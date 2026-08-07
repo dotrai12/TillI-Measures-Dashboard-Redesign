@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 ---
+- do not use any frame works like nextjs/react. Use plain js/html and css
 
 ## How to respond to me
 
