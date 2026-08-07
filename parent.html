@@ -9,43 +9,534 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/tilli.css">
+<style>
+  /* ---- Parent-flow layout ---- */
+  .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
+    padding: clamp(18px,3.4vh,34px) clamp(24px,6vw,90px) clamp(40px,6vh,72px); }
+  .p-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .p-main { max-width: 860px; width: 100%; margin: 22px auto 0; }
+
+  /* ---- Child switcher ---- */
+  .switcher { position: relative; margin-left: auto; }
+  .switch-btn { display: inline-flex; align-items: center; gap: 10px; background: #fff;
+    border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 6px 8px 6px 16px;
+    cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--ink-700);
+    transition: border-color .2s; }
+  .switch-btn:hover { border-color: var(--cyan-500); }
+  .switch-btn .av { width: 32px; height: 32px; border-radius: 50%; background: var(--wash-yellow);
+    display: flex; align-items: center; justify-content: center; }
+  .switch-btn .av img { width: 55%; }
+  .switch-btn .caret { color: var(--ink-300); font-size: 11px; }
+  .switch-menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 30; background: #fff;
+    border: 1px solid var(--line-200); border-radius: 18px; box-shadow: 0 12px 30px rgba(20,20,20,.12);
+    padding: 8px; min-width: 250px; }
+  .switch-item { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; border: none;
+    background: transparent; border-radius: 12px; padding: 10px 12px; cursor: pointer;
+    font-family: 'Quicksand',sans-serif; transition: background .15s; }
+  .switch-item:hover { background: var(--surface-100); }
+  .switch-item.on { background: var(--wash-green); }
+  .switch-item .dot { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex;
+    align-items: center; justify-content: center; }
+  .switch-item .nm { display: block; font-weight: 700; font-size: 14px; color: var(--ink-900); }
+  .switch-item .mt { display: block; font-weight: 600; font-size: 11.5px; color: var(--ink-300); margin-top: 1px; }
+  .switch-item .ck { margin-left: auto; color: var(--green-500); font-weight: 700; }
+  .switch-add { width: 100%; text-align: left; border: 1.5px dashed var(--line-200); background: #fff;
+    border-radius: 12px; padding: 10px 12px; margin-top: 4px; cursor: pointer; text-decoration: none; display: block;
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--green-500);
+    transition: border-color .2s; }
+  .switch-add:hover { border-color: var(--green-500); }
+
+  /* ---- Hero ---- */
+  .p-hero { display: grid; grid-template-columns: auto 1fr; gap: clamp(18px,3vw,36px);
+    align-items: center; margin-top: clamp(14px,2.6vh,26px); }
+  .p-face { width: clamp(96px,13vw,130px); height: clamp(96px,13vw,130px); flex: none;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .p-face img { width: 52%; height: auto; }
+  .p-eyebrow { font-weight: 700; font-size: clamp(11px,1.1vw,13px); letter-spacing: .16em;
+    text-transform: uppercase; color: var(--green-500); margin: 0 0 6px; }
+  .p-title { font-weight: 700; letter-spacing: -.02em; font-size: clamp(28px,4vw,46px);
+    line-height: 1.05; margin: 0; text-wrap: balance; }
+  .p-title span { color: var(--pink-600); }
+  .p-sub { font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: clamp(14px,1.5vw,17px);
+    color: var(--ink-600); margin: 10px 0 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; border-radius: var(--radius-pill);
+    padding: 6px 13px; font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12px; }
+  .chip .cd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .chip.school { background: var(--wash-cyan); color: var(--cyan-700); }
+  .chip.grade  { background: var(--wash-green); color: var(--green-700); }
+  .chip.adm    { background: var(--wash-yellow); color: #7a5c00; }
+
+  /* ---- Section headers ---- */
+  .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    margin: clamp(30px,4vh,44px) 0 14px; }
+  .sec-head h2 { font-weight: 700; font-size: clamp(18px,2vw,22px); margin: 0; }
+  .sec-head .muted { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink-300); }
+  .sec-head .muted.due { margin-left: auto; }
+  .sec-head .accent { color: var(--pink-600); }
+
+  /* ---- Progress card + donut ---- */
+  .prog-card { display: flex; align-items: center; gap: 18px; width: 100%; text-align: left;
+    background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-card);
+    padding: 18px 22px; }
+  .prog-card .txt b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
+  .prog-card .txt span { display: block; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 12.5px;
+    color: var(--ink-450); margin-top: 3px; }
+
+  /* ---- Assessment timeline ---- */
+  .timeline { position: relative; background: #fff; border: 1px solid var(--line-200);
+    border-radius: var(--radius-card); padding: 8px 18px; }
+  .timeline::before { content: ''; position: absolute; left: 33px; top: 30px; bottom: 30px;
+    width: 3px; background: var(--line-200); border-radius: 2px; }
+  .t-row { position: relative; display: flex; align-items: center; gap: 14px; width: 100%;
+    text-align: left; background: none; border: none; cursor: pointer; padding: 13px 2px;
+    font-family: 'Montserrat',sans-serif; border-radius: 12px; transition: background .15s; }
+  .t-row:hover { background: var(--surface-100); }
+  .t-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px; border-radius: 50%;
+    box-sizing: border-box; margin: 0 6px; }
+  .t-dot.done { background: var(--green-500); border: 3px solid var(--green-600); }
+  .t-dot.progress { background: var(--yellow-500); border: 3px solid var(--orange-500); }
+  .t-dot.pending { background: #fff; border: 3px solid #C9CDD6; }
+  .t-body { flex: 1; min-width: 0; }
+  .t-body b { display: block; font-weight: 700; font-size: 15px; color: var(--ink-900); }
+  .t-body span { display: block; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 12px;
+    color: var(--ink-450); margin-top: 1px; }
+  .t-badge { flex: none; font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12px;
+    border-radius: var(--radius-pill); padding: 7px 15px; }
+  .t-badge.done { color: var(--green-700); background: var(--wash-green); }
+  .t-badge.progress { color: #8a6100; background: var(--wash-yellow); }
+  .t-badge.pending { color: var(--ink-600); background: var(--surface-100); }
+
+  /* ---- Report CTA ---- */
+  .report-cta { margin-top: 18px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    border-radius: var(--radius-card); padding: 22px 24px; border: 2px solid; transition: border-color .2s, background .2s; }
+  .report-cta.ready { background: var(--wash-green); border-color: var(--green-500); }
+  .report-cta.locked { background: var(--surface-100); border-color: var(--line-200); }
+  .report-cta .ico { width: 54px; height: 54px; border-radius: 50%; background: #fff; flex: none;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(20,20,20,.08); }
+  .report-cta .ico img { width: 52%; }
+  .report-cta .rt { flex: 1; min-width: 180px; }
+  .report-cta .rt b { display: block; font-weight: 700; font-size: 18px; color: var(--ink-900); }
+  .report-cta .rt span { display: block; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px;
+    color: var(--ink-450); margin-top: 3px; }
+
+  /* ---- Garden report ---- */
+  .garden { position: relative; overflow: hidden; border-radius: var(--radius-card);
+    background: linear-gradient(180deg, var(--wash-cyan) 0%, var(--wash-green) 48%);
+    padding: clamp(22px,3vw,32px) clamp(14px,2vw,24px) clamp(16px,2.4vw,26px); margin-top: 6px; }
+  .garden .bed { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px 0; align-items: end; }
+  @media (max-width: 620px) { .garden .bed { grid-template-columns: repeat(4, 1fr); } }
+  .flower-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .flower-cell .fl { line-height: 0; }
+  .flower-cell .lbl { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 9.5px;
+    color: var(--green-700); text-align: center; line-height: 1.15; max-width: 12ch; }
+
+  .skill-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+  .skill-card { background: #fff; border: 1px solid var(--line-200); border-radius: 16px; padding: 14px 16px; }
+  .skill-card .sk-top { display: flex; align-items: center; gap: 10px; }
+  .skill-card .sk-name { font-weight: 700; font-size: 14.5px; color: var(--ink-900); flex: 1; }
+  .skill-card .sk-tag { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 11.5px;
+    border-radius: var(--radius-pill); padding: 4px 11px; }
+  .skill-card .sk-bar { height: 9px; background: var(--surface-100); border-radius: 99px; overflow: hidden; margin: 10px 0 8px; }
+  .skill-card .sk-fill { height: 100%; border-radius: 99px; transition: width .6s var(--ease); }
+  .skill-card .sk-note { font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 12.5px;
+    color: var(--ink-450); line-height: 1.5; }
+
+  .tips { background: var(--wash-yellow); border: 1px solid #F1DA7A; border-radius: var(--radius-card);
+    padding: 20px 22px; margin-top: 20px; }
+  .tips h3 { margin: 0 0 8px; font-weight: 700; font-size: 16px; color: #6b5100; }
+  .tips p { font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px; color: #7a5c00;
+    line-height: 1.6; margin: 5px 0; }
+
+  .report-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+  .btn-outline { background: #fff; border: 1.5px solid var(--green-500); color: var(--green-600);
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14px; border-radius: var(--radius-pill);
+    padding: 12px 22px; cursor: pointer; transition: background .2s; }
+  .btn-outline:hover { background: var(--wash-green); }
+
+  .footnote { text-align: center; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px;
+    color: var(--green-600); margin: 30px 0 0; }
+</style>
 </head>
 <body>
 <div class="brand-rail" aria-hidden="true"><span></span><span class="seg pink"></span><span class="seg cyan"></span><span class="seg yellow"></span></div>
 
-<div style="min-height:100svh;display:flex;flex-direction:column;padding:clamp(20px,4vh,40px) clamp(30px,6vw,90px)">
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <a href="index.html" class="lockup" style="text-decoration:none">
-      <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli">
-      <span class="divider"></span>
-      <span class="measures">Measures</span>
-    </a>
-    <span class="pill-info" id="school-pill" style="margin-left:auto"></span>
-  </div>
-
-  <div class="tm-rise" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px">
-    <span style="width:72px;height:72px;border-radius:50%;background:var(--wash-yellow);display:flex;align-items:center;justify-content:center">
-      <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/smiley.png" alt="" style="width:46%">
-    </span>
-    <p style="font-weight:700;font-size:clamp(11px,1.1vw,14px);letter-spacing:.16em;text-transform:uppercase;color:var(--green-500);margin:8px 0 0">Parent home</p>
-    <h1 style="font-weight:700;letter-spacing:-.02em;font-size:clamp(28px,4vw,48px);margin:0;max-width:16ch;text-wrap:balance" id="headline">Watch <span style="color:var(--pink-600)" id="child-name">your child</span> grow</h1>
-    <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:clamp(15px,1.6vw,19px);color:var(--ink-600);margin:0;max-width:44ch" id="meta-line">Your child's own garden — skills, assessments and gentle next steps — will live here. Coming next.</p>
-    <a href="index.html" class="btn btn-primary focus" style="text-decoration:none;display:inline-block;margin-top:10px">&#8592; Back to start</a>
-  </div>
-</div>
+<div id="app"></div>
 
 <script>
-  const p = new URLSearchParams(location.search);
-  const school = p.get('school'), child = p.get('child');
-  const grade = p.get('grade'), section = p.get('section'), adm = p.get('adm');
-  const pill = document.getElementById('school-pill');
-  if (school) pill.textContent = school; else pill.style.display = 'none';
-  if (child) document.getElementById('child-name').textContent = child;
-  const bits = [grade, section && 'Section ' + section, adm].filter(Boolean);
-  if (bits.length) {
-    document.getElementById('meta-line').textContent =
-      bits.join('  ·  ') + " — this is where their garden will grow. Coming next.";
+(function () {
+  const DS = '_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/';
+  const LOGO = DS + 'logos/tilli-wordmark-crop.png';
+  const SMILEY = DS + 'icons/smiley.png';
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // Each child is represented by a smiley in their own colour (stable per slot).
+  const SMILE_COLORS = ['#56C02B', '#E91E8C', '#26BDE2', '#F99B1C', '#A99BD6', '#E866B0'];
+  const smileColor = (i) => SMILE_COLORS[((i % SMILE_COLORS.length) + SMILE_COLORS.length) % SMILE_COLORS.length];
+
+  // ---- seeded RNG (stable per child) ----
+  function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function mulberry32(a) { return function () { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ---- 12 skills (SEL + cognitive), each with a flower colour ----
+  const SKILLS = [
+    { key: 'emotion_awareness',    name: 'Emotion Awareness',      color: '#E91E8C' },
+    { key: 'emotion_regulation',   name: 'Emotion Regulation',     color: '#F0A84A' },
+    { key: 'empathy',              name: 'Empathy',                color: '#EFA9B8' },
+    { key: 'relationship_skills',  name: 'Relationship Skills',    color: '#F99B1C' },
+    { key: 'metacognition',        name: 'Metacognition',          color: '#A99BD6' },
+    { key: 'critical_thinking',    name: 'Critical Thinking',      color: '#7FB2E6' },
+    { key: 'working_memory',       name: 'Working Memory',         color: '#26BDE2' },
+    { key: 'planning',             name: 'Planning & Organizing',  color: '#5AA9E6' },
+    { key: 'cognitive_flexibility',name: 'Cognitive Flexibility',  color: '#6FC3B8' },
+    { key: 'inhibition_distraction',name:'Focus (Distraction)',    color: '#FCC30B' },
+    { key: 'inhibition_response',  name: 'Self-control',           color: '#E866B0' },
+    { key: 'attention',            name: 'Attention',              color: '#56C02B' },
+  ];
+
+  // Warm, concrete "help at home" tips, keyed by skill.
+  const TIPS = {
+    emotion_awareness:     'Name feelings out loud through the day — "you look frustrated" builds emotion words.',
+    emotion_regulation:    'Practice belly-breathing together when everyone is calm, not mid-meltdown.',
+    empathy:               'Read a story and pause to ask "how do you think they feel right now?"',
+    relationship_skills:   'Set up one short playdate and let them practice taking turns.',
+    metacognition:         'After a task ask "what was tricky, and what would you try next time?"',
+    critical_thinking:     'Ask open "why do you think…?" questions instead of giving the answer.',
+    working_memory:        'Play one short memory game after dinner — five minutes is plenty.',
+    planning:              'Let them plan a small routine, like packing their own bag with a checklist.',
+    cognitive_flexibility: 'Play "let\'s do it a different way" games to practice switching ideas.',
+    inhibition_distraction:'Try 5-minute focus stretches in a quiet spot, then a movement break.',
+    inhibition_response:   'Play "red light, green light" — it makes pausing before acting fun.',
+    attention:            'Read together a little longer each week to stretch sustained focus.',
+  };
+
+  function bandOf(pct) { return pct < 34 ? 'seedling' : pct < 67 ? 'sprouting' : 'blooming'; }
+  const BAND_META = {
+    blooming:  { tag: 'Blooming',  color: 'var(--green-700)', bg: 'var(--wash-green)',  fill: 'var(--green-500)' },
+    sprouting: { tag: 'Sprouting', color: '#8a6100',          bg: 'var(--wash-yellow)', fill: 'var(--yellow-500)' },
+    seedling:  { tag: 'Seedling',  color: 'var(--pink-600)',  bg: 'var(--wash-pink)',   fill: 'var(--pink-400)' },
+  };
+
+  // Build a child's 12-skill garden (stable per name).
+  function buildSkills(name) {
+    const rnd = mulberry32(hashStr(name + ':garden'));
+    const base = 40 + rnd() * 26; // child's overall tilt
+    return SKILLS.map((sk) => {
+      const pct = Math.round(clamp(base + (rnd() - 0.5) * 60, 6, 98));
+      const band = bandOf(pct);
+      const note = band === 'blooming'
+        ? name + ' shows real strength in ' + sk.name.toLowerCase() + '.'
+        : band === 'sprouting'
+        ? sk.name + ' is coming along nicely — a little practice helps.'
+        : sk.name + ' is just beginning to grow; gentle support will help.';
+      return { key: sk.key, name: sk.name, color: sk.color, pct, band, note, seed: hashStr(name + sk.key) % 97 };
+    });
   }
+
+  // ============================================================
+  // Per-skill flower (garden bed) — flat brand flower / tulip / sprout,
+  // matching the landing flower band. band drives the form.
+  // ============================================================
+  function flowerSVG(color, band, seed, size) {
+    const rnd = (k) => { const v = Math.sin((seed + 1) * (k * 12.9898 + 4.1414)) * 43758.5453; return v - Math.floor(v); };
+    const tilt = (rnd(4) * 12 - 6).toFixed(1);
+    const w = size, h = Math.round(size * 1.7);
+    const cx = 30, gy = 96;
+    let stemH, headY, head;
+    if (band === 'blooming') {
+      stemH = 58; headY = gy - stemH;
+      const rad = 12, pet = [];
+      for (let i = 0; i < 5; i++) { const a = (Math.PI * 2 * i) / 5 - Math.PI / 2; pet.push(`<circle cx="${(cx + Math.cos(a) * rad).toFixed(1)}" cy="${(headY + Math.sin(a) * rad).toFixed(1)}" r="${(rad * .84).toFixed(1)}" fill="${color}"/>`); }
+      head = pet.join('') + `<circle cx="${cx}" cy="${headY}" r="6.5" fill="#FCC30B"/>`;
+    } else if (band === 'sprouting') {
+      stemH = 40; headY = gy - stemH;
+      const tw = 12, th = 22;
+      head = `<path d="M ${cx - tw} ${headY + 3} C ${cx - tw} ${headY - th * .55} ${cx - tw * .55} ${headY - th} ${cx} ${headY - th} C ${cx + tw * .55} ${headY - th} ${cx + tw} ${headY - th * .55} ${cx + tw} ${headY + 3} C ${cx + tw * .6} ${headY + 10} ${cx - tw * .6} ${headY + 10} ${cx - tw} ${headY + 3} Z" fill="${color}"/>`;
+    } else {
+      stemH = 24; headY = gy - stemH;
+      head = `<path d="M ${cx} ${headY + 10} q -14 -5 -18 -18 q 14 2 18 14 Z" fill="#56C02B"/><path d="M ${cx} ${headY + 10} q 14 -5 18 -18 q -14 2 -18 14 Z" fill="#8FD96B"/>`;
+    }
+    const topY = gy - stemH;
+    const stem = `<path d="M ${cx} ${gy} C ${cx - 3} ${gy - stemH * .45} ${cx + 3} ${topY + stemH * .35} ${cx} ${topY}" stroke="#56C02B" stroke-width="3.4" fill="none" stroke-linecap="round"/>`;
+    const leaf = band === 'seedling' ? '' :
+      `<path d="M ${cx - 1} ${gy - stemH * .42} q -17 -5 -22 8 q 13 4 22 -8 Z" fill="#3F9E1D"/>`;
+    return `<svg width="${w}" height="${h}" viewBox="0 0 60 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+      <g class="tm-sway" style="transform:rotate(${tilt}deg);animation:swayC ${(4 + rnd(7) * 1.6).toFixed(1)}s ease-in-out infinite alternate">
+        ${stem}${leaf}${head}
+      </g>
+    </svg>`;
+  }
+
+  // ============================================================
+  // State
+  // ============================================================
+  const p = new URLSearchParams(location.search);
+  const school = p.get('school') || 'Little Sprouts School';
+
+  const children = [
+    { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041' },
+    { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044' },
+  ];
+  const urlChild = (p.get('child') || '').trim();
+  let selected = 0;
+  if (urlChild) {
+    const i = children.findIndex((c) => c.name.toLowerCase() === urlChild.toLowerCase());
+    if (i >= 0) selected = i;
+    else { children.unshift({ name: urlChild, grade: p.get('grade') || '', section: p.get('section') || '', adm: p.get('adm') || '' }); selected = 0; }
+  }
+
+  const ASSESSMENTS = [
+    { id: 'parent', title: 'Parent report',    sub: 'Parent survey · 10 questions' },
+    { id: 'hearts', title: 'Hearts & Flowers', sub: 'Child activity · about 5 min' },
+    { id: 'memory', title: 'Memory Game',       sub: 'Child activity · about 5 min' },
+    { id: 'emt1',   title: 'EMT 1',             sub: 'Child activity · about 4 min' },
+    { id: 'emt2',   title: 'EMT 2',             sub: 'Child activity · about 4 min' },
+    { id: 'emt3',   title: 'EMT 3',             sub: 'Child activity · about 4 min' },
+  ];
+  // Per-child assessment status (Aarav pre-populated so its report is unlocked).
+  const STATUS = {};
+  children.forEach((c) => {
+    if (c.name === 'Aarav') STATUS[c.name] = { parent: 'done', hearts: 'done', memory: 'done', emt1: 'done', emt2: 'progress', emt3: 'pending' };
+    else STATUS[c.name] = { parent: 'pending', hearts: 'pending', memory: 'pending', emt1: 'pending', emt2: 'pending', emt3: 'pending' };
+  });
+
+  const state = { view: 'home', selected, switcherOpen: false, saved: '' };
+  const app = document.getElementById('app');
+  const child = () => children[state.selected];
+  const status = () => STATUS[child().name];
+  const set = (patch) => { Object.assign(state, patch); render(); };
+
+  // ---- shared bits ----
+  const lockup = `<a href="index.html" class="lockup" style="text-decoration:none">
+      <img src="${LOGO}" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></a>`;
+
+  function switcher() {
+    const c = child();
+    const items = children.map((k, i) => `
+      <button class="switch-item ${i === state.selected ? 'on' : ''}" data-select="${i}">
+        <span class="dot" style="background:${smileColor(i)}"><img src="${SMILEY}" alt="" style="width:55%"></span>
+        <span style="flex:1;min-width:0">
+          <span class="nm">${esc(k.name)}</span>
+          <span class="mt">${[k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ') || 'No grade set'}</span>
+        </span>
+        ${i === state.selected ? '<span class="ck">✓</span>' : ''}
+      </button>`).join('');
+    return `<div class="switcher">
+      <button class="switch-btn focus" data-act="toggle-switch" aria-haspopup="menu" aria-expanded="${state.switcherOpen}">
+        ${esc(c.name)}'s parent
+        <span class="av" style="background:${smileColor(state.selected)}"><img src="${SMILEY}" alt=""></span>
+        <span class="caret" aria-hidden="true">▾</span>
+      </button>
+      ${state.switcherOpen ? `<div class="switch-menu" role="menu">${items}
+        <a href="index.html" class="switch-add focus">+ Add another child</a></div>` : ''}
+    </div>`;
+  }
+
+  function donut(pct) {
+    const r = 26, circ = 2 * Math.PI * r, off = circ * (1 - pct / 100);
+    return `<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--line-200)" stroke-width="7"/>
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--green-500)" stroke-width="7" stroke-linecap="round"
+        stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 32 32)" style="transition:stroke-dashoffset .5s ease"/>
+      <text x="32" y="37" text-anchor="middle" font-family="'Montserrat',sans-serif" font-weight="700" font-size="14" fill="var(--ink-900)">${pct}%</text>
+    </svg>`;
+  }
+
+  // ============================================================
+  // HOME VIEW
+  // ============================================================
+  function homeView() {
+    const c = child();
+    const st = status();
+    const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
+    const total = ASSESSMENTS.length;
+    const pct = Math.round((done / total) * 100);
+    const reportReady = st.parent === 'done';
+    const faceColor = smileColor(state.selected);
+
+    const chips = [
+      `<span class="chip school"><span class="cd" style="background:var(--cyan-500)"></span>${esc(school)}</span>`,
+      c.grade ? `<span class="chip grade"><span class="cd" style="background:var(--green-500)"></span>${esc(c.grade)}${c.section ? ' · Section ' + esc(c.section) : ''}</span>` : '',
+      c.adm ? `<span class="chip adm"><span class="cd" style="background:var(--yellow-500)"></span>Admission ${esc(c.adm)}</span>` : '',
+    ].filter(Boolean).join('');
+
+    const rows = ASSESSMENTS.map((a) => {
+      const s = st[a.id];
+      const badge = s === 'done' ? 'Completed' : s === 'progress' ? 'In progress' : 'Start';
+      return `<button class="t-row focus" data-tap="${a.id}">
+        <span class="t-dot ${s}"></span>
+        <span class="t-body"><b>${esc(a.title)}</b><span>${esc(a.sub)}</span></span>
+        <span class="t-badge ${s}">${badge}</span>
+      </button>`;
+    }).join('');
+
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}${switcher()}</div>
+      <div class="p-main">
+
+        <div class="p-hero tm-rise">
+          <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a">
+            <img src="${SMILEY}" alt="">
+          </div>
+          <div>
+            <p class="p-eyebrow">Parent home · Week 14</p>
+            <h1 class="p-title">Watch <span>${esc(c.name)}</span> grow</h1>
+            <p class="p-sub">${done < total
+              ? done + ' of ' + total + " check-ins done — finish them to complete " + esc(c.name) + "'s garden."
+              : "Every check-in is complete — " + esc(c.name) + "'s garden report is ready below."}</p>
+            <div class="chips">${chips}</div>
+          </div>
+        </div>
+
+        <div class="sec-head">
+          <h2>Assessments for ${esc(c.name)}</h2>
+          <span class="muted due">Due <span class="accent">15 August</span></span>
+        </div>
+
+        <button class="prog-card focus" data-act="progress-tap" style="margin-bottom:14px">
+          ${donut(pct)}
+          <span class="txt"><b>${done} of ${total} completed</b>
+          <span>Tap an assessment to start it, then tap again to mark it done.</span></span>
+        </button>
+
+        <div class="timeline">${rows}</div>
+
+        <div class="report-cta ${reportReady ? 'ready' : 'locked'}">
+          <span class="ico"><img src="${DS}icons/${reportReady ? 'chart-up.png' : 'clock.png'}" alt=""></span>
+          <span class="rt">
+            <b>${reportReady ? esc(c.name) + "'s garden report is ready" : esc(c.name) + "'s garden report"}</b>
+            <span>${reportReady ? 'See how each skill is growing, with tips for home.' : 'Complete the Parent report to unlock the garden.'}</span>
+          </span>
+          ${reportReady
+            ? `<button class="btn btn-primary focus" data-act="open-report" style="flex:none">See garden →</button>`
+            : `<button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>`}
+        </div>
+
+        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>
+      </div>
+    </div>`;
+  }
+
+  // ============================================================
+  // REPORT VIEW (garden payoff)
+  // ============================================================
+  function reportView() {
+    const c = child();
+    const skills = buildSkills(c.name);
+    const avg = Math.round(skills.reduce((a, s) => a + s.pct, 0) / skills.length);
+    const blooms = skills.filter((s) => s.band === 'blooming').length;
+
+    const bed = skills.map((s) => `
+      <div class="flower-cell">
+        <span class="fl">${flowerSVG(s.color, s.band, s.seed, 46)}</span>
+        <span class="lbl">${esc(s.name)}</span>
+      </div>`).join('');
+
+    const cards = skills.map((s) => {
+      const b = BAND_META[s.band];
+      return `<div class="skill-card">
+        <div class="sk-top">
+          <span class="sk-name">${esc(s.name)}</span>
+          <span class="sk-tag" style="color:${b.color};background:${b.bg}">${b.tag}</span>
+        </div>
+        <div class="sk-bar"><div class="sk-fill" style="width:${s.pct}%;background:${b.fill}"></div></div>
+        <div class="sk-note">${esc(s.note)}</div>
+      </div>`;
+    }).join('');
+
+    // Three lowest skills → home tips.
+    const lows = [...skills].sort((a, b) => a.pct - b.pct).slice(0, 3);
+    const tips = lows.map((s) => `<p>• ${esc(TIPS[s.key])}</p>`).join('');
+
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}
+        <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
+      </div>
+      <div class="p-main tm-rise">
+
+        <p class="p-eyebrow" style="margin-top:8px">${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
+        <h1 class="p-title" style="font-size:clamp(26px,3.4vw,40px)">${esc(c.name)}'s garden</h1>
+        <p class="p-sub" style="max-width:52ch">${esc(c.name)}'s garden is growing — ${blooms} of ${skills.length} skills are blooming, with a few still finding the sun. Here's the whole picture.</p>
+
+        <div class="garden" style="margin-top:20px">
+          <div class="bed">${bed}</div>
+        </div>
+
+        <div class="sec-head"><h2>Every skill, up close</h2><span class="muted">Overall ${avg}%</span></div>
+        <div class="skill-list">${cards}</div>
+
+        <div class="tips">
+          <h3>How to help at home 🏡</h3>
+          ${tips}
+        </div>
+
+        <div class="report-actions">
+          <button class="btn btn-primary focus" data-act="save-pdf" style="padding:12px 22px;font-size:14px">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF'}</button>
+          <button class="btn-outline focus" data-act="save-png">${state.saved === 'png' ? 'Saved ✓' : 'Save image'}</button>
+          <button class="btn-ghost focus" data-act="back-home" style="padding:12px 18px">Back to home</button>
+        </div>
+
+        <p class="footnote">Sent to your email too · a fresh report follows each assessment window.</p>
+      </div>
+    </div>`;
+  }
+
+  // ============================================================
+  // Render + events
+  // ============================================================
+  function render() {
+    app.innerHTML = state.view === 'report' ? reportView() : homeView();
+    wire();
+  }
+
+  let saveTimer;
+  function wire() {
+    app.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      switch (b.dataset.act) {
+        case 'toggle-switch': set({ switcherOpen: !state.switcherOpen }); break;
+        case 'progress-tap': {
+          const st = status();
+          const open = ASSESSMENTS.find((a) => st[a.id] === 'progress');
+          if (open) { st[open.id] = 'done'; render(); }
+          break;
+        }
+        case 'open-report': set({ view: 'report', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
+        case 'back-home': set({ view: 'home' }); window.scrollTo(0, 0); break;
+        case 'save-pdf':
+        case 'save-png': {
+          const kind = b.dataset.act === 'save-pdf' ? 'pdf' : 'png';
+          set({ saved: kind });
+          clearTimeout(saveTimer);
+          saveTimer = setTimeout(() => set({ saved: '' }), 1600);
+          break;
+        }
+      }
+    }));
+
+    // assessment cards cycle pending → progress → done → pending
+    app.querySelectorAll('[data-tap]').forEach((b) => b.addEventListener('click', () => {
+      const st = status();
+      const next = { pending: 'progress', progress: 'done', done: 'pending' };
+      st[b.dataset.tap] = next[st[b.dataset.tap]] || 'pending';
+      render();
+    }));
+
+    // switcher select
+    app.querySelectorAll('[data-select]').forEach((b) => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      set({ selected: +b.dataset.select, switcherOpen: false, view: 'home' });
+    }));
+  }
+
+  // click outside closes switcher
+  document.addEventListener('click', () => { if (state.switcherOpen) set({ switcherOpen: false }); });
+
+  render();
+})();
 </script>
 </body>
 </html>

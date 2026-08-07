@@ -18,6 +18,13 @@
     background: #fff;
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
+    /* Per-item text scale multipliers (baked from the Text size GUI) */
+    --eyebrow-scale: 1.30;
+    --title-scale: 1.20;
+    --sub-scale: 1.10;
+    --cta-scale: 1.25;
+    --statnum-scale: 0.95;
+    --statlabel-scale: 1.00;
   }
 
   .landing-inner {
@@ -43,17 +50,17 @@
   }
   .hero-eyebrow {
     font-weight: 700;
-    font-size: clamp(11px, 1.1vw, 14px);
     letter-spacing: .16em;
     text-transform: uppercase;
     color: var(--green-500);
     margin: 0 0 clamp(12px, 2vh, 20px);
+    font-size: calc(clamp(11px, 1.1vw, 14px) * var(--eyebrow-scale));
   }
   .hero-title {
     font-weight: 700;
     letter-spacing: -.02em;
     line-height: 1.06;
-    font-size: clamp(34px, 5vw, 64px);
+    font-size: calc(clamp(34px, 5vw, 64px) * var(--title-scale));
     color: var(--ink-900);
     margin: 0;
     max-width: 15ch;
@@ -63,12 +70,13 @@
     font-family: 'Quicksand', sans-serif;
     font-style: italic;
     font-weight: 600;
-    font-size: clamp(16px, 2vw, 25px);
+    font-size: calc(clamp(16px, 2vw, 25px) * var(--sub-scale));
     color: var(--ink-600);
     margin: clamp(12px, 2vh, 20px) 0 0;
     max-width: 30ch;
   }
   .hero-cta { margin-top: clamp(24px, 4vh, 36px); }
+  .hero-cta .btn-primary { font-size: calc(clamp(15px, 1.7vw, 19px) * var(--cta-scale)); }
 
   .stat-stack { display: flex; flex-direction: column; gap: clamp(14px, 2vh, 20px); }
   .stat-card {
@@ -94,7 +102,7 @@
   .stat-num {
     display: block;
     font-weight: 700;
-    font-size: clamp(30px, 3.2vw, 44px);
+    font-size: calc(clamp(30px, 3.2vw, 44px) * var(--statnum-scale));
     line-height: 1;
     color: var(--pink-600);
   }
@@ -102,7 +110,7 @@
     display: block;
     font-family: 'Quicksand', sans-serif;
     font-weight: 700;
-    font-size: clamp(13px, 1.3vw, 16px);
+    font-size: calc(clamp(13px, 1.3vw, 16px) * var(--statlabel-scale));
     color: var(--ink-450);
     margin-top: 6px;
   }
@@ -175,6 +183,107 @@
 
 <!-- Auth + selection layers get injected here -->
 <div id="flow-root"></div>
+
+<!-- ============================================================
+     Text size GUI (dev tooling) — scale each hero text item
+     independently. Each slider drives one CSS variable on .landing.
+     ============================================================ -->
+<style>
+  #text-gui {
+    position: fixed; top: 14px; right: 14px; z-index: 9999;
+    width: 232px; font-family: 'Quicksand', system-ui, sans-serif;
+    background: #fff; border: 1px solid #E2E2E2; border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.14); overflow: hidden;
+    font-size: 12px; color: #333;
+  }
+  #text-gui .tg-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 12px; background: #FAFAFA; border-bottom: 1px solid #EEE;
+    cursor: pointer; user-select: none;
+  }
+  #text-gui .tg-head b { font-weight: 700; font-size: 12.5px; }
+  #text-gui .tg-body { padding: 6px 12px 12px; }
+  #text-gui .tg-row { margin-top: 11px; }
+  #text-gui label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-weight: 600; margin-bottom: 4px; cursor: help;
+  }
+  #text-gui label .tg-val { font-weight: 700; color: var(--pink-600, #E91E8C); }
+  #text-gui label.tg-new { color: var(--pink-600, #E91E8C); }
+  #text-gui input[type=range] { width: 100%; margin: 0; accent-color: var(--pink-400, #E866B0); }
+  #text-gui .tg-reset {
+    margin-top: 13px; width: 100%; padding: 7px; border: 1px solid #DDD;
+    border-radius: 8px; background: #fff; font: inherit; font-weight: 700;
+    cursor: pointer;
+  }
+  #text-gui .tg-reset:hover { background: #F5F5F5; }
+  #text-gui.tg-collapsed .tg-body { display: none; }
+</style>
+
+<div id="text-gui" aria-label="Text size controls">
+  <div class="tg-head" id="tg-toggle"><b>Text size</b><span id="tg-caret">▾</span></div>
+  <div class="tg-body"></div>
+</div>
+
+<script>
+(function () {
+  // [cssVar, GUI label, tooltip, isNewlyAdded]
+  var CONTROLS = [
+    ['--eyebrow-scale',   'Eyebrow scale',      'Scales the "Developmentally on track by 10" line', true],
+    ['--title-scale',     'Title scale',        'Scales the "Welcome to Tilli Measures" heading',   true],
+    ['--sub-scale',       'Subtitle scale',     'Scales the "Every skill a seed…" italic line',     true],
+    ['--cta-scale',       'Button scale',       'Scales the "Get started" button text',             true],
+    ['--statnum-scale',   'Stat number scale',  'Scales the big stat numbers (12, 3×)',             true],
+    ['--statlabel-scale', 'Stat label scale',   'Scales the small text under each stat number',     true],
+  ];
+  var MIN = 0.5, MAX = 2, STEP = 0.05;
+  var target = document.querySelector('.landing');
+  var body = document.querySelector('#text-gui .tg-body');
+
+  CONTROLS.forEach(function (c) {
+    var cssVar = c[0], text = c[1], tip = c[2], isNew = c[3];
+    var row = document.createElement('div');
+    row.className = 'tg-row';
+    row.innerHTML =
+      '<label title="' + tip + '"' + (isNew ? ' class="tg-new"' : '') + '>' +
+        '<span>' + (isNew ? '* ' : '') + text + '</span>' +
+        '<span class="tg-val">1.00</span>' +
+      '</label>' +
+      '<input type="range" min="' + MIN + '" max="' + MAX + '" step="' + STEP + '" value="1" title="' + tip + '">';
+    var input = row.querySelector('input');
+    var val = row.querySelector('.tg-val');
+    input.dataset.var = cssVar;
+    // Reflect the baked CSS default on load
+    var baked = parseFloat(getComputedStyle(target).getPropertyValue(cssVar)) || 1;
+    input.value = baked;
+    val.textContent = baked.toFixed(2);
+    input.addEventListener('input', function () {
+      target.style.setProperty(cssVar, input.value);
+      val.textContent = parseFloat(input.value).toFixed(2);
+    });
+    body.appendChild(row);
+  });
+
+  var reset = document.createElement('button');
+  reset.className = 'tg-reset';
+  reset.textContent = 'Reset all';
+  reset.addEventListener('click', function () {
+    body.querySelectorAll('input').forEach(function (i) {
+      target.style.removeProperty(i.dataset.var); // fall back to baked CSS default
+      var baked = parseFloat(getComputedStyle(target).getPropertyValue(i.dataset.var)) || 1;
+      i.value = baked;
+      i.closest('.tg-row').querySelector('.tg-val').textContent = baked.toFixed(2);
+    });
+  });
+  body.appendChild(reset);
+
+  var gui = document.getElementById('text-gui');
+  document.getElementById('tg-toggle').addEventListener('click', function () {
+    gui.classList.toggle('tg-collapsed');
+    document.getElementById('tg-caret').textContent = gui.classList.contains('tg-collapsed') ? '▸' : '▾';
+  });
+})();
+</script>
 
 <script src="assets/flower-band.js"></script>
 <script src="assets/landing.js"></script>

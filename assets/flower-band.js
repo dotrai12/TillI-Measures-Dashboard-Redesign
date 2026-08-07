@@ -9,6 +9,16 @@
   const PETALS = ['#E866B0', '#26BDE2', '#FCC30B', '#E91E8C'];
   const GY = 196; // ground y
 
+  /* One fixed size per plant category so every plant of a kind shares the
+     same stem height and head size (colours still vary). Heights are kept
+     low enough that heads never clip against the top of the band on wide
+     screens. Per-spec h/scale below are ignored in favour of these. */
+  const PROFILE = {
+    flower: { h: 102, scale: 1.0 }, // full-bloom flowers — tallest
+    tulip:  { h: 78,  scale: 1.0 }, // buds — medium
+    sprout: { h: 42,  scale: 1.0 }, // no flower / bud — shortest
+  };
+
   function el(name, attrs, children) {
     const node = document.createElementNS(NS, name);
     for (const k in attrs) {
@@ -95,8 +105,10 @@
     svg.appendChild(el('rect', { x: 0, y: 150, width: 1440, height: 90, fill: '#F1FFEC' }));
     let c = 0;
     const plants = SPECS.map(([x, o]) => {
-      const petal = o.kind === 'sprout' ? null : PETALS[c++ % PETALS.length];
-      return plant(x, GY, Object.assign({ petal }, o));
+      const prof = PROFILE[o.kind] || {};
+      const spec = Object.assign({}, o, { h: prof.h, scale: prof.scale });
+      const petal = spec.kind === 'sprout' ? null : PETALS[c++ % PETALS.length];
+      return plant(x, GY, Object.assign({ petal }, spec));
     });
     svg.appendChild(el('g', {}, plants));
     svg.appendChild(el('rect', { x: 0, y: 194, width: 1440, height: 5, fill: '#56C02B' }));
