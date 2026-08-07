@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/layout.css">
+  <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/base.css">
+  <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/styles.css">
+  <script src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/_ds_bundle.js"></script>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#fff}
+    a{color:#26BDE2}
+    a:hover{color:#1CA3C6}
+    @keyframes swayA{from{transform:rotate(-2.2deg)}to{transform:rotate(2.6deg)}}
+    @keyframes swayB{from{transform:rotate(2.4deg)}to{transform:rotate(-2deg)}}
+    @keyframes swayC{from{transform:rotate(-1.4deg)}to{transform:rotate(1.6deg)}}
+    @keyframes tmRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes tmSpin{to{transform:rotate(360deg)}}
+    @keyframes tmShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+    .tm-shake{animation:tmShake .4s ease}
+    .tm-sway{transform-box:fill-box;transform-origin:50% 100%}
+    .tm-focus:focus-visible{outline:3px solid #26BDE2;outline-offset:3px}
+    @media (prefers-reduced-motion:reduce){.tm-sway,.tm-rise{animation:none !important}}
+  </style>
+</helmet>
+
+<div style="position:relative;width:100%;min-height:100svh;overflow-x:hidden;background:#fff;font-family:'Montserrat',sans-serif;display:grid;grid-template-rows:minmax(0,1fr) auto">
+
+  <div aria-hidden="true" style="position:absolute;left:0;top:0;bottom:0;width:clamp(8px,1vw,19px);display:flex;flex-direction:column;z-index:3">
+    <span style="flex:1;background:#56C02B"></span>
+    <span style="height:64px;background:#E866B0"></span>
+    <span style="height:64px;background:#26BDE2"></span>
+    <span style="height:64px;background:#FCC30B"></span>
+  </div>
+
+
+
+  <div style="position:relative;z-index:2;min-width:0;display:flex;flex-direction:column;padding:clamp(16px,3vh,36px) clamp(22px,5vw,72px) clamp(18px,3vh,32px) clamp(30px,5vw,80px)">
+
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli" style="height:clamp(22px,2.4vw,30px);width:auto;display:block">
+      <span style="width:1px;height:20px;background:#ECEEF2"></span>
+      <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(11px,1.1vw,13px);letter-spacing:.14em;text-transform:uppercase;color:#26BDE2">Measures</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <span style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9AA3AF">Hero</span>
+        <sc-for list="{{ heroTabs }}" as="t" hint-placeholder-count="3">
+          <button onClick="{{ t.onClick }}" class="tm-focus" style="{{ t.style }}">{{ t.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ===== HERO A · paper ===== -->
+    <sc-if value="{{ heroA }}" hint-placeholder-val="{{ true }}">
+      <div class="tm-rise" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;animation:tmRise .6s ease both;padding-top:clamp(8px,2vh,26px)">
+        <p style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(11px,1.1vw,14px);letter-spacing:.16em;text-transform:uppercase;color:#56C02B;margin:0 0 clamp(10px,1.6vh,18px)">Developmentally on track by 10</p>
+        <h1 style="font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:-.02em;line-height:1.08;font-size:clamp(32px,4.8vw,58px);color:#141414;margin:0;max-width:17ch;text-wrap:balance">Welcome to <span style="color:#E91E8C">Tilli Measures</span></h1>
+        <p style="font-family:'Quicksand',sans-serif;font-style:italic;font-weight:600;font-size:clamp(16px,2.1vw,26px);color:#545454;margin:clamp(12px,2vh,20px) 0 0;max-width:32ch">Every skill a seed. Watch the whole child grow.</p>
+        <div style="margin-top:clamp(18px,3vh,30px)">
+          <button onClick="{{ onGetStarted }}" class="tm-focus" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(15px,1.7vw,19px);color:#fff;background:#56C02B;padding:16px 44px;border-radius:999px;transition:transform .2s cubic-bezier(.2,.7,.3,1),background .2s" style-hover="background:#49A524" style-active="transform:scale(.98)">Get started</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(12px,2vw,26px);margin-top:clamp(18px,3.2vh,34px)">
+          <div style="background:#FFF6FB;border-radius:16px;padding:13px 24px;min-width:164px">
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1;color:#E91E8C">12</div>
+            <div style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(12px,1.2vw,15px);color:#5B6170;margin-top:6px">foundational skills</div>
+          </div>
+          <div style="background:#FFF6A8;border-radius:16px;padding:13px 24px;min-width:164px">
+            <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1;color:#E91E8C">3&#215;</div>
+            <div style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(12px,1.2vw,15px);color:#5B6170;margin-top:6px">a year, 20 min a week</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===== HERO B · brush ===== -->
+    <sc-if value="{{ heroB }}" hint-placeholder-val="{{ false }}">
+      <div class="tm-rise" style="flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));align-items:center;gap:clamp(28px,4vw,64px);max-width:1240px;width:100%;margin:0 auto;animation:tmRise .6s ease both;padding-top:clamp(16px,4vh,40px)">
+        <div>
+          <p style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(11px,1.1vw,14px);letter-spacing:.16em;text-transform:uppercase;color:#56C02B;margin:0 0 clamp(12px,2vh,20px)">Developmentally on track by 10</p>
+          <h1 style="font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:-.02em;line-height:1.06;font-size:clamp(34px,5vw,64px);color:#141414;margin:0;max-width:15ch;text-wrap:balance">Welcome to Tilli Measures</h1>
+          <p style="font-family:'Quicksand',sans-serif;font-style:italic;font-weight:600;font-size:clamp(16px,2vw,25px);color:#545454;margin:clamp(12px,2vh,20px) 0 0;max-width:30ch">Every skill a seed. Watch the whole child grow.</p>
+          <div style="margin-top:clamp(24px,4vh,36px)">
+            <button onClick="{{ onGetStarted }}" class="tm-focus" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(15px,1.7vw,19px);color:#fff;background:#56C02B;padding:16px 44px;border-radius:999px;transition:transform .2s cubic-bezier(.2,.7,.3,1),background .2s" style-hover="background:#49A524" style-active="transform:scale(.98)">Get started</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:clamp(14px,2vh,20px)">
+          <div style="border:2px solid #E866B0;border-radius:24px;padding:clamp(20px,2.4vw,28px);background:#fff;display:flex;align-items:center;gap:20px">
+            <span style="flex:none;width:clamp(52px,5vw,68px);height:clamp(52px,5vw,68px);border-radius:50%;background:#E866B0;display:flex;align-items:center;justify-content:center"><img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/chart-up.png" alt="" aria-hidden="true" style="width:55%;height:auto"></span>
+            <span>
+              <span style="display:block;font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(30px,3.2vw,44px);line-height:1;color:#E91E8C">12</span>
+              <span style="display:block;font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(13px,1.3vw,16px);color:#5B6170;margin-top:6px">foundational skills, measured from three angles</span>
+            </span>
+          </div>
+          <div style="border:2px solid #FCC30B;border-radius:24px;padding:clamp(20px,2.4vw,28px);background:#fff;display:flex;align-items:center;gap:20px">
+            <span style="flex:none;width:clamp(52px,5vw,68px);height:clamp(52px,5vw,68px);border-radius:50%;background:#FCC30B;display:flex;align-items:center;justify-content:center"><img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/clock.png" alt="" aria-hidden="true" style="width:55%;height:auto"></span>
+            <span>
+              <span style="display:block;font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(30px,3.2vw,44px);line-height:1;color:#E91E8C">3&#215;</span>
+              <span style="display:block;font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(13px,1.3vw,16px);color:#5B6170;margin-top:6px">a year &#183; 20 minutes a week</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===== HERO C · wash card ===== -->
+    <sc-if value="{{ heroC }}" hint-placeholder-val="{{ false }}">
+      <div class="tm-rise" style="flex:1;display:flex;align-items:center;justify-content:center;animation:tmRise .6s ease both;padding-top:clamp(16px,4vh,40px)">
+        <div style="width:100%;max-width:920px;background:#D9F5FF;border-radius:40px;padding:clamp(22px,3vh,40px) clamp(24px,4vw,60px);text-align:center">
+          <p style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(11px,1.1vw,13px);letter-spacing:.16em;text-transform:uppercase;color:#1B7F99;margin:0 0 clamp(12px,2vh,20px)">Developmentally on track by 10</p>
+          <h1 style="font-family:'Montserrat',sans-serif;font-weight:800;letter-spacing:-.02em;line-height:1.08;font-size:clamp(32px,4.8vw,58px);color:#141414;margin:0 auto;max-width:18ch;text-wrap:balance">Welcome to Tilli Measures</h1>
+          <p style="font-family:'Quicksand',sans-serif;font-style:italic;font-weight:600;font-size:clamp(16px,2vw,24px);color:#3F5560;margin:clamp(14px,2.4vh,24px) auto 0;max-width:32ch">Every skill a seed. Watch the whole child grow.</p>
+          <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(12px,2vw,22px);margin-top:clamp(22px,3.4vh,32px)">
+            <span style="background:#fff;border-radius:999px;padding:11px 20px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(12px,1.2vw,15px);color:#5B6170"><b style="font-family:'Montserrat',sans-serif;color:#E91E8C">12</b> foundational skills</span>
+            <span style="background:#fff;border-radius:999px;padding:11px 20px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(12px,1.2vw,15px);color:#5B6170"><b style="font-family:'Montserrat',sans-serif;color:#E91E8C">3&#215;</b> a year, 20 min a week</span>
+          </div>
+          <div style="margin-top:clamp(24px,4vh,34px)">
+            <button onClick="{{ onGetStarted }}" class="tm-focus" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:clamp(15px,1.7vw,19px);color:#fff;background:#56C02B;padding:16px 44px;border-radius:999px;transition:transform .2s cubic-bezier(.2,.7,.3,1),background .2s" style-hover="background:#49A524" style-active="transform:scale(.98)">Get started</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div aria-hidden="true" style="position:relative;z-index:1;height:clamp(130px,22vh,220px);pointer-events:none">{{ band }}</div>
+
+  <!-- ===== CHILD SELECT ===== -->
+  <sc-if value="{{ st_children }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:6;background:#fff;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:clamp(24px,5vh,48px) clamp(24px,5vw,48px);animation:tmRise .32s ease both">
+      <div style="width:100%;max-width:660px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:clamp(20px,3.4vh,32px)">
+          <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli" style="height:26px;width:auto;display:block">
+          <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#26BDE2">Measures</span>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:#D9F5FF;border-radius:999px;padding:7px 14px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:12.5px;color:#1B7F99">
+            <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/graduation-cap.png" alt="" aria-hidden="true" style="width:14px;height:auto;filter:brightness(0) saturate(100%) invert(38%) sepia(52%) saturate(1200%) hue-rotate(150deg)">{{ school }}
+          </span>
+        </div>
+        <h1 style="font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,36px);line-height:1.14;color:#141414;margin:0 0 8px;text-wrap:balance">Select the child you want to know more about</h1>
+        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#545454;margin:0 0 clamp(20px,3vh,28px)">{{ childSub }}</p>
+        <div style="display:flex;flex-wrap:wrap;gap:16px">
+          <sc-for list="{{ children }}" as="ch" hint-placeholder-count="2">
+            <button onClick="{{ ch.onClick }}" class="tm-focus" style="{{ ch.style }}">
+              <span style="display:flex;align-items:center;gap:12px">
+                <span style="{{ ch.dotStyle }}"><img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/smiley.png" alt="" aria-hidden="true" style="width:55%;height:auto"></span>
+                <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:19px;color:#474747">{{ ch.name }}</span>
+              </span>
+              <span style="{{ ch.badgeStyle }}">{{ ch.status }}</span>
+            </button>
+          </sc-for>
+          <button onClick="{{ startAddChild }}" class="tm-focus" style="border:2px dashed #ECEEF2;background:#fff;border-radius:24px;padding:22px 26px;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#56C02B;min-width:170px;transition:transform .2s cubic-bezier(.2,.7,.3,1),border-color .2s" style-hover="border-color:#56C02B;transform:translateY(-4px)">+ add child</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== ADD CHILD ===== -->
+  <sc-if value="{{ st_childForm }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:6;background:#fff;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:clamp(24px,5vh,48px) clamp(24px,5vw,48px);animation:tmRise .32s ease both">
+      <div style="width:100%;max-width:520px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:clamp(20px,3.4vh,30px)">
+          <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli" style="height:26px;width:auto;display:block">
+          <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#26BDE2">Measures</span>
+          <button onClick="{{ childFormBack }}" class="tm-focus" style="margin-left:auto;background:#fff;border:1px solid #ECEEF2;color:#545454;border-radius:999px;padding:8px 14px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:12.5px;cursor:pointer;transition:border-color .2s" style-hover="border-color:#26BDE2;color:#26BDE2">&#8592; Back</button>
+        </div>
+        <h1 style="font-family:'Montserrat',sans-serif;font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,34px);color:#141414;margin:0 0 8px">Add child details</h1>
+        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#545454;margin:0 0 24px">Tell us a little about your child.</p>
+        <form onSubmit="{{ submitChild }}" style="display:flex;flex-direction:column;gap:16px;background:#fff;border:2px solid #26BDE2;border-radius:24px;padding:clamp(20px,3vw,28px)">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+            <label style="display:flex;flex-direction:column;gap:7px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12.5px;color:#474747">First name *
+              <input value="{{ newChildName }}" onInput="{{ onNewChildName }}" autoFocus placeholder="Enter first name" class="tm-focus" style="border:1px solid {{ errFirst }};background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:13px 15px;border-radius:8px;width:100%"/>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:7px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12.5px;color:#474747">Last name *
+              <input value="{{ newChildLast }}" onInput="{{ onNewChildLast }}" placeholder="Enter last name" class="tm-focus" style="border:1px solid {{ errLast }};background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:13px 15px;border-radius:8px;width:100%"/>
+            </label>
+          </div>
+          <label style="display:flex;flex-direction:column;gap:7px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12.5px;color:#474747">Student admission number *
+            <input value="{{ newChildAdmission }}" onInput="{{ onNewChildAdmission }}" placeholder="Enter student admission number" class="tm-focus" style="border:1px solid {{ errAdm }};background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:13px 15px;border-radius:8px"/>
+          </label>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+            <label style="display:flex;flex-direction:column;gap:7px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12.5px;color:#474747">Grade
+              <span style="position:relative;display:block">
+                <select value="{{ newChildGrade }}" onChange="{{ onNewChildGrade }}" class="tm-focus" style="border:1px solid #ECEEF2;background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:13px 36px 13px 15px;border-radius:8px;width:100%;appearance:none;cursor:pointer">
+                  <option value="">Select grade</option>
+                  <sc-for list="{{ gradeOptions }}" as="g" hint-placeholder-count="3"><option value="{{ g }}">{{ g }}</option></sc-for>
+                </select>
+                <span aria-hidden="true" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#9AA3AF;font-size:12px;pointer-events:none">&#9662;</span>
+              </span>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:7px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12.5px;color:#474747">Section
+              <span style="position:relative;display:block">
+                <select value="{{ newChildSection }}" onChange="{{ onNewChildSection }}" class="tm-focus" style="border:1px solid #ECEEF2;background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:13px 36px 13px 15px;border-radius:8px;width:100%;appearance:none;cursor:pointer">
+                  <option value="">Select section</option>
+                  <sc-for list="{{ sectionOptions }}" as="s" hint-placeholder-count="3"><option value="{{ s }}">{{ s }}</option></sc-for>
+                </select>
+                <span aria-hidden="true" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#9AA3AF;font-size:12px;pointer-events:none">&#9662;</span>
+              </span>
+            </label>
+          </div>
+          <button type="submit" class="tm-focus {{ addShake }}" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fff;background:#56C02B;padding:15px;border-radius:999px;margin-top:4px;transition:background .2s,transform .2s cubic-bezier(.2,.7,.3,1)" style-hover="background:#49A524" style-active="transform:scale(.98)">Add child &#8594;</button>
+        </form>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== AUTH DIALOG ===== -->
+  <sc-if value="{{ authOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:5;background:rgba(20,20,20,.42);display:flex;align-items:center;justify-content:center;padding:24px;animation:tmRise .28s ease both">
+      <div role="dialog" aria-label="Get started with Tilli Measures" style="position:relative;width:100%;max-width:440px;max-height:calc(100svh - 40px);overflow-y:auto;background:#fff;border:2px solid #26BDE2;border-radius:24px;padding:32px 30px;font-family:'Montserrat',sans-serif">
+
+        <sc-if value="{{ showBack }}">
+          <button onClick="{{ authBack }}" aria-label="Back" class="tm-focus" style="position:absolute;top:16px;left:16px;background:#fff;border:1px solid #ECEEF2;color:#545454;border-radius:999px;padding:7px 13px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:12.5px;cursor:pointer;transition:border-color .2s,color .2s" style-hover="border-color:#26BDE2;color:#26BDE2">&#8592; Back</button>
+        </sc-if>
+        <button onClick="{{ authClose }}" aria-label="Close" class="tm-focus" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#9AA3AF;font-size:24px;line-height:1;cursor:pointer">&#215;</button>
+
+        <div style="display:flex;justify-content:center;margin:10px 0 14px">
+          <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli" style="height:26px;width:auto;display:block">
+        </div>
+
+        <sc-if value="{{ st_role }}">
+          <h2 style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:24px;color:#141414;text-align:center;margin:0 0 6px">Who are you?</h2>
+          <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:#545454;text-align:center;margin:0 0 22px">We'll set up the right garden for you.</p>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ roles }}" as="r" hint-placeholder-count="2">
+              <button onClick="{{ r.onClick }}" class="tm-focus" style="{{ r.style }}">
+                <span style="{{ r.circleStyle }}">{{ r.iconEl }}</span>
+                <span style="text-align:left">
+                  <span style="display:block;font-family:'Montserrat',sans-serif;font-weight:700;font-size:17px;color:#474747">{{ r.label }}</span>
+                  <span style="display:block;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#5B6170;margin-top:3px">{{ r.sub }}</span>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ st_school }}">
+          <h2 style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:22px;color:#141414;text-align:center;margin:0 0 6px;text-wrap:balance">{{ schoolTitle }}</h2>
+          <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:#545454;text-align:center;margin:0 0 20px">Start typing to find it in the list.</p>
+          <div style="position:relative">
+            <input value="{{ schoolQuery }}" onInput="{{ onSchoolQuery }}" onFocus="{{ openSchool }}" autoFocus placeholder="Select school" aria-label="Search school" class="tm-focus" style="width:100%;border:1px solid #ECEEF2;background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:14px 40px 14px 16px;border-radius:8px"/>
+            <span aria-hidden="true" style="position:absolute;right:15px;top:50%;transform:translateY(-50%);color:#9AA3AF;font-size:12px">&#9662;</span>
+            <sc-if value="{{ schoolListOpen }}">
+              <div role="listbox" style="margin-top:8px;background:#fff;border:1px solid #ECEEF2;border-radius:16px;box-shadow:0 2px 10px rgba(20,20,20,.06);max-height:200px;overflow-y:auto;padding:6px">
+                <sc-for list="{{ schoolMatches }}" as="sc" hint-placeholder-count="5">
+                  <button role="option" onClick="{{ sc.onClick }}" class="tm-focus" style="{{ sc.style }}">
+                    <span style="width:7px;height:7px;border-radius:50%;background:#56C02B;flex:none"></span>{{ sc.name }}
+                  </button>
+                </sc-for>
+                <sc-if value="{{ schoolNoMatch }}"><div style="padding:12px 13px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:#9AA3AF">No match &#8212; <span style="color:#56C02B">use &#8220;{{ schoolQuery }}&#8221;</span></div></sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <button onClick="{{ schoolContinue }}" disabled="{{ schoolContinueDisabled }}" class="tm-focus" style="{{ schoolContinueStyle }}">Continue &#8594;</button>
+        </sc-if>
+
+        <sc-if value="{{ st_email }}">
+          <h2 style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:24px;color:#141414;text-align:center;margin:0 0 10px">Enter your email</h2>
+          <p style="text-align:center;margin:0 0 20px"><span style="display:inline-flex;align-items:center;gap:8px;background:#D9F5FF;border-radius:999px;padding:7px 14px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:12.5px;color:#1B7F99">{{ school }}</span></p>
+          <form onSubmit="{{ onEmailSubmit }}" style="display:flex;flex-direction:column;gap:14px">
+            <input value="{{ email }}" onInput="{{ onEmail }}" type="email" required autoFocus placeholder="you@email.com" aria-label="Email address" class="tm-focus" style="border:1px solid #ECEEF2;background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:14px 16px;border-radius:8px"/>
+            <button type="submit" class="tm-focus" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fff;background:#56C02B;padding:15px;border-radius:999px;transition:background .2s,transform .2s cubic-bezier(.2,.7,.3,1)" style-hover="background:#49A524" style-active="transform:scale(.98)">Enter &#8594;</button>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ st_checking }}">
+          <div style="text-align:center;padding:24px 0 14px">
+            <div style="width:44px;height:44px;border-radius:50%;border:4px solid #ECEEF2;border-top-color:#26BDE2;margin:0 auto 18px;animation:tmSpin .8s linear infinite"></div>
+            <p style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:15px;color:#545454;margin:0">Checking if your account exists&#8230;</p>
+            <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#9AA3AF;margin:6px 0 0;word-break:break-all">{{ email }}</p>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ st_login }}">
+          <h2 style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:23px;color:#141414;text-align:center;margin:0 0 8px">Enter your Tilli account</h2>
+          <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:#545454;text-align:center;margin:0 0 20px;word-break:break-all">{{ email }}</p>
+          <button onClick="{{ googleAuth }}" class="tm-focus" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid #ECEEF2;background:#fff;color:#474747;font-family:'Montserrat',sans-serif;font-weight:700;font-size:14.5px;padding:14px;border-radius:999px;cursor:pointer;transition:border-color .2s" style-hover="border-color:#26BDE2">{{ gIcon }} Enter via Google</button>
+          <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:#9AA3AF;font-family:'Quicksand',sans-serif;font-size:12px;font-weight:700"><span style="flex:1;height:1px;background:#ECEEF2"></span>OR<span style="flex:1;height:1px;background:#ECEEF2"></span></div>
+          <form onSubmit="{{ onPasswordSubmit }}" style="display:flex;flex-direction:column;gap:14px">
+            <input value="{{ password }}" onInput="{{ onPassword }}" type="password" required placeholder="Enter your password" aria-label="Password" class="tm-focus" style="border:1px solid #ECEEF2;background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:14px 16px;border-radius:8px"/>
+            <button type="submit" class="tm-focus" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fff;background:#56C02B;padding:15px;border-radius:999px;transition:background .2s,transform .2s cubic-bezier(.2,.7,.3,1)" style-hover="background:#49A524" style-active="transform:scale(.98)">Enter via password &#8594;</button>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ st_signup }}">
+          <h2 style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:23px;color:#141414;text-align:center;margin:0 0 8px">Create your Tilli account</h2>
+          <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:#545454;text-align:center;margin:0 0 20px;word-break:break-all">{{ email }}</p>
+          <button onClick="{{ googleAuth }}" class="tm-focus" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid #ECEEF2;background:#fff;color:#474747;font-family:'Montserrat',sans-serif;font-weight:700;font-size:14.5px;padding:14px;border-radius:999px;cursor:pointer;transition:border-color .2s" style-hover="border-color:#26BDE2">{{ gIcon }} Create via Google</button>
+          <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:#9AA3AF;font-family:'Quicksand',sans-serif;font-size:12px;font-weight:700"><span style="flex:1;height:1px;background:#ECEEF2"></span>OR<span style="flex:1;height:1px;background:#ECEEF2"></span></div>
+          <form onSubmit="{{ onPasswordSubmit }}" style="display:flex;flex-direction:column;gap:14px">
+            <input value="{{ password }}" onInput="{{ onPassword }}" type="password" required placeholder="Create a password" aria-label="Create a password" class="tm-focus" style="border:1px solid #ECEEF2;background:#fff;outline:none;font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:#141414;padding:14px 16px;border-radius:8px"/>
+            <button type="submit" class="tm-focus" style="border:none;cursor:pointer;font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fff;background:#56C02B;padding:15px;border-radius:999px;transition:background .2s,transform .2s cubic-bezier(.2,.7,.3,1)" style-hover="background:#49A524" style-active="transform:scale(.98)">Create via password &#8594;</button>
+          </form>
+        </sc-if>
+
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;heroVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A&quot;,&quot;B&quot;,&quot;C&quot;],&quot;default&quot;:&quot;A&quot;,&quot;tsType&quot;:&quot;'A'|'B'|'C'&quot;,&quot;section&quot;:&quot;Hero&quot;}}">
+class Component extends DCLogic {
+  state = { step: "start", hero: "A", role: null, school: "", schoolQuery: "", schoolListOpen: false, email: "", password: "", kids: [], newChildName: "", newChildLast: "", newChildAdmission: "", newChildGrade: "", newChildSection: "", childErrs: {}, addShake: false };
+
+  DS = "_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/";
+  ACCT_KEY = "tilliMeasures.accounts";
+
+  loadAccounts() {
+    let a = {};
+    try { a = JSON.parse(localStorage.getItem(this.ACCT_KEY) || "{}"); } catch (e) {}
+    if (!a["teacher@tilli.edu"]) a["teacher@tilli.edu"] = true;
+    if (!a["parent@tilli.edu"]) a["parent@tilli.edu"] = true;
+    return a;
+  }
+  saveAccount(email) {
+    const a = this.loadAccounts();
+    a[email.toLowerCase()] = true;
+    try { localStorage.setItem(this.ACCT_KEY, JSON.stringify(a)); } catch (e) {}
+  }
+
+  SCHOOLS = [
+    "Little Sprouts School", "Greenfield International School", "Sunrise Public School",
+    "Meadow Montessori", "Bright Beginnings Academy", "Lotus Valley School",
+    "Riverside Primary", "Banyan Tree School", "Marigold Learning Centre",
+    "Colombo Kids Academy", "Kandy Hill School", "St. Mary's Convent",
+  ];
+
+  setHero = (hero) => this.setState({ hero });
+  onGetStarted = () => this.setState({ step: "role", role: null, school: "", schoolQuery: "", schoolListOpen: false });
+  pickRole = (role) => this.setState({ step: "school", role, school: "", schoolQuery: "", schoolListOpen: false });
+  onSchoolQuery = (e) => this.setState({ schoolQuery: e.target.value, school: "", schoolListOpen: true });
+  openSchool = () => this.setState({ schoolListOpen: true });
+  pickSchool = (name) => this.setState({ school: name, schoolQuery: name, schoolListOpen: false });
+  schoolContinue = () => {
+    const s = (this.state.school || this.state.schoolQuery).trim();
+    if (!s) return;
+    this.setState({ step: "email", school: s, schoolListOpen: false, email: "", password: "" });
+  };
+  onEmail = (e) => this.setState({ email: e.target.value });
+  onPassword = (e) => this.setState({ password: e.target.value });
+  onEmailSubmit = (e) => {
+    e.preventDefault();
+    const email = this.state.email.trim();
+    if (!email) return;
+    this.setState({ step: "checking", password: "" });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => {
+      const exists = !!this.loadAccounts()[email.toLowerCase()];
+      this.setState({ step: exists ? "login" : "signup" });
+    }, 900);
+  };
+  onPasswordSubmit = (e) => {
+    e.preventDefault();
+    if (!this.state.password.trim()) return;
+    if (this.state.step === "signup") this.saveAccount(this.state.email);
+    this.go();
+  };
+  googleAuth = () => {
+    if (this.state.step === "signup") this.saveAccount(this.state.email);
+    this.go();
+  };
+  go = () => {
+    if (this.state.role === "teacher") {
+      window.location.href = "Teacher Dashboard.dc.html?school=" + encodeURIComponent(this.state.school);
+      return;
+    }
+    const isNew = this.state.step === "signup";
+    const kids = isNew ? [] : [{ name: "Aarav", status: "assessment complete" }, { name: "Meera", status: "assessment pending" }];
+    this.setState({ step: "children", kids });
+  };
+  goHome = (childName, meta) => {
+    let url = "Home%20flow.dc.html?school=" + encodeURIComponent(this.state.school) + "&child=" + encodeURIComponent(childName);
+    if (meta) {
+      if (meta.grade) url += "&grade=" + encodeURIComponent(meta.grade);
+      if (meta.section) url += "&section=" + encodeURIComponent(meta.section);
+      if (meta.adm) url += "&adm=" + encodeURIComponent(meta.adm);
+    }
+    window.location.href = url;
+  };
+  startAddChild = () => this.setState({ step: "childForm", newChildName: "", newChildLast: "", newChildAdmission: "", newChildGrade: "", newChildSection: "" });
+  childFormBack = () => this.setState({ step: "children" });
+  onNewChildName = (e) => this.setState({ newChildName: e.target.value, childErrs: { ...this.state.childErrs, first: false } });
+  onNewChildLast = (e) => this.setState({ newChildLast: e.target.value, childErrs: { ...this.state.childErrs, last: false } });
+  onNewChildAdmission = (e) => this.setState({ newChildAdmission: e.target.value, childErrs: { ...this.state.childErrs, adm: false } });
+  onNewChildGrade = (e) => this.setState({ newChildGrade: e.target.value });
+  onNewChildSection = (e) => this.setState({ newChildSection: e.target.value });
+  submitChild = (e) => {
+    e.preventDefault();
+    const errs = {
+      first: !this.state.newChildName.trim(),
+      last: !this.state.newChildLast.trim(),
+      adm: !this.state.newChildAdmission.trim(),
+    };
+    if (errs.first || errs.last || errs.adm) {
+      this.setState({ childErrs: errs, addShake: true });
+      clearTimeout(this._shakeT);
+      this._shakeT = setTimeout(() => this.setState({ addShake: false }), 450);
+      return;
+    }
+    this.goHome(this.state.newChildName.trim(), { grade: this.state.newChildGrade, section: this.state.newChildSection, adm: this.state.newChildAdmission.trim() });
+  };
+  authClose = () => { clearTimeout(this._t); this.setState({ step: "start" }); };
+  authBack = () => {
+    const s = this.state.step;
+    clearTimeout(this._t);
+    if (s === "school") this.setState({ step: "role" });
+    else if (s === "email") this.setState({ step: "school" });
+    else this.setState({ step: "email", password: "" });
+  };
+  componentWillUnmount() { clearTimeout(this._t); clearTimeout(this._shakeT); }
+
+  // ---- flat brand-colour flower band ----
+  head(cx, cy, petal, kind, scale) {
+    const R = React.createElement;
+    if (kind === "tulip") {
+      const w = 14 * scale, hh = 26 * scale;
+      return R("g", null, [
+        R("path", { key: "t", d: `M ${cx - w} ${cy + 4 * scale} C ${cx - w} ${cy - hh * 0.55} ${cx - w * 0.55} ${cy - hh} ${cx} ${cy - hh} C ${cx + w * 0.55} ${cy - hh} ${cx + w} ${cy - hh * 0.55} ${cx + w} ${cy + 4 * scale} C ${cx + w * 0.6} ${cy + 12 * scale} ${cx - w * 0.6} ${cy + 12 * scale} ${cx - w} ${cy + 4 * scale} Z`, fill: petal }),
+        R("path", { key: "t2", d: `M ${cx} ${cy - hh} C ${cx - w * 0.34} ${cy - hh * 0.4} ${cx - w * 0.34} ${cy + 4 * scale} ${cx} ${cy + 9 * scale} C ${cx + w * 0.34} ${cy + 4 * scale} ${cx + w * 0.34} ${cy - hh * 0.4} ${cx} ${cy - hh} Z`, fill: "#fff", opacity: 0.22 }),
+      ]);
+    }
+    if (kind === "sprout") {
+      return R("g", null, [
+        R("path", { key: "s1", d: `M ${cx} ${cy + 12 * scale} q -${16 * scale} -${6 * scale} -${20 * scale} -${20 * scale} q ${16 * scale} ${2 * scale} ${20 * scale} ${16 * scale} Z`, fill: "#56C02B" }),
+        R("path", { key: "s2", d: `M ${cx} ${cy + 12 * scale} q ${16 * scale} -${6 * scale} ${20 * scale} -${20 * scale} q -${16 * scale} ${2 * scale} -${20 * scale} ${16 * scale} Z`, fill: "#8FD96B" }),
+      ]);
+    }
+    const rad = 12 * scale, petals = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+      petals.push(R("circle", { key: "p" + i, cx: cx + Math.cos(a) * rad, cy: cy + Math.sin(a) * rad, r: rad * 0.84, fill: petal }));
+    }
+    return R("g", null, [...petals, R("circle", { key: "c", cx, cy, r: 6.5 * scale, fill: "#FCC30B" })]);
+  }
+
+  plant(x, groundY, o) {
+    const R = React.createElement;
+    const { h, petal, sway, delay, dur, scale = 1, kind = "flower", lean = 0 } = o;
+    const topY = groundY - h, cx = x + lean;
+    return R("g", { className: "tm-sway", style: { animation: `${sway} ${dur}s ease-in-out ${delay}s infinite alternate` } }, [
+      R("path", { key: "stem", d: `M ${x} ${groundY} C ${x - 3} ${groundY - h * 0.45} ${cx + 3} ${topY + h * 0.35} ${cx} ${topY}`, stroke: "#56C02B", strokeWidth: 3.6 * scale, fill: "none", strokeLinecap: "round" }),
+      R("path", { key: "ll", d: `M ${x - 1} ${groundY - h * 0.4} q -${19 * scale} -${5 * scale} -${25 * scale} ${9 * scale} q ${15 * scale} ${4 * scale} ${25 * scale} -${9 * scale} Z`, fill: "#56C02B" }),
+      R("path", { key: "lr", d: `M ${x + 1} ${groundY - h * 0.62} q ${17 * scale} -${6 * scale} ${23 * scale} ${8 * scale} q -${14 * scale} ${4 * scale} -${23 * scale} -${8 * scale} Z`, fill: "#3F9E1D" }),
+      R("g", { key: "head" }, this.head(cx, topY, petal, kind, scale)),
+    ]);
+  }
+
+  renderVals() {
+    const R = React.createElement;
+    const petals = ["#E866B0", "#26BDE2", "#FCC30B", "#E91E8C"];
+    const GY = 196;
+    const specs = [
+      [60, { h: 96, kind: "flower", scale: 1.05, sway: "swayA", dur: 4.4, delay: 0, lean: 2 }],
+      [136, { h: 54, kind: "sprout", scale: 1, sway: "swayC", dur: 3.6, delay: 0.6 }],
+      [212, { h: 118, kind: "tulip", scale: 1.1, sway: "swayB", dur: 5.1, delay: 0.3, lean: -3 }],
+      [288, { h: 68, kind: "flower", scale: 0.85, sway: "swayC", dur: 4.0, delay: 1.1 }],
+      [372, { h: 104, kind: "flower", scale: 1.12, sway: "swayA", dur: 4.8, delay: 0.2, lean: 3 }],
+      [446, { h: 48, kind: "sprout", scale: 0.95, sway: "swayB", dur: 3.4, delay: 0.9 }],
+      [524, { h: 128, kind: "flower", scale: 1.18, sway: "swayB", dur: 5.4, delay: 0.5, lean: -2 }],
+      [608, { h: 72, kind: "tulip", scale: 0.95, sway: "swayC", dur: 4.2, delay: 1.3 }],
+      [686, { h: 98, kind: "flower", scale: 1.05, sway: "swayA", dur: 4.6, delay: 0.15, lean: 2 }],
+      [760, { h: 44, kind: "sprout", scale: 1, sway: "swayC", dur: 3.2, delay: 0.7 }],
+      [832, { h: 116, kind: "flower", scale: 1.14, sway: "swayB", dur: 5.2, delay: 0.4, lean: -3 }],
+      [912, { h: 62, kind: "tulip", scale: 0.9, sway: "swayA", dur: 3.9, delay: 1.0 }],
+      [986, { h: 104, kind: "flower", scale: 1.08, sway: "swayC", dur: 4.9, delay: 0.25, lean: 2 }],
+      [1062, { h: 50, kind: "sprout", scale: 1.05, sway: "swayB", dur: 3.5, delay: 0.8 }],
+      [1132, { h: 90, kind: "flower", scale: 1, sway: "swayA", dur: 4.5, delay: 0.55 }],
+      [1206, { h: 60, kind: "tulip", scale: 0.92, sway: "swayC", dur: 4.1, delay: 1.2, lean: 2 }],
+      [1280, { h: 110, kind: "flower", scale: 1.1, sway: "swayB", dur: 5.0, delay: 0.35, lean: -2 }],
+      [1360, { h: 46, kind: "sprout", scale: 1, sway: "swayA", dur: 3.3, delay: 0.95 }],
+    ];
+    const band = R("svg", {
+      viewBox: "0 0 1440 240", preserveAspectRatio: "xMidYMax slice",
+      style: { width: "100%", height: "100%", display: "block" }, "aria-hidden": "true",
+    }, [
+      R("rect", { key: "wash", x: 0, y: 150, width: 1440, height: 90, fill: "#F1FFEC" }),
+      R("g", { key: "plants" }, (() => { let c = 0; return specs.map(([x, o], i) => { const p = o.kind === "sprout" ? null : petals[c++ % petals.length]; return R("g", { key: "pl" + i }, this.plant(x, GY, { petal: p, ...o })); }); })()),
+      R("rect", { key: "ground", x: 0, y: 194, width: 1440, height: 5, fill: "#56C02B" }),
+    ]);
+
+    const hero = this.state.hero || this.props.heroVariant || "A";
+    const heroTabs = ["A", "B", "C"].map((k) => ({
+      label: k, onClick: () => this.setHero(k),
+      style: {
+        cursor: "pointer", fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "12px",
+        padding: "6px 12px", borderRadius: "999px", transition: "all .2s cubic-bezier(.2,.7,.3,1)",
+        border: hero === k ? "1px solid #26BDE2" : "1px solid #ECEEF2",
+        background: hero === k ? "#26BDE2" : "#fff", color: hero === k ? "#fff" : "#9AA3AF",
+      },
+    }));
+
+    const roleCard = (accent) => ({
+      display: "flex", alignItems: "center", gap: "16px", border: "2px solid " + accent,
+      background: "#fff", borderRadius: "24px", padding: "18px 18px", cursor: "pointer",
+      fontFamily: "'Montserrat',sans-serif", transition: "transform .2s cubic-bezier(.2,.7,.3,1)",
+    });
+    const circle = (accent) => ({ flex: "none", width: "56px", height: "56px", borderRadius: "50%", background: accent, display: "flex", alignItems: "center", justifyContent: "center" });
+    const iconEl = (src) => R("img", { src, alt: "", "aria-hidden": "true", style: { width: "52%", height: "auto" } });
+    const roles = [
+      { key: "parent", iconEl: iconEl(this.DS + "icons/family.png"), label: "Parent / Home", sub: "Follow your child's assessments", style: roleCard("#FCC30B"), circleStyle: circle("#FCC30B"), onClick: () => this.pickRole("parent") },
+      { key: "teacher", iconEl: iconEl(this.DS + "icons/graduation-cap.png"), label: "School", sub: "See your whole class garden", style: roleCard("#26BDE2"), circleStyle: circle("#26BDE2"), onClick: () => this.pickRole("teacher") },
+    ];
+
+    const step = this.state.step;
+    const isTeacher = this.state.role === "teacher";
+    const q = (this.state.schoolQuery || "").trim().toLowerCase();
+    const matches = q ? this.SCHOOLS.filter((s) => s.toLowerCase().includes(q)) : this.SCHOOLS;
+    const exactish = this.SCHOOLS.some((s) => s.toLowerCase() === q);
+    const schoolMatches = matches.map((name) => ({
+      name,
+      style: {
+        width: "100%", textAlign: "left", border: "none", borderRadius: "8px", padding: "11px 13px",
+        cursor: "pointer", fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "14.5px",
+        color: "#141414", display: "flex", alignItems: "center", gap: "10px",
+        background: this.state.school === name ? "#F1FFEC" : "transparent",
+      },
+      onClick: () => this.pickSchool(name),
+    }));
+    const canContinue = !!(this.state.school || this.state.schoolQuery.trim());
+
+    const gIcon = R("svg", { width: 18, height: 18, viewBox: "0 0 48 48", "aria-hidden": "true" }, [
+      R("path", { key: "b", fill: "#4285F4", d: "M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" }),
+      R("path", { key: "g", fill: "#34A853", d: "M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" }),
+      R("path", { key: "y", fill: "#FBBC05", d: "M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z" }),
+      R("path", { key: "r", fill: "#EA4335", d: "M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" }),
+    ]);
+
+    return {
+      band, roles, gIcon, heroTabs,
+      heroA: hero === "A", heroB: hero === "B", heroC: hero === "C",
+      onGetStarted: this.onGetStarted, authBack: this.authBack, authClose: this.authClose,
+      authOpen: step !== "start" && step !== "children" && step !== "childForm",
+      showBack: step !== "role" && step !== "checking",
+      st_role: step === "role", st_school: step === "school",
+      st_email: step === "email", st_checking: step === "checking",
+      st_login: step === "login", st_signup: step === "signup",
+      st_children: step === "children", st_childForm: step === "childForm",
+      childSub: this.state.kids.length ? "Tap a child to see how their garden is growing." : "Add your first child to get started.",
+      children: this.state.kids.map((k) => {
+        const done = k.status.indexOf("complete") >= 0;
+        return {
+          name: k.name, status: k.status,
+          onClick: () => this.goHome(k.name, k.name === "Aarav" ? { grade: "Grade 1", section: "A", adm: "ADM-2041" } : { grade: "Grade 3", section: "B", adm: "ADM-2044" }),
+          style: {
+            textAlign: "left", border: "2px solid " + (done ? "#56C02B" : "#ECEEF2"), background: "#fff",
+            borderRadius: "24px", padding: "20px 24px", cursor: "pointer", minWidth: "220px",
+            fontFamily: "'Montserrat',sans-serif", transition: "transform .2s cubic-bezier(.2,.7,.3,1)",
+          },
+          dotStyle: { flex: "none", width: "40px", height: "40px", borderRadius: "50%", background: done ? "#56C02B" : "#FCC30B", display: "flex", alignItems: "center", justifyContent: "center" },
+          badgeStyle: { display: "block", marginTop: "10px", fontFamily: "'Quicksand',sans-serif", fontWeight: 700, fontSize: "12px", color: done ? "#3F9E1D" : "#5B6170" },
+        };
+      }),
+      startAddChild: this.startAddChild, childFormBack: this.childFormBack, submitChild: this.submitChild,
+      errFirst: this.state.childErrs.first ? "#F99B1C" : "#ECEEF2",
+      errLast: this.state.childErrs.last ? "#F99B1C" : "#ECEEF2",
+      errAdm: this.state.childErrs.adm ? "#F99B1C" : "#ECEEF2",
+      addShake: this.state.addShake ? "tm-shake" : "",
+      gradeOptions: ["Pre-K", "Kindergarten", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5"],
+      sectionOptions: ["A", "B", "C", "D", "E", "F"],
+      newChildName: this.state.newChildName, newChildLast: this.state.newChildLast, newChildAdmission: this.state.newChildAdmission,
+      newChildGrade: this.state.newChildGrade, newChildSection: this.state.newChildSection,
+      onNewChildName: this.onNewChildName, onNewChildLast: this.onNewChildLast, onNewChildAdmission: this.onNewChildAdmission,
+      onNewChildGrade: this.onNewChildGrade, onNewChildSection: this.onNewChildSection,
+      email: this.state.email, password: this.state.password, school: this.state.school,
+      onEmail: this.onEmail, onPassword: this.onPassword,
+      onEmailSubmit: this.onEmailSubmit, onPasswordSubmit: this.onPasswordSubmit, googleAuth: this.googleAuth,
+      schoolQuery: this.state.schoolQuery, schoolListOpen: this.state.schoolListOpen,
+      schoolMatches, schoolNoMatch: q && !exactish && matches.length === 0,
+      schoolTitle: isTeacher ? "Select your school" : "Which school does your child go to?",
+      onSchoolQuery: this.onSchoolQuery, openSchool: this.openSchool, schoolContinue: this.schoolContinue,
+      schoolContinueDisabled: !canContinue,
+      schoolContinueStyle: {
+        width: "100%", marginTop: "16px", border: "none", cursor: canContinue ? "pointer" : "not-allowed",
+        fontFamily: "'Montserrat',sans-serif", fontWeight: 700, fontSize: "16px", color: "#fff",
+        background: canContinue ? "#56C02B" : "#DDE3DB", padding: "15px", borderRadius: "999px",
+      },
+    };
+  }
+}
+
+</script>
+</body>
+</html>
