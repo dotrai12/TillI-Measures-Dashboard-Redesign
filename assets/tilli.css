@@ -1,0 +1,222 @@
+/* ============================================================
+   Tilli Measures — shared design system
+   Bright brand identity (per image 1): Montserrat + Quicksand,
+   green / pink / cyan / yellow rail, flower band.
+   ============================================================ */
+
+:root {
+  /* Brand core */
+  --green-500: #56C02B;
+  --green-600: #49A524;
+  --green-700: #348C11;
+  --lime-400: #9BDE1D;
+  --pink-400: #E866B0;
+  --pink-600: #E91E8C;
+  --cyan-500: #26BDE2;
+  --cyan-700: #1B7F99;
+  --yellow-500: #FCC30B;
+  --orange-500: #F99B1C;
+
+  /* Ink */
+  --ink-900: #141414;
+  --ink-700: #474747;
+  --ink-600: #545454;
+  --ink-450: #5B6170;
+  --ink-300: #9AA3AF;
+
+  /* Surfaces & lines */
+  --white: #FFFFFF;
+  --line-200: #ECEEF2;
+  --surface-100: #F8F9FB;
+
+  /* Washes */
+  --wash-yellow: #FFF6A8;
+  --wash-cyan: #D9F5FF;
+  --wash-green: #F1FFEC;
+  --wash-pink: #FFF6FB;
+
+  --radius-card: 24px;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(.2, .7, .3, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  color: var(--ink-900);
+}
+
+a { color: var(--cyan-500); }
+a:hover { color: var(--cyan-700); }
+
+/* ---- Brand vertical rail (left edge) ---- */
+.brand-rail {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: clamp(8px, 1vw, 19px);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+}
+.brand-rail span:first-child { flex: 1; background: var(--green-500); }
+.brand-rail .seg { height: 64px; }
+.brand-rail .seg.pink { background: var(--pink-400); }
+.brand-rail .seg.cyan { background: var(--cyan-500); }
+.brand-rail .seg.yellow { background: var(--yellow-500); }
+
+/* ---- Wordmark lockup ---- */
+.lockup { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lockup img { height: clamp(22px, 2.4vw, 30px); width: auto; display: block; }
+.lockup .divider { width: 1px; height: 20px; background: var(--line-200); }
+.lockup .measures {
+  font-weight: 700;
+  font-size: clamp(11px, 1.1vw, 13px);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--cyan-500);
+}
+
+/* ---- Buttons ---- */
+.btn {
+  border: none;
+  cursor: pointer;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  transition: transform .2s var(--ease), background .2s, border-color .2s, color .2s;
+}
+.btn:active { transform: scale(.98); }
+.btn-primary {
+  color: #fff;
+  background: var(--green-500);
+  font-size: clamp(15px, 1.7vw, 19px);
+  padding: 16px 44px;
+}
+.btn-primary:hover { background: var(--green-600); }
+.btn-primary.block { width: 100%; padding: 15px; font-size: 16px; }
+.btn-primary:disabled { background: #DDE3DB; cursor: not-allowed; }
+
+.btn-ghost {
+  background: #fff;
+  border: 1px solid var(--line-200);
+  color: var(--ink-600);
+  border-radius: var(--radius-pill);
+  padding: 8px 14px;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .2s, color .2s;
+}
+.btn-ghost:hover { border-color: var(--cyan-500); color: var(--cyan-500); }
+
+/* ---- Focus ring ---- */
+.focus:focus-visible { outline: 3px solid var(--cyan-500); outline-offset: 3px; }
+
+/* ---- Form fields ---- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--ink-700);
+}
+.input, .select {
+  border: 1px solid var(--line-200);
+  background: #fff;
+  outline: none;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink-900);
+  padding: 13px 15px;
+  border-radius: 8px;
+  width: 100%;
+}
+.input:focus, .select:focus { border-color: var(--cyan-500); }
+.input.err { border-color: var(--orange-500); }
+.select { padding-right: 36px; appearance: none; cursor: pointer; }
+.select-wrap { position: relative; display: block; }
+.select-wrap::after {
+  content: '\25BE';
+  position: absolute; right: 14px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-300); font-size: 12px; pointer-events: none;
+}
+
+/* ---- School / grade pill ---- */
+.pill-info {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--wash-cyan);
+  border-radius: var(--radius-pill);
+  padding: 7px 14px;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700; font-size: 12.5px;
+  color: var(--cyan-700);
+}
+
+/* ---- Animations ---- */
+@keyframes swayA { from { transform: rotate(-2.2deg); } to { transform: rotate(2.6deg); } }
+@keyframes swayB { from { transform: rotate(2.4deg); } to { transform: rotate(-2deg); } }
+@keyframes swayC { from { transform: rotate(-1.4deg); } to { transform: rotate(1.6deg); } }
+@keyframes tmRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes tmSpin { to { transform: rotate(360deg); } }
+@keyframes tmShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); } 40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); } 80% { transform: translateX(3px); }
+}
+.tm-rise { animation: tmRise .6s ease both; }
+.tm-shake { animation: tmShake .4s ease; }
+.tm-sway { transform-box: fill-box; transform-origin: 50% 100%; }
+@media (prefers-reduced-motion: reduce) {
+  .tm-sway, .tm-rise { animation: none !important; }
+}
+
+/* ---- Spinner ---- */
+.spinner {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 4px solid var(--line-200); border-top-color: var(--cyan-500);
+  animation: tmSpin .8s linear infinite;
+}
+
+/* ---- Overlay / dialog ---- */
+.overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(20, 20, 20, .42);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  animation: tmRise .28s ease both;
+}
+.dialog {
+  position: relative;
+  width: 100%; max-width: 440px;
+  max-height: calc(100svh - 40px); overflow-y: auto;
+  background: #fff;
+  border: 2px solid var(--cyan-500);
+  border-radius: var(--radius-card);
+  padding: 32px 30px;
+}
+.sheet {
+  position: fixed; inset: 0; z-index: 50;
+  background: #fff; overflow-y: auto;
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(24px, 5vh, 48px) clamp(24px, 5vw, 48px);
+  animation: tmRise .32s ease both;
+}
+.dialog-close {
+  position: absolute; top: 12px; right: 16px;
+  background: none; border: none; color: var(--ink-300);
+  font-size: 24px; line-height: 1; cursor: pointer;
+}
+.dialog-back {
+  position: absolute; top: 16px; left: 16px;
+}
+
+.hidden { display: none !important; }

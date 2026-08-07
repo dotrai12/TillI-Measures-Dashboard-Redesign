@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilli Measures — Parent</title>
+<link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/fonts.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tilli.css">
+</head>
+<body>
+<div class="brand-rail" aria-hidden="true"><span></span><span class="seg pink"></span><span class="seg cyan"></span><span class="seg yellow"></span></div>
+
+<div style="min-height:100svh;display:flex;flex-direction:column;padding:clamp(20px,4vh,40px) clamp(30px,6vw,90px)">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <a href="index.html" class="lockup" style="text-decoration:none">
+      <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli">
+      <span class="divider"></span>
+      <span class="measures">Measures</span>
+    </a>
+    <span class="pill-info" id="school-pill" style="margin-left:auto"></span>
+  </div>
+
+  <div class="tm-rise" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px">
+    <span style="width:72px;height:72px;border-radius:50%;background:var(--wash-yellow);display:flex;align-items:center;justify-content:center">
+      <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/smiley.png" alt="" style="width:46%">
+    </span>
+    <p style="font-weight:700;font-size:clamp(11px,1.1vw,14px);letter-spacing:.16em;text-transform:uppercase;color:var(--green-500);margin:8px 0 0">Parent home</p>
+    <h1 style="font-weight:700;letter-spacing:-.02em;font-size:clamp(28px,4vw,48px);margin:0;max-width:16ch;text-wrap:balance" id="headline">Watch <span style="color:var(--pink-600)" id="child-name">your child</span> grow</h1>
+    <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:clamp(15px,1.6vw,19px);color:var(--ink-600);margin:0;max-width:44ch" id="meta-line">Your child's own garden — skills, assessments and gentle next steps — will live here. Coming next.</p>
+    <a href="index.html" class="btn btn-primary focus" style="text-decoration:none;display:inline-block;margin-top:10px">&#8592; Back to start</a>
+  </div>
+</div>
+
+<script>
+  const p = new URLSearchParams(location.search);
+  const school = p.get('school'), child = p.get('child');
+  const grade = p.get('grade'), section = p.get('section'), adm = p.get('adm');
+  const pill = document.getElementById('school-pill');
+  if (school) pill.textContent = school; else pill.style.display = 'none';
+  if (child) document.getElementById('child-name').textContent = child;
+  const bits = [grade, section && 'Section ' + section, adm].filter(Boolean);
+  if (bits.length) {
+    document.getElementById('meta-line').textContent =
+      bits.join('  ·  ') + " — this is where their garden will grow. Coming next.";
+  }
+</script>
+</body>
+</html>

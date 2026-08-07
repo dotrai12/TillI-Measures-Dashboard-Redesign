@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilli Measures</title>
+<link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/fonts.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tilli.css">
+<style>
+  .landing {
+    position: relative;
+    width: 100%;
+    min-height: 100svh;
+    overflow-x: hidden;
+    background: #fff;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .landing-inner {
+    position: relative;
+    z-index: 2;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(16px, 3vh, 36px) clamp(22px, 5vw, 72px) clamp(18px, 3vh, 32px) clamp(30px, 5vw, 80px);
+  }
+
+  /* Hero: left copy + right stat cards (image 1) */
+  .hero {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    align-items: center;
+    gap: clamp(28px, 4vw, 64px);
+    max-width: 1240px;
+    width: 100%;
+    margin: 0 auto;
+    padding-top: clamp(16px, 4vh, 40px);
+  }
+  .hero-eyebrow {
+    font-weight: 700;
+    font-size: clamp(11px, 1.1vw, 14px);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--green-500);
+    margin: 0 0 clamp(12px, 2vh, 20px);
+  }
+  .hero-title {
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.06;
+    font-size: clamp(34px, 5vw, 64px);
+    color: var(--ink-900);
+    margin: 0;
+    max-width: 15ch;
+    text-wrap: balance;
+  }
+  .hero-sub {
+    font-family: 'Quicksand', sans-serif;
+    font-style: italic;
+    font-weight: 600;
+    font-size: clamp(16px, 2vw, 25px);
+    color: var(--ink-600);
+    margin: clamp(12px, 2vh, 20px) 0 0;
+    max-width: 30ch;
+  }
+  .hero-cta { margin-top: clamp(24px, 4vh, 36px); }
+
+  .stat-stack { display: flex; flex-direction: column; gap: clamp(14px, 2vh, 20px); }
+  .stat-card {
+    border: 2px solid var(--pink-400);
+    border-radius: var(--radius-card);
+    padding: clamp(20px, 2.4vw, 28px);
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .stat-card.yellow { border-color: var(--yellow-500); }
+  .stat-icon {
+    flex: none;
+    width: clamp(52px, 5vw, 68px);
+    height: clamp(52px, 5vw, 68px);
+    border-radius: 50%;
+    background: var(--pink-400);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stat-icon.yellow { background: var(--yellow-500); }
+  .stat-icon img { width: 55%; height: auto; }
+  .stat-num {
+    display: block;
+    font-weight: 700;
+    font-size: clamp(30px, 3.2vw, 44px);
+    line-height: 1;
+    color: var(--pink-600);
+  }
+  .stat-label {
+    display: block;
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+    font-size: clamp(13px, 1.3vw, 16px);
+    color: var(--ink-450);
+    margin-top: 6px;
+  }
+
+  .flower-band {
+    position: relative;
+    z-index: 1;
+    height: clamp(130px, 22vh, 220px);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- Left brand rail -->
+<div class="brand-rail" aria-hidden="true">
+  <span></span>
+  <span class="seg pink"></span>
+  <span class="seg cyan"></span>
+  <span class="seg yellow"></span>
+</div>
+
+<div class="landing">
+  <div class="landing-inner">
+
+    <!-- Top bar -->
+    <div class="lockup">
+      <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/logos/tilli-wordmark-crop.png" alt="Tilli">
+      <span class="divider"></span>
+      <span class="measures">Measures</span>
+    </div>
+
+    <!-- Hero -->
+    <div class="hero tm-rise">
+      <div>
+        <p class="hero-eyebrow">Developmentally on track by 10</p>
+        <h1 class="hero-title">Welcome to Tilli Measures</h1>
+        <p class="hero-sub">Every skill a seed. Watch the whole child grow.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary focus" id="get-started">Get started</button>
+        </div>
+      </div>
+      <div class="stat-stack">
+        <div class="stat-card">
+          <span class="stat-icon">
+            <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/chart-up.png" alt="" aria-hidden="true">
+          </span>
+          <span>
+            <span class="stat-num">12</span>
+            <span class="stat-label">foundational skills, measured from three angles</span>
+          </span>
+        </div>
+        <div class="stat-card yellow">
+          <span class="stat-icon yellow">
+            <img src="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/icons/clock.png" alt="" aria-hidden="true">
+          </span>
+          <span>
+            <span class="stat-num">3&#215;</span>
+            <span class="stat-label">a year &#183; 20 minutes a week</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Flower band (SVG injected by JS) -->
+  <div class="flower-band" id="flower-band" aria-hidden="true"></div>
+</div>
+
+<!-- Auth + selection layers get injected here -->
+<div id="flow-root"></div>
+
+<script src="assets/flower-band.js"></script>
+<script src="assets/landing.js"></script>
+</body>
+</html>
