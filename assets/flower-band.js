@@ -116,6 +116,34 @@
     target.appendChild(svg);
   };
 
+  /* A small, standalone trio (one of each plant kind) on a transparent
+     background — a decorative flourish for other screens. Ground-less.
+     cfg lets a caller nudge the trio around (see FLOWER_CFG in landing.js). */
+  window.renderMiniFlowers = function (target, cfg) {
+    if (!target) return;
+    cfg = cfg || {};
+    const gy = cfg.groundY != null ? cfg.groundY : 128;
+    const baseX = cfg.baseX != null ? cfg.baseX : 46;
+    const gap = cfg.spacing != null ? cfg.spacing : 86;
+    const xs = [baseX, baseX + gap, baseX + gap * 2];
+    const trio = [
+      { x: xs[0], h: PROFILE.flower.h, scale: PROFILE.flower.scale, kind: 'flower', petal: '#E91E8C', sway: 'swayA', dur: 4.6, delay: 0.1, lean: 2 },
+      { x: xs[1], h: PROFILE.tulip.h,  scale: PROFILE.tulip.scale,  kind: 'tulip',  petal: '#FCC30B', sway: 'swayB', dur: 5.0, delay: 0.5, lean: -2 },
+      { x: xs[2], h: PROFILE.sprout.h, scale: PROFILE.sprout.scale, kind: 'sprout', petal: null,      sway: 'swayC', dur: 3.6, delay: 0.3 },
+    ];
+    const svg = el('svg', {
+      viewBox: '0 0 264 140', preserveAspectRatio: 'xMidYMax meet',
+      style: 'width:100%;height:100%;display:block;overflow:visible', 'aria-hidden': 'true',
+    });
+    svg.appendChild(el('g', {}, trio.map((o) => plant(o.x, gy, o))));
+    target.innerHTML = '';
+    target.appendChild(svg);
+    // Whole-trio placement is applied on the host element.
+    const tx = cfg.offsetX || 0, ty = cfg.offsetY || 0, sc = cfg.scale != null ? cfg.scale : 1;
+    target.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+    target.style.transformOrigin = 'top center';
+  };
+
   document.addEventListener('DOMContentLoaded', function () {
     const band = document.getElementById('flower-band');
     if (band) window.renderFlowerBand(band);

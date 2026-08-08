@@ -21,10 +21,47 @@
     /* Per-item text scale multipliers (baked from the Text size GUI) */
     --eyebrow-scale: 1.30;
     --title-scale: 1.20;
-    --sub-scale: 1.10;
+    --sub-scale: 1.05;
     --cta-scale: 1.25;
     --statnum-scale: 0.95;
-    --statlabel-scale: 1.00;
+    --statlabel-scale: 0.90;
+    /* Milo Hand decorative image (baked from the Milo GUI) */
+    --milo-x: -124px;
+    --milo-y: 95px;
+    --milo-scale: 1.05;
+    --milo-rot: 123deg;
+    /* Section nudge offsets (baked from the Section layout GUI) */
+    --herocopy-x: 0px;
+    --herocopy-y: 146px;
+    --stats-x: 0px;
+    --stats-y: 127px;
+  }
+
+  /* Section nudge — move the hero copy block (image 3) as a unit */
+  .hero-copy {
+    transform: translate(var(--herocopy-x), var(--herocopy-y));
+  }
+  /* Section nudge — move the stat cards block (image 4) as a unit */
+  .stat-stack {
+    transform: translate(var(--stats-x), var(--stats-y));
+  }
+
+  /* Milo Hand — decorative, sits above the landing, ignores clicks */
+  .milo-hand {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 3;
+    width: clamp(160px, 22vw, 320px);
+    height: auto;
+    transform:
+      translate(-50%, -50%)
+      translate(var(--milo-x), var(--milo-y))
+      rotate(var(--milo-rot))
+      scale(var(--milo-scale));
+    transform-origin: center;
+    pointer-events: none;
+    user-select: none;
   }
 
   .landing-inner {
@@ -121,6 +158,18 @@
     height: clamp(130px, 22vh, 220px);
     pointer-events: none;
   }
+
+  /* ---- Mobile (portrait phones ≤ 640px) ---- */
+  @media (max-width: 640px) {
+    .landing-inner { padding: 18px 20px 20px 26px; }
+    .hero { gap: 22px; padding-top: 14px; }
+    .hero-eyebrow { margin-bottom: 10px; }
+    .hero-cta { margin-top: 22px; }
+    .hero-cta .btn-primary { width: 100%; }   /* full-width Get started for thumb reach */
+    .stat-stack { gap: 12px; }
+    .stat-card { padding: 16px 18px; gap: 16px; border-radius: 20px; }
+    .flower-band { height: clamp(96px, 16vh, 150px); }
+  }
 </style>
 </head>
 <body>
@@ -145,7 +194,7 @@
 
     <!-- Hero -->
     <div class="hero tm-rise">
-      <div>
+      <div class="hero-copy">
         <p class="hero-eyebrow">Developmentally on track by 10</p>
         <h1 class="hero-title">Welcome to Tilli Measures</h1>
         <p class="hero-sub">Every skill a seed. Watch the whole child grow.</p>
@@ -177,6 +226,9 @@
 
   </div>
 
+  <!-- Milo Hand (decorative) — position/scale/rotation baked on .landing -->
+  <img class="milo-hand" id="milo-hand" src="assets/Milo Hand.png" alt="" aria-hidden="true">
+
   <!-- Flower band (SVG injected by JS) -->
   <div class="flower-band" id="flower-band" aria-hidden="true"></div>
 </div>
@@ -184,107 +236,7 @@
 <!-- Auth + selection layers get injected here -->
 <div id="flow-root"></div>
 
-<!-- ============================================================
-     Text size GUI (dev tooling) — scale each hero text item
-     independently. Each slider drives one CSS variable on .landing.
-     ============================================================ -->
-<style>
-  #text-gui {
-    position: fixed; top: 14px; right: 14px; z-index: 9999;
-    width: 232px; font-family: 'Quicksand', system-ui, sans-serif;
-    background: #fff; border: 1px solid #E2E2E2; border-radius: 12px;
-    box-shadow: 0 8px 28px rgba(0,0,0,.14); overflow: hidden;
-    font-size: 12px; color: #333;
-  }
-  #text-gui .tg-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 9px 12px; background: #FAFAFA; border-bottom: 1px solid #EEE;
-    cursor: pointer; user-select: none;
-  }
-  #text-gui .tg-head b { font-weight: 700; font-size: 12.5px; }
-  #text-gui .tg-body { padding: 6px 12px 12px; }
-  #text-gui .tg-row { margin-top: 11px; }
-  #text-gui label {
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-weight: 600; margin-bottom: 4px; cursor: help;
-  }
-  #text-gui label .tg-val { font-weight: 700; color: var(--pink-600, #E91E8C); }
-  #text-gui label.tg-new { color: var(--pink-600, #E91E8C); }
-  #text-gui input[type=range] { width: 100%; margin: 0; accent-color: var(--pink-400, #E866B0); }
-  #text-gui .tg-reset {
-    margin-top: 13px; width: 100%; padding: 7px; border: 1px solid #DDD;
-    border-radius: 8px; background: #fff; font: inherit; font-weight: 700;
-    cursor: pointer;
-  }
-  #text-gui .tg-reset:hover { background: #F5F5F5; }
-  #text-gui.tg-collapsed .tg-body { display: none; }
-</style>
-
-<div id="text-gui" aria-label="Text size controls">
-  <div class="tg-head" id="tg-toggle"><b>Text size</b><span id="tg-caret">▾</span></div>
-  <div class="tg-body"></div>
-</div>
-
-<script>
-(function () {
-  // [cssVar, GUI label, tooltip, isNewlyAdded]
-  var CONTROLS = [
-    ['--eyebrow-scale',   'Eyebrow scale',      'Scales the "Developmentally on track by 10" line', true],
-    ['--title-scale',     'Title scale',        'Scales the "Welcome to Tilli Measures" heading',   true],
-    ['--sub-scale',       'Subtitle scale',     'Scales the "Every skill a seed…" italic line',     true],
-    ['--cta-scale',       'Button scale',       'Scales the "Get started" button text',             true],
-    ['--statnum-scale',   'Stat number scale',  'Scales the big stat numbers (12, 3×)',             true],
-    ['--statlabel-scale', 'Stat label scale',   'Scales the small text under each stat number',     true],
-  ];
-  var MIN = 0.5, MAX = 2, STEP = 0.05;
-  var target = document.querySelector('.landing');
-  var body = document.querySelector('#text-gui .tg-body');
-
-  CONTROLS.forEach(function (c) {
-    var cssVar = c[0], text = c[1], tip = c[2], isNew = c[3];
-    var row = document.createElement('div');
-    row.className = 'tg-row';
-    row.innerHTML =
-      '<label title="' + tip + '"' + (isNew ? ' class="tg-new"' : '') + '>' +
-        '<span>' + (isNew ? '* ' : '') + text + '</span>' +
-        '<span class="tg-val">1.00</span>' +
-      '</label>' +
-      '<input type="range" min="' + MIN + '" max="' + MAX + '" step="' + STEP + '" value="1" title="' + tip + '">';
-    var input = row.querySelector('input');
-    var val = row.querySelector('.tg-val');
-    input.dataset.var = cssVar;
-    // Reflect the baked CSS default on load
-    var baked = parseFloat(getComputedStyle(target).getPropertyValue(cssVar)) || 1;
-    input.value = baked;
-    val.textContent = baked.toFixed(2);
-    input.addEventListener('input', function () {
-      target.style.setProperty(cssVar, input.value);
-      val.textContent = parseFloat(input.value).toFixed(2);
-    });
-    body.appendChild(row);
-  });
-
-  var reset = document.createElement('button');
-  reset.className = 'tg-reset';
-  reset.textContent = 'Reset all';
-  reset.addEventListener('click', function () {
-    body.querySelectorAll('input').forEach(function (i) {
-      target.style.removeProperty(i.dataset.var); // fall back to baked CSS default
-      var baked = parseFloat(getComputedStyle(target).getPropertyValue(i.dataset.var)) || 1;
-      i.value = baked;
-      i.closest('.tg-row').querySelector('.tg-val').textContent = baked.toFixed(2);
-    });
-  });
-  body.appendChild(reset);
-
-  var gui = document.getElementById('text-gui');
-  document.getElementById('tg-toggle').addEventListener('click', function () {
-    gui.classList.toggle('tg-collapsed');
-    document.getElementById('tg-caret').textContent = gui.classList.contains('tg-collapsed') ? '▸' : '▾';
-  });
-})();
-</script>
-
+<script src="school-data.js"></script>
 <script src="assets/flower-band.js"></script>
 <script src="assets/landing.js"></script>
 </body>

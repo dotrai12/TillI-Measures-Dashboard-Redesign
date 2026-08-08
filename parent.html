@@ -156,6 +156,62 @@
 
   .footnote { text-align: center; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px;
     color: var(--green-600); margin: 30px 0 0; }
+
+  /* ---- Parent snapshot (post-survey, parent-facing copy) ---- */
+  .snap-meta { font-family:'Quicksand',sans-serif; font-weight:700; font-size:12.5px;
+    color: var(--ink-300); margin: 8px 0 0; }
+  .snap-lead { font-family:'Quicksand',sans-serif; font-weight:600; font-size:clamp(14px,1.5vw,17px);
+    color: var(--ink-600); margin: 12px 0 0; max-width: 60ch; line-height:1.6; }
+  .shine { list-style:none; margin: 6px 0 0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .shine li { position:relative; background: var(--wash-green); border:1px solid #BFE6AE; border-radius:16px;
+    padding:14px 16px 14px 44px; font-family:'Quicksand',sans-serif; font-weight:600; font-size:13.5px;
+    color: var(--green-700); line-height:1.55; }
+  .shine li::before { content:'🌼'; position:absolute; left:15px; top:12px; font-size:15px; }
+  .grow-card { background: var(--wash-cyan); border:1px solid #B7E6F1; border-radius:var(--radius-card);
+    padding:18px 20px; margin-top:6px; }
+  .grow-card h3 { margin:0 0 6px; font-weight:700; font-size:16px; color: var(--cyan-700); }
+  .grow-card p { margin:0; font-family:'Quicksand',sans-serif; font-weight:600; font-size:13.5px;
+    color: var(--ink-600); line-height:1.6; max-width:62ch; }
+  .try { display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:6px; }
+  @media (max-width:640px){ .try { grid-template-columns:1fr; } }
+  .try .card { background:#fff; border:1px solid var(--line-200); border-radius:16px; padding:16px; }
+  .try .card b { display:block; font-weight:700; font-size:14px; color:var(--ink-900); margin-bottom:5px; }
+  .try .card span { font-family:'Quicksand',sans-serif; font-weight:600; font-size:12.5px;
+    color: var(--ink-450); line-height:1.55; }
+  .teacher-card { display:flex; align-items:flex-start; gap:14px; background: var(--wash-yellow);
+    border:1px solid #F1DA7A; border-radius:var(--radius-card); padding:18px 20px; margin-top:6px; }
+  .teacher-card .ico { width:44px; height:44px; border-radius:50%; background:#fff; flex:none;
+    display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .teacher-card p { margin:0; font-family:'Quicksand',sans-serif; font-weight:600; font-size:13.5px;
+    color:#7a5c00; line-height:1.6; max-width:60ch; }
+
+  /* ---- Mobile (portrait phones ≤ 640px) ---- */
+  @media (max-width: 640px) {
+    .p-wrap { padding: 16px 18px 40px; }
+    .p-main { margin-top: 16px; }
+    .p-top { gap: 10px; }
+    .switch-menu { min-width: min(250px, calc(100vw - 40px)); }
+
+    .p-hero { gap: 16px; margin-top: 12px; }
+    .p-face { width: 72px; height: 72px; }
+    .p-title { font-size: clamp(26px, 8vw, 34px); }
+
+    .sec-head { margin: 26px 0 12px; }
+    .prog-card { padding: 16px 18px; gap: 14px; }
+    .report-cta { padding: 18px; }
+    /* Force the primary CTA onto its own full-width row on phones */
+    .report-cta .btn-primary { flex: 1 0 100%; width: 100%; }
+
+    .report-actions { gap: 8px; }
+    .report-actions .btn-primary,
+    .report-actions .btn-outline,
+    .report-actions .btn-ghost { flex: 1 0 100%; width: 100%; text-align: center; }
+
+    .garden { padding: 20px 12px 16px; }
+  }
+  @media (max-width: 380px) {
+    .garden .bed { grid-template-columns: repeat(3, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -163,6 +219,7 @@
 
 <div id="app"></div>
 
+<script src="school-data.js"></script>
 <script>
 (function () {
   const DS = '_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/';
@@ -171,6 +228,27 @@
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // ---- pronoun-aware copy filler (agreement-safe: verbs are phrased with be + complement) ----
+  const PRON = {
+    he:   { subj: 'he',   obj: 'him',  poss: 'his',   reflex: 'himself',    be: 'is',  have: 'has'  },
+    she:  { subj: 'she',  obj: 'her',  poss: 'her',   reflex: 'herself',    be: 'is',  have: 'has'  },
+    they: { subj: 'they', obj: 'them', poss: 'their', reflex: 'themselves', be: 'are', have: 'have' },
+  };
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  // Fill {name}/{Name}, {subj}/{Subj}, {obj}, {poss}/{Poss}, {be}, {have}, {reflex}, {teacher}.
+  function fill(tpl, c) {
+    const pr = PRON[c.pronoun] || PRON.they;
+    const name = esc(c.name);
+    const m = {
+      name, Name: name,
+      subj: pr.subj, Subj: cap(pr.subj),
+      obj: pr.obj, poss: pr.poss, Poss: cap(pr.poss),
+      be: pr.be, have: pr.have, reflex: pr.reflex,
+      teacher: esc(c.teacher || 'your teacher'),
+    };
+    return tpl.replace(/\{(\w+)\}/g, (mm, k) => (k in m ? m[k] : mm));
+  }
 
   // Each child is represented by a smiley in their own colour (stable per slot).
   const SMILE_COLORS = ['#56C02B', '#E91E8C', '#26BDE2', '#F99B1C', '#A99BD6', '#E866B0'];
@@ -275,17 +353,27 @@
   // ============================================================
   const p = new URLSearchParams(location.search);
   const school = p.get('school') || 'Little Sprouts School';
+  const TERM = p.get('term') || 'Term One';          // snapshot metadata (no scores)
+  const CONTACT = 'info@tillikids.com · tillikids.com';
 
-  const children = [
-    { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041' },
-    { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044' },
+  // The login parent (Priya Menon) and her two children come from the
+  // dummy dataset (school-data.js). Falls back to demo kids if it's absent.
+  const TS = window.TILLI_SCHOOL;
+  const linked = (TS && TS.childrenForParent) ? TS.childrenForParent('priya.menon@example.com') : [];
+  const children = linked.length ? linked.map((s, i) => ({
+    name: s.first, grade: s.grade, section: s.section, adm: s.adm,
+    pronoun: s.pronoun, teacher: s.teacherName, unlocked: i === 0,
+  })) : [
+    { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041', pronoun: 'he',  teacher: 'Ms Rao',   unlocked: true },
+    { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044', pronoun: 'she', teacher: 'Mr Silva', unlocked: false },
   ];
   const urlChild = (p.get('child') || '').trim();
   let selected = 0;
   if (urlChild) {
     const i = children.findIndex((c) => c.name.toLowerCase() === urlChild.toLowerCase());
     if (i >= 0) selected = i;
-    else { children.unshift({ name: urlChild, grade: p.get('grade') || '', section: p.get('section') || '', adm: p.get('adm') || '' }); selected = 0; }
+    else { children.unshift({ name: urlChild, grade: p.get('grade') || '', section: p.get('section') || '', adm: p.get('adm') || '',
+      pronoun: (p.get('pronoun') || 'they').toLowerCase(), teacher: p.get('teacher') || 'your teacher' }); selected = 0; }
   }
 
   const ASSESSMENTS = [
@@ -296,10 +384,10 @@
     { id: 'emt2',   title: 'EMT 2',             sub: 'Child activity · about 4 min' },
     { id: 'emt3',   title: 'EMT 3',             sub: 'Child activity · about 4 min' },
   ];
-  // Per-child assessment status (Aarav pre-populated so its report is unlocked).
+  // Per-child assessment status (the "unlocked" child is pre-populated so its report opens).
   const STATUS = {};
   children.forEach((c) => {
-    if (c.name === 'Aarav') STATUS[c.name] = { parent: 'done', hearts: 'done', memory: 'done', emt1: 'done', emt2: 'progress', emt3: 'pending' };
+    if (c.unlocked) STATUS[c.name] = { parent: 'done', hearts: 'done', memory: 'done', emt1: 'done', emt2: 'progress', emt3: 'pending' };
     else STATUS[c.name] = { parent: 'pending', hearts: 'pending', memory: 'pending', emt1: 'pending', emt2: 'pending', emt3: 'pending' };
   });
 
@@ -407,11 +495,11 @@
         <div class="report-cta ${reportReady ? 'ready' : 'locked'}">
           <span class="ico"><img src="${DS}icons/${reportReady ? 'chart-up.png' : 'clock.png'}" alt=""></span>
           <span class="rt">
-            <b>${reportReady ? esc(c.name) + "'s garden report is ready" : esc(c.name) + "'s garden report"}</b>
-            <span>${reportReady ? 'See how each skill is growing, with tips for home.' : 'Complete the Parent report to unlock the garden.'}</span>
+            <b>${reportReady ? esc(c.name) + "'s snapshot is ready" : esc(c.name) + "'s parent snapshot"}</b>
+            <span>${reportReady ? 'A warm summary of what you’re seeing at home, from your survey.' : 'Complete the Parent report to unlock your snapshot.'}</span>
           </span>
           ${reportReady
-            ? `<button class="btn btn-primary focus" data-act="open-report" style="flex:none">See garden →</button>`
+            ? `<button class="btn btn-primary focus" data-act="open-snapshot" style="flex:none">See snapshot →</button>`
             : `<button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>`}
         </div>
 
@@ -485,10 +573,192 @@
   }
 
   // ============================================================
+  // PARENT SNAPSHOT — warm, parent-facing copy generated the moment
+  // the parent survey is done. Reflects ONLY parent observations.
+  // Rules: no numbers/levels/labels; skills become home behaviours;
+  // strengths-first; exactly ONE growth area; UK spelling.
+  // ============================================================
+
+  // Each strength → a concrete home behaviour (one sentence). Never a label.
+  const STRENGTH_BEHAVIOUR = {
+    emotion_awareness:      '{Subj} {be} good at putting feelings into words — you’ll often hear {name} say ‘I feel cross’ or ‘that made me happy’ without being asked.',
+    emotion_regulation:     'When something upsets {name}, {subj} {be} usually able to settle back down before long and get on with the day.',
+    empathy:                '{Name} tends to notice when someone else is sad or left out, and will often go over to comfort them.',
+    relationship_skills:    '{Name} plays warmly with others — sharing, taking turns and finding {poss} way back after a squabble.',
+    metacognition:          '{Name} likes to think out loud about {poss} own thinking — what was tricky, and what {subj} {be} going to try next.',
+    critical_thinking:      '{Name} asks plenty of ‘but why?’ questions and enjoys working out how things fit together.',
+    working_memory:         '{Name} can hold a few steps in mind at once — give {obj} a two-part instruction and {subj} {be} usually able to see it through.',
+    planning:               '{Name} likes things in order — {subj} {be} happy to line up a task and work through it step by step.',
+    cognitive_flexibility:  'When a plan changes, {name} tends to roll with it and try another way rather than getting stuck.',
+    inhibition_distraction: '{Name} can settle into something and keep going, even with a bit of noise and bustle around {obj}.',
+    inhibition_response:    '{Subj} {be} often able to stop and think for a moment before jumping straight in.',
+    attention:              '{Name} can stay with a game or a story for a good stretch without drifting off.',
+  };
+
+  // The single growth area → a plain-language behaviour heading + a warm, opportunity-framed description.
+  const GROWTH_FRAME = {
+    emotion_awareness:      { head: 'Putting feelings into words',   desc: 'Right now {name} sometimes shows big feelings through {poss} body or actions before {subj} can name them. A little help spotting and naming feelings gives {obj} the words to tell you what’s going on.' },
+    emotion_regulation:     { head: 'Settling big feelings',         desc: 'When something feels unfair or frustrating, it can take {name} a while to come back down. With a few calming tricks to reach for, those moments get shorter and gentler.' },
+    empathy:                { head: 'Tuning in to how others feel',  desc: '{Name} is still learning to read when a friend is upset or wants a turn. Gentle noticing games help {obj} see things from someone else’s side.' },
+    relationship_skills:    { head: 'Playing and sharing with others',desc: 'Taking turns and smoothing over little disagreements are still growing for {name}. Short, guided play gives {obj} a friendly place to practise.' },
+    metacognition:          { head: 'Noticing how they think',       desc: '{Name} is beginning to look back on what {subj} {be} doing and why. Simple ‘what worked, what was tricky’ chats help that reflecting habit take root.' },
+    critical_thinking:      { head: 'Thinking things through',       desc: '{Name} is still building the habit of weighing choices and asking why. Open questions instead of quick answers give {obj} room to reason it out.' },
+    working_memory:         { head: 'Holding steps in mind',         desc: 'Longer instructions can slip away before {name} finishes them. Breaking things into a couple of clear steps helps {obj} keep the whole plan in mind.' },
+    planning:               { head: 'Planning and organising',       desc: 'Getting started and keeping bits in order is still coming along for {name}. A simple picture checklist gives {obj} a way to see what comes next.' },
+    cognitive_flexibility:  { head: 'Adapting when things change',    desc: 'A sudden change to a plan can feel hard for {name} just now. Playful ‘let’s try it another way’ moments make switching feel safe and fun.' },
+    inhibition_distraction: { head: 'Staying focused',               desc: 'It’s easy for {name} to be pulled away by whatever is going on nearby. Short bursts of quiet focus, then a break, help that staying-power grow.' },
+    inhibition_response:    { head: 'Pausing before acting',         desc: '{Name} sometimes jumps straight in before stopping to think. Fun ‘wait for it’ games make that pause feel like play rather than a rule.' },
+    attention:              { head: 'Staying with one thing',        desc: '{Name}’s focus can drift after a little while. Slowly stretching cosy reading or building time helps {obj} stay with one thing for longer.' },
+  };
+
+  // Exactly three low-effort home actions, ALL tied to the single growth area. Numbers spelled out (no digits).
+  const GROWTH_ACTIONS = {
+    emotion_awareness: [
+      { t: 'Name it as you go', b: 'Say what you notice out loud: ‘you look frustrated with that puzzle.’ Hearing feelings named gives {name} the words to use next time.' },
+      { t: 'Feelings check-in', b: 'At dinner, each share one feeling from the day. Take a turn yourself so it feels normal.' },
+      { t: 'Story feelings',    b: 'While reading, pause and ask ‘how do you think they feel?’ Picture books are full of easy feelings to spot.' },
+    ],
+    emotion_regulation: [
+      { t: 'Practise calm when it’s calm', b: 'Try belly-breathing together when everyone is relaxed, so the trick is ready for the wobbly moments.' },
+      { t: 'A calm-down corner', b: 'Set up a cosy spot with a cushion or soft toy {name} can choose to go to when feelings get big — never as a punishment.' },
+      { t: 'Name the size',      b: 'Talk about feelings as small, medium or big. Spotting one early makes it easier to handle before it grows.' },
+    ],
+    empathy: [
+      { t: 'How do they feel?',  b: 'During stories or at the park, wonder aloud how someone else might be feeling, and why.' },
+      { t: 'Little helper jobs', b: 'Give {name} small caring jobs — carrying something for a sibling, checking on a friend — so kindness gets lots of practice.' },
+      { t: 'Feelings faces',     b: 'Play a quick game guessing feelings from faces in photos or books. It builds the habit of reading others.' },
+    ],
+    relationship_skills: [
+      { t: 'One-to-one play',   b: 'Set up a short playdate with a single friend. Fewer children makes taking turns easier to manage.' },
+      { t: 'Turn-taking games', b: 'Simple board games are gentle practice for waiting, winning and losing.' },
+      { t: 'Talk it back',      b: 'After a squabble, calmly help {name} name what happened and think of one thing to try next time.' },
+    ],
+    metacognition: [
+      { t: 'Look-back chats', b: 'After a task ask ‘what was tricky, and what would you try next time?’ Keep it curious, not a test.' },
+      { t: 'Think out loud',  b: 'Narrate your own thinking — ‘I’ll do the hard bit first’ — so {name} hears how planning sounds.' },
+      { t: 'Two ways',        b: 'When something is tricky, ask {name} to think of two ways to try it before picking one.' },
+    ],
+    critical_thinking: [
+      { t: 'Ask, don’t tell',  b: 'When {name} wonders about something, ask ‘why do you think that is?’ before giving the answer.' },
+      { t: 'What might happen?',b: 'During stories, pause and guess together what could come next, and why.' },
+      { t: 'Sorting games',    b: 'Sort toys or socks by colour, size or type. Grouping things builds reasoning in a playful way.' },
+    ],
+    working_memory: [
+      { t: 'Two-step errands', b: 'Give little two-part jobs — ‘put your cup in the sink and grab your shoes.’ Add a step as it gets easy.' },
+      { t: 'Quick memory games', b: 'Play a short round of ‘I packed my bag’ after dinner. Five minutes is plenty.' },
+      { t: 'Say it back',      b: 'Ask {name} to repeat the plan back to you before starting, so the steps stick.' },
+    ],
+    planning: [
+      { t: 'Picture checklist', b: 'Make a simple picture list for a routine like the morning bag, and let {name} tick things off.' },
+      { t: 'Plan it first',     b: 'Before an activity, ask ‘what do we need, and what comes first?’ Planning aloud makes it a habit.' },
+      { t: 'First, then',       b: 'Use ‘first we do this, then that’ language so the order of steps feels clear and doable.' },
+    ],
+    cognitive_flexibility: [
+      { t: 'Another way',   b: 'Play ‘let’s do it differently’ — brush teeth with the other hand, take a new route to the park.' },
+      { t: 'Gentle heads-up', b: 'Warn before a change: ‘five more minutes, then we tidy up.’ Knowing what’s coming makes switching easier.' },
+      { t: 'What else could it be?', b: 'Look at a cloud or a squiggle and take turns saying what else it could be. Silly is good.' },
+    ],
+    inhibition_distraction: [
+      { t: 'Quiet focus bursts', b: 'Try a few minutes of one task in a calm spot, then a movement break. Slowly stretch the time.' },
+      { t: 'Clear the deck',     b: 'Before something that needs focus, tidy away the other toys so there is less pulling {poss} attention.' },
+      { t: 'Beat the timer',     b: 'Set a short, fun timer and see how much of one job {name} can finish before it rings.' },
+    ],
+    inhibition_response: [
+      { t: 'Red light, green light', b: 'Play stop-and-go games. They make pausing before acting genuinely fun.' },
+      { t: 'Wait for the word',      b: 'Play games where {name} waits for a signal before moving — good practice for holding on a beat.' },
+      { t: 'Take a breath',          b: 'Coach one slow breath before answering or reacting. A tiny pause is a big skill.' },
+    ],
+    attention: [
+      { t: 'A little longer',    b: 'Read or build together and gently stretch the time by a minute or two each week.' },
+      { t: 'One thing at a time',b: 'Offer a single activity rather than several, so it is easier to stay with it to the end.' },
+      { t: 'Finish-it moments',  b: 'Pick a small task to see all the way through together, and celebrate reaching the end.' },
+    ],
+  };
+
+  // Pick the strengths (top 2–3) and the single growth area from the child's standings.
+  function snapshotStandings(c) {
+    const skills = buildSkills(c.name);
+    const sorted = [...skills].sort((a, b) => b.pct - a.pct);
+    // Always the top two; a third only if it is genuinely shining (not a weak skill dressed up).
+    const strengths = sorted.slice(0, 3).filter((s, i) => i < 2 || s.pct >= 55);
+    const growth = sorted[sorted.length - 1];
+    return { strengths, growth };
+  }
+
+  function snapshotView() {
+    const c = child();
+    const { strengths, growth } = snapshotStandings(c);
+    const gf = GROWTH_FRAME[growth.key];
+    const acts = GROWTH_ACTIONS[growth.key];
+    const faceColor = smileColor(state.selected);
+
+    const shine = strengths.map((s) => `<li>${fill(STRENGTH_BEHAVIOUR[s.key], c)}</li>`).join('');
+    const tryCards = acts.map((a) => `<div class="card"><b>${esc(a.t)}</b><span>${fill(a.b, c)}</span></div>`).join('');
+
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}
+        <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
+      </div>
+      <div class="p-main tm-rise">
+
+        <!-- 1 · kicker + hero -->
+        <div class="p-hero" style="grid-template-columns:auto 1fr;margin-top:8px">
+          <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a">
+            <img src="${SMILEY}" alt="">
+          </div>
+          <div>
+            <p class="p-eyebrow">A note for ${esc(c.name)}’s family</p>
+            <h1 class="p-title">Here’s what you’re seeing in <span>${esc(c.name)}</span> right now</h1>
+            <p class="snap-meta">${esc(school)} · ${esc(TERM)} · ${esc(c.teacher)}’s class</p>
+          </div>
+        </div>
+
+        <!-- 2 · sub-line -->
+        <p class="snap-lead">Drawn from your own observations at home, here is what ${esc(c.name)} is showing right
+          now — plenty to celebrate, and one gentle place where a little support will go a long way.</p>
+
+        <!-- 3 · what's already shining -->
+        <div class="sec-head"><h2>What’s already shining ✨</h2></div>
+        <ul class="shine">${shine}</ul>
+
+        <!-- 4 · where a little support helps most -->
+        <div class="sec-head"><h2>Where a little support helps most</h2></div>
+        <div class="grow-card">
+          <h3>${esc(gf.head)}</h3>
+          <p>${fill(gf.desc, c)}</p>
+        </div>
+
+        <!-- 5 · three small things to try at home -->
+        <div class="sec-head"><h2>Three small things to try at home 🏡</h2></div>
+        <div class="try">${tryCards}</div>
+
+        <!-- 6 · talk to your teacher (the ONLY place the three lenses appear) -->
+        <div class="sec-head"><h2>Talk to ${esc(c.teacher)}</h2></div>
+        <div class="teacher-card">
+          <span class="ico">💬</span>
+          <p>When you’re ready, ask ${esc(c.teacher)} for ${esc(c.name)}’s fuller report. It brings this survey
+            together with ${esc(c.name)}’s own activities and what ${fill('{poss}', c)} teacher sees in class —
+            three angles on the same wonderful child.</p>
+        </div>
+
+        <div class="report-actions">
+          <button class="btn btn-primary focus" data-act="save-pdf" style="padding:12px 22px;font-size:14px">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download snapshot'}</button>
+          <button class="btn-outline focus" data-act="open-report">See ${esc(c.name)}’s full garden →</button>
+        </div>
+
+        <!-- 7 · footer -->
+        <p class="footnote">For family use only · ${CONTACT} · a fresh snapshot follows each assessment window.</p>
+      </div>
+    </div>`;
+  }
+
+  // ============================================================
   // Render + events
   // ============================================================
   function render() {
-    app.innerHTML = state.view === 'report' ? reportView() : homeView();
+    app.innerHTML = state.view === 'report' ? reportView()
+      : state.view === 'snapshot' ? snapshotView()
+      : homeView();
     wire();
   }
 
@@ -504,6 +774,7 @@
           if (open) { st[open.id] = 'done'; render(); }
           break;
         }
+        case 'open-snapshot': set({ view: 'snapshot', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'open-report': set({ view: 'report', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'back-home': set({ view: 'home' }); window.scrollTo(0, 0); break;
         case 'save-pdf':

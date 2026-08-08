@@ -203,20 +203,104 @@ a:hover { color: var(--cyan-700); }
   border-radius: var(--radius-card);
   padding: 32px 30px;
 }
+/* Dialog step transitions — the backdrop stays put while cards slide.
+   Forward: old exits left, new enters from the right. Back: reversed. */
+@keyframes tmSlideInRight  { from { transform: translateX(120%);  } to { transform: translateX(0); } }
+@keyframes tmSlideOutLeft  { from { transform: translateX(0);     } to { transform: translateX(-120%); } }
+@keyframes tmSlideInLeft   { from { transform: translateX(-120%); } to { transform: translateX(0); } }
+@keyframes tmSlideOutRight { from { transform: translateX(0);     } to { transform: translateX(120%); } }
+.dlg-in-right  { animation: tmSlideInRight  .30s var(--ease) both; }
+.dlg-out-left  { animation: tmSlideOutLeft  .30s var(--ease) both; }
+.dlg-in-left   { animation: tmSlideInLeft   .30s var(--ease) both; }
+.dlg-out-right { animation: tmSlideOutRight  .30s var(--ease) both; }
+@media (prefers-reduced-motion: reduce) {
+  .dlg-in-right, .dlg-out-left, .dlg-in-left, .dlg-out-right { animation-duration: .01ms; }
+}
 .sheet {
   position: fixed; inset: 0; z-index: 50;
   background: #fff; overflow-y: auto;
   display: flex; align-items: center; justify-content: center;
   padding: clamp(24px, 5vh, 48px) clamp(24px, 5vw, 48px);
-  animation: tmRise .32s ease both;
 }
 .dialog-close {
   position: absolute; top: 12px; right: 16px;
   background: none; border: none; color: var(--ink-300);
   font-size: 24px; line-height: 1; cursor: pointer;
 }
+
+/* ---- Add-child "getting the notepad" loading screen ----
+   All positions/sizes are driven by CSS custom properties set inline on
+   .pencil-load-wrap (defaults below are the fallbacks). Tune them live via
+   the on-screen panel. */
+.pencil-load-wrap {
+  --pencil-size: 165px;
+  --pencil-gap: 47px;
+  --pencil-x: 0px;
+  --pencil-y: 200px;
+  --bob-altitude: 31px;
+  --bob-speed: .66s;
+  --msg-size: 20px;
+  --msg-gap: 36px;
+  --msg-x: 0px;
+  --msg-y: 200px;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+}
+.pencil-loader {
+  display: flex; align-items: flex-end;
+  gap: var(--pencil-gap);
+  height: calc(var(--pencil-size) + var(--bob-altitude));
+  transform: translate(var(--pencil-x), var(--pencil-y));
+}
+.pencil-loader .pencil {
+  height: var(--pencil-size); width: auto; display: block;
+  user-select: none; -webkit-user-drag: none;
+  will-change: transform;
+  animation: pencilBob var(--bob-speed) infinite both;
+}
+/* Staggered starts make a lively travelling bob rather than one flat sine. */
+.pencil-loader .pencil-1 { animation-delay: calc(var(--bob-speed) * -0.00); }
+.pencil-loader .pencil-2 { animation-delay: calc(var(--bob-speed) * -0.16); }
+.pencil-loader .pencil-3 { animation-delay: calc(var(--bob-speed) * -0.32); }
+/* Ease-out up, ease-in down = a gravity-like hop, not a smooth sinusoid. */
+@keyframes pencilBob {
+  0%   { transform: translateY(0);                                 animation-timing-function: cubic-bezier(.3,.7,.2,1); }
+  42%  { transform: translateY(calc(-1 * var(--bob-altitude)));    animation-timing-function: cubic-bezier(.7,0,.7,.3); }
+  84%  { transform: translateY(0); }
+  100% { transform: translateY(0); }
+}
+.pencil-load-msg {
+  font-family: 'Quicksand', sans-serif; font-weight: 600;
+  font-size: var(--msg-size); color: var(--ink-600);
+  margin: var(--msg-gap) 0 0; max-width: 30ch; line-height: 1.5;
+  transform: translate(var(--msg-x), var(--msg-y));
+}
+@media (prefers-reduced-motion: reduce) {
+  .pencil-loader .pencil { animation: none; }
+}
 .dialog-back {
   position: absolute; top: 16px; left: 16px;
 }
 
 .hidden { display: none !important; }
+
+/* ============================================================
+   Mobile-first refinements — portrait phones (≤ 640px)
+   Base styles above are fluid and already scale down; these
+   tighten spacing, enlarge tap targets, and slim overlays so
+   the phone view feels designed, not just shrunk. Desktop is
+   untouched.
+   ============================================================ */
+@media (max-width: 640px) {
+  .btn-primary { padding: 14px 30px; font-size: 16px; }
+
+  .overlay { padding: 14px; }
+  .dialog { padding: 26px 20px; border-radius: 20px; }
+  .sheet { padding: 28px 20px; align-items: flex-start; }
+
+  .lockup { gap: 10px; }
+  .lockup .divider { height: 18px; }
+
+  /* Hide the decorative brand rail on mobile across all screens */
+  .brand-rail { display: none; }
+}

@@ -29,12 +29,10 @@ export const PERSPECTIVES = [
 ];
 
 export const SECTIONS = [
-  { id: "prek_a", name: "Pre-K A", grade: "Pre-K", n: 24 },
-  { id: "prek_b", name: "Pre-K B", grade: "Pre-K", n: 26 },
-  { id: "kg_d", name: "KG D", grade: "KG", n: 27 },
-  { id: "kg_e", name: "KG E", grade: "KG", n: 25 },
-  { id: "ukg_a", name: "UKG A", grade: "UKG", n: 28 },
-  { id: "grade1_a", name: "Grade 1 A", grade: "Grade 1", n: 27 },
+  { id: "kg_a", name: "Kindergarten A", grade: "Kindergarten", n: 6 },
+  { id: "kg_b", name: "Kindergarten B", grade: "Kindergarten", n: 6 },
+  { id: "g1_a", name: "Grade 1 A", grade: "Grade 1", n: 6 },
+  { id: "g1_b", name: "Grade 1 B", grade: "Grade 1", n: 6 },
 ];
 
 const FIRST = [
@@ -86,16 +84,18 @@ const TEND_PHRASE = {
   attention: "Sustained attention is ready for tending",
 };
 
-function buildStudent(section, i) {
-  const seed = hashStr(section.id + ":" + i);
+function buildStudent(section, i, roster) {
+  // When a real roster entry is supplied (dummy school), use its identity and
+  // seed by admission number so the same student always looks the same.
+  const seed = roster ? hashStr(roster.adm) : hashStr(section.id + ":" + i);
   const rnd = mulberry32(seed);
-  const first = FIRST[Math.floor(rnd() * FIRST.length)];
-  const last = LAST[Math.floor(rnd() * LAST.length)];
+  const first = roster ? roster.first : FIRST[Math.floor(rnd() * FIRST.length)];
+  const last = roster ? roster.last : LAST[Math.floor(rnd() * LAST.length)];
   const name = first + " " + last;
   const initials = (first[0] + last[0]).toUpperCase();
 
   // Grade-tuned base ability so older sections score a touch higher.
-  const gradeLift = { "Pre-K": -6, KG: 0, UKG: 4, "Grade 1": 8 }[section.grade] || 0;
+  const gradeLift = { "Pre-K": -6, KG: 0, Kindergarten: 0, UKG: 4, "Grade 1": 8 }[section.grade] || 0;
   const base = clamp(46 + gradeLift + (rnd() - 0.5) * 46, 12, 92);
 
   // ~1 in 14 students has no data yet (recent joiner).
@@ -143,9 +143,10 @@ function buildStudent(section, i) {
   const tendReason = TEND_PHRASE[lowest.key];
 
   return {
-    id: section.id + "_" + i,
+    id: roster ? roster.adm : section.id + "_" + i,
+    adm: roster ? roster.adm : null,
     first, last, name, initials,
-    parentEmail: (first + "." + last + "@parent.tilli.co").toLowerCase(),
+    parentEmail: roster ? roster.parentEmail : (first + "." + last + "@parent.tilli.co").toLowerCase(),
     section: section.name, grade: section.grade,
     band, overallPct, overallPre, growth, chips, maxGap,
     state, skills, celebrateLine, tendReason,
@@ -155,8 +156,19 @@ function buildStudent(section, i) {
 }
 
 export function buildAllData() {
-  const sections = SECTIONS.map((sec) => {
-    const students = Array.from({ length: sec.n }, (_, i) => buildStudent(sec, i));
+  // Prefer the shared dummy-school roster (school-data.js) when it's loaded,
+  // so the teacher dashboard shows the same students as the parent flow.
+  const TS = typeof window !== "undefined" ? window.TILLI_SCHOOL : null;
+  const sectionDefs = TS && TS.sections
+    ? TS.sections.map((s) => ({ id: s.id, name: s.name, grade: s.grade, section: s.section,
+        n: TS.students.filter((st) => st.grade === s.grade && st.section === s.section).length }))
+    : SECTIONS;
+
+  const sections = sectionDefs.map((sec) => {
+    const roster = TS && TS.students
+      ? TS.students.filter((st) => st.grade === sec.grade && st.section === sec.section)
+      : null;
+    const students = Array.from({ length: sec.n }, (_, i) => buildStudent(sec, i, roster ? roster[i] : null));
     // Disambiguate students who share a first name (add last initial).
     const firstCounts = {};
     students.forEach((st) => { firstCounts[st.first] = (firstCounts[st.first] || 0) + 1; });
