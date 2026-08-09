@@ -154,6 +154,11 @@
     <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
   </svg>`;
 
+  // eye (password hidden) / eye-off (password visible) toggle icon
+  const eyeIcon = (shown) => shown
+    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+    : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
   const brandMark = `<span class="lockup">
     <img src="${LOGO}" alt="Tilli">
     <span class="divider"></span>
@@ -381,7 +386,10 @@
       <button class="focus" data-act="google" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--line-200);background:#fff;color:var(--ink-700);font-weight:700;font-size:14.5px;padding:14px;border-radius:999px;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='#26BDE2'" onmouseout="this.style.borderColor='#ECEEF2'">${gIcon} ${verb} via Google</button>
       <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink-300);font-family:'Quicksand',sans-serif;font-size:12px;font-weight:700"><span style="flex:1;height:1px;background:var(--line-200)"></span>OR<span style="flex:1;height:1px;background:var(--line-200)"></span></div>
       <form id="pw-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
-        <input id="pw-input" class="input focus ${state.errs.pw ? 'err' : ''}" type="password" required placeholder="${isSignup ? 'Create a password' : 'Enter your password'}" aria-label="Password" value="${esc(state.password)}">
+        <div style="position:relative">
+          <input id="pw-input" class="input focus ${state.errs.pw ? 'err' : ''}" type="password" required placeholder="${isSignup ? 'Create a password' : 'Enter your password'}" aria-label="Password" value="${esc(state.password)}" style="padding-right:44px">
+          <button type="button" id="pw-toggle" class="focus" aria-label="Show password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:none;cursor:pointer;color:var(--ink-450);border-radius:8px">${eyeIcon(false)}</button>
+        </div>
         ${state.errs.pw ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0">That password doesn't match this account. Please try again.</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">${verb} via password &#8594;</button>
       </form>`;
@@ -540,6 +548,17 @@
     const pf = scope.querySelector('#pw-form');
     if (pf) {
       const pi = scope.querySelector('#pw-input');
+      // show / hide password toggle
+      const pt = scope.querySelector('#pw-toggle');
+      if (pt) pt.addEventListener('click', () => {
+        const show = pi.type === 'password';
+        pi.type = show ? 'text' : 'password';
+        pt.innerHTML = eyeIcon(show);
+        pt.setAttribute('aria-pressed', String(show));
+        pt.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        pt.setAttribute('title', show ? 'Hide password' : 'Show password');
+        pi.focus();
+      });
       pi.addEventListener('input', (ev) => {
         state.password = ev.target.value;
         if (state.errs.pw) { state.errs = {}; ev.target.classList.remove('err'); }
