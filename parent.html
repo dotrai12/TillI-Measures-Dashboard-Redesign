@@ -45,6 +45,49 @@
     font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--green-500);
     transition: border-color .2s; }
   .switch-add:hover { border-color: var(--green-500); }
+  /* thin rule + nav rows (Profile / Log out) below the child list */
+  .switch-sep { height: 1px; background: var(--line-200); margin: 8px 4px; }
+  .switch-nav { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; border: none;
+    background: transparent; border-radius: 12px; padding: 10px 12px; cursor: pointer;
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--ink-700);
+    transition: background .15s; }
+  .switch-nav svg { width: 18px; height: 18px; flex: none; }
+  .switch-nav:hover { background: var(--surface-100); }
+  .switch-nav.danger { color: var(--pink-600); }
+
+  /* ---- Profile page ---- */
+  .profile-head { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+  .profile-face { width: clamp(64px,9vw,84px); height: clamp(64px,9vw,84px); flex: none; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 26px rgba(86,192,43,.24); }
+  .profile-face img { width: 52%; }
+  .kid-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+  .kid-card { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+    background: #fff; border: 1px solid var(--line-200); border-radius: 18px; padding: 16px 18px;
+    cursor: pointer; font-family: 'Montserrat',sans-serif;
+    transition: border-color .2s, box-shadow .2s, transform .15s; }
+  .kid-card:hover { border-color: var(--green-500); box-shadow: 0 12px 26px rgba(20,20,20,.08); transform: translateY(-1px); }
+  .kid-av { width: 48px; height: 48px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
+  .kid-av img { width: 56%; }
+  .kid-info { flex: 1; min-width: 0; }
+  .kid-info b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
+  .kid-info span { display: block; font-weight: 600; font-size: 12.5px; color: var(--ink-450); margin-top: 2px; }
+  .kid-prog { flex: none; display: flex; align-items: center; gap: 11px; }
+  .kid-status { text-align: right; font-family: 'Montserrat',sans-serif; }
+  .kid-status b { display: block; font-weight: 700; font-size: 13px; }
+  .kid-status span { display: block; font-weight: 600; font-size: 11px; color: var(--ink-450); margin-top: 1px; }
+  .kid-card .chev { color: var(--ink-300); font-size: 20px; flex: none; }
+  .kid-add { display: block; text-align: center; text-decoration: none; border: 1.5px dashed var(--line-200);
+    background: #fff; border-radius: 18px; padding: 16px; font-family: 'Montserrat',sans-serif; font-weight: 700;
+    font-size: 14px; color: var(--green-500); transition: border-color .2s, background .2s; }
+  .kid-add:hover { border-color: var(--green-500); background: var(--wash-green); }
+  .btn-logout { background: #fff; border: 1.5px solid var(--line-200); color: var(--ink-600);
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14px; border-radius: var(--radius-pill);
+    padding: 12px 22px; cursor: pointer; transition: border-color .2s, color .2s; }
+  .btn-logout:hover { border-color: var(--pink-600); color: var(--pink-600); }
+  @media (max-width: 640px) {
+    .kid-status span { display: none; }
+    .kid-card { padding: 14px 15px; gap: 11px; }
+  }
 
   /* ---- Hero ---- */
   .p-hero { display: grid; grid-template-columns: auto 1fr; gap: clamp(18px,3vw,36px);
@@ -316,6 +359,10 @@
   const LOGO = DS + 'logos/tilli-wordmark-crop.png';
   const SMILEY = DS + 'icons/smiley.png';
 
+  // Inline stroke icons for the switcher menu (no matching PNG in the DS set).
+  const ICON_USER = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--ink-450)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`;
+  const ICON_LOGOUT = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--pink-600)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M15 12H5"/></svg>`;
+
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -457,6 +504,7 @@
     { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041', pronoun: 'he',  teacher: 'Ms Rao',   unlocked: true },
     { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044', pronoun: 'she', teacher: 'Mr Silva', unlocked: false },
   ];
+  const PARENT_NAME = (linked[0] && linked[0].parentName) || 'Your family';
   const urlChild = (p.get('child') || '').trim();
   let selected = 0;
   if (urlChild) {
@@ -510,7 +558,11 @@
         <span class="caret" aria-hidden="true">▾</span>
       </button>
       ${state.switcherOpen ? `<div class="switch-menu" role="menu">${items}
-        <a href="index.html" class="switch-add focus">+ Add another child</a></div>` : ''}
+        <a href="index.html" class="switch-add focus">+ Add another child</a>
+        <div class="switch-sep" role="separator"></div>
+        <button class="switch-nav focus" data-act="open-profile" role="menuitem">${ICON_USER}<span>Profile</span></button>
+        <button class="switch-nav danger focus" data-act="logout" role="menuitem">${ICON_LOGOUT}<span>Log out</span></button>
+      </div>` : ''}
     </div>`;
   }
 
@@ -881,6 +933,60 @@
   }
 
   // ============================================================
+  // PROFILE VIEW — who the parent is, their linked children, and how
+  // much each child still has to complete. Tapping a child opens that
+  // child's home (image 2) via the shared [data-select] handler.
+  // ============================================================
+  function profileView() {
+    const total = ASSESSMENTS.length;
+    const kids = children.map((k, i) => {
+      const st = STATUS[k.name];
+      const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
+      const remaining = total - done;
+      const pct = Math.round((done / total) * 100);
+      const col = smileColor(i);
+      const meta = [k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ') || 'No grade set';
+      return `<button class="kid-card focus" data-select="${i}">
+        <span class="kid-av" style="background:${col}"><img src="${SMILEY}" alt=""></span>
+        <span class="kid-info"><b>${esc(k.name)}</b><span>${esc(meta)}</span></span>
+        <span class="kid-prog">
+          ${donut(pct)}
+          <span class="kid-status">
+            <b style="color:${remaining ? 'var(--pink-600)' : 'var(--green-600)'}">${remaining ? remaining + ' to go' : 'All done ✓'}</b>
+            <span>${done}/${total} check-ins</span>
+          </span>
+        </span>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>`;
+    }).join('');
+
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}
+        <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
+      </div>
+      <div class="p-main" data-rise>
+        <div class="profile-head">
+          <span class="profile-face" style="background:var(--green-500)"><img src="${SMILEY}" alt=""></span>
+          <div>
+            <p class="p-eyebrow" style="margin-bottom:4px">Your profile</p>
+            <h1 class="p-title" style="font-size:clamp(24px,3.2vw,38px)">${esc(PARENT_NAME)}</h1>
+          </div>
+        </div>
+        <p class="p-sub" style="margin-top:14px">You're following ${children.length} ${children.length === 1 ? 'child' : 'children'} at ${esc(school)}. Tap a child to open their check-ins.</p>
+
+        <div class="sec-head"><h2>Your children</h2><span class="muted">${children.length} linked</span></div>
+        <div class="kid-list">${kids}
+          <a href="index.html" class="kid-add focus">+ Add another child</a>
+        </div>
+
+        <div class="report-actions" style="margin-top:26px">
+          <button class="btn-logout focus" data-act="logout">Log out</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ============================================================
   // Render + events
   // ============================================================
   // Full (re)mount of a view: rebuilds everything and plays the entrance
@@ -889,6 +995,7 @@
   function render() {
     app.innerHTML = state.view === 'report' ? reportView()
       : state.view === 'snapshot' ? snapshotView()
+      : state.view === 'profile' ? profileView()
       : homeView();
     app.querySelectorAll('[data-rise]').forEach((el) => el.classList.add('tm-rise'));
     wire(app);
@@ -935,6 +1042,8 @@
           if (open) { st[open.id] = 'done'; patchHome(); }
           break;
         }
+        case 'open-profile': set({ view: 'profile', switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'logout': location.href = 'index.html'; break;
         case 'open-snapshot': set({ view: 'snapshot', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'open-report': set({ view: 'report', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'back-home': set({ view: 'home' }); window.scrollTo(0, 0); break;
