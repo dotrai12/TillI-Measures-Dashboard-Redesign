@@ -53,6 +53,9 @@ html, body {
 a { color: var(--cyan-500); }
 a:hover { color: var(--cyan-700); }
 
+/* Headings use Quicksand; body + supporting text use Montserrat (set on body above) */
+h1, h2, h3, h4, h5, h6 { font-family: 'Quicksand', sans-serif; }
+
 /* ---- Brand vertical rail (left edge) ---- */
 .brand-rail {
   position: fixed;
@@ -106,7 +109,7 @@ a:hover { color: var(--cyan-700); }
   color: var(--ink-600);
   border-radius: var(--radius-pill);
   padding: 8px 14px;
-  font-family: 'Quicksand', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-weight: 700;
   font-size: 12.5px;
   cursor: pointer;
@@ -131,7 +134,7 @@ a:hover { color: var(--cyan-700); }
   border: 1px solid var(--line-200);
   background: #fff;
   outline: none;
-  font-family: 'Quicksand', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-weight: 600;
   font-size: 15px;
   color: var(--ink-900);
@@ -156,7 +159,7 @@ a:hover { color: var(--cyan-700); }
   background: var(--wash-cyan);
   border-radius: var(--radius-pill);
   padding: 7px 14px;
-  font-family: 'Quicksand', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-weight: 700; font-size: 12.5px;
   color: var(--cyan-700);
 }
@@ -270,7 +273,7 @@ a:hover { color: var(--cyan-700); }
   100% { transform: translateY(0); }
 }
 .pencil-load-msg {
-  font-family: 'Quicksand', sans-serif; font-weight: 600;
+  font-family: 'Montserrat', sans-serif; font-weight: 600;
   font-size: var(--msg-size); color: var(--ink-600);
   margin: var(--msg-gap) 0 0; max-width: 30ch; line-height: 1.5;
   transform: translate(var(--msg-x), var(--msg-y));

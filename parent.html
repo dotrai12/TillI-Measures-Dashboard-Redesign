@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/tokens/fonts.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/tilli.css">
 <style>
   /* ---- Parent-flow layout ---- */
@@ -32,7 +32,7 @@
     padding: 8px; min-width: 250px; }
   .switch-item { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; border: none;
     background: transparent; border-radius: 12px; padding: 10px 12px; cursor: pointer;
-    font-family: 'Quicksand',sans-serif; transition: background .15s; }
+    font-family: 'Montserrat',sans-serif; transition: background .15s; }
   .switch-item:hover { background: var(--surface-100); }
   .switch-item.on { background: var(--wash-green); }
   .switch-item .dot { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex;
@@ -57,11 +57,11 @@
   .p-title { font-weight: 700; letter-spacing: -.02em; font-size: clamp(28px,4vw,46px);
     line-height: 1.05; margin: 0; text-wrap: balance; }
   .p-title span { color: var(--pink-600); }
-  .p-sub { font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: clamp(14px,1.5vw,17px);
+  .p-sub { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: clamp(14px,1.5vw,17px);
     color: var(--ink-600); margin: 10px 0 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .chip { display: inline-flex; align-items: center; gap: 7px; border-radius: var(--radius-pill);
-    padding: 6px 13px; font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12px; }
+    padding: 6px 13px; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12px; }
   .chip .cd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .chip.school { background: var(--wash-cyan); color: var(--cyan-700); }
   .chip.grade  { background: var(--wash-green); color: var(--green-700); }
@@ -71,7 +71,7 @@
   .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
     margin: clamp(30px,4vh,44px) 0 14px; }
   .sec-head h2 { font-weight: 700; font-size: clamp(18px,2vw,22px); margin: 0; }
-  .sec-head .muted { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink-300); }
+  .sec-head .muted { font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink-300); }
   .sec-head .muted.due { margin-left: auto; }
   .sec-head .accent { color: var(--pink-600); }
 
@@ -80,7 +80,7 @@
     background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-card);
     padding: 18px 22px; }
   .prog-card .txt b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
-  .prog-card .txt span { display: block; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 12.5px;
+  .prog-card .txt span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12.5px;
     color: var(--ink-450); margin-top: 3px; }
 
   /* ---- Assessment timeline ---- */
@@ -99,9 +99,9 @@
   .t-dot.pending { background: #fff; border: 3px solid #C9CDD6; }
   .t-body { flex: 1; min-width: 0; }
   .t-body b { display: block; font-weight: 700; font-size: 15px; color: var(--ink-900); }
-  .t-body span { display: block; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 12px;
+  .t-body span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12px;
     color: var(--ink-450); margin-top: 1px; }
-  .t-badge { flex: none; font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12px;
+  .t-badge { flex: none; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12px;
     border-radius: var(--radius-pill); padding: 7px 15px; }
   .t-badge.done { color: var(--green-700); background: var(--wash-green); }
   .t-badge.progress { color: #8a6100; background: var(--wash-yellow); }
@@ -117,8 +117,11 @@
   .report-cta .ico img { width: 52%; }
   .report-cta .rt { flex: 1; min-width: 180px; }
   .report-cta .rt b { display: block; font-weight: 700; font-size: 18px; color: var(--ink-900); }
-  .report-cta .rt span { display: block; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px;
+  .report-cta .rt span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13px;
     color: var(--ink-450); margin-top: 3px; }
+  .report-cta .snap-gate { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .report-cta .snap-gate-note { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12px;
+    color: var(--ink-450); }
 
   /* ---- Garden report ---- */
   .garden { position: relative; overflow: hidden; border-radius: var(--radius-card);
@@ -128,24 +131,24 @@
   @media (max-width: 620px) { .garden .bed { grid-template-columns: repeat(4, 1fr); } }
   .flower-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; }
   .flower-cell .fl { line-height: 0; }
-  .flower-cell .lbl { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 9.5px;
+  .flower-cell .lbl { font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 9.5px;
     color: var(--green-700); text-align: center; line-height: 1.15; max-width: 12ch; }
 
   .skill-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
   .skill-card { background: #fff; border: 1px solid var(--line-200); border-radius: 16px; padding: 14px 16px; }
   .skill-card .sk-top { display: flex; align-items: center; gap: 10px; }
   .skill-card .sk-name { font-weight: 700; font-size: 14.5px; color: var(--ink-900); flex: 1; }
-  .skill-card .sk-tag { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 11.5px;
+  .skill-card .sk-tag { font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 11.5px;
     border-radius: var(--radius-pill); padding: 4px 11px; }
   .skill-card .sk-bar { height: 9px; background: var(--surface-100); border-radius: 99px; overflow: hidden; margin: 10px 0 8px; }
   .skill-card .sk-fill { height: 100%; border-radius: 99px; transition: width .6s var(--ease); }
-  .skill-card .sk-note { font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 12.5px;
+  .skill-card .sk-note { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12.5px;
     color: var(--ink-450); line-height: 1.5; }
 
   .tips { background: var(--wash-yellow); border: 1px solid #F1DA7A; border-radius: var(--radius-card);
     padding: 20px 22px; margin-top: 20px; }
   .tips h3 { margin: 0 0 8px; font-weight: 700; font-size: 16px; color: #6b5100; }
-  .tips p { font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px; color: #7a5c00;
+  .tips p { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13px; color: #7a5c00;
     line-height: 1.6; margin: 5px 0; }
 
   .report-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
@@ -154,36 +157,123 @@
     padding: 12px 22px; cursor: pointer; transition: background .2s; }
   .btn-outline:hover { background: var(--wash-green); }
 
-  .footnote { text-align: center; font-family: 'Quicksand',sans-serif; font-weight: 600; font-size: 13px;
+  .footnote { text-align: center; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13px;
     color: var(--green-600); margin: 30px 0 0; }
 
   /* ---- Parent snapshot (post-survey, parent-facing copy) ---- */
-  .snap-meta { font-family:'Quicksand',sans-serif; font-weight:700; font-size:12.5px;
+  .snap-meta { font-family:'Montserrat',sans-serif; font-weight:700; font-size:12.5px;
     color: var(--ink-300); margin: 8px 0 0; }
-  .snap-lead { font-family:'Quicksand',sans-serif; font-weight:600; font-size:clamp(14px,1.5vw,17px);
+  .snap-lead { font-family:'Montserrat',sans-serif; font-weight:600; font-size:clamp(14px,1.5vw,17px);
     color: var(--ink-600); margin: 12px 0 0; max-width: 60ch; line-height:1.6; }
   .shine { list-style:none; margin: 6px 0 0; padding:0; display:flex; flex-direction:column; gap:10px; }
   .shine li { position:relative; background: var(--wash-green); border:1px solid #BFE6AE; border-radius:16px;
-    padding:14px 16px 14px 44px; font-family:'Quicksand',sans-serif; font-weight:600; font-size:13.5px;
+    padding:14px 16px 14px 44px; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
     color: var(--green-700); line-height:1.55; }
   .shine li::before { content:'🌼'; position:absolute; left:15px; top:12px; font-size:15px; }
   .grow-card { background: var(--wash-cyan); border:1px solid #B7E6F1; border-radius:var(--radius-card);
     padding:18px 20px; margin-top:6px; }
   .grow-card h3 { margin:0 0 6px; font-weight:700; font-size:16px; color: var(--cyan-700); }
-  .grow-card p { margin:0; font-family:'Quicksand',sans-serif; font-weight:600; font-size:13.5px;
+  .grow-card p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
     color: var(--ink-600); line-height:1.6; max-width:62ch; }
   .try { display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:6px; }
   @media (max-width:640px){ .try { grid-template-columns:1fr; } }
   .try .card { background:#fff; border:1px solid var(--line-200); border-radius:16px; padding:16px; }
   .try .card b { display:block; font-weight:700; font-size:14px; color:var(--ink-900); margin-bottom:5px; }
-  .try .card span { font-family:'Quicksand',sans-serif; font-weight:600; font-size:12.5px;
+  .try .card span { font-family:'Montserrat',sans-serif; font-weight:600; font-size:12.5px;
     color: var(--ink-450); line-height:1.55; }
   .teacher-card { display:flex; align-items:flex-start; gap:14px; background: var(--wash-yellow);
     border:1px solid #F1DA7A; border-radius:var(--radius-card); padding:18px 20px; margin-top:6px; }
   .teacher-card .ico { width:44px; height:44px; border-radius:50%; background:#fff; flex:none;
     display:flex; align-items:center; justify-content:center; font-size:20px; }
-  .teacher-card p { margin:0; font-family:'Quicksand',sans-serif; font-weight:600; font-size:13.5px;
+  .teacher-card p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
     color:#7a5c00; line-height:1.6; max-width:60ch; }
+
+  /* ============================================================
+     Parent report — mockup redesign (image 1). Structure only;
+     colours/fonts stay on the site's tokens.
+     ============================================================ */
+  /* hero note */
+  .note-hero { margin-top: 8px; }
+  .note-kicker { font-family:'Montserrat',sans-serif; font-weight:700; font-size:clamp(15px,1.6vw,18px);
+    color: var(--ink-450); margin:0 0 2px; }
+  .note-hero .p-title { font-size: clamp(28px,4vw,44px); }
+  .note-lead { font-family:'Montserrat',sans-serif; font-weight:600; font-size:clamp(14px,1.5vw,16px);
+    color: var(--ink-600); margin:12px 0 0; max-width:60ch; line-height:1.6; }
+
+  /* grey band that groups the graded report content, setting it apart from
+     the intro note above and the download/footer below.
+     Full-bleed: breaks out of the centred .p-main to span the whole viewport
+     width, while .report-band-inner keeps the content aligned to the page. */
+  .report-band { background: var(--surface-100);
+    width: 100vw; position: relative; left: 50%; margin-left: -50vw;
+    padding: clamp(16px,2.6vw,24px) 0; margin-top: clamp(18px,3vh,26px); }
+  .report-band-inner { max-width: 860px; margin: 0 auto;
+    padding: 0 clamp(24px,6vw,90px); }
+  .report-band-inner > :first-child { margin-top: 0; }
+
+  /* framed panels (shining / support) */
+  .panel { border-radius: var(--radius-card); padding: clamp(14px,2vw,18px); margin-top: 16px; }
+  .panel-title { font-weight:700; font-size:clamp(16px,1.8vw,19px); margin:0 0 12px; text-align:center; }
+  .panel-body { background:#fff; border-radius:18px; padding: clamp(14px,2vw,18px); }
+
+  .panel-shine { background: var(--wash-green); border:1.5px solid #BFE6AE; }
+  .panel-shine .panel-title { color: var(--green-700); }
+  .shine-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px; }
+  .shine-list li { display:flex; gap:11px; align-items:flex-start; }
+  .shine-list .di { color: var(--orange-500); font-size:12px; line-height:1.6; flex:none; margin-top:1px; }
+  .shine-list p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
+    color: var(--ink-600); line-height:1.55; }
+
+  .panel-support { background: var(--wash-cyan); border:1.5px solid #B7E6F1; }
+  .panel-support .panel-title { color: var(--cyan-700); }
+  .support-body { display:grid; grid-template-columns:1fr auto; gap:14px; align-items:end; }
+  .support-text h3 { margin:0 0 6px; font-weight:700; font-size:16px; color: var(--ink-900); }
+  .support-text p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
+    color: var(--ink-600); line-height:1.6; }
+  .support-ill { width:92px; height:auto; align-self:end; }
+  @media (max-width:640px){ .support-ill { width:70px; } }
+
+  /* try-at-home clickable cards */
+  .try-sub { text-align:center; font-family:'Montserrat',sans-serif; font-weight:600; font-size:12.5px;
+    color: var(--ink-300); margin:6px 0 12px; }
+  /* try-at-home tag cards — stacked with overlap; bottom card tilts (image 3).
+     --card-overlap = how far each card slides up under the one above.
+     --bottom-tilt  = rotation of the last (bottom) card. */
+  .try-list { position:relative; display:block; --card-overlap:20px; }
+  .try-card { position:relative; display:block; text-decoration:none; background:#fff;
+    border:3.5px solid var(--c,var(--line-200)); border-radius:20px;
+    padding:29px 18px;
+    box-shadow: 0 8px 20px rgba(20,20,20,.06);
+    transform-origin: 65% 0%;
+    transition: transform .18s var(--ease), box-shadow .2s; }
+  .try-card + .try-card { margin-top: calc(-1 * var(--card-overlap)); }
+  /* baked per-card rotation/nudge */
+  .try-card:nth-child(1) { transform: rotate(2deg) translateY(6px); }
+  .try-card:nth-child(2) { transform: rotate(0deg) translateY(1px); }
+  .try-card:nth-child(3) { transform: rotate(2deg) translateY(17px); }
+  .try-card:hover { z-index:5; box-shadow: 0 16px 34px rgba(20,20,20,.12); }
+  .tc-tags { display:flex; justify-content:space-between; gap:10px; font-family:'Montserrat',sans-serif;
+    font-weight:700; font-size:11.5px; }
+  .tc-type { color: var(--c,var(--ink-600)); }
+  .tc-freq { color: var(--ink-450); }
+  .tc-topic { font-weight:700; font-size:14px; letter-spacing:.02em; text-transform:uppercase;
+    color: var(--ink-900); margin:10px 0 5px; }
+  .tc-desc { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:12.5px;
+    color: var(--ink-450); line-height:1.55; }
+
+  /* decorative flower row */
+  .flower-row { display:flex; justify-content:center; align-items:flex-end; gap:clamp(10px,4vw,30px);
+    padding:8px 0 2px; margin-top:22px; }
+  .flower-row .fl { line-height:0; }
+
+  /* work with the teacher */
+  .teach-head { text-transform:uppercase; letter-spacing:.05em; }
+  .teach-copy { font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px; color: var(--ink-600);
+    line-height:1.6; margin:0; max-width:62ch; }
+
+  /* download + footer */
+  .download-row { display:flex; justify-content:center; margin-top:28px; }
+  .download-row .btn-primary { padding:13px 42px; font-size:15px; }
 
   /* ---- Mobile (portrait phones ≤ 640px) ---- */
   @media (max-width: 640px) {
@@ -391,6 +481,7 @@
     else STATUS[c.name] = { parent: 'pending', hearts: 'pending', memory: 'pending', emt1: 'pending', emt2: 'pending', emt3: 'pending' };
   });
 
+  // Default visibility of the decorative flower row on the report.
   const state = { view: 'home', selected, switcherOpen: false, saved: '' };
   const app = document.getElementById('app');
   const child = () => children[state.selected];
@@ -451,7 +542,8 @@
     const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
     const total = ASSESSMENTS.length;
     const pct = Math.round((done / total) * 100);
-    const reportReady = st.parent === 'done';
+    const reportReady = st.parent === 'done';   // snapshot is generated once the parent report is done
+    const allDone = done === total;              // but it can only be opened once every assessment is complete
     const faceColor = smileColor(state.selected);
 
     const chips = [
@@ -505,7 +597,12 @@
             <span>${reportReady ? 'A warm summary of what you’re seeing at home, from your survey.' : 'Complete the Parent report to unlock your snapshot.'}</span>
           </span>
           ${reportReady
-            ? `<button class="btn btn-primary focus" data-act="open-snapshot" style="flex:none">See snapshot →</button>`
+            ? (allDone
+                ? `<button class="btn btn-primary focus" data-act="open-snapshot" style="flex:none">See snapshot →</button>`
+                : `<span class="snap-gate" style="flex:none;text-align:center">
+                     <button class="btn btn-primary focus" style="flex:none" disabled>See snapshot →</button>
+                     <span class="snap-gate-note">Complete all assessments to access it</span>
+                   </span>`)
             : `<button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>`}
         </div>
 
@@ -683,10 +780,24 @@
   function snapshotStandings(c) {
     const skills = buildSkills(c.name);
     const sorted = [...skills].sort((a, b) => b.pct - a.pct);
-    // Always the top two; a third only if it is genuinely shining (not a weak skill dressed up).
-    const strengths = sorted.slice(0, 3).filter((s, i) => i < 2 || s.pct >= 55);
+    // Mockup shows exactly three "places where {name} is shining".
+    const strengths = sorted.slice(0, 3);
     const growth = sorted[sorted.length - 1];
     return { strengths, growth };
+  }
+
+  // Dummy metadata for the three try-at-home cards until real content is wired.
+  // Card i gets ACT_TYPE[i] / ACT_FREQ[i], a border colour and a placeholder link.
+  const ACT_TYPE = ['Playful game', 'Everyday chat', 'Daily routine'];
+  const ACT_FREQ = ['A few times a week', 'Once a day', 'Once a week'];
+  const TRY_COLORS = ['var(--green-500)', 'var(--cyan-500)', 'var(--orange-500)'];
+  const ACT_LINK = 'https://www.tillikids.com'; // TODO placeholder — real how-to link (YouTube / article / steps)
+
+  // Decorative flower row — reuses flowerSVG() in a cool brand palette.
+  const FLOWER_ROW_COLORS = ['#26BDE2', '#5AA9E6', '#26BDE2', '#7FB2E6', '#26BDE2'];
+  function flowerRow() {
+    return FLOWER_ROW_COLORS.map((col, i) =>
+      `<span class="fl">${flowerSVG(col, 'blooming', i * 7 + 3, 40)}</span>`).join('');
   }
 
   function snapshotView() {
@@ -694,10 +805,18 @@
     const { strengths, growth } = snapshotStandings(c);
     const gf = GROWTH_FRAME[growth.key];
     const acts = GROWTH_ACTIONS[growth.key];
-    const faceColor = smileColor(state.selected);
 
-    const shine = strengths.map((s) => `<li>${fill(STRENGTH_BEHAVIOUR[s.key], c)}</li>`).join('');
-    const tryCards = acts.map((a) => `<div class="card"><b>${esc(a.t)}</b><span>${fill(a.b, c)}</span></div>`).join('');
+    const shine = strengths.map((s) =>
+      `<li><span class="di">◆</span><p>${fill(STRENGTH_BEHAVIOUR[s.key], c)}</p></li>`).join('');
+
+    const tryCards = acts.map((a, i) =>
+      `<a class="try-card focus" href="${ACT_LINK}" target="_blank" rel="noopener"
+          style="--c:${TRY_COLORS[i % TRY_COLORS.length]}">
+        <div class="tc-tags"><span class="tc-type">${esc(ACT_TYPE[i] || 'Activity')}</span>
+          <span class="tc-freq">${esc(ACT_FREQ[i] || '')}</span></div>
+        <div class="tc-topic">${esc(a.t)}</div>
+        <p class="tc-desc">${fill(a.b, c)}</p>
+      </a>`).join('');
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
@@ -705,53 +824,58 @@
       </div>
       <div class="p-main" data-rise>
 
-        <!-- 1 · kicker + hero -->
-        <div class="p-hero" style="grid-template-columns:auto 1fr;margin-top:8px">
-          <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a">
-            <img src="${SMILEY}" alt="">
+        <!-- 1 · a note for the family -->
+        <div class="note-hero">
+          <p class="note-kicker">A note for</p>
+          <h1 class="p-title"><span>${esc(c.name)}</span>’s family</h1>
+          <p class="note-lead">Here is a brief analysis based on your observations and how ${esc(c.name)}
+            did in the ${esc(TERM)} Tilli games.</p>
+        </div>
+
+        <!-- grey band groups the graded report (shining → work with teacher) -->
+        <div class="report-band">
+        <div class="report-band-inner">
+
+        <!-- 2 · three places where {name} is shining -->
+        <section class="panel panel-shine">
+          <h2 class="panel-title">3 places where ${esc(c.name)} is shining</h2>
+          <div class="panel-body"><ul class="shine-list">${shine}</ul></div>
+        </section>
+
+        <!-- 3 · where {name} needs support (single growth area) -->
+        <section class="panel panel-support">
+          <h2 class="panel-title">Where ${esc(c.name)} needs support</h2>
+          <div class="panel-body support-body">
+            <div class="support-text">
+              <h3>${esc(gf.head)}</h3>
+              <p>${fill(gf.desc, c)}</p>
+            </div>
+            <img class="support-ill" src="${DS}icons/people.png" alt="">
           </div>
-          <div>
-            <p class="p-eyebrow">A note for ${esc(c.name)}’s family</p>
-            <h1 class="p-title">Here’s what you’re seeing in <span>${esc(c.name)}</span> right now</h1>
-            <p class="snap-meta">${esc(school)} · ${esc(TERM)} · ${esc(c.teacher)}’s class</p>
-          </div>
+        </section>
+
+        <!-- 4 · three things you can try at home -->
+        <div class="sec-head"><h2>3 things you can try at home</h2></div>
+        <p class="try-sub">tap on each card to learn more</p>
+        <div class="try-list">${tryCards}</div>
+
+        <!-- 5 · decorative flower row -->
+        <div class="flower-row">${flowerRow()}</div>
+
+        <!-- 6 · work with the teacher -->
+        <div class="sec-head"><h2 class="teach-head">Work with the teacher</h2></div>
+        <p class="teach-copy">When you’re ready, ask ${esc(c.teacher)} for ${esc(c.name)}’s fuller report. It brings
+          this survey together with ${esc(c.name)}’s own activities and what ${fill('{poss}', c)} teacher sees in
+          class — three angles on the same wonderful child.</p>
+
+        </div><!-- /report-band-inner -->
+        </div><!-- /report-band -->
+
+        <!-- 7 · download + footer -->
+        <div class="download-row">
+          <button class="btn btn-primary focus" data-act="save-pdf">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF'}</button>
         </div>
-
-        <!-- 2 · sub-line -->
-        <p class="snap-lead">Drawn from your own observations at home, here is what ${esc(c.name)} is showing right
-          now — plenty to celebrate, and one gentle place where a little support will go a long way.</p>
-
-        <!-- 3 · what's already shining -->
-        <div class="sec-head"><h2>What’s already shining ✨</h2></div>
-        <ul class="shine">${shine}</ul>
-
-        <!-- 4 · where a little support helps most -->
-        <div class="sec-head"><h2>Where a little support helps most</h2></div>
-        <div class="grow-card">
-          <h3>${esc(gf.head)}</h3>
-          <p>${fill(gf.desc, c)}</p>
-        </div>
-
-        <!-- 5 · three small things to try at home -->
-        <div class="sec-head"><h2>Three small things to try at home 🏡</h2></div>
-        <div class="try">${tryCards}</div>
-
-        <!-- 6 · talk to your teacher (the ONLY place the three lenses appear) -->
-        <div class="sec-head"><h2>Talk to ${esc(c.teacher)}</h2></div>
-        <div class="teacher-card">
-          <span class="ico">💬</span>
-          <p>When you’re ready, ask ${esc(c.teacher)} for ${esc(c.name)}’s fuller report. It brings this survey
-            together with ${esc(c.name)}’s own activities and what ${fill('{poss}', c)} teacher sees in class —
-            three angles on the same wonderful child.</p>
-        </div>
-
-        <div class="report-actions">
-          <button class="btn btn-primary focus" data-act="save-pdf" style="padding:12px 22px;font-size:14px">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download snapshot'}</button>
-          <button class="btn-outline focus" data-act="open-report">See ${esc(c.name)}’s full garden →</button>
-        </div>
-
-        <!-- 7 · footer -->
-        <p class="footnote">For family use only · ${CONTACT} · a fresh snapshot follows each assessment window.</p>
+        <p class="footnote">For family use only · for enquiry / questions email info@tillikids.com · a fresh snapshot follows each assessment window.</p>
       </div>
     </div>`;
   }
@@ -795,7 +919,7 @@
   function patchSave() {
     const pdf = app.querySelector('[data-act="save-pdf"]');
     const png = app.querySelector('[data-act="save-png"]');
-    if (pdf) pdf.textContent = state.saved === 'pdf' ? 'Downloaded ✓' : (state.view === 'snapshot' ? 'Download snapshot' : 'Download PDF');
+    if (pdf) pdf.textContent = state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF';
     if (png) png.textContent = state.saved === 'png' ? 'Saved ✓' : 'Save image';
   }
 
