@@ -437,6 +437,15 @@
   // HOME VIEW
   // ============================================================
   function homeView() {
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}${switcher()}</div>
+      <div class="p-main">${homeMainInner()}</div>
+    </div>`;
+  }
+
+  // Inner content of .p-main — regenerated on its own by patchHome() so an
+  // assessment status change never rebuilds (and re-animates) the whole screen.
+  function homeMainInner() {
     const c = child();
     const st = status();
     const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
@@ -461,11 +470,8 @@
       </button>`;
     }).join('');
 
-    return `<div class="p-wrap">
-      <div class="p-top">${lockup}${switcher()}</div>
-      <div class="p-main">
-
-        <div class="p-hero tm-rise">
+    return `
+        <div class="p-hero" data-rise>
           <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a">
             <img src="${SMILEY}" alt="">
           </div>
@@ -503,9 +509,7 @@
             : `<button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>`}
         </div>
 
-        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>
-      </div>
-    </div>`;
+        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
   }
 
   // ============================================================
@@ -543,7 +547,7 @@
       <div class="p-top">${lockup}
         <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
       </div>
-      <div class="p-main tm-rise">
+      <div class="p-main" data-rise>
 
         <p class="p-eyebrow" style="margin-top:8px">${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
         <h1 class="p-title" style="font-size:clamp(26px,3.4vw,40px)">${esc(c.name)}'s garden</h1>
@@ -699,7 +703,7 @@
       <div class="p-top">${lockup}
         <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
       </div>
-      <div class="p-main tm-rise">
+      <div class="p-main" data-rise>
 
         <!-- 1 · kicker + hero -->
         <div class="p-hero" style="grid-template-columns:auto 1fr;margin-top:8px">
@@ -755,23 +759,56 @@
   // ============================================================
   // Render + events
   // ============================================================
+  // Full (re)mount of a view: rebuilds everything and plays the entrance
+  // animation once. Only used for view/child transitions — never for in-place
+  // edits, which patch their own region so the header can't re-fade.
   function render() {
     app.innerHTML = state.view === 'report' ? reportView()
       : state.view === 'snapshot' ? snapshotView()
       : homeView();
-    wire();
+    app.querySelectorAll('[data-rise]').forEach((el) => el.classList.add('tm-rise'));
+    wire(app);
+  }
+
+  // Targeted patch: rebuild just .p-main's contents (home view). No tm-rise is
+  // re-added, so the hero stays put instead of fading in on every tap.
+  function patchHome() {
+    const main = app.querySelector('.p-main');
+    if (!main) return;
+    main.innerHTML = homeMainInner();
+    wire(main);
+  }
+
+  // Targeted patch: rebuild only the child switcher (open/close its menu)
+  // without touching — or re-animating — the rest of the page.
+  function patchSwitcher() {
+    const cur = app.querySelector('.switcher');
+    if (!cur) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = switcher();
+    const next = tmp.firstElementChild;
+    cur.replaceWith(next);
+    wire(next);
+  }
+
+  // Targeted patch: just the two save-button labels (report/snapshot views).
+  function patchSave() {
+    const pdf = app.querySelector('[data-act="save-pdf"]');
+    const png = app.querySelector('[data-act="save-png"]');
+    if (pdf) pdf.textContent = state.saved === 'pdf' ? 'Downloaded ✓' : (state.view === 'snapshot' ? 'Download snapshot' : 'Download PDF');
+    if (png) png.textContent = state.saved === 'png' ? 'Saved ✓' : 'Save image';
   }
 
   let saveTimer;
-  function wire() {
-    app.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => {
+  function wire(root) {
+    root.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       switch (b.dataset.act) {
-        case 'toggle-switch': set({ switcherOpen: !state.switcherOpen }); break;
+        case 'toggle-switch': state.switcherOpen = !state.switcherOpen; patchSwitcher(); break;
         case 'progress-tap': {
           const st = status();
           const open = ASSESSMENTS.find((a) => st[a.id] === 'progress');
-          if (open) { st[open.id] = 'done'; render(); }
+          if (open) { st[open.id] = 'done'; patchHome(); }
           break;
         }
         case 'open-snapshot': set({ view: 'snapshot', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
@@ -779,32 +816,34 @@
         case 'back-home': set({ view: 'home' }); window.scrollTo(0, 0); break;
         case 'save-pdf':
         case 'save-png': {
-          const kind = b.dataset.act === 'save-pdf' ? 'pdf' : 'png';
-          set({ saved: kind });
+          state.saved = b.dataset.act === 'save-pdf' ? 'pdf' : 'png';
+          patchSave();
           clearTimeout(saveTimer);
-          saveTimer = setTimeout(() => set({ saved: '' }), 1600);
+          saveTimer = setTimeout(() => { state.saved = ''; patchSave(); }, 1600);
           break;
         }
       }
     }));
 
     // assessment cards cycle pending → progress → done → pending
-    app.querySelectorAll('[data-tap]').forEach((b) => b.addEventListener('click', () => {
+    root.querySelectorAll('[data-tap]').forEach((b) => b.addEventListener('click', () => {
       const st = status();
       const next = { pending: 'progress', progress: 'done', done: 'pending' };
       st[b.dataset.tap] = next[st[b.dataset.tap]] || 'pending';
-      render();
+      patchHome();
     }));
 
-    // switcher select
-    app.querySelectorAll('[data-select]').forEach((b) => b.addEventListener('click', (ev) => {
+    // switcher select (child switch genuinely changes everything → full render)
+    root.querySelectorAll('[data-select]').forEach((b) => b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       set({ selected: +b.dataset.select, switcherOpen: false, view: 'home' });
     }));
   }
 
-  // click outside closes switcher
-  document.addEventListener('click', () => { if (state.switcherOpen) set({ switcherOpen: false }); });
+  // click outside closes switcher (targeted — no full render)
+  document.addEventListener('click', () => {
+    if (state.switcherOpen) { state.switcherOpen = false; patchSwitcher(); }
+  });
 
   render();
 })();
