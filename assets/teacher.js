@@ -104,6 +104,10 @@
   function setDemo(patch) { state.demo = Object.assign({}, state.demo, patch); render(); }
   function setRoster(patch) { state.roster = Object.assign({}, state.roster, patch); render(); }
 
+  // Guards the one-time dashboard mount. Declared here (not next to
+  // enterDashboard) so boot() below can call enterDashboard without a TDZ error.
+  let dashboardMounted = false;
+
   // ---------- boot: resume or start ----------
   (function boot() {
     const saved = TeacherStore.load(ctx.email);
@@ -143,7 +147,8 @@
   // ---- hand off to the dashboard (Phase 2) ----
   // Hides the onboarding garden background, loads the sample data, and mounts
   // the dashboard once. The developer swaps buildAllData() for a real fetch.
-  let dashboardMounted = false;
+  // (dashboardMounted is declared above boot() so a returning, already-onboarded
+  //  teacher can mount straight from boot without hitting a TDZ error.)
   function enterDashboard() {
     const onb = document.getElementById('onb');
     const dashRoot = document.getElementById('dash-root');
@@ -155,14 +160,18 @@
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
     };
-    import('./dashboard-data.js')
-      .then((m) => {
-        if (window.TilliDashboard) window.TilliDashboard.mount(dashRoot, { data: m.buildAllData(), teacher });
-      })
-      .catch((err) => {
-        console.error('dashboard load failed', err);
-        dashRoot.innerHTML = '<div style="padding:48px;text-align:center;font-family:Montserrat,sans-serif;color:#545454">Could not load your dashboard. Please refresh.</div>';
-      });
+    // dashboard-data.js is loaded as a classic <script> in teacher.html, so it
+    // works under file:// too (no ES-module fetch). It exposes window.buildAllData.
+    try {
+      if (window.TilliDashboard && window.buildAllData) {
+        window.TilliDashboard.mount(dashRoot, { data: window.buildAllData(), teacher });
+      } else {
+        throw new Error('dashboard scripts not loaded (TilliDashboard/buildAllData missing)');
+      }
+    } catch (err) {
+      console.error('dashboard load failed', err);
+      dashRoot.innerHTML = '<div style="padding:48px;text-align:center;font-family:Montserrat,sans-serif;color:#545454">Could not load your dashboard. Please refresh.</div>';
+    }
   }
 
   // white flow card wrapper (+ optional back button)

@@ -1,7 +1,10 @@
 // Tilli Measures — sample data for the teacher dashboard.
 // Deterministic generation so the prototype is stable across renders.
-
-export const SKILLS = [
+// Loaded as a classic <script> (see teacher.html); exposes window.buildAllData.
+// Wrapped in an IIFE so SKILLS/WINDOWS/etc. stay private and never collide
+// with the identically-named locals in school-data.js.
+(function () {
+const SKILLS = [
   { key: "emotion_awareness", name: "Emotion Awareness", group: "sel" },
   { key: "emotion_regulation", name: "Emotion Regulation", group: "sel" },
   { key: "empathy", name: "Empathy", group: "sel" },
@@ -16,19 +19,19 @@ export const SKILLS = [
   { key: "attention", name: "Attention", group: "cog" },
 ];
 
-export const WINDOWS = [
+const WINDOWS = [
   { key: "baseline", label: "Baseline", sub: "Start of year", date: "Apr 2" },
   { key: "mid", label: "Mid-year", sub: "Week 8", date: "Jun 18" },
   { key: "post", label: "End of year", sub: "Week 14", date: "Sep 24" },
 ];
 
-export const PERSPECTIVES = [
+const PERSPECTIVES = [
   { key: "teacher", label: "Teacher", icon: "👩‍🏫" },
   { key: "parent", label: "Parent", icon: "🏠" },
   { key: "student", label: "Student", icon: "🧒" },
 ];
 
-export const SECTIONS = [
+const SECTIONS = [
   { id: "kg_a", name: "Kindergarten A", grade: "Kindergarten", n: 6 },
   { id: "kg_b", name: "Kindergarten B", grade: "Kindergarten", n: 6 },
   { id: "g1_a", name: "Grade 1 A", grade: "Grade 1", n: 6 },
@@ -155,7 +158,7 @@ function buildStudent(section, i, roster) {
   };
 }
 
-export function buildAllData() {
+function buildAllData() {
   // Prefer the shared dummy-school roster (school-data.js) when it's loaded,
   // so the teacher dashboard shows the same students as the parent flow.
   const TS = typeof window !== "undefined" ? window.TILLI_SCHOOL : null;
@@ -205,3 +208,6 @@ export function buildAllData() {
   });
   return { sections, skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES };
 }
+
+window.buildAllData = buildAllData;
+})();
