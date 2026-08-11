@@ -167,11 +167,16 @@
 
   // ---- navigation actions ----
   function go() {
+    const isNew = state.step === 'signup';
     if (state.role === 'teacher') {
-      window.location.href = 'teacher.html?school=' + encodeURIComponent(state.school);
+      // New teachers run the self-reflection onboarding; returning teachers
+      // whose onboarding is already saved skip straight to their dashboard.
+      let url = 'teacher.html?school=' + encodeURIComponent(state.school)
+        + '&email=' + encodeURIComponent(state.email);
+      if (isNew) url += '&new=1';
+      window.location.href = url;
       return;
     }
-    const isNew = state.step === 'signup';
     // Pull the logged-in parent's linked children from the dummy dataset.
     const linked = (!isNew && window.TILLI_SCHOOL && window.TILLI_SCHOOL.childrenForParent)
       ? window.TILLI_SCHOOL.childrenForParent(state.email)

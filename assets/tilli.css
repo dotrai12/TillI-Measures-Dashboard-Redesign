@@ -175,7 +175,10 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Quicksand', sans-serif; }
   20% { transform: translateX(-7px); } 40% { transform: translateX(6px); }
   60% { transform: translateX(-4px); } 80% { transform: translateX(3px); }
 }
-.tm-rise { animation: tmRise .6s ease both; }
+/* .tm-rise entrance fade is intentionally a no-op — fade-in animations were
+   removed site-wide (they replayed on re-render). The class + @keyframes
+   tmRise are kept so a fade can be opted back in per-screen when asked. */
+.tm-rise { animation: none; }
 .tm-shake { animation: tmShake .4s ease; }
 .tm-sway { transform-box: fill-box; transform-origin: 50% 100%; }
 @media (prefers-reduced-motion: reduce) {
@@ -195,7 +198,6 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Quicksand', sans-serif; }
   background: rgba(20, 20, 20, .42);
   display: flex; align-items: center; justify-content: center;
   padding: 24px;
-  animation: tmRise .28s ease both;
 }
 .dialog {
   position: relative;
