@@ -7,8 +7,8 @@
    Slice 1 (this file): shell (sidebar / header / section chips /
    profile), My Garden (beds overview + class modal + section
    garden), Ask Tilli (draggable sun + panel). Students,
-   Observations, Completion logs and Analysis render an in-shell
-   "coming next" panel and are filled in by later slices.
+   Assess (Observations + Completion merged, sub-tabs To-do / Enter /
+   Completed) and Insights render an in-shell panel.
    ============================================================ */
 (function () {
   'use strict';
@@ -77,13 +77,17 @@
   };
   const STATE_DOT = { blossoming: '#EFA9B8', growing: '#56C02B', tending: '#E8C4A8', waiting: '#A7CDE2' };
 
+  // One source of truth for both nav surfaces (desktop side rail + mobile
+  // bottom bar). `short` is the compact label the bottom bar shows; `center`
+  // marks Ask Tilli as the raised primary action. Order = spec order intent.
+  // Observations + Completion are now one destination ("Assess"); Analysis is
+  // renamed to Insights everywhere.
   const NAV = [
-    { key: 'garden', label: 'My Garden' },
-    { key: 'students', label: 'Students' },
-    { key: 'assess', label: 'Observations' },
-    { key: 'logs', label: 'Completion logs' },
-    { key: 'insights', label: 'Analysis' },
-    { key: 'ask', label: 'Ask Tilli' },
+    { key: 'garden', label: 'My Garden', short: 'My' },
+    { key: 'students', label: 'Students', short: 'Students' },
+    { key: 'ask', label: 'Ask Tilli', short: 'Ask Tilli', center: true },
+    { key: 'assess', label: 'Assess', short: 'Assess' },
+    { key: 'insights', label: 'Insights', short: 'Insights' },
   ];
   const NAV_ICON = {
     garden: '<path d="M12 21v-8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 13C12 9 9 6 5 6c0 4 3 7 7 7Z" fill="currentColor" opacity=".55"/><path d="M12 14c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="currentColor"/>',
@@ -97,6 +101,13 @@
   // ---------------- module state ----------------
   let S = null;
   let root = null;
+  // Browser/phone back-button support: the app never changes the URL, so we mirror
+  // each "screen" into the history stack. render() pushes an entry when the screen
+  // changes; the popstate handler replays a snapshot back into S. See syncHistory().
+  let lastNavKey = null;
+  let historyReady = false;
+  let suppressPush = false; // true while restoring from popstate — don't re-push
+  let popBound = false;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function firstName() { return ((S.teacher.demo && S.teacher.demo.name || '').trim().split(/\s+/)[0]) || 'there'; }
@@ -105,7 +116,15 @@
     if (!parts.length) return 'T';
     return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
   }
-  function section() { return S.data.sections.find((s) => s.id === S.sectionId) || S.data.sections[0]; }
+  // Virtual "All grades" section: every student across every grade, so roster /
+  // assess / insights / section-garden all work unchanged when 'all' is picked.
+  function allSection() {
+    return { id: 'all', name: 'All grades', grade: 'mixed-grade', students: S.data.sections.flatMap((s) => s.students) };
+  }
+  function section() {
+    if (S.sectionId === 'all' && S.data.sections.length > 1) return allSection();
+    return S.data.sections.find((s) => s.id === S.sectionId) || S.data.sections[0];
+  }
   function sectionIdOfStudent(sid) { const s = S.data.sections.find((sec) => sec.students.some((st) => st.id === sid)); return s ? s.id : S.sectionId; }
   function openStudent(sid) { S.classModal = null; S.sectionId = sectionIdOfStudent(sid); S.studentId = sid; S.studentTab = 'overview'; S.nav = 'students'; render(); }
   const bestOf = (stu) => [...stu.skills].sort((a, b) => b.pct - a.pct)[0].name;
@@ -151,25 +170,58 @@
       nav: 'garden', sectionId: (ctx.data.sections[0] || {}).id,
       gardenLevel: 'beds', classModal: null, studentId: null,
       rosterSearch: '', rosterSort: 'state', studentTab: 'overview',
-      obsLevel: 'vine', enter: { studentId: null, q: 0, ratings: {}, done: false },
+      assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
       insightsView: 'growing',
       add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '' },
       vw: window.innerWidth,
       ask: { open: false, context: '', prompt: '', thread: [] },
-      sun: { x: null, y: null },
       gardener: (ctx.teacher && ctx.teacher.demo && ctx.teacher.demo.gender === 'Male') ? 'm' : 'f',
     };
     injectCSS();
     let rt;
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { S.vw = window.innerWidth; render(); }, 120); });
+    bindBackButton();
     render();
   }
 
   function bp() { const w = S.vw; return { isPhone: w < 640, isTablet: w >= 640 && w < 1024, isDesktop: w >= 1024 }; }
 
+  // ---------------- back-button / history ----------------
+  // The fields that define "which screen you're on". Sub-tabs (studentTab,
+  // rosterSort, etc.) are intentionally excluded — they're not back-worthy steps.
+  function navState() {
+    return { nav: S.nav, gardenLevel: S.gardenLevel, sectionId: S.sectionId, studentId: S.studentId, classModal: S.classModal, askOpen: S.ask.open };
+  }
+  function navKey() { const s = navState(); return [s.nav, s.gardenLevel, s.sectionId, s.studentId, s.classModal, s.askOpen].join('|'); }
+
+  // Called on every render: seed the first entry, then push a new history entry
+  // whenever the screen changed (unless we're mid-restore from a back/forward).
+  function syncHistory() {
+    const key = navKey();
+    if (!historyReady) { history.replaceState({ tilliNav: navState() }, ''); historyReady = true; lastNavKey = key; return; }
+    if (suppressPush || key === lastNavKey) { lastNavKey = key; return; }
+    history.pushState({ tilliNav: navState() }, '');
+    lastNavKey = key;
+  }
+
+  function bindBackButton() {
+    if (popBound) return; // mount can run more than once; only one listener
+    popBound = true;
+    window.addEventListener('popstate', (e) => {
+      const st = e.state && e.state.tilliNav;
+      if (!st || !S) return; // outside our stack — let the browser leave the app
+      suppressPush = true;
+      S.nav = st.nav; S.gardenLevel = st.gardenLevel; S.sectionId = st.sectionId;
+      S.studentId = st.studentId; S.classModal = st.classModal; S.ask.open = st.askOpen;
+      render();
+      suppressPush = false;
+    });
+  }
+
   // ---------------- render ----------------
   function render() {
+    syncHistory();
     const { isPhone, isDesktop } = bp();
     const sideWide = isDesktop;
     const showSidebar = !isPhone;
@@ -177,7 +229,7 @@
 
     const navBtns = NAV.map((it) => {
       const on = it.key === active;
-      return `<button class="dash-navbtn${on ? ' on' : ''}" data-nav="${it.key}" title="${esc(it.label)}">
+      return `<button class="dash-navbtn${on ? ' on' : ''}" data-nav="${it.key}" title="${esc(it.label)}"${on ? ' aria-current="page"' : ''}>
         <span class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none">${NAV_ICON[it.key]}</svg></span>
         ${sideWide ? `<span class="lb">${esc(it.label)}</span>` : ''}
       </button>`;
@@ -197,12 +249,31 @@
       </aside>` : '';
 
     const bottomNav = isPhone ? `
-      <nav class="dash-bottomnav">
-        ${NAV.map((it) => { const on = it.key === active; return `<button class="dash-bnav${on ? ' on' : ''}" data-nav="${it.key}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none">${NAV_ICON[it.key]}</svg><span>${esc(it.label.split(' ')[0])}</span></button>`; }).join('')}
+      <nav class="dash-bottomnav" aria-label="Primary">
+        ${NAV.map((it) => {
+          const on = it.key === active;
+          // Ask Tilli is the raised primary action: always accent-treated,
+          // never carries the quiet "current tab" state the other four use.
+          if (it.center) {
+            return `<button class="dash-bnav center" data-nav="${it.key}" aria-label="${esc(it.label)}">
+              <span class="dash-fab"><svg width="26" height="26" viewBox="0 0 24 24" fill="none">${NAV_ICON[it.key]}</svg></span>
+              <span class="lb">${esc(it.short)}</span>
+            </button>`;
+          }
+          return `<button class="dash-bnav${on ? ' on' : ''}" data-nav="${it.key}"${on ? ' aria-current="page"' : ''}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">${NAV_ICON[it.key]}</svg>
+            <span class="lb">${esc(it.short)}</span>
+          </button>`;
+        }).join('')}
       </nav>` : '';
 
-    const showChips = S.nav !== 'profile' && !(S.nav === 'garden' && S.gardenLevel === 'beds');
-    const chips = showChips ? `<div class="dash-chips">${S.data.sections.map((sec) => {
+    // Section picker persists across all five destinations (spec). Only the
+    // profile panel — which isn't one of the five — hides it.
+    const showChips = S.nav !== 'profile';
+    // "All" appears only when there's more than one grade to combine.
+    const allChip = S.data.sections.length > 1
+      ? `<button class="dash-chip${S.sectionId === 'all' ? ' on' : ''}" data-section="all">All</button>` : '';
+    const chips = showChips ? `<div class="dash-chips">${allChip}${S.data.sections.map((sec) => {
       const on = sec.id === S.sectionId;
       return `<button class="dash-chip${on ? ' on' : ''}" data-section="${sec.id}">${esc(sec.name)}</button>`;
     }).join('')}</div>` : '';
@@ -215,7 +286,6 @@
           <main class="dash-main">${mainView()}</main>
         </div>
         ${bottomNav}
-        ${sunView()}
         ${S.ask.open ? askPanel() : ''}
         ${S.classModal ? classModalView() : ''}
         ${addModal()}
@@ -228,7 +298,6 @@
     if (S.nav === 'profile') return profilePanel();
     if (S.nav === 'students') return S.studentId ? studentDetailView() : rosterView();
     if (S.nav === 'assess') return assessView();
-    if (S.nav === 'logs') return logsView();
     if (S.nav === 'insights') return insightsView();
     return placeholder('My Garden', '');
   }
@@ -389,7 +458,10 @@
           <h1 class="dash-h1" style="color:var(--green-700)">My garden</h1>
           <p class="dash-sub">Good morning, ${esc(firstName())} 🌱 — every bloom is one of your students. Pick a bush to tend.</p>
         </div>
-        ${gardenerSVG()}
+        <div class="garden-head-right">
+          <button class="dash-avatarbtn focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
+          ${gardenerSVG()}
+        </div>
       </div>
       <div class="beds-grid">${bedsHTML}</div>
       <div class="bed-key">${key}</div>
@@ -526,7 +598,7 @@
           <div class="eyebrow" style="color:#c07689">Garden highlights</div>
           <p style="margin:0 0 14px;font-size:15px;color:#7a5560;line-height:1.45">Your class's strongest skills right now:</p>
           <div class="hl-chips">${highlights}</div>
-          <button class="hl-more focus" data-nav="insights">See all in Analysis →</button>
+          <button class="hl-more focus" data-nav="insights">See all in Insights →</button>
         </section>
         <section class="grow-card">
           <div class="eyebrow" style="color:#9a8f5a">Growing areas</div>
@@ -735,22 +807,23 @@
   };
   const STAR_LABELS = ['Emerging', 'Beginner', 'Growing', 'Expert'];
 
+  // Merged destination: Observations + Completion are now one "Assess" place
+  // with three sub-tabs — To-do (the journey/what's next), Enter (record an
+  // observation), Completed (who has finished each window).
   function assessView() {
     const sec = section();
-    const lvl = S.obsLevel;
-    const back = lvl !== 'vine' ? `<button class="obs-back focus" data-obs-back>← Back to journey</button>` : '';
-    const subtitle = lvl === 'enter' ? (sec.name + ' · recording an observation')
-      : lvl === 'report' ? (sec.name + ' · baseline window')
-      : "Your class's assessment journey grows as each window is complete. Tend the glowing window next.";
-    let body = '';
-    if (lvl === 'vine') body = obsVine();
-    else if (lvl === 'enter') body = obsEnter();
-    else body = obsReport();
-    return `<div class="dash-wrap" style="max-width:880px">
-      ${back}
-      <h1 class="dash-h1" style="color:var(--green-700)">Observations</h1>
-      <p class="dash-sub" style="max-width:520px">${esc(subtitle)}</p>
-      <div style="margin-top:20px">${body}</div>
+    const tab = S.assessTab || 'todo';
+    const subTabs = [['todo', 'To-do'], ['enter', 'Enter'], ['completed', 'Completed']]
+      .map(([k, l]) => `<button class="pill-tab atab${tab === k ? ' on' : ''}" data-assesstab="${k}">${l}</button>`).join('');
+    let body, subtitle;
+    if (tab === 'enter') { body = obsEnter(); subtitle = sec.name + ' · recording an observation'; }
+    else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
+    else { body = obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
+    return `<div class="dash-wrap" style="max-width:1080px">
+      <h1 class="dash-h1" style="color:var(--green-700)">Assess</h1>
+      <p class="dash-sub" style="max-width:560px">${esc(subtitle)}</p>
+      <div class="log-tabs" style="margin-top:16px">${subTabs}</div>
+      <div style="margin-top:16px">${body}</div>
     </div>`;
   }
 
@@ -824,24 +897,13 @@
     </div>${celebrate}`;
   }
 
-  function obsReport() {
-    const sec = section();
-    const rows = sec.students.map((s) => {
-      const meta = STATUS_META[s.assess === 'done' ? 'done' : s.assess === 'in_progress' ? 'in_progress' : 'pending'];
-      return `<div class="rep-row"><div class="nm">${esc(s.name)}</div><div class="wn">Baseline</div><div><span class="rep-pill" style="background:${meta.bg};color:${meta.fg}">${meta.label}</span></div></div>`;
-    }).join('');
-    return `<div class="dash-h2" style="margin-bottom:4px">Baseline · completion</div>
-      <p class="dash-sub" style="margin:0 0 16px">Where every family stands on the baseline window.</p>
-      <div class="rep-table">
-        <div class="rep-head"><div>Student</div><div>Window</div><div>Status</div></div>${rows}
-      </div>`;
-  }
-
-  function startEnter(id) { S.obsLevel = 'enter'; S.enter = { studentId: id, q: 0, ratings: {}, done: false }; render(); }
+  function startEnter(id) { S.assessTab = 'enter'; S.enter = { studentId: id, q: 0, ratings: {}, done: false }; render(); }
   function continueAssess() { const sec = section(); const nxt = sec.students.find((s) => s.assess !== 'done'); startEnter(nxt ? nxt.id : sec.students[0].id); }
 
-  // ================= Completion logs =================
-  function logsView() {
+  // ================= Assess · Completed sub-tab (was "Completion logs") =====
+  // Body only — the h1/subtitle/sub-tabs now live in assessView(). Keeps its
+  // own inner By-class / By-student / List tabs.
+  function assessCompleted() {
     const view = S.logsView;
     const tabs = [['class', 'By class'], ['student', 'By student'], ['list', 'List']]
       .map(([k, l]) => `<button class="pill-tab logtab${view === k ? ' on' : ''}" data-logview="${k}">${l}</button>`).join('');
@@ -851,12 +913,7 @@
       <span><span class="d" style="background:#d8cfba"></span>Not started</span>
       <span style="color:var(--ink-300)">· 👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
     const body = view === 'class' ? logsByClass() : view === 'student' ? logsByStudent() : logsList();
-    return `<div class="dash-wrap" style="max-width:1080px">
-      <div class="log-headrow"><div><h1 class="dash-h1">Assessment logs</h1><p class="dash-sub">Who has finished each assessment window — and who's still waiting.</p></div></div>
-      <div class="log-tabs">${tabs}</div>
-      ${legend}
-      ${body}
-    </div>`;
+    return `<div class="log-tabs">${tabs}</div>${legend}${body}`;
   }
 
   function logsByClass() {
@@ -945,7 +1002,7 @@
       <div class="list-table"><div class="list-head"><div>Student</div><div>Baseline</div><div>Mid-year</div><div>End of year</div><div style="text-align:right">Progress</div></div>${body}</div>`;
   }
 
-  // ================= Analysis (insights) =================
+  // ================= Insights (was "Analysis") =================
   function insightsView() {
     const view = S.insightsView;
     const tabs = [['growing', "How we're growing"], ['perspectives', 'Perspectives'], ['compare', 'Compare sections']]
@@ -956,7 +1013,7 @@
     else if (view === 'perspectives') body = insPerspectives(cs);
     else body = insCompare();
     return `<div class="dash-wrap" style="max-width:1040px">
-      <h1 class="dash-h1">Analysis</h1>
+      <h1 class="dash-h1">Insights</h1>
       <div class="log-tabs" style="margin-top:16px">${tabs}</div>
       ${body}
     </div>`;
@@ -1099,14 +1156,6 @@
   }
 
   // ---------------- Ask Tilli ----------------
-  function sunView() {
-    const showSun = S.nav === 'garden' && !S.ask.open;
-    if (!showSun) return '';
-    const s = S.sun;
-    const pos = s.x != null ? `left:${s.x - 28}px;top:${s.y - 28}px` : `right:24px;bottom:${bp().isPhone ? 92 : 28}px`;
-    return `<button class="ask-sun" id="ask-sun" style="${pos}" title="Ask Tilli" aria-label="Ask Tilli">${sunSmall()}</button>`;
-  }
-
   function askPanel() {
     const a = S.ask;
     const thread = a.thread.map((m) => `<div class="ask-msg ${m.role}">${esc(m.text)}</div>`).join('');
@@ -1144,7 +1193,7 @@
       <div class="dash-card" style="margin-top:16px;padding:8px 20px">${rows}</div>
       <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap">
         <button class="btn btn-ghost focus" data-redo style="padding:12px 20px">Redo reflection</button>
-        <a class="btn btn-ghost focus" href="index.html" style="padding:12px 20px;text-decoration:none">Sign out</a>
+        <a class="btn focus" href="index.html" style="padding:12px 20px;text-decoration:none;background:#FBE7EA;color:#c0435c;font-weight:700">↩ Sign out</a>
       </div>
     </div>`;
   }
@@ -1191,10 +1240,11 @@
       openAsk(`${stu.first} · ${b.dataset.askSkill}`, `How can I support ${stu.name}, a ${stu.grade} student at ${b.dataset.band} level in ${b.dataset.askSkill}?`);
     }));
 
-    // observations
-    root.querySelectorAll('[data-obs-back]').forEach((b) => b.addEventListener('click', () => { S.obsLevel = 'vine'; render(); }));
+    // assess: sub-tabs + observation flow
+    root.querySelectorAll('[data-assesstab]').forEach((b) => b.addEventListener('click', () => { S.assessTab = b.dataset.assesstab; render(); }));
+    root.querySelectorAll('[data-obs-back]').forEach((b) => b.addEventListener('click', () => { S.assessTab = 'todo'; render(); }));
     root.querySelectorAll('[data-obs-continue]').forEach((b) => b.addEventListener('click', () => continueAssess()));
-    root.querySelectorAll('[data-obs-report]').forEach((b) => b.addEventListener('click', () => { S.obsLevel = 'report'; render(); }));
+    root.querySelectorAll('[data-obs-report]').forEach((b) => b.addEventListener('click', () => { S.assessTab = 'completed'; render(); }));
     root.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => {
       const sk = S.data.skills[S.enter.q];
       S.enter = Object.assign({}, S.enter, { ratings: Object.assign({}, S.enter.ratings, { [sk.key]: +b.dataset.star }) });
@@ -1230,8 +1280,6 @@
     wireAddFlow();
 
     // ask tilli
-    const sun = root.querySelector('#ask-sun');
-    if (sun) wireSun(sun);
     root.querySelectorAll('[data-close-ask]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; render(); }));
     const ai = root.querySelector('.ask-input');
     if (ai) ai.addEventListener('input', (e) => { S.ask.prompt = e.target.value; });
@@ -1265,18 +1313,6 @@
     }
   }
 
-  // draggable sun (pointer)
-  function wireSun(sun) {
-    let moved = false;
-    sun.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); moved = false;
-      const move = (ev) => { moved = true; S.sun = { x: ev.clientX, y: ev.clientY }; sun.style.left = (ev.clientX - 28) + 'px'; sun.style.top = (ev.clientY - 28) + 'px'; sun.style.right = 'auto'; sun.style.bottom = 'auto'; };
-      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
-      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
-    });
-    sun.addEventListener('click', () => { if (!moved) openAsk('', 'Ask me anything about your class or a student.'); });
-  }
-
   // ---------------- styles ----------------
   function injectCSS() {
     if (document.getElementById('dash-css')) return;
@@ -1288,8 +1324,8 @@
 
   const CSS = `
   #dash-root { position: fixed; inset: 0; overflow: auto; background: #fff; }
-  .dash { min-height: 100vh; display: flex; background: #fff; color: var(--ink-900); }
-  .dash-side { width: 224px; flex: none; background: #fff; border-right: 1px solid var(--line-200); padding: 22px 16px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+  .dash { min-height: 100vh; min-height: 100dvh; display: flex; background: #fff; color: var(--ink-900); }
+  .dash-side { width: 224px; flex: none; background: #fff; border-right: 1px solid var(--line-200); padding: 22px 16px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; height: 100dvh; }
   .dash-side.narrow { width: 76px; padding: 22px 10px; align-items: center; }
   .dash-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 22px; }
   .dash-logo { width: 34px; height: 34px; border-radius: 11px; background: var(--wash-green); display: flex; align-items: center; justify-content: center; flex: none; }
@@ -1326,6 +1362,9 @@
 
   /* garden beds */
   .garden-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .garden-head-right { display: flex; align-items: center; gap: 14px; }
+  .dash-avatarbtn { width: 42px; height: 42px; border-radius: 50%; background: var(--pink-400); color: #fff; border: none; cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 800; font-size: 15px; flex: none; box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+  .dash-avatarbtn:hover { filter: brightness(1.05); }
   .gardener { flex: none; animation: tdFloat 4.6s ease-in-out infinite; }
   @keyframes tdFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
   @media (prefers-reduced-motion: reduce) { .gardener { animation: none; } }
@@ -1404,8 +1443,6 @@
   .grow-ask { background: var(--wash-yellow); color: #8a6a1f; border: none; border-radius: 10px; padding: 8px 12px; font-weight: 700; font-size: 12px; cursor: pointer; white-space: nowrap; font-family: 'Montserrat',sans-serif; }
 
   /* ask tilli */
-  .ask-sun { position: fixed; z-index: 55; width: 56px; height: 56px; border-radius: 50%; border: none; cursor: grab; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 35% 30%,#FCE9A8,#F2CE7B); box-shadow: 0 8px 22px rgba(200,160,60,.35); touch-action: none; padding: 0; }
-  .ask-sun:active { cursor: grabbing; }
   .ask-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(30,40,30,.28); }
   .ask-panel { position: fixed; z-index: 61; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: #fff; display: flex; flex-direction: column; box-shadow: -8px 0 40px rgba(40,70,40,.18); }
   .ask-head { display: flex; align-items: center; gap: 10px; padding: 18px 20px; border-bottom: 1px solid var(--line-200); }
@@ -1649,10 +1686,19 @@
   .pot-rim { position: absolute; left: 50%; bottom: 46px; margin-left: -52px; width: 104px; height: 20px; border-radius: 6px; background: #C77E4E; }
   .pot-body { position: absolute; left: 50%; bottom: 4px; margin-left: -49px; width: 98px; height: 50px; background: #B96E42; clip-path: polygon(4% 0, 96% 0, 84% 100%, 16% 100%); }
 
-  /* bottom nav (mobile) */
-  .dash-bottomnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; background: #fff; border-top: 1px solid var(--line-200); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
-  .dash-bnav { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; cursor: pointer; color: var(--ink-300); font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 10px; padding: 4px 2px; }
+  /* bottom nav (mobile) — four quiet tabs + raised Ask Tilli in the centre */
+  .dash-bottomnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; align-items: flex-end; background: #fff; border-top: 1px solid var(--line-200); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  .dash-bnav { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; background: none; border: none; cursor: pointer; color: var(--ink-300); font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 10px; padding: 4px 2px; min-height: 44px; }
+  .dash-bnav .lb { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Quiet active state: colour + weight only, deliberately softer than the centre button. */
   .dash-bnav.on { color: var(--green-700); }
+  .dash-bnav.on .lb { font-weight: 800; }
+  /* Raised centre action (Ask Tilli): overlaps the top edge, carries the sole accent. */
+  .dash-bnav.center { color: var(--green-700); }
+  .dash-bnav.center .dash-fab { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; margin-top: -26px; border-radius: 50%; background: var(--green-500); color: #fff; box-shadow: 0 6px 18px rgba(52,140,17,.36); border: 3px solid #fff; }
+  .dash-bnav.center .lb { color: var(--green-700); font-weight: 800; }
+  .dash-bnav.center:active .dash-fab { transform: scale(.94); }
+  @media (prefers-reduced-motion: reduce) { .dash-bnav.center:active .dash-fab { transform: none; } }
 
   @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
   @media (max-width: 640px) {
