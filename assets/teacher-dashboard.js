@@ -98,6 +98,54 @@
     ask: '<path d="M4 6.5C4 5 5 4 6.5 4h11C19 4 20 5 20 6.5v7c0 1.5-1 2.5-2.5 2.5H10l-4 3.5V16H6.5C5 16 4 15 4 13.5v-7Z" fill="currentColor"/><circle cx="9" cy="10" r="1.2" fill="#fff"/><circle cx="12" cy="10" r="1.2" fill="#fff"/><circle cx="15" cy="10" r="1.2" fill="#fff"/>',
   };
 
+  // ---------------- "My Garden" landing (spec: my-garden-landing-spec.md) ----------------
+  // The four states the landing can render, keyed by S.windowState. `windowOpen`
+  // decides the hero (open window → assessment CTA; else → Ask Tilli). `maturity`
+  // selects the garden-scene variant. Copy here is verbatim from the spec; {N}/{n}
+  // /{next} are filled at render time. Between-window is the default — it's the most
+  // common state and the one that proves the "calm doorway" concept.
+  const LANDING_STATES = {
+    baseline: {
+      windowOpen: true, winKey: 'baseline', maturity: 'seedling', week: 'week 1',
+      caption: 'Freshly planted — this is where the year begins.',
+      heroTitle: 'Baseline is open',
+      heroBlurb: 'Set the starting point for all {N} children — the garden they grow from.',
+      deadline: 'Apr 2',
+    },
+    between: {
+      windowOpen: false, maturity: 'growing', week: 'week 14',
+      caption: 'Your garden is resting — scores next update at {next}.',
+    },
+    midline: {
+      windowOpen: true, winKey: 'mid', maturity: 'growing2', week: 'week 15',
+      caption: 'Growing season — your garden has moved since baseline.',
+      celebrate: '{n} of your plants have grown since baseline.',
+      heroTitle: 'Midline is open',
+      heroBlurb: 'See how far your class has come since baseline.',
+      deadline: 'Jun 18',
+    },
+    endline: {
+      windowOpen: true, winKey: 'post', maturity: 'bloom', week: 'week 30',
+      caption: "Full bloom — the end of this year's journey.",
+      celebrate: '{n} plants blossomed across the whole year.',
+      heroTitle: 'Endline is open',
+      heroBlurb: 'The final check-in — capture how far every child has travelled.',
+      deadline: 'Sep 24',
+    },
+  };
+
+  // "This week's idea" content set. Rotates weekly, independent of assessment data
+  // (the primary reason to return between windows). Treat as pluggable — the rotation
+  // is the point, not this exact list.
+  const WEEK_IDEAS = [
+    { t: 'Feelings weather check-in', d: 'Open the day by asking each child to name their inner weather — sunny, cloudy, or stormy. Thirty seconds each, no fixing, just naming.', ask: 'Give me a 5-minute "feelings weather" check-in routine to run at the start of the day with my class.' },
+    { t: 'Two-minute calm corner', d: 'Set up a quiet corner with one soft object. When a child feels too big inside, they can visit for two slow breaths, then rejoin. Introduce it to the whole class first.', ask: 'Help me set up and introduce a simple two-minute calm corner for my class.' },
+    { t: 'Kindness on paper', d: 'Each child draws or writes one kind thing a classmate did this week. Read a few aloud with no names attached to keep it light and safe.', ask: 'Give me a short "kindness on paper" activity that builds empathy in my class this week.' },
+    { t: 'Name it to tame it', d: 'When a child is frustrated, help them put a word to the feeling before anything else — "you look really frustrated." Naming lowers the heat before you problem-solve.', ask: 'Coach me through using "name it to tame it" with a child who gets frustrated easily.' },
+    { t: 'One-breath reset', d: 'Between two busy activities, lead a single shared deep breath — everyone in, everyone out. It costs ten seconds and resets the room.', ask: 'Suggest a few tiny 10-second reset routines I can use between activities.' },
+    { t: 'Glow and grow', d: 'End the day with each child sharing one "glow" (something that went well) and, if they want, one "grow" (something to try tomorrow). Model it yourself first.', ask: 'Give me a simple end-of-day "glow and grow" reflection routine for my class.' },
+  ];
+
   // ---------------- module state ----------------
   let S = null;
   let root = null;
@@ -168,7 +216,8 @@
     S = {
       data: ctx.data, teacher: ctx.teacher || {},
       nav: 'garden', sectionId: (ctx.data.sections[0] || {}).id,
-      gardenLevel: 'beds', classModal: null, studentId: null,
+      gardenLevel: 'landing', classModal: null, studentId: null,
+      windowState: 'between', // which of the 4 landing states renders (dev GUI switch)
       rosterSearch: '', rosterSort: 'state', studentTab: 'overview',
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
@@ -289,12 +338,13 @@
         ${S.ask.open ? askPanel() : ''}
         ${S.classModal ? classModalView() : ''}
         ${addModal()}
+        ${(S.nav === 'garden' && S.gardenLevel === 'landing') ? stateSwitcherGUI() : ''}
       </div>`;
     wire();
   }
 
   function mainView() {
-    if (S.nav === 'garden') return S.gardenLevel === 'beds' ? bedsView() : sectionGardenView();
+    if (S.nav === 'garden') return S.gardenLevel === 'beds' ? bedsView() : S.gardenLevel === 'section' ? sectionGardenView() : landingView();
     if (S.nav === 'profile') return profilePanel();
     if (S.nav === 'students') return S.studentId ? studentDetailView() : rosterView();
     if (S.nav === 'assess') return assessView();
@@ -312,6 +362,221 @@
         <p style="color:var(--ink-450);font-size:14px;margin:6px 0 0">This section is being planted. The garden is ready to explore now.</p>
         <button class="btn btn-primary focus" data-nav="garden" style="margin-top:18px;padding:12px 22px">Go to My Garden</button>
       </div>
+    </div>`;
+  }
+
+  // ================= My Garden: landing (state-driven doorway) =================
+  // Spec: my-garden-landing-spec.md. One skeleton, four states. Not a live
+  // dashboard — a calm doorway to Ask Tilli + the open assessment + one fresh
+  // weekly idea. Applies the existing DS only; no new visual language.
+
+  const fill = (tpl, map) => String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (map[k] != null ? map[k] : ''));
+  const bandOfPct = (p) => (p < 34 ? 'Beginner' : p < 67 ? 'Learner' : 'Expert');
+  function greetWord() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
+  // Weekly rotation for "This week's idea" — independent of assessment data.
+  function weekIdea() { const wk = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000)); return WEEK_IDEAS[wk % WEEK_IDEAS.length]; }
+
+  function landingData() {
+    const sec = section();
+    const stu = sec.students;
+    const N = stu.length;
+    // Band mix: three counts that sum to class size. No-data ("waiting") children
+    // fold into "Ready to tend" so the sum always equals N (they need attention too).
+    const blossoming = stu.filter((s) => s.state === 'blossoming').length;
+    const growing = stu.filter((s) => s.state === 'growing').length;
+    const tend = N - blossoming - growing;
+    // Celebration = plants that genuinely grew since the last window. Never fabricated.
+    const grown = stu.filter((s) => s.grewSincePre >= 8).length;
+    // Tend cards name only the gently-struggling few (max 3), always with an action.
+    const tending = stu.filter((s) => s.state === 'tending');
+    // Data-grounded "down from X": children whose *baseline* overall band was Beginner.
+    const baselineTend = stu.filter((s) => bandOfPct(s.overallPre) === 'Beginner').length;
+    return { sec, stu, N, blossoming, growing, tend, grown, tending, nTend: tending.length, baselineTend };
+  }
+
+  // Progress for an open assessment window. Baseline uses the per-student `assess`
+  // flag; mid/post read the full assessLog. Returns done/total + next ungraded child.
+  function windowProgress(winKey) {
+    const list = section().students;
+    const notDone = list.filter((s) => {
+      if (winKey === 'baseline') return s.assess !== 'done';
+      const w = (s.assessLog || []).find((x) => x.key === winKey);
+      return !w || w.status !== 'done';
+    });
+    return { done: list.length - notDone.length, total: list.length, next: notDone[0] || list[0] };
+  }
+
+  // Compose the calm garden scene from the existing plant art (no new illustration).
+  // Maturity varies which plant states + sizes fill the row.
+  function gardenScene(maturity) {
+    const { isPhone } = bp();
+    const recipes = {
+      seedling: ['waiting', 'tending', 'waiting', 'tending', 'waiting', 'tending', 'waiting'],
+      growing: ['tending', 'growing', 'growing', 'tending', 'growing', 'growing', 'tending'],
+      growing2: ['growing', 'blossoming', 'growing', 'growing', 'blossoming', 'growing', 'blossoming'],
+      bloom: ['blossoming', 'blossoming', 'growing', 'blossoming', 'blossoming', 'blossoming', 'growing'],
+    };
+    let arr = recipes[maturity] || recipes.growing;
+    if (isPhone) arr = arr.filter((_, i) => i % 2 === 0); // thin the row on phones
+    const base = maturity === 'seedling' ? (isPhone ? 44 : 54) : maturity === 'bloom' ? (isPhone ? 68 : 92) : (isPhone ? 58 : 76);
+    const grew = maturity === 'growing2' || maturity === 'bloom';
+    const offs = [16, 2, 22, 6, 18, 0, 12];
+    const plants = arr.map((st, i) => {
+      const scale = st === 'blossoming' ? 1.06 : st === 'growing' ? 0.92 : st === 'tending' ? 0.8 : 0.7;
+      const sz = Math.round(base * scale);
+      const sparkle = grew && (st === 'blossoming' || st === 'growing');
+      return `<span class="mg-plant" style="transform:translateY(${offs[i % offs.length]}px)">${plantSVG(st, sz, false, sparkle)}</span>`;
+    }).join('');
+    return `<div class="mg-scene mg-scene-${maturity}" aria-hidden="true">
+      <span class="mg-sun"></span>
+      <div class="mg-plants">${plants}</div>
+      <div class="mg-ground"></div>
+    </div>`;
+  }
+
+  // Band-mix strip: distinguishable without colour (each has a glyph + word + count).
+  function bandMix(ld, note) {
+    const items = [
+      ['Blossoming', ld.blossoming, '#EFA9B8', '✿'],
+      ['Growing', ld.growing, '#56C02B', '❋'],
+      ['Ready to tend', ld.tend, '#E8C4A8', '◗'],
+    ];
+    return `<div class="mg-bandmix" role="group" aria-label="Class band mix">
+      ${items.map(([lb, ct, c, ic]) => `<div class="mg-band"><span class="mg-band-ic" style="color:${c}" aria-hidden="true">${ic}</span><span class="mg-band-n">${ct}</span><span class="mg-band-lb">${lb}</span></div>`).join('')}
+      ${note ? `<div class="mg-band-note">${esc(note)}</div>` : ''}
+    </div>`;
+  }
+
+  function heroWindow(st, N) {
+    const pg = windowProgress(st.winKey);
+    const pct = pg.total ? Math.round((pg.done / pg.total) * 100) : 0;
+    const nextName = pg.next ? (pg.next.dispFirst || pg.next.first) : '';
+    return `<section class="mg-hero mg-hero-window">
+      <div class="mg-eyebrow">Do what you came for</div>
+      <h2 class="mg-hero-t">${esc(st.heroTitle)}</h2>
+      <p class="mg-hero-b">${esc(fill(st.heroBlurb, { N }))}</p>
+      <div class="mg-prog"><span style="width:${pct}%"></span></div>
+      <div class="mg-prog-row"><span><b>${pg.done}</b> of ${pg.total} children done</span><span class="mg-deadline">Window closes ${esc(st.deadline)}</span></div>
+      <button class="btn btn-primary focus mg-hero-cta" data-continue-assess="${esc(pg.next ? pg.next.id : '')}">Continue → next: ${esc(nextName)}</button>
+    </section>`;
+  }
+
+  function heroAsk(sec) {
+    const n = sec.students.length;
+    const starters = [
+      ['An activity for a restless class', `Suggest a 10-minute activity to settle a restless ${sec.grade} class of about ${n} children, with limited materials.`],
+      ["Help me plan tomorrow's lesson", `Help me plan tomorrow's lesson for my ${sec.grade} class. Ask me what to focus on, then give a simple structure.`],
+      ['A calm-down idea for one child', `Give me a gentle calm-down idea I can use with one child who gets overwhelmed, in a ${sec.grade} classroom.`],
+    ];
+    return `<section class="mg-hero mg-hero-ask">
+      <div class="mg-eyebrow">Do what you came for</div>
+      <div class="mg-hero-askhead"><span class="mg-hero-askic">${chatIcon('#348C11')}</span><h2 class="mg-hero-t">Ask Tilli</h2></div>
+      <p class="mg-hero-b">Your teaching changes every day — even when the scores don't.</p>
+      <div class="mg-starters">${starters.map(([lb, pr]) => `<button class="mg-starter focus" data-ask-prompt="${esc(pr)}" data-ask-ctx="${esc(sec.name + ' · quick start')}"><span>${esc(lb)}</span><span class="mg-starter-ar" aria-hidden="true">→</span></button>`).join('')}</div>
+    </section>`;
+  }
+
+  function weekIdeaSlot() {
+    const wi = weekIdea();
+    return `<section class="mg-idea">
+      <div class="mg-idea-tag">This week's idea</div>
+      <h3 class="mg-idea-t">${esc(wi.t)}</h3>
+      <p class="mg-idea-d">${esc(wi.d)}</p>
+      <button class="mg-idea-ask focus" data-ask-prompt="${esc(wi.ask)}" data-ask-ctx="${esc("This week's idea · " + wi.t)}">${chatIcon('#348C11')} Ask Tilli for more</button>
+    </section>`;
+  }
+
+  function tendSlot(ld, state) {
+    if (state === 'baseline') {
+      return `<section class="mg-tend">
+        <h3 class="mg-tend-h">Who could use you</h3>
+        <div class="mg-tend-empty">Once baseline is in, this is where the 2–3 children who could use a little extra will appear.</div>
+      </section>`;
+    }
+    const notes = {
+      between: `Unchanged since baseline — the same ${ld.nTend} could use a little extra`,
+      midline: `Down from ${ld.baselineTend} at baseline`,
+      endline: `Down to ${ld.nTend} now, from ${ld.baselineTend} at baseline — look how far they've come`,
+    };
+    const cards = ld.tending.slice(0, 3).map((st) => `
+      <div class="mg-tend-card">
+        <div class="mg-tend-top"><span class="mg-tend-pl">${plantSVG('tending', 46, false, false)}</span><span class="mg-tend-nm">${esc(st.dispFirst)}</span></div>
+        <p class="mg-tend-reason">${esc(st.tendReason)}</p>
+        <button class="btn-ask-a focus" data-ask-prompt="${esc('How can I gently support ' + st.name + ', a ' + st.grade + ' child working on ' + st.lowestSkill.name + '? Give me one small thing to try this week.')}" data-ask-ctx="${esc(st.first + ' · ' + st.lowestSkill.name)}">${chatIcon('#fff')} Ask Tilli for an idea</button>
+      </div>`).join('');
+    return `<section class="mg-tend">
+      <div class="mg-tend-head"><h3 class="mg-tend-h">Who could use you</h3><span class="mg-tend-note">${esc(notes[state] || '')}</span></div>
+      <div class="mg-tend-grid">${cards || `<div class="mg-tend-empty">Every child is on track right now — nothing to tend. 🌿</div>`}</div>
+    </section>`;
+  }
+
+  function quietDoorways() {
+    return `<section class="mg-doors" aria-label="More places to go">
+      <button class="mg-door focus" data-ask-prompt="Ask me anything about your class or a student." data-ask-ctx="">${chatIcon('#348C11')}<span>Ask Tilli</span></button>
+      <button class="mg-door focus" data-nav="students"><span>Students</span></button>
+      <button class="mg-door focus" data-nav="insights"><span>Insights</span></button>
+      <button class="mg-door focus" data-garden-level="section"><span>Full garden</span></button>
+    </section>`;
+  }
+
+  function landingView() {
+    const ld = landingData();
+    const { sec, N } = ld;
+    const state = S.windowState;
+    const st = LANDING_STATES[state] || LANDING_STATES.between;
+    const nextWindow = (S.data.windows.find((w) => w.key === 'mid') || {}).label || 'Mid-year';
+
+    // Slot 4 — celebration only when the garden genuinely moved (never fabricated).
+    const celebration = (st.celebrate && ld.grown > 0)
+      ? `<div class="mg-celebrate">🌸 ${esc(fill(st.celebrate, { n: ld.grown }))}</div>` : '';
+
+    // Slot 5 — band mix (hidden at baseline; there's no prior data to mix).
+    let bandBlock;
+    if (state === 'baseline') {
+      bandBlock = `<div class="mg-bandmix mg-bandmix-empty">${N} children, ready to begin their year.</div>`;
+    } else {
+      const note = state === 'between' ? `Last measured at baseline · ${N} children`
+        : state === 'midline' ? `Your ${sec.name} · ${N} children`
+        : `The year's story · ${N} children`;
+      bandBlock = bandMix(ld, note);
+    }
+
+    // Slot 6 — hero: open window → its assessment CTA; no window → Ask Tilli.
+    const hero = st.windowOpen ? heroWindow(st, N) : heroAsk(sec);
+
+    return `<div class="dash-wrap mg-wrap">
+      <div class="mg-greet">
+        <div>
+          <h1 class="mg-hello">${greetWord()}, ${esc(firstName())} 🌱</h1>
+          <p class="mg-season">Your <b>${esc(sec.name)}</b> garden · ${esc(st.week)}</p>
+        </div>
+        <button class="dash-avatarbtn focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
+      </div>
+
+      ${gardenScene(st.maturity)}
+      <p class="mg-caption">${esc(fill(st.caption, { next: nextWindow }))}</p>
+      ${celebration}
+      ${bandBlock}
+
+      ${hero}
+      ${weekIdeaSlot()}
+      ${tendSlot(ld, state)}
+      ${quietDoorways()}
+    </div>`;
+  }
+
+  // Dev-only landing-state switch (see spec build order: mock the current window
+  // first). Not part of the teacher UI — a scaffold to preview all four states.
+  function stateSwitcherGUI() {
+    const opts = [
+      ['baseline', 'Baseline', 'State A — start of year, Baseline window open. Seedlings, no prior data; band mix hidden; tend list empty.'],
+      ['between', 'Between', 'State B — most of the year, no window open. Ask Tilli is the hero; garden is honestly "resting".'],
+      ['midline', 'Midline', 'State C — mid-year window open. Garden has grown; celebration line appears.'],
+      ['endline', 'Endline', 'State D — year end, Endline window open. Full bloom; biggest celebration.'],
+    ];
+    return `<div class="mg-gui" role="group" aria-label="Landing state (dev only)">
+      <div class="mg-gui-h" title="Dev-only switch. Drives which of the 4 landing states renders (controls S.windowState). Not shown to teachers — bake or remove before ship.">Landing&nbsp;state <span class="mg-gui-star" title="Newly added control">*</span></div>
+      <div class="mg-gui-opts">${opts.map(([v, lb, tip]) => `<button class="mg-gui-opt${S.windowState === v ? ' on' : ''}" data-window-state="${v}" title="${esc(tip)}">${lb}</button>`).join('')}</div>
     </div>`;
   }
 
@@ -1204,12 +1469,17 @@
       const k = b.dataset.nav;
       if (k === 'ask') { openAsk('', 'Ask me anything about your class or a student.'); return; }
       S.ask.open = false;
-      if (k === 'garden') { S.nav = 'garden'; S.gardenLevel = 'beds'; } else S.nav = k;
+      if (k === 'garden') { S.nav = 'garden'; S.gardenLevel = 'landing'; } else S.nav = k;
       S.studentId = null; render();
     }));
     root.querySelectorAll('[data-section]').forEach((b) => b.addEventListener('click', () => { S.sectionId = b.dataset.section; S.studentId = null; render(); }));
     root.querySelectorAll('[data-open-class]').forEach((b) => b.addEventListener('click', () => { S.classModal = b.dataset.openClass; render(); }));
     root.querySelectorAll('[data-back-beds]').forEach((b) => b.addEventListener('click', () => { S.gardenLevel = 'beds'; render(); }));
+    // My Garden landing: dev state switch, hero/tend Ask-Tilli prompts, assess CTA, doorways.
+    root.querySelectorAll('[data-window-state]').forEach((b) => b.addEventListener('click', () => { S.windowState = b.dataset.windowState; render(); }));
+    root.querySelectorAll('[data-ask-prompt]').forEach((b) => b.addEventListener('click', () => openAsk(b.dataset.askCtx || '', b.dataset.askPrompt || '')));
+    root.querySelectorAll('[data-continue-assess]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'assess'; startEnter(b.dataset.continueAssess); }));
+    root.querySelectorAll('[data-garden-level]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'garden'; S.gardenLevel = b.dataset.gardenLevel; render(); }));
     root.querySelectorAll('[data-add-class]').forEach((b) => b.addEventListener('click', () => openAddFlow()));
 
     // class modal
@@ -1699,6 +1969,111 @@
   .dash-bnav.center .lb { color: var(--green-700); font-weight: 800; }
   .dash-bnav.center:active .dash-fab { transform: scale(.94); }
   @media (prefers-reduced-motion: reduce) { .dash-bnav.center:active .dash-fab { transform: none; } }
+
+  /* ================= My Garden — landing (state-driven doorway) ================= */
+  .mg-wrap { max-width: 860px; display: flex; flex-direction: column; gap: 18px; }
+  /* Slot 1 — greeting */
+  .mg-greet { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .mg-hello { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: clamp(24px, 3.2vw, 32px); color: var(--green-700); margin: 0; }
+  .mg-season { margin: 5px 0 0; font-size: 14.5px; color: var(--ink-450); }
+  .mg-season b { color: var(--ink-900); }
+
+  /* Slot 2 — garden scene (composed from existing plant art; presentational) */
+  .mg-scene { position: relative; overflow: hidden; border-radius: var(--radius-card); border: 1px solid var(--line-200);
+    background: linear-gradient(180deg, #E6F4F8 0%, #EAF5EC 52%, #F1FFEC 100%);
+    height: clamp(200px, 30vh, 300px); box-shadow: inset 0 -30px 50px -30px rgba(78,140,66,.18); }
+  .mg-sun { position: absolute; top: -46px; right: -46px; width: 200px; height: 200px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, #FCE39A 0%, #FCD661 40%, #FBCB3E 60%, rgba(252,203,62,0) 70%); pointer-events: none; }
+  .mg-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 26%;
+    background: linear-gradient(180deg, rgba(155,222,29,.18), rgba(86,192,43,.28)); border-radius: 0 0 var(--radius-card) var(--radius-card); }
+  .mg-plants { position: absolute; left: 0; right: 0; bottom: 8%; display: flex; align-items: flex-end; justify-content: center; gap: clamp(2px, 1.6vw, 14px); padding: 0 14px; }
+  .mg-plant { display: inline-block; line-height: 0; }
+  .mg-scene-seedling { background: linear-gradient(180deg, #EAF3F6 0%, #EEF6EC 60%, #F4FBEE 100%); }
+  .mg-scene-bloom { background: linear-gradient(180deg, #FDEFF4 0%, #EAF5EC 50%, #F1FFEC 100%); box-shadow: inset 0 -30px 50px -30px rgba(224,102,176,.22); }
+
+  /* Slot 3 — caption · Slot 4 — celebration */
+  .mg-caption { margin: 0; font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 16px; color: var(--ink-700); text-align: center; }
+  .mg-celebrate { align-self: center; background: var(--wash-pink); color: #b0546b; font-weight: 800; font-size: 14.5px; padding: 10px 18px; border-radius: var(--radius-pill); }
+
+  /* Slot 5 — band mix (colour + glyph + word: distinguishable without colour) */
+  .mg-bandmix { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 22px; padding: 14px 18px; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: 16px; }
+  .mg-band { display: inline-flex; align-items: baseline; gap: 7px; }
+  .mg-band-ic { font-size: 15px; line-height: 1; }
+  .mg-band-n { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 20px; color: var(--ink-900); }
+  .mg-band-lb { font-size: 13px; font-weight: 700; color: var(--ink-450); }
+  .mg-band-note { flex-basis: 100%; text-align: center; font-size: 12px; color: var(--ink-300); font-weight: 700; }
+  .mg-bandmix-empty { justify-content: center; font-weight: 700; color: var(--ink-450); font-size: 14.5px; }
+
+  /* Slot 6 — hero (context-aware) */
+  .mg-hero { border-radius: var(--radius-card); padding: 22px 24px; }
+  .mg-hero-window { background: var(--wash-green); border: 1.5px solid #CDE9C0; }
+  .mg-hero-ask { background: #fff; border: 1.5px solid var(--line-200); box-shadow: 0 10px 30px rgba(40,70,40,.06); }
+  .mg-eyebrow { display: inline-flex; background: rgba(255,255,255,.7); color: var(--green-700); font-weight: 800; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 5px 11px; border-radius: var(--radius-pill); margin-bottom: 12px; }
+  .mg-hero-ask .mg-eyebrow { background: var(--wash-green); }
+  .mg-hero-t { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: clamp(20px, 2.6vw, 26px); color: var(--ink-900); margin: 0; }
+  .mg-hero-b { margin: 8px 0 0; font-size: 14.5px; color: var(--ink-600); line-height: 1.5; }
+  .mg-hero-askhead { display: flex; align-items: center; gap: 10px; }
+  .mg-hero-askic { width: 34px; height: 34px; border-radius: 50%; background: var(--wash-green); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .mg-prog { height: 9px; background: rgba(52,140,17,.14); border-radius: 5px; overflow: hidden; margin: 16px 0 8px; }
+  .mg-prog > span { display: block; height: 100%; background: var(--green-500); border-radius: 5px; transition: width .3s var(--ease); }
+  .mg-prog-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--ink-600); font-weight: 700; }
+  .mg-prog-row b { color: var(--green-700); }
+  .mg-deadline { color: var(--ink-300); }
+  .mg-hero-cta { margin-top: 16px; width: 100%; padding: 15px; font-size: 16px; }
+  .mg-starters { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+  .mg-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left;
+    border: 1.5px solid var(--line-200); background: var(--surface-100); border-radius: 14px; padding: 14px 16px; cursor: pointer;
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14.5px; color: var(--ink-700); transition: border-color .15s, background .15s; }
+  .mg-starter:hover { border-color: var(--green-500); background: var(--wash-green); }
+  .mg-starter-ar { color: var(--green-600); font-weight: 800; }
+
+  /* Slot 7 — this week's idea */
+  .mg-idea { background: var(--wash-cyan); border: 1.5px solid #C4ECF6; border-radius: var(--radius-card); padding: 20px 22px; }
+  .mg-idea-tag { display: inline-flex; background: #fff; color: var(--cyan-700); font-weight: 800; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; padding: 5px 11px; border-radius: var(--radius-pill); }
+  .mg-idea-t { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 18px; color: var(--ink-900); margin: 12px 0 0; }
+  .mg-idea-d { margin: 7px 0 0; font-size: 14px; color: var(--ink-600); line-height: 1.55; }
+  .mg-idea-ask { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; background: #fff; border: 1.5px solid #C4ECF6; color: var(--cyan-700);
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; padding: 10px 16px; border-radius: var(--radius-pill); cursor: pointer; transition: border-color .15s; }
+  .mg-idea-ask:hover { border-color: var(--cyan-500); }
+
+  /* Slot 8 — who could use you (tend cards) */
+  .mg-tend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .mg-tend-h { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 18px; color: var(--ink-900); margin: 0; }
+  .mg-tend-note { font-size: 12.5px; color: var(--ink-300); font-weight: 700; }
+  .mg-tend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .mg-tend-card { border: 1px solid var(--line-200); border-radius: 18px; background: #fff; padding: 15px; display: flex; flex-direction: column; gap: 9px; }
+  .mg-tend-top { display: flex; align-items: center; gap: 10px; }
+  .mg-tend-pl { line-height: 0; flex: none; }
+  .mg-tend-nm { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 16px; color: var(--ink-900); }
+  .mg-tend-reason { margin: 0; font-size: 13px; color: var(--ink-600); line-height: 1.45; flex: 1; }
+  .mg-tend-empty { background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: 16px; padding: 20px; font-size: 13.5px; color: var(--ink-450); font-weight: 600; line-height: 1.5; }
+  .btn-ask-a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: none; cursor: pointer;
+    background: var(--green-500); color: #fff; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; padding: 10px 12px; border-radius: var(--radius-pill); transition: background .15s; }
+  .btn-ask-a:hover { background: var(--green-600); }
+
+  /* Slot 9 — quiet doorways */
+  .mg-doors { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2px; }
+  .mg-door { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line-200); border-radius: var(--radius-pill);
+    padding: 10px 16px; cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-600); transition: border-color .15s, color .15s; }
+  .mg-door:hover { border-color: var(--green-500); color: var(--green-700); }
+
+  /* Dev-only landing-state switch (scaffold; not teacher-facing) */
+  .mg-gui { position: fixed; right: 16px; bottom: 16px; z-index: 45; background: rgba(20,28,20,.9); color: #fff;
+    border-radius: 14px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); backdrop-filter: blur(4px); font-family: 'Montserrat',sans-serif; }
+  .mg-gui-h { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #B9E8A6; margin-bottom: 7px; }
+  .mg-gui-star { color: var(--yellow-500); }
+  .mg-gui-opts { display: flex; gap: 5px; }
+  .mg-gui-opt { border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #E6EFE2; cursor: pointer;
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 11.5px; padding: 6px 10px; border-radius: 9px; transition: background .15s, border-color .15s; }
+  .mg-gui-opt:hover { background: rgba(255,255,255,.14); }
+  .mg-gui-opt.on { background: var(--green-500); border-color: var(--green-600); color: #fff; }
+
+  @media (max-width: 640px) {
+    .mg-tend-grid { grid-template-columns: 1fr; }
+    .mg-gui { right: 10px; bottom: calc(78px + env(safe-area-inset-bottom)); left: 10px; }
+    .mg-gui-opts { flex-wrap: wrap; }
+    .mg-gui-opt { flex: 1; }
+  }
 
   @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
   @media (max-width: 640px) {
