@@ -17,6 +17,9 @@
   ];
   const GRADES = ['Pre-K', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'];
   const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F'];
+  // Minimum characters before the school dropdown reveals any matches —
+  // below this the list just shows a "keep typing" hint (no full school list).
+  const SCHOOL_MIN_CHARS = 3;
 
   // ---- roster the school uploaded (demo stand-in for the school's student list) ----
   // Admission numbers are matched case-insensitively after trimming.
@@ -128,15 +131,25 @@
 
   // ---- state ----
   const state = {
-    step: 'start', // start|role|school|email|checking|login|signup|children|childLoading|childForm|childConfirm
+    // start|role|school|email|checking|login|signup|children|childLoading|childForm|childVerify|childConfirm
+    step: 'start',
     role: null,
     school: '', schoolQuery: '', schoolListOpen: false,
     email: '', password: '',
     kids: [],
     child: { first: '', last: '', adm: '', grade: '', section: '' },
-    match: null,          // roster student matched by admission number
+    match: null,          // roster student matched by admission number (legacy fallback)
+    // Secure parent claim (spec §5, verify-before-reveal). B1 collects the id,
+    // B2 the second factor; nothing about the child is known until verify passes.
+    claim: { challengeId: null, factor: 'code', code: '', reveal: null, token: null, retryAt: 0 },
     errs: {}, shake: false,
   };
+  const SESSION_KEY = 'tilliMeasures.session';
+  // Records who is signed in for the downstream pages (parent.html reads this
+  // instead of trusting a URL param — spec §5 downstream hardening).
+  function setSession(role, email) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ role, email: String(email || '').toLowerCase() })); } catch (e) {}
+  }
   let checkTimer, shakeTimer, loadTimer;
 
   const root = document.getElementById('flow-root');
@@ -177,16 +190,20 @@
       window.location.href = url;
       return;
     }
-    // Pull the logged-in parent's linked children from the dummy dataset.
-    const linked = (!isNew && window.TILLI_SCHOOL && window.TILLI_SCHOOL.childrenForParent)
-      ? window.TILLI_SCHOOL.childrenForParent(state.email)
+    // Parent is now signed in — record it for the downstream page.
+    setSession('parent', state.email);
+    // Pull the logged-in parent's linked children from the guard layer
+    // (active ParentLinks only — spec §7 "own children"). This reflects any
+    // child the parent has securely claimed, and it persists across reloads.
+    const linked = (window.TilliAPI && window.TilliAPI.childrenForParent)
+      ? window.TilliAPI.childrenForParent(state.email)
       : [];
     let kids;
     if (linked.length) {
       kids = linked.map((s, i) => ({
         name: s.first,
         status: i === 0 ? 'assessment complete' : 'assessment pending',
-        meta: { grade: s.grade, section: s.section, adm: s.adm },
+        meta: { grade: s.grade, section: s.section, adm: s.student_id || s.adm },
       }));
     } else if (isNew) {
       kids = [];
@@ -213,7 +230,7 @@
   function render() {
     const s = state.step;
     const authOpen = s !== 'start' && s !== 'children' && s !== 'childForm'
-      && s !== 'childLoading' && s !== 'childConfirm';
+      && s !== 'childLoading' && s !== 'childVerify' && s !== 'childConfirm';
 
     // Flower controls live only on the "Add your child" screen.
     if (s !== 'childForm') removeFlowerGUI();
@@ -221,7 +238,8 @@
     if (s === 'start') { root.innerHTML = ''; prevAuthStep = null; return; }
     if (s === 'children') { root.innerHTML = childSelectView(); wire(); return; }
     if (s === 'childLoading') { root.innerHTML = childLoadingView(); wireLoader(); return; }
-    if (s === 'childForm') { root.innerHTML = childFormView(); wire(); applyFlowers(); ensureFlowerGUI(); return; }
+    if (s === 'childForm') { root.innerHTML = childFormView(); wire(); applyFlowers(); return; }
+    if (s === 'childVerify') { root.innerHTML = childVerifyView(); wire(); return; }
     if (s === 'childConfirm') { root.innerHTML = childConfirmView(); wire(); return; }
     if (authOpen) { renderAuth(); }
   }
@@ -339,14 +357,19 @@
   function schoolView() {
     const isTeacher = state.role === 'teacher';
     const q = (state.schoolQuery || '').trim().toLowerCase();
-    const matches = q ? SCHOOLS.filter((x) => x.toLowerCase().includes(q)) : SCHOOLS;
+    // Only search once the user has typed enough — no full-list-on-focus.
+    const enoughChars = q.length >= SCHOOL_MIN_CHARS;
+    const matches = enoughChars ? SCHOOLS.filter((x) => x.toLowerCase().includes(q)) : [];
     const exactish = SCHOOLS.some((x) => x.toLowerCase() === q);
     const canContinue = !!(state.school || state.schoolQuery.trim());
     const listItems = matches.map((name) => `
       <button role="option" class="focus school-opt" data-school="${esc(name)}" style="width:100%;text-align:left;border:none;border-radius:8px;padding:11px 13px;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-900);display:flex;align-items:center;gap:10px;background:${state.school === name ? '#F1FFEC' : 'transparent'}">
         <span style="width:7px;height:7px;border-radius:50%;background:#56C02B;flex:none"></span>${esc(name)}
       </button>`).join('');
-    const noMatch = q && !exactish && matches.length === 0;
+    const hint = !enoughChars
+      ? `<div style="padding:12px 13px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-300)">Type at least ${SCHOOL_MIN_CHARS} letters to search&#8230;</div>`
+      : '';
+    const noMatch = enoughChars && !exactish && matches.length === 0;
 
     return `
       <h2 style="font-weight:700;font-size:22px;text-align:center;margin:0 0 6px;text-wrap:balance">${isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
@@ -356,6 +379,7 @@
         <span aria-hidden="true" style="position:absolute;right:15px;top:24px;transform:translateY(-50%);color:var(--ink-300);font-size:12px">&#9662;</span>
         ${state.schoolListOpen ? `
           <div role="listbox" style="margin-top:8px;background:#fff;border:1px solid var(--line-200);border-radius:16px;box-shadow:0 2px 10px rgba(20,20,20,.06);max-height:200px;overflow-y:auto;padding:6px">
+            ${hint}
             ${listItems}
             ${noMatch ? `<div style="padding:12px 13px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-300)">No match &#8212; <span style="color:#56C02B">use &#8220;${esc(state.schoolQuery)}&#8221;</span></div>` : ''}
           </div>` : ''}
@@ -457,15 +481,11 @@
     loadTimer = setTimeout(() => set({ step: 'childForm' }), LOADING_MS);
   }
 
+  // ===== B1 — enter the child's admission number. REVEAL NOTHING =====
+  // We never tell the parent whether the id exists (spec §5 B1 / acceptance #6);
+  // any id simply advances to the second-factor step.
   function childFormView() {
     const c = state.child, e = state.errs;
-    // Not-found banner uses the exact admission the parent typed + the chosen school.
-    const notFound = e.notFound ? `
-      <div style="display:flex;align-items:flex-start;gap:10px;background:#FDECEF;border:1px solid #F6C9D3;border-radius:14px;padding:13px 15px">
-        <span aria-hidden="true" style="flex:none;font-size:16px;line-height:1.3">&#9888;&#65039;</span>
-        <span style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:#B22447;line-height:1.5">
-          There is no student with <b>${esc(e.notFoundAdm)}</b> as their admission number in ${esc(state.school)}.</span>
-      </div>` : '';
     return `<div class="sheet">
       <div style="width:100%;max-width:520px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:clamp(20px,3.4vh,30px)">
@@ -473,23 +493,58 @@
           <button class="btn-ghost focus" data-act="child-back" style="margin-left:auto">&#8592; Back</button>
         </div>
         <h1 style="font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,34px);margin:0 0 8px">Add your child</h1>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Enter the admission number of your child and we'll find them.</p>
+        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Enter your child&#39;s admission number. We&#39;ll ask for a verification code next to keep their information private.</p>
         <form id="child-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:16px;background:#fff;border:1px solid var(--line-200);border-radius:24px;padding:clamp(20px,3vw,28px)">
           <label class="field">Admission number *
-            <input id="cf-adm" class="input focus ${e.adm || e.notFound ? 'err' : ''}" value="${esc(c.adm)}" placeholder="Enter admission number of your child" autofocus>
+            <input id="cf-adm" class="input focus ${e.adm ? 'err' : ''}" value="${esc(c.adm)}" placeholder="Enter admission number of your child" autofocus>
           </label>
-          ${notFound}
-          <button type="submit" class="btn btn-primary block focus" style="margin-top:4px">Find child &#8594;</button>
+          <button type="submit" class="btn btn-primary block focus" style="margin-top:4px">Continue &#8594;</button>
         </form>
         <div id="cf-flowers" style="width:min(264px,70%);margin:clamp(28px,5vh,52px) auto 0"></div>
       </div>
     </div>`;
   }
 
-  // ===== CONFIRM MATCHED CHILD (parent) =====
+  // ===== B2 — second factor (verification code). Verify BEFORE reveal =====
+  // A wrong id and a wrong code look identical here (spec §5 B2 / acceptance #8):
+  // the same generic message, and after N tries the attempt is locked.
+  function childVerifyView() {
+    const e = state.errs, cl = state.claim;
+    const locked = !!e.locked;
+    const mins = locked ? Math.max(1, Math.ceil((cl.retryAt - Date.now()) / 60000)) : 0;
+    const banner = (e.mismatch || locked) ? `
+      <div style="display:flex;align-items:flex-start;gap:10px;background:#FDECEF;border:1px solid #F6C9D3;border-radius:14px;padding:13px 15px">
+        <span aria-hidden="true" style="flex:none;font-size:16px;line-height:1.3">&#9888;&#65039;</span>
+        <span style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:#B22447;line-height:1.5">
+          ${locked
+            ? `Too many attempts. For your child&#39;s safety, please try again in about ${mins} minute${mins === 1 ? '' : 's'}.`
+            : `Those details don&#39;t match. Check the admission number and code your school gave you, and try again.`}</span>
+      </div>` : '';
+    return `<div class="sheet">
+      <div style="width:100%;max-width:520px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:clamp(20px,3.4vh,30px)">
+          ${brandMark}
+          <button class="btn-ghost focus" data-act="child-back" style="margin-left:auto">&#8592; Back</button>
+        </div>
+        <h1 style="font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,34px);margin:0 0 8px">Verify it&#39;s your child</h1>
+        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Enter the verification code your school shared for this child. This keeps every child&#39;s information private.</p>
+        <form id="verify-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:16px;background:#fff;border:1px solid var(--line-200);border-radius:24px;padding:clamp(20px,3vw,28px)">
+          <label class="field">Verification code *
+            <input id="cf-code" class="input focus ${(e.code || e.mismatch) ? 'err' : ''}" value="${esc(cl.code)}" placeholder="e.g. TIL-AB12" autocomplete="off" ${locked ? 'disabled' : 'autofocus'}>
+          </label>
+          ${banner}
+          <button type="submit" class="btn btn-primary block focus" style="margin-top:4px" ${locked ? 'disabled' : ''}>Verify &#8594;</button>
+        </form>
+        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12.5px;color:var(--ink-300);text-align:center;margin:16px 0 0">Don&#39;t have a code? Ask your child&#39;s teacher or school office.</p>
+      </div>
+    </div>`;
+  }
+
+  // ===== B3 — reveal + confirm (only reached after a correct second factor) =====
   function childConfirmView() {
-    const m = state.match || {};
-    const full = `${m.first || ''} ${m.last || ''}`.trim();
+    // Details come from the verified reveal, never from a client-side roster lookup.
+    const m = state.claim.reveal || state.match || {};
+    const full = (m.name || `${m.first || ''} ${m.last || ''}`).trim();
     const gradeSection = [m.grade, m.section && 'Section ' + m.section].filter(Boolean).join(', ');
     return `<div class="sheet">
       <div style="width:100%;max-width:520px">
@@ -501,7 +556,7 @@
         <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Please confirm this is the right student.</p>
         <div style="background:#fff;border:2px solid #56C02B;border-radius:24px;padding:clamp(22px,3vw,28px);text-align:center">
           <span style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:#56C02B;align-items:center;justify-content:center;margin:0 0 14px"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true" style="width:55%;height:auto"></span>
-          <p class="pill-info" style="display:inline-block;margin:0 0 14px">Admission code &middot; ${esc(m.adm)}</p>
+          <p class="pill-info" style="display:inline-block;margin:0 0 14px">Admission code &middot; ${esc(m.student_id || m.adm)}</p>
           <p style="font-weight:700;font-size:clamp(20px,2.6vw,26px);color:var(--ink-900);margin:0 0 4px">${esc(full)}</p>
           <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-600);margin:0">${esc(gradeSection)}</p>
           <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--green-700);margin:16px 0 0;line-height:1.5">Understand <b>${esc(full)}</b> with Tilli Measures.</p>
@@ -590,14 +645,14 @@
       goHome(k.name, k.meta || {});
     }));
 
-    // child form — single admission-number lookup against the school roster
+    // child form — B1: submit the admission number. We reveal NOTHING here;
+    // any id opens a claim challenge and advances to the second factor.
     const cf = scope.querySelector('#child-form');
     if (cf) {
       const adm = scope.querySelector('#cf-adm');
-      // Typing clears a lingering error but keeps the caret (no re-render).
       if (adm) adm.addEventListener('input', (ev) => {
         state.child.adm = ev.target.value;
-        if (state.errs.notFound || state.errs.adm) { state.errs = {}; ev.target.classList.remove('err'); }
+        if (state.errs.adm) { state.errs = {}; ev.target.classList.remove('err'); }
       });
       cf.addEventListener('submit', (ev) => {
         ev.preventDefault();
@@ -608,14 +663,51 @@
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
           return;
         }
-        const match = findStudent(typed);
-        if (!match) {
-          set({ errs: { notFound: true, notFoundAdm: typed }, shake: true });
+        // beginClaim returns the same shape whether or not the child exists.
+        const res = (window.TilliAPI && window.TilliAPI.beginClaim)
+          ? window.TilliAPI.beginClaim(state.school, typed)
+          : { ok: true, challengeId: null, factor: 'code' };
+        set({
+          step: 'childVerify',
+          claim: { challengeId: res.challengeId, factor: res.factor || 'code', code: '', reveal: null, token: null, retryAt: 0 },
+          errs: {},
+        });
+      });
+    }
+
+    // verify form — B2: submit the second factor. Wrong id and wrong code are
+    // indistinguishable; on success we get the reveal + a one-shot claim token.
+    const vf = scope.querySelector('#verify-form');
+    if (vf) {
+      const ci = scope.querySelector('#cf-code');
+      if (ci) ci.addEventListener('input', (ev) => {
+        state.claim.code = ev.target.value;
+        if (state.errs.code || state.errs.mismatch) { state.errs = {}; ev.target.classList.remove('err'); }
+      });
+      vf.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const code = (state.claim.code || '').trim();
+        if (!code) {
+          set({ errs: { code: true }, shake: true });
           clearTimeout(shakeTimer);
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
           return;
         }
-        set({ step: 'childConfirm', match, errs: {} });
+        const res = (window.TilliAPI && window.TilliAPI.verifyClaim)
+          ? window.TilliAPI.verifyClaim(state.claim.challengeId, code)
+          : { ok: false, error: 'mismatch' };
+        if (res.ok) {
+          state.claim.reveal = res.child;
+          state.claim.token = res.claimToken;
+          set({ step: 'childConfirm', errs: {} });
+          return;
+        }
+        // Failure — generic. 'locked' shows a cool-down; everything else is "doesn't match".
+        const locked = res.error === 'locked';
+        state.claim.retryAt = res.retryAt || 0;
+        set({ errs: locked ? { locked: true } : { mismatch: true }, shake: true });
+        clearTimeout(shakeTimer);
+        shakeTimer = setTimeout(() => set({ shake: false }), 450);
       });
     }
   }
@@ -643,19 +735,30 @@
         go();
         break;
       case 'add-child':
-        set({ step: 'childLoading', child: { first: '', last: '', adm: '', grade: '', section: '' }, match: null, errs: {} });
+        set({ step: 'childLoading', child: { first: '', last: '', adm: '', grade: '', section: '' }, match: null,
+              claim: { challengeId: null, factor: 'code', code: '', reveal: null, token: null, retryAt: 0 }, errs: {} });
         break;
       case 'child-back':
-        // From the confirm screen "Back" returns to the lookup; from the form it returns to the child list.
-        set({ step: state.step === 'childConfirm' ? 'childForm' : 'children' });
+        // confirm → back to the code step; verify → back to the id; form → child list.
+        if (state.step === 'childConfirm') set({ step: 'childVerify', errs: {} });
+        else if (state.step === 'childVerify') set({ step: 'childForm', errs: {} });
+        else set({ step: 'children', errs: {} });
         break;
       case 'confirm-child': {
-        const m = state.match;
-        if (m) goHome(m.first, { grade: m.grade, section: m.section, adm: m.adm });
+        // B3 — create the ParentLink (never a student), then enter the garden.
+        const m = state.claim.reveal;
+        if (!m) return;
+        if (window.TilliAPI && window.TilliAPI.confirmClaim && state.claim.token) {
+          window.TilliAPI.confirmClaim(state.claim.token, state.email);
+        }
+        setSession('parent', state.email);
+        goHome(m.first || m.name, { grade: m.grade, section: m.section, adm: m.student_id || m.adm });
         break;
       }
       case 'not-child':
-        set({ step: 'childForm', match: null, child: { first: '', last: '', adm: '', grade: '', section: '' }, errs: {} });
+        // Discard the reveal and start a fresh claim.
+        set({ step: 'childForm', match: null, child: { first: '', last: '', adm: '', grade: '', section: '' },
+              claim: { challengeId: null, factor: 'code', code: '', reveal: null, token: null, retryAt: 0 }, errs: {} });
         break;
     }
   }

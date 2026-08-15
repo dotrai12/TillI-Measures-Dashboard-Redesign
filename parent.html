@@ -353,6 +353,7 @@
 <div id="app"></div>
 
 <script src="school-data.js"></script>
+<script src="assets/tilli-api.js"></script>
 <script>
 (function () {
   const DS = '_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/';
@@ -493,25 +494,41 @@
   const TERM = p.get('term') || 'Term One';          // snapshot metadata (no scores)
   const CONTACT = 'info@tillikids.com · tillikids.com';
 
-  // The login parent (Priya Menon) and her two children come from the
-  // dummy dataset (school-data.js). Falls back to demo kids if it's absent.
+  // Which children this parent may see comes from their active ParentLinks
+  // (TilliAPI = access control), NOT from the URL. The URL can only *select*
+  // which linked child to focus — it can never inject one (spec §5 hardening).
   const TS = window.TILLI_SCHOOL;
-  const linked = (TS && TS.childrenForParent) ? TS.childrenForParent('priya.menon@example.com') : [];
-  const children = linked.length ? linked.map((s, i) => ({
-    name: s.first, grade: s.grade, section: s.section, adm: s.adm,
-    pronoun: s.pronoun, teacher: s.teacherName, unlocked: i === 0,
-  })) : [
-    { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041', pronoun: 'he',  teacher: 'Ms Rao',   unlocked: true },
-    { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044', pronoun: 'she', teacher: 'Mr Silva', unlocked: false },
-  ];
-  const PARENT_NAME = (linked[0] && linked[0].parentName) || 'Your family';
+  function readSession() {
+    try { return JSON.parse(localStorage.getItem('tilliMeasures.session') || '{}') || {}; } catch (e) { return {}; }
+  }
+  const PARENT_EMAIL = (readSession().email) || 'priya.menon@example.com'; // demo fallback
+  const links = (window.TilliAPI && window.TilliAPI.childrenForParent)
+    ? window.TilliAPI.childrenForParent(PARENT_EMAIL) : [];
+  let children;
+  if (links.length) {
+    // Enrich each linked child with display fields (pronoun/teacher/scores) from
+    // the dataset. The LINK decides access; the dataset only supplies presentation.
+    children = links.map((lk, i) => {
+      const full = (TS && TS.findByAdm) ? TS.findByAdm(lk.student_id) : null;
+      return {
+        name: lk.first, grade: lk.grade, section: lk.section, adm: lk.student_id,
+        pronoun: (full && full.pronoun) || (lk.gender === 'm' ? 'he' : 'she'),
+        teacher: (full && full.teacherName) || 'your teacher', unlocked: i === 0,
+      };
+    });
+  } else {
+    // Legacy demo fallback (generic parent@tilli.edu / no links yet).
+    children = [
+      { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041', pronoun: 'he',  teacher: 'Ms Rao',   unlocked: true },
+      { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044', pronoun: 'she', teacher: 'Mr Silva', unlocked: false },
+    ];
+  }
+  const PARENT_NAME = (links[0] && links[0].parentName) || 'Your family';
   const urlChild = (p.get('child') || '').trim();
   let selected = 0;
   if (urlChild) {
     const i = children.findIndex((c) => c.name.toLowerCase() === urlChild.toLowerCase());
-    if (i >= 0) selected = i;
-    else { children.unshift({ name: urlChild, grade: p.get('grade') || '', section: p.get('section') || '', adm: p.get('adm') || '',
-      pronoun: (p.get('pronoun') || 'they').toLowerCase(), teacher: p.get('teacher') || 'your teacher' }); selected = 0; }
+    if (i >= 0) selected = i;   // focus a child the parent is genuinely linked to; ignore otherwise
   }
 
   const ASSESSMENTS = [

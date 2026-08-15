@@ -144,6 +144,86 @@
     target.style.transformOrigin = 'top center';
   };
 
+  /* ============================================================
+     Dev GUI — nudge the flower-band "asset box" on X/Y and resize it.
+     Only mounts when the band sits inside the teacher onboarding
+     scene (.onb), so the index.html landing band is left untouched.
+     Mirrors the flower-gui pattern in landing.js.
+     ============================================================ */
+  const BAND_CFG = { offsetX: 0, offsetY: 0, width: 0, height: 0 };
+  let BAND_DEFAULTS = null;
+  const BAND_CONTROLS = [
+    { key: 'offsetX', label: 'Box Offset X', min: -800, max: 800, step: 1, tip: 'Horizontal position of the whole asset box, in pixels (X axis). Negative moves it left.' },
+    { key: 'offsetY', label: 'Box Offset Y', min: -800, max: 800, step: 1, tip: 'Vertical position of the whole asset box, in pixels (Y axis). Negative moves it up.' },
+    { key: 'width',   label: 'Box Width',    min: 200,  max: 2200, step: 1, tip: 'Width of the asset box along the X axis, in pixels.' },
+    { key: 'height',  label: 'Box Height',   min: 40,   max: 640,  step: 1, tip: 'Height of the asset box along the Y axis, in pixels.' },
+  ];
+
+  function applyBand(band) {
+    if (!band) return;
+    band.style.left = '0';
+    band.style.right = 'auto';           // release the left:0/right:0 stretch so width takes effect
+    band.style.width = BAND_CFG.width + 'px';
+    band.style.height = BAND_CFG.height + 'px';
+    band.style.transform = `translate(${BAND_CFG.offsetX}px, ${BAND_CFG.offsetY}px)`;
+  }
+
+  function ensureBandGUI(band) {
+    if (document.getElementById('band-gui')) return;
+    // Seed defaults from the box's rendered size on first mount.
+    BAND_CFG.width = Math.round(band.getBoundingClientRect().width) || 800;
+    BAND_CFG.height = Math.round(band.getBoundingClientRect().height) || 200;
+    BAND_DEFAULTS = Object.assign({}, BAND_CFG);
+    applyBand(band);
+
+    const panel = document.createElement('div');
+    panel.id = 'band-gui';
+    // Narrow phones: sit the panel bottom-left, full-ish width, and let it
+    // scroll — otherwise the lower sliders (Box Height) run off-screen and
+    // can't be touched. Desktop keeps the compact top-right card.
+    const narrow = window.matchMedia('(max-width: 640px)').matches;
+    panel.style.cssText = narrow
+      ? 'position:fixed;left:12px;bottom:12px;right:12px;z-index:9999;background:#fff;border:1px solid #ECEEF2;border-radius:14px;box-shadow:0 12px 30px rgba(20,20,20,.14);padding:12px 14px;max-height:56vh;overflow-y:auto;-webkit-overflow-scrolling:touch;font-family:Montserrat,sans-serif'
+      : 'position:fixed;top:16px;right:16px;z-index:9999;background:#fff;border:1px solid #ECEEF2;border-radius:14px;box-shadow:0 12px 30px rgba(20,20,20,.14);padding:14px 16px;width:252px;max-height:calc(100vh - 32px);overflow-y:auto;font-family:Montserrat,sans-serif';
+    const row = (c) => `
+      <label title="${c.tip}" style="display:block;margin:10px 0 0;cursor:ns-resize">
+        <span style="display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;color:#F0A84A">
+          <span>${c.label} <span title="Newly added control" style="color:#F0A84A">*</span></span>
+          <span data-bg-val="${c.key}" style="color:#5B6170;font-weight:600;font-family:'Quicksand',sans-serif">${BAND_CFG[c.key]}</span>
+        </span>
+        <input type="range" data-bg-input="${c.key}" min="${c.min}" max="${c.max}" step="${c.step}" value="${BAND_CFG[c.key]}" style="width:100%;accent-color:#56C02B;margin-top:3px">
+      </label>`;
+    const btn = 'font-family:Montserrat,sans-serif;font-weight:700;font-size:12px;border-radius:999px;padding:7px 14px;cursor:pointer';
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <b style="font-size:13px;color:#1e2230">Asset box controls</b>
+        <button data-bg="reset" title="Reset the asset box to its default position and size" style="${btn};border:1px solid #ECEEF2;background:#fff;color:#5B6170">Reset</button>
+      </div>
+      ${BAND_CONTROLS.map(row).join('')}
+      <button data-bg="copy" title="Copy the current asset-box values to the clipboard as JSON, ready to bake in" style="${btn};border:none;background:#56C02B;color:#fff;width:100%;margin-top:14px">Copy values</button>`;
+    document.body.appendChild(panel);
+
+    const refresh = () => BAND_CONTROLS.forEach((c) => {
+      const inp = panel.querySelector(`[data-bg-input="${c.key}"]`);
+      const val = panel.querySelector(`[data-bg-val="${c.key}"]`);
+      if (inp) inp.value = BAND_CFG[c.key];
+      if (val) val.textContent = BAND_CFG[c.key];
+    });
+    panel.querySelectorAll('[data-bg-input]').forEach((inp) => inp.addEventListener('input', (ev) => {
+      const key = inp.dataset.bgInput;
+      BAND_CFG[key] = parseFloat(ev.target.value);
+      const val = panel.querySelector(`[data-bg-val="${key}"]`);
+      if (val) val.textContent = BAND_CFG[key];
+      applyBand(band);
+    }));
+    panel.querySelector('[data-bg="reset"]').addEventListener('click', () => { Object.assign(BAND_CFG, BAND_DEFAULTS); refresh(); applyBand(band); });
+    panel.querySelector('[data-bg="copy"]').addEventListener('click', (ev) => {
+      try { navigator.clipboard.writeText(JSON.stringify(BAND_CFG)); } catch (e) {}
+      const b = ev.currentTarget; const old = b.textContent; b.textContent = 'Copied ✓';
+      setTimeout(() => { b.textContent = old; }, 1200);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     const band = document.getElementById('flower-band');
     if (band) window.renderFlowerBand(band);

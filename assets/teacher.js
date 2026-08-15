@@ -86,7 +86,10 @@
     school: ctx.school, country: '', city: '', countryOpen: false, cityOpen: false,
     gradesSel: {}, secs: {}, subjects: {}, resSuff: '', resources: {},
   });
-  const blankRoster = () => ({ method: null, grade: '', first: '', last: '', adm: '', students: [], csvMsg: '', picMsg: '' });
+  // `students` holds structured records { first, last, adm, grade, section, claimCode }
+  // (not display strings) so each add can run through the dedupe guard. `note`
+  // carries the result of the last add (created / merged / flagged for review).
+  const blankRoster = () => ({ method: null, grade: '', first: '', last: '', adm: '', students: [], note: null, csvMsg: '', picMsg: '' });
 
   const state = {
     phase: 'intro',   // intro | demo | greet | assess | done | roster | complete
@@ -176,20 +179,29 @@
 
   // white flow card wrapper (+ optional back button)
   function card(inner, opts) {
-    const back = opts && opts.back
+    const hasBack = !!(opts && opts.back);
+    const back = hasBack
       ? `<button class="btn-ghost onb-back focus" data-act="onb-back">&#8592; Back</button>` : '';
-    return `<div class="onb-card">${back}${inner}</div>`;
+    return `<div class="onb-card${hasBack ? ' has-back' : ''}">${back}${inner}</div>`;
   }
 
   // ---- petal cluster (celebration mark) ----
-  function petals(size) {
-    const r = size === 'lg' ? 44 : 33;
+  // Outline-only circles: coloured ring, white fill, sized smaller than the old
+  // solid discs. `cen` holds each circle's CENTRE (top,left); the render offsets
+  // by half the diameter so shrinking the discs leaves every centre in place.
+  function petals(size, filled) {
+    const s = size === 'lg' ? 30 : 22;      // circle diameter (was 44 / 33, solid)
+    const bw = size === 'lg' ? 3.5 : 3;     // outline thickness
     const wrap = size === 'lg' ? 130 : 96;
-    const pos = size === 'lg'
-      ? [[3, 43], [31, 81], [74, 65], [74, 21], [31, 5]]
-      : [[2, 31], [23, 59], [55, 47], [55, 15], [23, 3]];
-    const spans = pos.map((xy, i) =>
-      `<span style="top:${xy[0]}px;left:${xy[1]}px;width:${r}px;height:${r}px;background:${PETAL_COLORS[i]};animation-delay:${0.3 + i * 0.1}s"></span>`).join('');
+    const cen = size === 'lg'
+      ? [[25, 65], [53, 103], [96, 87], [96, 43], [53, 27]]
+      : [[18.5, 47.5], [39.5, 75.5], [71.5, 63.5], [71.5, 31.5], [39.5, 19.5]];
+    // `filled` = solid coloured discs (used for the "done" celebration);
+    // default = coloured outline on a white fill.
+    const spans = cen.map((c, i) => {
+      const bg = filled ? PETAL_COLORS[i] : '#fff';
+      return `<span style="top:${c[0] - s / 2}px;left:${c[1] - s / 2}px;width:${s}px;height:${s}px;background:${bg};border:${bw}px solid ${PETAL_COLORS[i]};animation-delay:${0.3 + i * 0.1}s"></span>`;
+    }).join('');
     return `<div class="onb-petals" style="width:${wrap}px;height:${wrap}px">${spans}</div>`;
   }
 
@@ -280,7 +292,10 @@
     </div>` : '';
 
     return `<div class="onb-fields">
-      ${selectField('School *', 'school', d.school, [ctx.school].concat(['Sunrise Academy', 'Green Valley Public School', 'Lakeview International'].filter((x) => x !== ctx.school)), 'Select school')}
+      <div><label class="onb-label">School</label>
+        <div class="onb-locked"><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.school)}</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="#b0b7c3"></rect><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="#b0b7c3" stroke-width="2"></path></svg>
+        </div></div>
       <div class="onb-grid2">
         <div class="onb-ac"><label class="onb-label">Country *</label>
           <input class="input focus" data-demo-ac="country" value="${esc(d.country)}" placeholder="Search country…" style="padding-right:38px" autocomplete="off">
@@ -369,14 +384,20 @@
   // ---- self-assessment ----
   function assessView() {
     const i = state.selfQ, q = SELF[i];
-    // section progress dots
-    const dots = SELF.map((sq, idx) => {
-      const answered = selfAnswered(idx);
-      const cur = idx === i;
-      const bg = cur ? CATS[q.cat].color : answered ? '#C9D6BE' : 'var(--line-200)';
-      const ang = (idx / SELF.length) * Math.PI * 2 - Math.PI / 2;
-      const R = 22, cx = 28 + Math.cos(ang) * R - 4, cy = 28 + Math.sin(ang) * R - 4;
-      return `<span style="position:absolute;left:${cx}px;top:${cy}px;width:8px;height:8px;border-radius:50%;background:${bg};transition:all .2s"></span>`;
+    // Section progress ring — exactly 5 outline circles, one per self-assessment
+    // category, matching the celebration petal cluster (same 5 brand colours).
+    // Each fills once every question in its category is answered; the current
+    // category shows a coloured ring as a "you are here" cue before it fills.
+    const R = 22, D = 11;
+    const dots = CATS.map((c, ci) => {
+      const done = SELF.every((sq, k) => sq.cat !== ci || selfAnswered(k));
+      const cur = ci === q.cat;
+      const col = PETAL_COLORS[ci];
+      const bg = done ? col : '#fff';
+      const bd = done || cur ? col : 'var(--line-200)';
+      const ang = (ci / CATS.length) * Math.PI * 2 - Math.PI / 2;
+      const cx = 28 + Math.cos(ang) * R - D / 2, cy = 28 + Math.sin(ang) * R - D / 2;
+      return `<span style="position:absolute;box-sizing:border-box;left:${cx}px;top:${cy}px;width:${D}px;height:${D}px;border-radius:50%;background:${bg};border:2px solid ${bd};transition:all .2s"></span>`;
     }).join('');
     // category chips (highlight the current one)
     const cats = CATS.map((c, ci) => {
@@ -421,7 +442,7 @@
   // ---- profile done ----
   function doneView() {
     return `<div style="text-align:center;padding:12px 0">
-      ${petals('lg')}
+      ${petals('lg', true)}
       <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 8px;color:var(--ink-900)">Amazing! Your profile is created</h1>
       <p style="color:var(--ink-450);font-size:15px;margin:0 0 26px">Now let&rsquo;s meet your class.</p>
       <button class="btn btn-primary focus" data-act="to-roster">Add my students &#8594;</button>
@@ -461,14 +482,23 @@
 
     let body = '';
     if (showBody && r.method === 'one') {
-      const chips = r.students.map((c) => `<span class="onb-chip">🌱 ${esc(c)}</span>`).join('');
+      // Each chip shows the child + the stable verification code the parent needs
+      // to claim them (spec §5 second factor). Teacher hands this to the parent.
+      const chips = r.students.map((c) => {
+        const nm = (c.first + ' ' + c.last).trim() + (c.adm ? ' · #' + c.adm : '');
+        const code = c.claimCode ? `<span class="onb-chip-code" style="margin-left:6px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:11px;color:var(--green-700);background:#EAF7E3;border-radius:999px;padding:2px 8px">${esc(c.claimCode)}</span>` : '';
+        return `<span class="onb-chip">🌱 ${esc(nm)}${code}</span>`;
+      }).join('');
+      const note = r.note ? `
+        <div class="onb-note" style="margin-top:12px;background:${r.note.kind === 'review' ? '#FFF4E5' : r.note.kind === 'merged' ? '#EAF4FF' : '#EAF7E3'};border:1px solid ${r.note.kind === 'review' ? '#F6D9A8' : r.note.kind === 'merged' ? '#C9DEF6' : '#BEE6AC'};color:var(--ink-700)">${esc(r.note.text)}</div>` : '';
       body = `
         <div class="onb-grid2" style="margin-bottom:12px">
-          <input class="input focus" data-roster="first" value="${esc(r.first)}" placeholder="First name">
-          <input class="input focus" data-roster="last" value="${esc(r.last)}" placeholder="Last name">
+          <input class="input focus" data-roster="first" value="${esc(r.first)}" placeholder="First name *">
+          <input class="input focus" data-roster="last" value="${esc(r.last)}" placeholder="Last name *">
         </div>
-        <input class="input focus" data-roster="adm" value="${esc(r.adm)}" placeholder="Admission number" style="margin-bottom:12px">
-        <button class="btn btn-primary block focus" data-act="roster-add"${r.first.trim() ? '' : ' disabled'}>+ Add student</button>
+        <input class="input focus" data-roster="adm" value="${esc(r.adm)}" placeholder="Admission number *" style="margin-bottom:12px">
+        <button class="btn btn-primary block focus" data-act="roster-add"${rosterAddValid() ? '' : ' disabled'}>+ Add student</button>
+        ${note}
         ${r.students.length ? `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px">
             <span style="font-weight:800;font-size:13px;color:var(--ink-700)">Your students</span>
@@ -514,6 +544,53 @@
         <button class="btn btn-primary grow focus" data-act="roster-finish"${canFinish ? '' : ' disabled'}>Enter my garden &#8594;</button>
       </div>`;
   }
+
+  // A student can only be added once every field is filled: first name,
+  // last name and admission number (grade & section is gated separately above).
+  function rosterAddValid() {
+    const r = state.roster;
+    return !!(r.first.trim() && r.last.trim() && r.adm.trim());
+  }
+
+  // Add a student through the dedupe guard (spec A4). Every add-path funnels
+  // through TilliAPI.addStudent so a repeated admission number can never create
+  // a second record — it merges; a near-match is flagged instead of merged.
+  function addRosterStudent(r) {
+    const label = r.grade || '';
+    const parts = label.split(' · Section ');
+    const grade = (parts[0] || '').trim();
+    const section = (parts[1] || '').trim();
+    const first = r.first.trim(), last = r.last.trim(), adm = r.adm.trim();
+
+    let res = null;
+    if (window.TilliAPI && window.TilliAPI.addStudent) {
+      // DEMO: give this teacher scope over the section they picked (real system:
+      // scope comes from the Admin invite, spec A3), then add within it.
+      const scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
+      res = window.TilliAPI.addStudent({
+        actorEmail: ctx.email, school_id: scope && scope.school_id,
+        section_id: scope && scope.section_id,
+        student_id: adm, first, last, grade, section, source: 'manual',
+      });
+    }
+
+    // Near-match → flagged for Admin review, NOT added to the garden (spec A4).
+    if (res && res.result === 'review') {
+      setRoster({ note: { kind: 'review', text: `“${first} ${last}” looks a lot like an existing student (${res.matched.name} · ${res.matched.student_id}). Flagged for your school admin to review — not added yet.` } });
+      return;
+    }
+    // Duplicate admission number → merged into the one existing record (spec A4).
+    if (res && res.result === 'merged') {
+      const exists = r.students.some((s) => normAdm(s.adm) === normAdm(adm));
+      const merged = exists ? r.students : r.students.concat([{ first, last, adm, grade, section, claimCode: res.student && res.student.claimCode }]);
+      setRoster({ students: merged, first: '', last: '', adm: '', note: { kind: 'merged', text: `Admission number ${adm} already exists — merged into that student instead of creating a duplicate.` } });
+      return;
+    }
+    // Created (or API unavailable → local add) → one new record.
+    const rec = { first, last, adm, grade, section, claimCode: res && res.student && res.student.claimCode };
+    setRoster({ students: r.students.concat([rec]), first: '', last: '', adm: '', note: { kind: 'created', text: `${first} planted 🌱` } });
+  }
+  const normAdm = (s) => String(s == null ? '' : s).trim().toUpperCase();
 
   // ============================================================
   //  WIRING
@@ -582,7 +659,7 @@
         if (el.tagName !== 'SELECT' && (key === 'first' || key === 'last' || key === 'adm')) {
           state.roster[key] = e.target.value;
           const add = root.querySelector('[data-act="roster-add"]');
-          if (add) add.disabled = !state.roster.first.trim();
+          if (add) add.disabled = !rosterAddValid();
           return;
         }
         setRoster({ [key]: e.target.value });
@@ -656,9 +733,8 @@
       case 'to-roster': set({ phase: 'roster' }); break;
       case 'roster-add': {
         const r = state.roster;
-        if (!r.first.trim()) return;
-        const nm = (r.first + ' ' + r.last).trim() + (r.adm.trim() ? ' · #' + r.adm.trim() : '');
-        setRoster({ students: r.students.concat(nm), first: '', last: '', adm: '' });
+        if (!rosterAddValid()) return;   // all fields (first, last, admission #) required
+        addRosterStudent(r);
         break;
       }
       case 'roster-finish': finishOnboard(); break;

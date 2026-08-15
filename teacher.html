@@ -18,12 +18,9 @@
   .onb {
     /* --- tunable visual parameters (see table in the chat message) --- */
     --onb-card-max: 560px;      /* max width of the white flow card */
-    --onb-sky-top: #E6F4F8;     /* top of the sky gradient */
-    --onb-sky-mid: #EAF5EC;     /* midpoint wash */
-    --onb-sky-bot: #F1FFEC;     /* meadow wash behind the flower band */
     --onb-band-h: clamp(120px, 20vh, 210px); /* flower-band height */
     position: fixed; inset: 0; overflow: hidden;
-    background: linear-gradient(180deg, var(--onb-sky-top) 0%, var(--onb-sky-mid) 48%, var(--onb-sky-bot) 100%);
+    background: #fff;           /* plain white sky (sun + flower band still overlaid) */
   }
   /* Decorative sun, top-right — echoes the landing scenery */
   .onb-sun {
@@ -36,16 +33,21 @@
     position: absolute; left: 0; right: 0; bottom: 0;
     height: var(--onb-band-h); z-index: 0; pointer-events: none;
   }
-  /* Scroll stage that centres the card above the meadow */
+  /* Scroll stage that centres the card above the meadow.
+     `margin:auto` on the card (below) — not align/justify centering — so the
+     card stays centred while it fits, but once it grows taller than the stage
+     it anchors to the top and the extra height spills downward into a scroll,
+     instead of expanding from the centre and clipping off the top. */
   .onb-stage {
     position: absolute; inset: 0; z-index: 1;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
     padding: clamp(20px, 4vh, 44px) clamp(16px, 4vw, 32px);
     overflow-y: auto;
   }
   .onb-card {
     position: relative;
     width: 100%; max-width: var(--onb-card-max);
+    margin: auto;               /* centre when it fits; scroll from top when tall */
     background: #fff;
     border: 1px solid var(--line-200);
     border-radius: var(--radius-card);
@@ -58,6 +60,9 @@
   .onb-back {
     position: absolute; top: 16px; left: 16px;
   }
+  /* When a Back button is overlaid, reserve top padding so no content
+     (eyebrow pill, title, chips) ever sits underneath it. */
+  .onb-card.has-back { padding-top: 64px; }
 
   /* Eyebrow pill (e.g. "DEMOGRAPHIC QUESTIONS") */
   .onb-eyebrow {
@@ -174,7 +179,7 @@
 
   /* Petal cluster (greeting / done celebrations) */
   .onb-petals { position: relative; margin: 0 auto 20px; }
-  .onb-petals span { position: absolute; border-radius: 50%; animation: tmPop .5s var(--ease) both; }
+  .onb-petals span { position: absolute; box-sizing: border-box; border-radius: 50%; animation: tmPop .5s var(--ease) both; }
   @keyframes tmPop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
 
   /* Roster method cards */
@@ -219,6 +224,7 @@
 <div id="dash-root" style="display:none"></div>
 
 <script src="school-data.js"></script>
+<script src="assets/tilli-api.js"></script>
 <script src="dashboard-data.js"></script>
 <script src="assets/flower-band.js"></script>
 <script src="assets/teacher-dashboard.js"></script>

@@ -222,7 +222,7 @@
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
       insightsView: 'growing',
-      add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '' },
+      add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
       vw: window.innerWidth,
       ask: { open: false, context: '', prompt: '', thread: [] },
       gardener: (ctx.teacher && ctx.teacher.demo && ctx.teacher.demo.gender === 'Male') ? 'm' : 'f',
@@ -338,7 +338,6 @@
         ${S.ask.open ? askPanel() : ''}
         ${S.classModal ? classModalView() : ''}
         ${addModal()}
-        ${(S.nav === 'garden' && S.gardenLevel === 'landing') ? stateSwitcherGUI() : ''}
       </div>`;
     wire();
   }
@@ -937,6 +936,7 @@
         <div class="stu-meta">
           <h1 class="stu-name">${esc(stu.name)}</h1>
           <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
+          ${claimCodeLine(stu)}
           <div class="stu-chips">${chipHTML(stu.chips)}</div>
         </div>
       </div>
@@ -1327,10 +1327,49 @@
       <div class="ins-key"><span style="color:#b08968">● Beginner</span><span style="color:#4e6b43">● Learner</span><span style="color:#c07689">● Expert</span></div></div>`;
   }
 
+  // Resolve this school's id once (S.teacher.school is the display name).
+  function schoolId() {
+    if (S._schoolId !== undefined) return S._schoolId;
+    var sc = (window.TilliAPI && window.TilliAPI.resolveSchool) ? window.TilliAPI.resolveSchool(S.teacher.school || (S.data && S.data.school)) : null;
+    S._schoolId = sc ? sc.school_id : null;
+    return S._schoolId;
+  }
+  // The stable verification code the parent needs to claim this child (spec §5).
+  // Looked up from the guard layer by admission number; shown to the teacher so
+  // they can pass it on. Falls back to nothing if the child isn't in the store.
+  function claimCodeLine(stu) {
+    if (!stu || !stu.adm || !window.TilliAPI || !window.TilliAPI.getStudent) return '';
+    const rec = window.TilliAPI.getStudent(schoolId(), stu.adm);
+    if (!rec || !rec.claimCode) return '';
+    return `<div class="stu-sub" style="margin-top:2px">Parent verification code:
+      <span style="font-family:'Quicksand',sans-serif;font-weight:700;color:var(--green-700);background:#EAF7E3;border-radius:999px;padding:2px 10px;margin-left:4px">${esc(rec.claimCode)}</span></div>`;
+  }
+
   // ================= Add student flow =================
   function openAddFlow() {
-    S.add = { active: true, step: 'count', sectionId: S.sectionId, count: '', total: 0, done: 0, first: '', last: '', adm: '' };
+    S.add = { active: true, step: 'count', sectionId: S.sectionId, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] };
     render();
+  }
+  // Persist one planted student through the dedupe guard (spec A4). Records the
+  // outcome (created / merged / review) so the finish screen can summarise it and
+  // show the parent verification codes for the new children.
+  function persistPlantedStudent() {
+    const a = S.add;
+    const first = (a.first || '').trim(), last = (a.last || '').trim(), adm = (a.adm || '').trim();
+    if (!window.TilliAPI || !window.TilliAPI.addStudent) { a.results.push({ name: (first + ' ' + last).trim(), result: 'created' }); return; }
+    const sec = S.data.sections.find((x) => x.id === a.sectionId) || {};
+    // DEMO: ensure this teacher has scope for the section (real system: scope is
+    // granted by the Admin invite, spec A3). Keeps the guard's shape intact.
+    const scope = window.TilliAPI.ensureTeacherScope(S.teacher.email, S.teacher.school, sec.grade, sec.section);
+    const res = window.TilliAPI.addStudent({
+      actorEmail: S.teacher.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
+      student_id: adm || ('TMP-' + Date.now()), first, last, grade: sec.grade, section: sec.section, source: 'manual',
+    });
+    a.results.push({
+      name: (first + ' ' + last).trim(), result: res.result,
+      claimCode: res.student && res.student.claimCode,
+      matched: res.matched && res.matched.name,
+    });
   }
   function addGradeName() { const s = S.data.sections.find((x) => x.id === S.add.sectionId); return s ? s.name : 'your class'; }
   function potHTML(done) {
@@ -1362,10 +1401,33 @@
         </div>
         <div style="margin-top:20px"><button class="btn btn-primary block focus" data-add-plant ${canPlant ? '' : 'disabled'}>${a.done + 1 >= a.total ? 'Plant last seed 🌱' : 'Plant seed → next'}</button></div>`;
     } else {
+      const results = a.results || [];
+      const created = results.filter((r) => r.result === 'created');
+      const merged = results.filter((r) => r.result === 'merged');
+      const review = results.filter((r) => r.result === 'review');
+      // Dedupe outcome — surfaced so the teacher sees duplicates were prevented.
+      const dedupeNote = (merged.length || review.length) ? `
+        <div class="add-done-sub" style="background:#EAF4FF;border:1px solid #C9DEF6;border-radius:12px;padding:10px 14px;margin:0 auto 12px;max-width:340px;color:#33465e">
+          ${merged.length ? `${merged.length} admission number${merged.length === 1 ? ' was' : 's were'} already on the roster — merged instead of duplicated.` : ''}
+          ${review.length ? ` ${review.length} entr${review.length === 1 ? 'y looks' : 'ies look'} like an existing student — flagged for your admin to review.` : ''}
+        </div>` : '';
+      // Parent verification codes for the newly created children (spec §5).
+      const codes = created.filter((r) => r.claimCode).map((r) =>
+        `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #EFEAe0">
+          <span style="font-weight:700;color:#4b463c">${esc(r.name)}</span>
+          <span style="font-family:'Quicksand',sans-serif;font-weight:700;color:var(--green-700)">${esc(r.claimCode)}</span></div>`).join('');
+      const codeCard = codes ? `
+        <div style="background:#fff;border:1px solid #EFEAe0;border-radius:14px;padding:12px 16px;margin:0 auto 16px;max-width:340px;text-align:left">
+          <div style="font-weight:800;font-size:12.5px;color:#8a8272;margin-bottom:4px">Parent verification codes</div>
+          <div style="font-size:12px;color:#9a9284;margin-bottom:6px">Share each code with the child’s parent so they can securely link to them.</div>
+          ${codes}
+        </div>` : '';
       step = `<div class="add-center" style="padding:14px 0 4px">
         <div style="display:flex;justify-content:center;margin:6px 0 14px">${plantSVG('growing', 96, false, true)}</div>
-        <div class="add-done-title">${a.total} seeds planted 🌱</div>
+        <div class="add-done-title">${created.length || a.total} seeds planted 🌱</div>
         <p class="add-done-sub">Your ${esc(addGradeName())} bed is ready. Time to help them grow.</p>
+        ${dedupeNote}
+        ${codeCard}
         <button class="btn btn-primary focus" data-add-finish>Go to my garden →</button>
       </div>`;
     }
@@ -1404,6 +1466,7 @@
     const plant = root.querySelector('[data-add-plant]');
     if (plant) plant.addEventListener('click', () => {
       if (!S.add.first.trim()) return;
+      persistPlantedStudent();                 // dedupe guard runs here (spec A4)
       const nd = S.add.done + 1;
       if (nd >= S.add.total) S.add = Object.assign({}, S.add, { done: nd, step: 'done' });
       else S.add = Object.assign({}, S.add, { done: nd, first: '', last: '', adm: '' });
