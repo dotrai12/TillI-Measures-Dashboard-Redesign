@@ -217,7 +217,9 @@
       data: ctx.data, teacher: ctx.teacher || {},
       nav: 'garden', sectionId: (ctx.data.sections[0] || {}).id,
       gardenLevel: 'landing', classModal: null, studentId: null,
-      windowState: 'between', // which of the 4 landing states renders (dev GUI switch)
+      // A first-time class (built from onboarding) opens on Baseline — no prior
+      // data to show; the demo dataset opens mid-year ('between'). Dev GUI switch overrides.
+      windowState: ctx.data.fresh ? 'baseline' : 'between',
       rosterSearch: '', rosterSort: 'state', studentTab: 'overview',
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
@@ -342,9 +344,25 @@
     wire();
   }
 
+  function hasStudents() { return S.data.sections.some((s) => s.students && s.students.length); }
+
+  // First-time teacher who reached the dashboard with no students yet. One calm
+  // screen across every destination (except profile) with a single clear action.
+  function emptyClassView() {
+    return `<div class="dash-wrap" style="max-width:640px">
+      <div class="empty-class">
+        <div class="empty-plant">${plantSVG('waiting', 96, false, false)}</div>
+        <h1 class="empty-t">Your garden is ready — let's plant it 🌱</h1>
+        <p class="empty-b">Add the students in your class and they'll appear here as seedlings, ready for their baseline. Nothing grows until you add a name.</p>
+        <button class="btn btn-primary focus empty-cta" data-onb-add>Add your students</button>
+      </div>
+    </div>`;
+  }
+
   function mainView() {
-    if (S.nav === 'garden') return S.gardenLevel === 'beds' ? bedsView() : S.gardenLevel === 'section' ? sectionGardenView() : landingView();
     if (S.nav === 'profile') return profilePanel();
+    if (!hasStudents()) return emptyClassView();
+    if (S.nav === 'garden') return S.gardenLevel === 'beds' ? bedsView() : S.gardenLevel === 'section' ? sectionGardenView() : landingView();
     if (S.nav === 'students') return S.studentId ? studentDetailView() : rosterView();
     if (S.nav === 'assess') return assessView();
     if (S.nav === 'insights') return insightsView();
@@ -924,6 +942,28 @@
     const sec = section();
     const stu = sec.students.find((x) => x.id === S.studentId);
     if (!stu) { S.studentId = null; return rosterView(); }
+
+    // Brand-new student, no assessment recorded yet — skip the score tabs (they'd
+    // all read 0%) and point the teacher at the one useful action: the baseline.
+    if (stu.state === 'waiting') {
+      return `<div class="dash-wrap" style="max-width:960px">
+        <button class="link-back focus" data-back-roster>← All students</button>
+        <div class="stu-head">
+          <span class="stu-plant">${plantSVG('waiting', 76, true, false)}</span>
+          <div class="stu-meta">
+            <h1 class="stu-name">${esc(stu.name)}</h1>
+            <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
+            ${claimCodeLine(stu)}
+          </div>
+        </div>
+        <div class="dash-card" style="text-align:center;padding:40px 28px;margin-top:16px">
+          <div style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:18px;color:var(--ink-900)">No assessment data yet</div>
+          <p style="color:var(--ink-450);font-size:14px;margin:8px auto 0;max-width:420px;line-height:1.5">Once you complete ${esc(stu.dispFirst)}'s baseline, their skills, growth and perspectives will grow in here.</p>
+          <button class="btn btn-primary focus" data-continue-assess="${esc(stu.id)}" style="margin-top:18px;padding:12px 22px">Start baseline for ${esc(stu.dispFirst)} →</button>
+        </div>
+      </div>`;
+    }
+
     const tab = S.studentTab;
     const tabBtn = [['overview', 'Overview'], ['skills', 'Skills'], ['perspectives', 'Perspectives'], ['history', 'History']]
       .map(([k, l]) => `<button class="pill-tab stab${tab === k ? ' on' : ''}" data-stab="${k}">${l}</button>`).join('');
@@ -1549,6 +1589,11 @@
     root.querySelectorAll('[data-continue-assess]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'assess'; startEnter(b.dataset.continueAssess); }));
     root.querySelectorAll('[data-garden-level]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'garden'; S.gardenLevel = b.dataset.gardenLevel; render(); }));
     root.querySelectorAll('[data-add-class]').forEach((b) => b.addEventListener('click', () => openAddFlow()));
+    // Empty-state CTA → back to onboarding's "add students" step (re-mounts on finish).
+    root.querySelectorAll('[data-onb-add]').forEach((b) => b.addEventListener('click', () => {
+      if (window.TilliOnboarding && window.TilliOnboarding.addStudents) window.TilliOnboarding.addStudents();
+      else openAddFlow();
+    }));
 
     // class modal
     root.querySelectorAll('[data-close-modal]').forEach((b) => b.addEventListener('click', (e) => { if (e.target === b) { S.classModal = null; render(); } }));
@@ -2115,6 +2160,13 @@
   .mg-tend-nm { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 16px; color: var(--ink-900); }
   .mg-tend-reason { margin: 0; font-size: 13px; color: var(--ink-600); line-height: 1.45; flex: 1; }
   .mg-tend-empty { background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: 16px; padding: 20px; font-size: 13.5px; color: var(--ink-450); font-weight: 600; line-height: 1.5; }
+
+  /* First-run empty state (no students yet) */
+  .empty-class { text-align: center; padding: clamp(32px, 8vh, 72px) 20px; display: flex; flex-direction: column; align-items: center; }
+  .empty-plant { margin-bottom: 10px; }
+  .empty-t { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: clamp(20px, 3vw, 26px); color: var(--ink-900); margin: 0 0 10px; }
+  .empty-b { color: var(--ink-450); font-size: 15px; line-height: 1.55; max-width: 420px; margin: 0 0 24px; }
+  .empty-cta { padding: 13px 26px; }
   .btn-ask-a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: none; cursor: pointer;
     background: var(--green-500); color: #fff; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; padding: 10px 12px; border-radius: var(--radius-pill); transition: background .15s; }
   .btn-ask-a:hover { background: var(--green-600); }

@@ -234,7 +234,11 @@
 
   // SERVER-SIDE (spec A4): dedupe-on-add. All three add-paths (manual / CSV /
   // photo) funnel through here so the guard can't be bypassed.
-  //   result: 'created' | 'merged' | 'review' | 'denied'
+  //   result: 'created' | 'merged' | 'denied'
+  //         | 'name_dup'    -> same name, different admission number (teacher confirms)
+  //         | 'id_conflict' -> same admission number, different child (teacher picks owner)
+  //   input.force: 'name'    -> create despite a same-name match
+  //                'replace'  -> on id_conflict, overwrite the record's identity
   function addStudent(input){
     var db = getDB();
     input = input || {};
@@ -253,37 +257,43 @@
     if (!sid) return { ok:false, result:'denied', reason:'missing-student-id' };
     var k = keyOf(schoolId, sid);
 
-    // 1) EXACT (school_id, student_id) match -> silent merge (spec A4).
-    //    New non-conflicting fields fill blanks; existing fields are NOT overwritten.
+    var inName = (norm(input.first)+' '+norm(input.last)).trim();
+    var sameName = function(c){ return low(fullName(c)) === low(inName); };
+
+    // 1) EXACT admission-number match (school_id, student_id).
     if (db.students[k]){
       var ex = db.students[k];
-      ['first','last','dob','gender','parentName','parentEmail','section_id','grade','section'].forEach(function(f){
-        if (!norm(ex[f]) && norm(input[f])) ex[f] = input[f];
-      });
-      ex.name = norm(ex.first)+' '+norm(ex.last);
-      write(db);
-      return { ok:true, result:'merged', student:Object.assign({}, ex) };
+      // (a) Same number AND same name -> the same child re-entered (idempotent);
+      //     fill any blanks. Same path the teacher takes after choosing REPLACE.
+      if (input.force==='replace' || sameName(ex)){
+        if (input.force==='replace'){ ex.first = norm(input.first); ex.last = norm(input.last); }
+        ['first','last','dob','gender','parentName','parentEmail','section_id','grade','section'].forEach(function(f){
+          if (!norm(ex[f]) && norm(input[f])) ex[f] = input[f];
+        });
+        ex.name = norm(ex.first)+' '+norm(ex.last);
+        write(db);
+        return { ok:true, result:'merged', student:Object.assign({}, ex) };
+      }
+      // (b) Same number, DIFFERENT child -> two kids can't share a number. The
+      //     teacher picks who keeps it (resolve via force:'replace' or a new id).
+      return { ok:true, result:'id_conflict',
+               existing:{ name:ex.name, first:ex.first, last:ex.last, student_id:ex.student_id },
+               incoming:{ first:norm(input.first), last:norm(input.last), student_id:sid } };
     }
 
-    // 2) NEAR-MATCH -> flag to Admin, do NOT silent-merge (spec A4 / §9.2).
-    //    (a) same name + same DOB, different id   (b) 1-char-off student_id
-    var near = null;
-    var candidates = Object.keys(db.students).map(function(x){ return db.students[x]; })
-                           .filter(function(s){ return s.school_id===schoolId; });
-    for (var i=0;i<candidates.length;i++){
-      var c = candidates[i];
-      var sameNameDob = low(fullName(c))===low(norm(input.first)+' '+norm(input.last))
-                        && norm(input.dob) && norm(c.dob)===norm(input.dob);
-      var typoId = levenshtein(c.student_id, sid) === 1;
-      if (sameNameDob || typoId){ near = c; break; }
-    }
-    if (near){
-      var flag = { id:newId('rev'), school_id:schoolId, section_id:sectionId,
-                   incoming:{ student_id:sid, first:input.first, last:input.last, dob:input.dob||'' },
-                   matched_student_id: near.student_id, reason: (levenshtein(near.student_id,sid)===1?'typo-id':'name-dob'),
-                   flaggedBy:actor, status:'open', createdAt:Date.now() };
-      db.reviewQueue.push(flag); write(db);
-      return { ok:true, result:'review', flag:flag, matched:{ name:near.name, student_id:near.student_id } };
+    // 2) SAME NAME as an existing child, but a DIFFERENT admission number.
+    //    Often two real children who share a name -> let the teacher confirm with
+    //    "Ignore and add" (force:'name' skips this check and creates the record).
+    if (input.force!=='name'){
+      var candidates = Object.keys(db.students).map(function(x){ return db.students[x]; })
+                             .filter(function(s){ return s.school_id===schoolId; });
+      for (var i=0;i<candidates.length;i++){
+        if (sameName(candidates[i])){
+          return { ok:true, result:'name_dup',
+                   matched:{ name:candidates[i].name, student_id:candidates[i].student_id },
+                   incoming:{ first:norm(input.first), last:norm(input.last), student_id:sid } };
+        }
+      }
     }
 
     // 3) Genuinely new -> create ONE canonical record.
@@ -304,12 +314,12 @@
   // Bulk add (CSV / photo OCR rows) — same dedupe guard per row, returns a summary
   // so the UI can show a confirm/review step on bulk import (spec A4 detail).
   function addStudentsBulk(actorEmail, schoolId, sectionId, rows, source){
-    var summary = { created:[], merged:[], review:[], denied:[] };
+    var summary = { created:[], merged:[], conflicts:[], denied:[] };
     (rows||[]).forEach(function(r){
       var res = addStudent(Object.assign({ actorEmail:actorEmail, school_id:schoolId, section_id:sectionId, source:source||'csv' }, r));
       if (res.result==='created') summary.created.push(res.student);
       else if (res.result==='merged') summary.merged.push(res.student);
-      else if (res.result==='review') summary.review.push(res.flag);
+      else if (res.result==='name_dup' || res.result==='id_conflict') summary.conflicts.push(res);
       else summary.denied.push({ row:r, reason:res.reason });
     });
     return { ok:true, summary:summary };

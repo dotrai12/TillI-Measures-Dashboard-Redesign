@@ -110,7 +110,14 @@
 
   // Guards the one-time dashboard mount. Declared here (not next to
   // enterDashboard) so boot() below can call enterDashboard without a TDZ error.
+  // `dashboardRosterSig` remembers which roster the mounted dashboard was built
+  // from, so returning to add students (empty-state CTA) re-mounts with the new kids.
   let dashboardMounted = false;
+  let dashboardRosterSig = null;
+  function rosterSig() {
+    try { return (state.roster.students || []).map((s) => (s.adm || '') + '|' + s.first + '|' + s.last).join(','); }
+    catch (e) { return ''; }
+  }
 
   // ---------- boot: resume or start ----------
   (function boot() {
@@ -158,17 +165,23 @@
     const dashRoot = document.getElementById('dash-root');
     if (onb) onb.style.display = 'none';
     if (dashRoot) dashRoot.style.display = '';
-    if (dashboardMounted || !dashRoot) return;
+    if (!dashRoot) return;
+    // render() calls this on every 'complete' render; only (re)mount when the
+    // roster actually changed — otherwise it's a no-op so typing/nav stays smooth.
+    const sig = rosterSig();
+    if (dashboardMounted && sig === dashboardRosterSig) return;
     dashboardMounted = true;
+    dashboardRosterSig = sig;
     const teacher = {
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
     };
     // dashboard-data.js is loaded as a classic <script> in teacher.html, so it
     // works under file:// too (no ES-module fetch). It exposes window.buildAllData.
+    // Pass this teacher's own roster so the dashboard shows THEIR students.
     try {
       if (window.TilliDashboard && window.buildAllData) {
-        window.TilliDashboard.mount(dashRoot, { data: window.buildAllData(), teacher });
+        window.TilliDashboard.mount(dashRoot, { data: window.buildAllData({ roster: state.roster }), teacher });
       } else {
         throw new Error('dashboard scripts not loaded (TilliDashboard/buildAllData missing)');
       }
@@ -497,8 +510,7 @@
         const code = c.claimCode ? `<span class="onb-chip-code" style="margin-left:6px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:11px;color:var(--green-700);background:#EAF7E3;border-radius:999px;padding:2px 8px">${esc(c.claimCode)}</span>` : '';
         return `<span class="onb-chip">🌱 ${esc(nm)}${code}</span>`;
       }).join('');
-      const note = r.note ? `
-        <div class="onb-note" style="margin-top:12px;background:${r.note.kind === 'review' ? '#FFF4E5' : r.note.kind === 'merged' ? '#EAF4FF' : '#EAF7E3'};border:1px solid ${r.note.kind === 'review' ? '#F6D9A8' : r.note.kind === 'merged' ? '#C9DEF6' : '#BEE6AC'};color:var(--ink-700)">${esc(r.note.text)}</div>` : '';
+      const note = rosterNoteHTML(r.note);
       body = `
         <div class="onb-grid2" style="margin-bottom:12px">
           <input class="input focus" data-roster="first" value="${esc(r.first)}" placeholder="First name *">
@@ -553,6 +565,37 @@
       </div>`;
   }
 
+  // Renders the feedback note under the add-student button. For the two
+  // conflict kinds it also renders the resolution buttons (data-act handled in
+  // handleAct). Colours: green = added, blue = updated, amber = needs a decision.
+  function rosterNoteHTML(n) {
+    if (!n) return '';
+    const pal = {
+      created: ['#EAF7E3', '#BEE6AC'], merged: ['#EAF4FF', '#C9DEF6'],
+      name_dup: ['#EAF4FF', '#C9DEF6'], id_conflict: ['#FFF4E5', '#F6D9A8'],
+      info: ['#EEF1F4', '#D8DEE6'],
+    };
+    const [bg, bd] = pal[n.kind] || pal.info;
+    const wrap = (inner) => `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">${inner}</div>`;
+    const choiceBtn = (act, label) => `<button class="focus" data-act="${act}" style="flex:1;min-width:150px;cursor:pointer;background:#fff;border:1.5px solid var(--line-200);border-radius:10px;padding:11px 12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--ink-700)">${label}</button>`;
+    let actions = '';
+    if (n.kind === 'name_dup') {
+      actions = wrap(
+        choiceBtn('roster-ignore-add', '<b>Add anyway</b>') +
+        choiceBtn('roster-dismiss-note', 'Cancel')
+      );
+    } else if (n.kind === 'id_conflict') {
+      const ex = n.existing || {}, inc = n.incoming || {};
+      const exNm = esc(ex.name || 'Existing student');
+      const incNm = esc(((inc.first || '') + ' ' + (inc.last || '')).trim() || 'New student');
+      actions = wrap(
+        choiceBtn('roster-conflict-keep', `Keep <b>${exNm}</b>`) +
+        choiceBtn('roster-conflict-replace', `Use <b>${incNm}</b>`)
+      );
+    }
+    return `<div class="onb-note" style="margin-top:12px;background:${bg};border:1px solid ${bd};color:var(--ink-700)">${esc(n.text)}${actions}</div>`;
+  }
+
   // A student can only be added once every field is filled: first name,
   // last name and admission number (grade & section is gated separately above).
   function rosterAddValid() {
@@ -561,9 +604,12 @@
   }
 
   // Add a student through the dedupe guard (spec A4). Every add-path funnels
-  // through TilliAPI.addStudent so a repeated admission number can never create
-  // a second record — it merges; a near-match is flagged instead of merged.
-  function addRosterStudent(r) {
+  // through TilliAPI.addStudent. Two conflicts are surfaced for the teacher to
+  // resolve inline (never auto-resolved): same NAME different number (name_dup),
+  // and same NUMBER different child (id_conflict). `force` carries the teacher's
+  // choice back to the API: 'name' = add anyway, 'replace' = give the number to
+  // the new child.
+  function addRosterStudent(r, force) {
     const label = r.grade || '';
     const parts = label.split(' · Section ');
     const grade = (parts[0] || '').trim();
@@ -578,20 +624,37 @@
       res = window.TilliAPI.addStudent({
         actorEmail: ctx.email, school_id: scope && scope.school_id,
         section_id: scope && scope.section_id,
-        student_id: adm, first, last, grade, section, source: 'manual',
+        student_id: adm, first, last, grade, section, source: 'manual', force: force || null,
       });
     }
 
-    // Near-match → flagged for Admin review, NOT added to the garden (spec A4).
-    if (res && res.result === 'review') {
-      setRoster({ note: { kind: 'review', text: `“${first} ${last}” looks a lot like an existing student (${res.matched.name} · ${res.matched.student_id}). Flagged for your school admin to review — not added yet.` } });
+    // Same name, different admission number → ask before adding a possible duplicate.
+    if (res && res.result === 'name_dup') {
+      setRoster({ note: { kind: 'name_dup',
+        text: `“${first} ${last}” has the same name as a student already on your list (#${res.matched.student_id}). If these are two different children, add them anyway.` } });
       return;
     }
-    // Duplicate admission number → merged into the one existing record (spec A4).
+    // Same admission number, different child → teacher chooses who keeps the number.
+    if (res && res.result === 'id_conflict') {
+      setRoster({ note: { kind: 'id_conflict', adm, existing: res.existing, incoming: res.incoming,
+        text: `Admission number #${adm} already belongs to ${res.existing.name}. Two children can’t share it — who should keep #${adm}?` } });
+      return;
+    }
+    // Merged: idempotent re-add (same name+number) OR the teacher chose "replace"
+    // on a conflict → the number now belongs to the new child; update that row.
     if (res && res.result === 'merged') {
-      const exists = r.students.some((s) => normAdm(s.adm) === normAdm(adm));
-      const merged = exists ? r.students : r.students.concat([{ first, last, adm, grade, section, claimCode: res.student && res.student.claimCode }]);
-      setRoster({ students: merged, first: '', last: '', adm: '', note: { kind: 'merged', text: `Admission number ${adm} already exists — merged into that student instead of creating a duplicate.` } });
+      const s = res.student || {};
+      const nm = ((s.first || first) + ' ' + (s.last || last)).trim();
+      const idx = r.students.findIndex((x) => normAdm(x.adm) === normAdm(adm));
+      let students;
+      if (idx >= 0) {
+        students = r.students.slice();
+        students[idx] = Object.assign({}, students[idx], { first: s.first || first, last: s.last || last, claimCode: s.claimCode || students[idx].claimCode });
+      } else {
+        students = r.students.concat([{ first, last, adm, grade, section, claimCode: s.claimCode }]);
+      }
+      setRoster({ students, first: '', last: '', adm: '', note: { kind: 'merged',
+        text: force === 'replace' ? `#${adm} now belongs to ${nm}. 🌱` : `#${adm} was already on your list — updated that student instead of duplicating.` } });
       return;
     }
     // Created (or API unavailable → local add) → one new record.
@@ -764,6 +827,17 @@
         addRosterStudent(r);
         break;
       }
+      // Conflict resolution (buttons live inside the note — see rosterNoteHTML):
+      case 'roster-ignore-add': addRosterStudent(state.roster, 'name'); break;       // two kids, same name → add anyway
+      case 'roster-conflict-replace': addRosterStudent(state.roster, 'replace'); break; // give the number to the new child
+      case 'roster-conflict-keep': {                                                 // existing child keeps the number
+        const n = state.roster.note || {}; const inc = n.incoming || {};
+        const incNm = ((inc.first || '') + ' ' + (inc.last || '')).trim();
+        setRoster({ adm: '', note: { kind: 'info',
+          text: `${(n.existing && n.existing.name) || 'The existing student'} keeps #${n.adm}. Enter a different admission number for “${incNm}”.` } });
+        break;
+      }
+      case 'roster-dismiss-note': setRoster({ note: null }); break;
       case 'roster-finish': finishOnboard(); break;
       case 'replay': replayOnboarding(); break;
       case 'onb-back': onbBack(); break;
@@ -799,7 +873,18 @@
     if (onb) onb.style.display = '';
     set({ phase: 'intro', selfQ: 0 });
   }
-  window.TilliOnboarding = { replay: replayOnboarding };
+  // Jump straight to the "add students" step (used by the dashboard empty state
+  // when a teacher landed with no students). Finishing re-mounts the dashboard
+  // with the new roster via enterDashboard's signature check.
+  function goToAddStudents() {
+    const onb = document.getElementById('onb');
+    const dashRoot = document.getElementById('dash-root');
+    if (dashRoot) dashRoot.style.display = 'none';
+    if (onb) onb.style.display = '';
+    setRoster({ method: null, csvMsg: '', picMsg: '', note: null });
+    set({ phase: 'roster' });
+  }
+  window.TilliOnboarding = { replay: replayOnboarding, addStudents: goToAddStudents };
 
   // close autocomplete menus / custom dropdowns on outside click
   document.addEventListener('click', (e) => {

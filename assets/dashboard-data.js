@@ -158,7 +158,79 @@ function buildStudent(section, i, roster) {
   };
 }
 
-function buildAllData() {
+// A brand-new student the teacher just added during onboarding: real identity,
+// but NO assessment data yet. `state:"waiting"` and an all-pending assessLog make
+// every downstream view (roster, landing, assess, insights) render it honestly as
+// "awaiting first assessment" rather than inventing scores. See buildFromRoster.
+function buildFreshStudent(section, r) {
+  const first = (r.first || "").trim();
+  const last = (r.last || "").trim();
+  const name = (first + " " + last).trim();
+  const initials = ((first[0] || "") + (last[0] || "")).toUpperCase() || "?";
+  const skills = SKILLS.map((sk) => ({
+    key: sk.key, name: sk.name, group: sk.group,
+    pct: 0, band: "Beginner", pre: 0, mid: 0, post: 0,
+    teacher: 0, parent: 0, student: 0, gap: 0,
+  }));
+  return {
+    id: (r.adm && String(r.adm).trim()) || section.id + "_" + name,
+    adm: (r.adm && String(r.adm).trim()) || null,
+    first, last, name, initials, dispFirst: first,
+    claimCode: r.claimCode || null,
+    parentEmail: r.parentEmail || (first + "." + last + "@parent.tilli.co").toLowerCase(),
+    section: section.name, grade: section.grade,
+    band: "Beginner", overallPct: 0, overallPre: 0, growth: 0,
+    chips: { beginner: 0, learner: 0, expert: 0 }, maxGap: 0,
+    state: "waiting", skills,
+    celebrateLine: "", tendReason: "",
+    lowestSkill: skills[0], topGrower: skills[0], grewSincePre: 0,
+    assess: "todo",
+    assessLog: WINDOWS.map((w) => ({
+      key: w.key, label: w.label, sub: w.sub, date: w.date,
+      persp: PERSPECTIVES.map((p) => ({ key: p.key, label: p.label, icon: p.icon, done: false })),
+      doneCount: 0, status: "pending",
+    })),
+    windowsDone: 0, perspDone: 0,
+  };
+}
+
+// Build the dashboard from the students a teacher entered during onboarding.
+// Groups them into sections by grade + section. Returns { fresh:true } so the
+// dashboard knows this is a first-time class (defaults the landing to Baseline).
+function buildFromRoster(rosterStudents) {
+  const groups = {};
+  rosterStudents.forEach((s) => {
+    const grade = (s.grade || "").trim() || "My class";
+    const section = (s.section || "").trim();
+    const gk = grade + "||" + section;
+    if (!groups[gk]) groups[gk] = { grade, section, list: [] };
+    groups[gk].list.push(s);
+  });
+  const sections = Object.keys(groups).map((gk, gi) => {
+    const g = groups[gk];
+    const sec = {
+      id: "sec_" + gi,
+      name: g.section ? g.grade + " " + g.section : g.grade,
+      grade: g.grade, section: g.section, n: g.list.length,
+    };
+    const students = g.list.map((rs) => buildFreshStudent(sec, rs));
+    // Disambiguate students who share a first name (add last initial).
+    const firstCounts = {};
+    students.forEach((st) => { firstCounts[st.first] = (firstCounts[st.first] || 0) + 1; });
+    students.forEach((st) => { st.dispFirst = firstCounts[st.first] > 1 ? st.first + " " + (st.last[0] || "") + "." : st.first; });
+    return Object.assign({}, sec, { students });
+  });
+  return { sections, skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES, fresh: true };
+}
+
+function buildAllData(opts) {
+  // A real teacher's own roster (from onboarding) takes priority: show THEIR
+  // students, as a fresh class with no data yet. An empty roster → empty dashboard.
+  if (opts && opts.roster) {
+    const rs = (opts.roster.students || []).filter((s) => s && (s.first || "").trim());
+    return buildFromRoster(rs);
+  }
+  // Fallback (no roster supplied): the demo dataset used by the standalone preview.
   // Prefer the shared dummy-school roster (school-data.js) when it's loaded,
   // so the teacher dashboard shows the same students as the parent flow.
   const TS = typeof window !== "undefined" ? window.TILLI_SCHOOL : null;
