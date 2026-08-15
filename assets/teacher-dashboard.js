@@ -418,13 +418,17 @@
     let arr = recipes[maturity] || recipes.growing;
     if (isPhone) arr = arr.filter((_, i) => i % 2 === 0); // thin the row on phones
     const base = maturity === 'seedling' ? (isPhone ? 44 : 54) : maturity === 'bloom' ? (isPhone ? 68 : 92) : (isPhone ? 58 : 76);
-    const grew = maturity === 'growing2' || maturity === 'bloom';
     const offs = [16, 2, 22, 6, 18, 0, 12];
+    // Use the landing flower-band art: student state → bloom stage.
+    const KIND = { blossoming: 'flower', growing: 'tulip', tending: 'sprout', waiting: 'sprout' };
+    const PETALS = (window.TilliFlowerPetals || ['#E866B0', '#26BDE2', '#FCC30B', '#E91E8C']);
     const plants = arr.map((st, i) => {
       const scale = st === 'blossoming' ? 1.06 : st === 'growing' ? 0.92 : st === 'tending' ? 0.8 : 0.7;
-      const sz = Math.round(base * scale);
-      const sparkle = grew && (st === 'blossoming' || st === 'growing');
-      return `<span class="mg-plant" style="transform:translateY(${offs[i % offs.length]}px)">${plantSVG(st, sz, false, sparkle)}</span>`;
+      const px = Math.round(base * scale * 1.35); // flowers are taller/thinner than the old pots
+      const kind = KIND[st] || 'flower';
+      const petal = kind === 'sprout' ? null : PETALS[i % PETALS.length];
+      const art = window.flowerMarkup ? window.flowerMarkup(kind, petal, px, i) : plantSVG(st, Math.round(base * scale), false, false);
+      return `<span class="mg-plant" style="transform:translateY(${offs[i % offs.length]}px)">${art}</span>`;
     }).join('');
     return `<div class="mg-scene mg-scene-${maturity}" aria-hidden="true">
       <span class="mg-sun"></span>
@@ -540,8 +544,8 @@
       bandBlock = bandMix(ld, note);
     }
 
-    // Slot 6 — hero: open window → its assessment CTA; no window → Ask Tilli.
-    const hero = st.windowOpen ? heroWindow(st, N) : heroAsk(sec);
+    // Slot 6 — hero: open window → its assessment CTA; no window → nothing.
+    const hero = st.windowOpen ? heroWindow(st, N) : '';
 
     return `<div class="dash-wrap mg-wrap">
       <div class="mg-greet">
@@ -561,6 +565,7 @@
       ${weekIdeaSlot()}
       ${tendSlot(ld, state)}
       ${quietDoorways()}
+      ${stateSwitcherGUI()}
     </div>`;
   }
 
@@ -2045,7 +2050,7 @@
   .mg-scene { position: relative; overflow: hidden; border-radius: var(--radius-card); border: 1px solid var(--line-200);
     background: linear-gradient(180deg, #E6F4F8 0%, #EAF5EC 52%, #F1FFEC 100%);
     height: clamp(200px, 20vh, 300px); box-shadow: inset 0 -30px 50px -30px rgba(78,140,66,.18); }
-  .mg-sun { position: absolute; top: -46px; right: -46px; width: 200px; height: 200px; border-radius: 50%;
+  .mg-sun { position: absolute; top: -46px; right: -46px; width: 150px; height: 150px; border-radius: 50%;
     background: radial-gradient(circle at 50% 50%, #FCE39A 0%, #FCD661 40%, #FBCB3E 60%, rgba(252,203,62,0) 70%); pointer-events: none; }
   .mg-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 26%;
     background: linear-gradient(180deg, rgba(155,222,29,.18), rgba(86,192,43,.28)); border-radius: 0 0 var(--radius-card) var(--radius-card); }

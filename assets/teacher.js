@@ -93,6 +93,7 @@
 
   const state = {
     phase: 'intro',   // intro | demo | greet | assess | done | roster | complete
+    openSelect: null, // id of the currently-open custom dropdown (only one at a time)
     selfQ: 0,
     selfAnswers: {},
     demo: blankDemo(),
@@ -225,12 +226,22 @@
       : step === 3 ? 'Tell us about yourself as a teacher'
       : 'About your classroom';
   }
-  function selectField(label, id, value, options, placeholder) {
-    const opts = ['<option value="">' + esc(placeholder) + '</option>']
-      .concat(options.map((o) => `<option value="${esc(o)}"${value === o ? ' selected' : ''}>${esc(o)}</option>`)).join('');
+  // Custom dropdown — replaces the native <select>, whose OS-drawn option list
+  // can't be styled or positioned and mis-renders (tiny / detached from the field)
+  // when the page is scaled. `scope` routes a pick to the right state slice:
+  // 'demo' → state.demo[id] (default), 'roster' → state.roster[id]. Only one
+  // dropdown is open at a time, tracked by state.openSelect === id.
+  function selectField(label, id, value, options, placeholder, scope) {
+    scope = scope || 'demo';
+    const open = state.openSelect === id;
+    const opts = options.map((o) =>
+      `<button type="button" class="onb-sel-opt focus${value === o ? ' on' : ''}" data-sel-scope="${scope}" data-sel-id="${esc(id)}" data-sel-val="${esc(o)}"><span>${esc(o)}</span>${value === o ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
     return `<div>
       <label class="onb-label">${esc(label)}</label>
-      <div class="select-wrap"><select class="select focus" data-demo="${id}">${opts}</select></div>
+      <div class="onb-sel${open ? ' open' : ''}">
+        <button type="button" class="onb-sel-trigger focus${value ? '' : ' is-placeholder'}" data-sel-toggle="${esc(id)}"><span class="onb-sel-val">${esc(value || placeholder)}</span></button>
+        ${open ? `<div class="onb-sel-menu">${opts}</div>` : ''}
+      </div>
     </div>`;
   }
 
@@ -472,12 +483,9 @@
     Object.keys(d.gradesSel).sort((a, b) => a - b).forEach((gi) => {
       DEMO_SECTIONS.forEach((sx) => { if (d.secs[gi + '-' + sx]) gradeOpts.push(DEMO_GRADES[gi] + ' · Section ' + sx); });
     });
-    const gradeSel = needsGrade ? `
-      <label class="onb-label">Grade &amp; section *</label>
-      <div class="select-wrap" style="margin-bottom:16px"><select class="select focus" data-roster="grade">
-        <option value="">Select the grade</option>
-        ${gradeOpts.map((o) => `<option value="${esc(o)}"${r.grade === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}
-      </select></div>` : '';
+    const gradeSel = needsGrade
+      ? `<div style="margin-bottom:16px">${selectField('Grade & section *', 'grade', r.grade, gradeOpts, 'Select the grade', 'roster')}</div>`
+      : '';
     const showBody = !needsGrade || !!r.grade;
 
     let body = '';
@@ -599,21 +607,40 @@
     // generic actions
     root.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => handleAct(b.dataset.act)));
 
-    // demo text/select inputs
+    // demo text inputs (gender / education are custom dropdowns — see [data-sel-*] below).
+    // Patched in place (no re-render) so the caret is preserved while typing.
     root.querySelectorAll('[data-demo]').forEach((el) => {
       const key = el.dataset.demo;
-      const evt = el.tagName === 'SELECT' ? 'change' : 'input';
-      el.addEventListener(evt, (e) => {
+      el.addEventListener('input', (e) => {
         let v = e.target.value;
-        if (key === 'age' || key === 'years') v = v.replace(/[^0-9]/g, '').slice(0, 2);
-        // numeric inputs: patch without full re-render to keep the caret
-        if ((key === 'age' || key === 'years') && el.tagName !== 'SELECT') {
-          state.demo[key] = v; el.value = v; refreshDemoNext(); return;
-        }
-        if (el.tagName !== 'SELECT') { state.demo[key] = v; refreshDemoNext(); return; }
-        setDemo({ [key]: v });
+        if (key === 'age' || key === 'years') { v = v.replace(/[^0-9]/g, '').slice(0, 2); el.value = v; }
+        state.demo[key] = v; refreshDemoNext();
       });
     });
+
+    // custom dropdowns (gender / education / resource sufficiency / roster grade)
+    root.querySelectorAll('[data-sel-toggle]').forEach((b) =>
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = b.dataset.selToggle;
+        set({ openSelect: state.openSelect === id ? null : id });
+      }));
+    root.querySelectorAll('[data-sel-val]').forEach((b) =>
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const scope = b.dataset.selScope, key = b.dataset.selId, val = b.dataset.selVal;
+        state.openSelect = null;
+        if (scope === 'roster') setRoster({ [key]: val }); else setDemo({ [key]: val });
+      }));
+    // If an open menu would overflow below the viewport, flip it above the field.
+    const openMenu = root.querySelector('.onb-sel-menu');
+    if (openMenu) {
+      const trg = openMenu.parentElement.querySelector('.onb-sel-trigger');
+      const r = trg.getBoundingClientRect();
+      if (window.innerHeight - r.bottom < openMenu.offsetHeight + 16 && r.top > openMenu.offsetHeight + 16) {
+        openMenu.classList.add('up');
+      }
+    }
 
     // country / city autocomplete
     root.querySelectorAll('[data-demo-ac]').forEach((el) => {
@@ -774,11 +801,12 @@
   }
   window.TilliOnboarding = { replay: replayOnboarding };
 
-  // close autocomplete menus on outside click
+  // close autocomplete menus / custom dropdowns on outside click
   document.addEventListener('click', (e) => {
-    if (state.phase !== 'demo') return;
-    if (!e.target.closest('.onb-ac') && (state.demo.countryOpen || state.demo.cityOpen)) {
+    if (state.phase === 'demo' && !e.target.closest('.onb-ac') && (state.demo.countryOpen || state.demo.cityOpen)) {
       setDemo({ countryOpen: false, cityOpen: false });
+      return;
     }
+    if (state.openSelect && !e.target.closest('.onb-sel')) set({ openSelect: null });
   });
 })();

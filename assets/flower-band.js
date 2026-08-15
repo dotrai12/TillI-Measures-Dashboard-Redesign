@@ -144,6 +144,35 @@
     target.style.transformOrigin = 'top center';
   };
 
+  /* Brand petal palette, exposed so other surfaces (e.g. the teacher
+     dashboard garden scene) colour their flowers from the same source. */
+  window.TilliFlowerPetals = PETALS.slice();
+
+  /* One ground-less plant (flower / tulip / sprout) as inline-SVG markup
+     in the landing flower-band style. `px` is the rendered height in pixels;
+     the width follows the art's aspect ratio. Every kind shares the same
+     stem-base baseline, so a flex row of them bottom-aligns cleanly. `i`
+     just varies the sway so a row doesn't move in lockstep. */
+  window.flowerMarkup = function (kind, petal, px, i) {
+    kind = PROFILE[kind] ? kind : 'flower';
+    const prof = PROFILE[kind];
+    const W = 72, TOP = 24, BASEPAD = 10; // headroom above the head / pad below the base
+    const groundY = TOP + prof.h, boxH = groundY + BASEPAD;
+    const n = i || 0;
+    const g = plant(W / 2, groundY, {
+      h: prof.h, scale: prof.scale, kind, petal,
+      sway: ['swayA', 'swayB', 'swayC'][n % 3], dur: 4.2 + (n % 4) * 0.4, delay: (n % 5) * 0.2, lean: 0,
+    });
+    const svg = el('svg', {
+      xmlns: NS, viewBox: `0 0 ${W} ${boxH}`,
+      height: px, width: +(W / boxH * px).toFixed(1),
+      style: 'display:block;overflow:visible', 'aria-hidden': 'true',
+    }, [g]);
+    const box = document.createElement('div');
+    box.appendChild(svg);
+    return box.innerHTML;
+  };
+
   /* ============================================================
      Dev GUI — nudge the flower-band "asset box" on X/Y and resize it.
      Only mounts when the band sits inside the teacher onboarding

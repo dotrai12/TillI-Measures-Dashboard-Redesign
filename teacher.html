@@ -139,6 +139,39 @@
   .onb-ac-empty { padding: 10px; font-size: 12.5px; color: var(--ink-300); font-weight: 600; }
   .onb-ac-flag { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none; }
 
+  /* Custom dropdown (replaces native <select> — see selectField in teacher.js) */
+  .onb-sel { position: relative; }
+  .onb-sel-trigger {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border: 1px solid var(--line-200); background: #fff; cursor: pointer; text-align: left;
+    font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px;
+    color: var(--ink-900); padding: 13px 15px; border-radius: 8px;
+  }
+  .onb-sel-trigger::after {
+    content: '\25BE'; flex: none; color: var(--ink-300); font-size: 12px;
+    transition: transform .18s var(--ease);
+  }
+  .onb-sel-trigger.is-placeholder { color: var(--ink-300); }
+  .onb-sel-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .onb-sel.open .onb-sel-trigger { border-color: var(--cyan-500); }
+  .onb-sel.open .onb-sel-trigger::after { transform: rotate(180deg); }
+  .onb-sel-menu {
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20;
+    background: #fff; border: 1px solid var(--line-200); border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(40, 70, 40, .16);
+    max-height: 240px; overflow-y: auto; padding: 5px;
+  }
+  .onb-sel-menu.up { top: auto; bottom: calc(100% + 6px); }
+  .onb-sel-opt {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 9px;
+    background: none; border: none; cursor: pointer; padding: 10px 12px; border-radius: 9px;
+    font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 600;
+    color: var(--ink-700); text-align: left;
+  }
+  .onb-sel-opt:hover { background: var(--wash-green); }
+  .onb-sel-opt.on { color: var(--green-700); font-weight: 700; }
+  .onb-sel-tick { flex: none; color: var(--green-600); font-weight: 800; }
+
   /* Footer buttons */
   .onb-actions { display: flex; gap: 12px; margin-top: 24px; }
   .onb-actions .btn { flex: 1; }
