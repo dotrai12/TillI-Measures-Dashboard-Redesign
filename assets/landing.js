@@ -5,7 +5,7 @@
    Vanilla state machine, no framework. Renders into #flow-root.
    ============================================================ */
 (function () {
-  const DS = '_ds/tilli-new-design-system-4928e3a5-55df-4bf0-a054-def8ad040436/assets/';
+  const DS = '_ds/tilli/assets/';
   const LOGO = DS + 'logos/tilli-wordmark-crop.png';
   const ACCT_KEY = 'tilliMeasures.accounts';
 
