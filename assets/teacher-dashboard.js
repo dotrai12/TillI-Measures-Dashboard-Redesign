@@ -2044,7 +2044,7 @@
   /* Slot 2 — garden scene (composed from existing plant art; presentational) */
   .mg-scene { position: relative; overflow: hidden; border-radius: var(--radius-card); border: 1px solid var(--line-200);
     background: linear-gradient(180deg, #E6F4F8 0%, #EAF5EC 52%, #F1FFEC 100%);
-    height: clamp(200px, 30vh, 300px); box-shadow: inset 0 -30px 50px -30px rgba(78,140,66,.18); }
+    height: clamp(200px, 20vh, 300px); box-shadow: inset 0 -30px 50px -30px rgba(78,140,66,.18); }
   .mg-sun { position: absolute; top: -46px; right: -46px; width: 200px; height: 200px; border-radius: 50%;
     background: radial-gradient(circle at 50% 50%, #FCE39A 0%, #FCD661 40%, #FBCB3E 60%, rgba(252,203,62,0) 70%); pointer-events: none; }
   .mg-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 26%;
