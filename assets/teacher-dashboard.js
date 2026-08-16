@@ -67,6 +67,21 @@
       ${body}${pot}${sparkle}</svg></span>`;
   }
 
+  // Landing-page flower art (flower-band.js) keyed by the dashboard's plant
+  // state, so student surfaces read as the same illustration family as the
+  // landing band instead of the potted plant. Falls back to plantSVG if the
+  // flower-band script didn't load. `px` = rendered height; `i` just varies the
+  // idle sway so a list of them doesn't move in lockstep.
+  const FLOWER_KIND = { blossoming: 'flower', growing: 'tulip', tending: 'sprout', waiting: 'sprout' };
+  const FLOWER_PETALS = (window.TilliFlowerPetals && window.TilliFlowerPetals.length)
+    ? window.TilliFlowerPetals : ['#E91E8C', '#FCC30B', '#7C4DFF', '#FF7043'];
+  function flowerArt(state, px, i) {
+    if (!window.flowerMarkup) return plantSVG(state, Math.round(px * 0.9), false, false);
+    const kind = FLOWER_KIND[state] || 'flower';
+    const petal = kind === 'sprout' ? null : FLOWER_PETALS[(i || 0) % FLOWER_PETALS.length];
+    return window.flowerMarkup(kind, petal, px, i || 0);
+  }
+
   // ---------------- constants ----------------
   const PALETTE = ['#FFFFFF', '#F0A84A', '#EFA9B8', '#5AA9E6', '#A99BD6', '#E4756B'];
   const TO_BLOOM = { blossoming: 'expert', growing: 'learner', tending: 'beginner', waiting: 'beginner' };
@@ -223,7 +238,7 @@
       rosterSearch: '', rosterSort: 'state', studentTab: 'overview',
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
-      insightsView: 'growing',
+      insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
       vw: window.innerWidth,
       ask: { open: false, context: '', prompt: '', thread: [] },
@@ -351,7 +366,7 @@
   function emptyClassView() {
     return `<div class="dash-wrap" style="max-width:640px">
       <div class="empty-class">
-        <div class="empty-plant">${plantSVG('waiting', 96, false, false)}</div>
+        <div class="empty-plant">${flowerArt('waiting', 96, 0)}</div>
         <h1 class="empty-t">Your garden is ready — let's plant it 🌱</h1>
         <p class="empty-b">Add the students in your class and they'll appear here as seedlings, ready for their baseline. Nothing grows until you add a name.</p>
         <button class="btn btn-primary focus empty-cta" data-onb-add>Add your students</button>
@@ -521,22 +536,13 @@
     };
     const cards = ld.tending.slice(0, 3).map((st) => `
       <div class="mg-tend-card">
-        <div class="mg-tend-top"><span class="mg-tend-pl">${plantSVG('tending', 46, false, false)}</span><span class="mg-tend-nm">${esc(st.dispFirst)}</span></div>
+        <div class="mg-tend-top"><span class="mg-tend-pl">${flowerArt('tending', 46, 0)}</span><span class="mg-tend-nm">${esc(st.dispFirst)}</span></div>
         <p class="mg-tend-reason">${esc(st.tendReason)}</p>
         <button class="btn-ask-a focus" data-ask-prompt="${esc('How can I gently support ' + st.name + ', a ' + st.grade + ' child working on ' + st.lowestSkill.name + '? Give me one small thing to try this week.')}" data-ask-ctx="${esc(st.first + ' · ' + st.lowestSkill.name)}">${chatIcon('#fff')} Ask Tilli for an idea</button>
       </div>`).join('');
     return `<section class="mg-tend">
       <div class="mg-tend-head"><h3 class="mg-tend-h">Who could use you</h3><span class="mg-tend-note">${esc(notes[state] || '')}</span></div>
       <div class="mg-tend-grid">${cards || `<div class="mg-tend-empty">Every child is on track right now — nothing to tend. 🌿</div>`}</div>
-    </section>`;
-  }
-
-  function quietDoorways() {
-    return `<section class="mg-doors" aria-label="More places to go">
-      <button class="mg-door focus" data-ask-prompt="Ask me anything about your class or a student." data-ask-ctx="">${chatIcon('#348C11')}<span>Ask Tilli</span></button>
-      <button class="mg-door focus" data-nav="students"><span>Students</span></button>
-      <button class="mg-door focus" data-nav="insights"><span>Insights</span></button>
-      <button class="mg-door focus" data-garden-level="section"><span>Full garden</span></button>
     </section>`;
   }
 
@@ -582,7 +588,6 @@
       ${hero}
       ${weekIdeaSlot()}
       ${tendSlot(ld, state)}
-      ${quietDoorways()}
       ${stateSwitcherGUI()}
     </div>`;
   }
@@ -822,7 +827,7 @@
 
     const bed = sorted.map((st, i) => `
       <div class="pg-cell" style="transform:translateY(${offs[i % offs.length]})">
-        <button class="pg-plant" data-open-student="${esc(st.id)}" title="${esc(st.name)}">${plantSVG(st.state, sizeFor(st.state), !isPhone, st.grewSincePre > 8)}</button>
+        <button class="pg-plant" data-open-student="${esc(st.id)}" title="${esc(st.name)}">${flowerArt(st.state, sizeFor(st.state), i)}</button>
         <div class="pg-tip">
           <div class="nm">${esc(st.name)}</div><div class="sl">${esc(bandLine(st))}</div>
           <div class="ch">${chipHTML(st.chips)}</div>
@@ -845,9 +850,9 @@
 
     const tendList = sorted.filter((st) => st.state === 'tending').slice(0, 3);
     const nTend = sorted.filter((st) => st.state === 'tending').length;
-    const tendCards = tendList.map((st) => `
+    const tendCards = tendList.map((st, i) => `
       <div class="tend-card">
-        <div class="tend-top"><span class="pl">${plantSVG('tending', 52, false, false)}</span>
+        <div class="tend-top"><span class="pl">${flowerArt('tending', 52, i)}</span>
           <span><span class="nm">${esc(st.dispFirst)}</span><span class="bd">${esc(st.band)} overall</span></span></div>
         <p class="reason">${esc(st.tendReason)}</p>
         <button class="btn-ask-a focus" data-ask="activity" data-skill="${esc(st.lowestSkill.name)}" data-band="${esc(st.lowestSkill.band)}">
@@ -904,9 +909,9 @@
     else if (S.rosterSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
     else list.sort((a, b) => b.grewSincePre - a.grewSincePre);
     if (!list.length) return '<p class="dash-sub" style="padding:8px 2px">No students match “' + esc(S.rosterSearch) + '”.</p>';
-    return list.map((st) => `
+    return list.map((st, i) => `
       <button class="roster-row" data-open-student="${esc(st.id)}">
-        <span class="rr-plant">${plantSVG(st.state, 46, false, false)}</span>
+        <span class="rr-plant">${flowerArt(st.state, 46, i)}</span>
         <span class="rr-info"><span class="nm">${esc(st.name)}</span><span class="sl">${esc(bandLine(st))}</span></span>
         <span class="rr-chips">${chipHTML(st.chips)}</span>
       </button>`).join('');
@@ -949,7 +954,7 @@
       return `<div class="dash-wrap" style="max-width:960px">
         <button class="link-back focus" data-back-roster>← All students</button>
         <div class="stu-head">
-          <span class="stu-plant">${plantSVG('waiting', 76, true, false)}</span>
+          <span class="stu-plant">${flowerArt('waiting', 76, 0)}</span>
           <div class="stu-meta">
             <h1 class="stu-name">${esc(stu.name)}</h1>
             <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
@@ -977,7 +982,7 @@
     return `<div class="dash-wrap" style="max-width:960px">
       <button class="link-back focus" data-back-roster>← All students</button>
       <div class="stu-head">
-        <span class="stu-plant">${plantSVG(stu.state, 76, true, stu.grewSincePre > 8)}</span>
+        <span class="stu-plant">${flowerArt(stu.state, 76, 0)}</span>
         <div class="stu-meta">
           <h1 class="stu-name">${esc(stu.name)}</h1>
           <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
@@ -1195,9 +1200,9 @@
       const st = Array.from({ length: 4 }, (_, j) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="${j <= i ? '#F2CE7B' : '#EAE3D3'}"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z"/></svg>`).join('');
       return `<button class="obs-star${picked ? ' on' : ''}" data-star="${i + 1}"><div class="row">${st}</div><div class="lb">${lbl}</div></button>`;
     }).join('');
-    const celebrate = e.done ? `<div class="obs-celebrate">${plantSVG('growing', 90, false, true)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
+    const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
     return `<div class="obs-enter">
-      <div class="obs-enter-head"><span class="pl">${plantSVG(stu.state, 46, false, false)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · observation</div></div></div>
+      <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · observation</div></div></div>
       <div class="obs-dots">${dots}</div>
       <div class="obs-q">Question ${e.q + 1} of 12 · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
       <div class="obs-skill">${esc(sk.name)}</div>
@@ -1282,7 +1287,7 @@
           <div class="tl-persps">${persp}</div>
           ${w.status !== 'done' ? `<button class="btn-ask-a focus" data-log-continue="${esc(active.id)}" style="margin-top:14px;display:inline-flex;width:auto">Continue this assessment →</button>` : ''}</div></div>`;
       }).join('');
-      detail = `<div class="logstu-head"><span class="pl">${plantSVG(active.state, 60, false, false)}</span>
+      detail = `<div class="logstu-head"><span class="pl">${flowerArt(active.state, 60, 0)}</span>
         <div class="m"><h2 class="stu-name" style="font-size:22px">${esc(active.name)}</h2><div class="stu-sub">${esc(sec.name)} · ${active.perspDone} of 9 check-ins done</div><div class="logstu-bar"><div style="width:${pct}%"></div></div></div>
         <button class="sc-ask focus" data-open-student="${esc(active.id)}" style="width:auto;padding:10px 15px">Open full profile →</button></div>
         <div class="tl">${timeline}</div>`;
@@ -1312,64 +1317,282 @@
       <div class="list-table"><div class="list-head"><div>Student</div><div>Baseline</div><div>Mid-year</div><div>End of year</div><div style="text-align:right">Progress</div></div>${body}</div>`;
   }
 
-  // ================= Insights (was "Analysis") =================
+  // ================= Insights (teacher planning view) =================
+  // Ownership + phase helpers ------------------------------------------------
+  // Which teacher this dashboard opened as. Falls back to the onboarding teacher
+  // object, then null (a fresh class where every section is already "mine").
+  function activeTeacherId() { return (S.data && S.data.activeTeacherId) || (S.teacher && S.teacher.id) || null; }
+  function mySections() {
+    const tid = activeTeacherId();
+    if (!tid) return S.data.sections;
+    const owned = S.data.sections.filter((s) => s.teacherId === tid);
+    return owned.length ? owned : S.data.sections; // fresh class → all are hers
+  }
+  // Grades where she owns 2+ sections → the only grades "Compare my sections"
+  // offers. Never cross-grade, never another teacher's section.
+  function comparableGrades() {
+    const byGrade = {};
+    mySections().forEach((s) => { (byGrade[s.grade] = byGrade[s.grade] || []).push(s); });
+    return Object.keys(byGrade).filter((g) => byGrade[g].length >= 2).map((g) => ({ grade: g, sections: byGrade[g] }));
+  }
+  function canCompare() { return comparableGrades().length > 0; }
+
+  // The 3 measurement windows in order, mapped to the skill fields they fill.
+  function phaseMeta() {
+    const w = {}; (S.data.windows || []).forEach((x) => { w[x.key] = x; });
+    return [
+      { win: 'baseline', field: 'pre',  meta: w.baseline || { label: 'Baseline', date: '' } },
+      { win: 'mid',      field: 'mid',  meta: w.mid || { label: 'Mid-year', date: '' } },
+      { win: 'post',     field: 'post', meta: w.post || { label: 'End of year', date: '' } },
+    ];
+  }
+  // A phase is "measured" for a group of students when, on average, at least half
+  // of each child's three perspectives are in for that window (spec: drive empty
+  // states off assessLog, not off placeholder numbers). Baseline & Mid clear this;
+  // the still-open End-of-year window does not, so it honestly reads "not yet".
+  function phaseMeasured(winKey, students) {
+    const assessed = students.filter((s) => s.state !== 'waiting' && Array.isArray(s.assessLog));
+    if (!assessed.length) return false;
+    let sum = 0, n = 0;
+    assessed.forEach((s) => { const w = s.assessLog.find((x) => x.key === winKey); if (w) { sum += (w.doneCount || 0) / 3; n++; } });
+    return n > 0 && (sum / n) >= 0.5;
+  }
+  function measuredMap(students) { const m = {}; phaseMeta().forEach((p) => { m[p.win] = phaseMeasured(p.win, students); }); return m; }
+  function groupLabel(g) { return g === 'cog' ? 'Executive Function' : 'Social-Emotional'; }
+
+  // Per-skill class stats for a set of students: phase averages, the three
+  // perspective averages, and the plurality band (which summary box it lands in).
+  function skillStatsFor(students) {
+    const assessed = students.filter((s) => s.state !== 'waiting');
+    return S.data.skills.map((sk) => {
+      const arr = assessed.map((s) => s.skills.find((x) => x.key === sk.key)).filter(Boolean);
+      const avg = (f) => Math.round(arr.reduce((a, x) => a + (x[f] || 0), 0) / (arr.length || 1));
+      const counts = { Beginner: 0, Learner: 0, Expert: 0 };
+      arr.forEach((x) => { if (counts[x.band] != null) counts[x.band]++; });
+      // Plurality band. Ties resolve toward the lower band (→ "A place to focus").
+      let plurality = 'Beginner';
+      ['Beginner', 'Learner', 'Expert'].forEach((b) => { if (counts[b] > counts[plurality]) plurality = b; });
+      const teacher = avg('teacher'), parent = avg('parent'), student = avg('student');
+      return {
+        key: sk.key, name: sk.name, group: sk.group,
+        pre: avg('pre'), mid: avg('mid'), post: avg('post'),
+        teacher, parent, student, gap: Math.max(teacher, parent, student) - Math.min(teacher, parent, student),
+        counts, plurality, total: arr.length,
+      };
+    });
+  }
+  function toneOf(v) { return v < 34 ? 'focus' : v < 67 ? 'devel' : 'strong'; }
+
   function insightsView() {
-    const view = S.insightsView;
-    const tabs = [['growing', "How we're growing"], ['perspectives', 'Perspectives'], ['compare', 'Compare sections']]
-      .map(([k, l]) => `<button class="pill-tab intab${view === k ? ' on' : ''}" data-inview="${k}">${l}</button>`).join('');
-    const cs = classSkills();
+    const scope = section();
+    const meas = measuredMap(scope.students);
+    // Before baseline exists at all → one calm whole-page state, no empty modules.
+    if (!meas.baseline) return insPreBaseline(scope);
+
+    if (S.insightsView === 'compare' && !canCompare()) S.insightsView = 'myclass';
+    const view = ['myclass', 'perspectives', 'compare'].indexOf(S.insightsView) >= 0 ? S.insightsView : 'myclass';
+    const tabDefs = [['myclass', 'My class'], ['perspectives', 'Perspectives']];
+    if (canCompare()) tabDefs.push(['compare', 'Compare my sections']);
+    const tabs = tabDefs.map(([k, l]) => `<button class="pill-tab intab${view === k ? ' on' : ''}" data-inview="${k}" role="tab" aria-selected="${view === k}">${l}</button>`).join('');
+
+    const stats = skillStatsFor(scope.students);
     let body = '';
-    if (view === 'growing') body = insGrowing(cs);
-    else if (view === 'perspectives') body = insPerspectives(cs);
+    if (view === 'myclass') body = insMyClass(stats, meas, scope);
+    else if (view === 'perspectives') body = insPerspectives(stats, scope);
     else body = insCompare();
+
     return `<div class="dash-wrap" style="max-width:1040px">
       <h1 class="dash-h1">Insights</h1>
-      <div class="log-tabs" style="margin-top:16px">${tabs}</div>
+      <p class="dash-sub">A quiet place to plan — where ${esc(scope.name)} is strong, growing, and ready for focus.</p>
+      <div class="log-tabs" role="tablist" style="margin-top:16px">${tabs}</div>
       ${body}
     </div>`;
   }
 
-  function insGrowing(cs) {
-    const barCol = bp().isPhone ? '96px' : '150px';
-    const grow = cs.map((c) => {
-      const color = c.now < 34 ? '#B08968' : c.now < 67 ? '#56C02B' : '#EFA9B8';
-      return `<div class="ins-row" style="grid-template-columns:${barCol} 1fr"><div class="ins-name">${esc(c.name)}</div><div class="ins-track"><div class="ins-fill" style="width:${c.now}%;background:${color}"><span>${c.now}%</span></div><div class="ins-pre" style="left:${c.pre}%"></div></div></div>`;
-    }).join('');
-    const dist = cs.map((c) => { const t = c.total || 1; return `<div class="ins-row" style="grid-template-columns:${barCol} 1fr"><div class="ins-name">${esc(c.name)}</div><div class="dist-bar"><div style="width:${c.beginner / t * 100}%;background:#E8C4A8"></div><div style="width:${c.learner / t * 100}%;background:#B7CFA9"></div><div style="width:${c.expert / t * 100}%;background:#EFA9B8"></div></div></div>`; }).join('');
-    return `<div class="dash-card ins-card">
-      <div class="ins-h">How is my class growing?</div><div class="ins-sub">Average skill score · Pre → Now</div>
-      <div class="ins-bars">${grow}</div>
-      <div class="ins-key"><span><span class="pre-mark"></span>Baseline</span><span><span class="now-mark"></span>Now</span></div>
-      <div class="ins-foot"><button class="sc-ask focus" data-ask-ins="grow" style="width:auto;padding:10px 16px">Ask Tilli what to do with this →</button></div>
-    </div>
-    <div class="dash-card ins-card" style="margin-top:16px">
-      <div class="ins-h">Where the class stands</div><div class="ins-sub">Band distribution · soil → sprout → blossom</div>
-      <div class="ins-bars">${dist}</div>
-      <div class="ins-key"><span style="color:#b08968">● Beginner</span><span style="color:#4e6b43">● Learner</span><span style="color:#c07689">● Expert</span></div>
+  // Whole-page pre-baseline state.
+  function insPreBaseline(scope) {
+    return `<div class="dash-wrap" style="max-width:640px">
+      <h1 class="dash-h1">Insights</h1>
+      <div class="empty-class">
+        <div class="empty-plant">${flowerArt('waiting', 92, 0)}</div>
+        <h2 class="empty-t">Your first insights arrive after baseline 🌱</h2>
+        <p class="empty-b">Once ${esc(scope.name)} has its Baseline window in, this page fills with where your class is strong, where to focus, and how they grow across the year. Nothing to read yet — and that's honest, not broken.</p>
+        <button class="btn btn-primary focus empty-cta" data-nav="assess">Go to Baseline</button>
+      </div>
     </div>`;
   }
 
-  function insPerspectives(cs) {
-    const barCol = bp().isPhone ? '96px' : '150px';
-    const gaps = [...cs].sort((a, b) => b.gap - a.gap).map((c) => `<div class="ins-row" style="grid-template-columns:${barCol} 1fr auto"><div class="ins-name">${esc(c.name)}</div><div class="ins-track" style="height:18px"><div class="ins-fill" style="width:${Math.min(100, c.gap * 2.2)}%;background:${c.gap >= 22 ? '#B9A9DC' : '#7FB7D6'}"></div></div><div class="gap-pts">${c.gap} pts</div></div>`).join('');
-    return `<div class="persp-note">Where teachers, parents and students see a skill differently across the class. Bigger gaps are simply worth a conversation. 🌤️</div>
-      <div class="dash-card ins-card"><div class="ins-h">Perspective gaps by skill</div><div class="ins-bars" style="margin-top:14px">${gaps}</div>
-      <div class="ins-foot"><button class="sc-ask focus" data-ask-ins="gap" style="width:auto;padding:10px 16px">Ask Tilli what to do with this →</button></div></div>`;
+  // --- Sub-tab 1: My class ---------------------------------------------------
+  function insMyClass(stats, meas, scope) {
+    return `${bandSummaryCard(stats, scope)}
+      ${progressCard(stats, meas)}
+      ${breakdownCard(stats, meas)}`;
   }
 
-  function insCompare() {
-    const rows = S.data.sections.map((s) => {
-      const assessed = s.students.filter((x) => x.state !== 'waiting');
-      const t = assessed.length || 1;
-      const beg = assessed.filter((x) => x.band === 'Beginner').length;
-      const learn = assessed.filter((x) => x.band === 'Learner').length;
-      const exp = assessed.filter((x) => x.band === 'Expert').length;
-      const blossom = s.students.filter((x) => x.state === 'blossoming').length;
-      return `<div><div class="cmp-top"><div class="nm">${esc(s.name)}</div><div class="sub">${s.students.length} students · ${blossom} blossoming</div></div><div class="cmp-bar"><div style="width:${beg / t * 100}%;background:#E8C4A8"></div><div style="width:${learn / t * 100}%;background:#B7CFA9"></div><div style="width:${exp / t * 100}%;background:#EFA9B8"></div></div></div>`;
+  // a) Skill-band summary — the 3 headline boxes (sorts SKILLS, not children).
+  function bandSummaryCard(stats, scope) {
+    const boxes = [
+      { tone: 'focus',  title: 'A place to focus', sub: 'Most children are at Beginner', list: stats.filter((s) => s.plurality === 'Beginner') },
+      { tone: 'devel',  title: 'Developing',       sub: 'Most children are at Learner',  list: stats.filter((s) => s.plurality === 'Learner') },
+      { tone: 'strong', title: 'Growing strong',   sub: 'Most children are at Expert',   list: stats.filter((s) => s.plurality === 'Expert') },
+    ];
+    const box = (b) => {
+      const multi = b.list.length > 3;
+      const body = b.list.length
+        ? `<ul class="bs-skills${multi ? ' two-col' : ''}">${b.list.map((s) => `<li>${esc(s.name)}</li>`).join('')}</ul>`
+        : `<div class="bs-none">Nothing sits here right now.</div>`;
+      return `<div class="bs-box bs-${b.tone}${multi ? ' bs-wide' : ''}">
+        <div class="bs-head"><span class="bs-count">${b.list.length}</span><div><div class="bs-title">${b.title}</div><div class="bs-sub">${b.sub}</div></div></div>
+        ${body}
+      </div>`;
+    };
+    return `<div class="dash-card ins-card" style="margin-top:16px">
+      <div class="ins-h">Where ${esc(scope.name)} sits across the 12 skills</div>
+      <div class="ins-sub">Grouped by where most children are right now — a place to start, never a grade.</div>
+      <div class="bs-grid">${boxes.map(box).join('')}</div>
+    </div>`;
+  }
+
+  // b) Progress over time — Baseline / Mid / End grouped columns per skill.
+  function progressCard(stats, meas) {
+    const phases = phaseMeta();
+    const rows = stats.map((s) => {
+      const cells = phases.map((p) => {
+        if (!meas[p.win]) return `<div class="pot-cell pot-empty" title="${esc(p.meta.label)} not measured yet"><div class="pot-barwrap pot-hollow"></div><span class="pot-val">–</span><span class="pot-lab">${esc(shortWin(p.meta.label))}</span></div>`;
+        const v = s[p.field];
+        return `<div class="pot-cell"><div class="pot-barwrap"><div class="pot-bar bs-fill-${toneOf(v)}" style="height:${Math.max(6, v)}%"></div></div><span class="pot-val">${v}%</span><span class="pot-lab">${esc(shortWin(p.meta.label))}</span></div>`;
+      }).join('');
+      return `<div class="pot-skill"><div class="pot-name">${esc(s.name)}</div><div class="pot-cells">${cells}</div></div>`;
     }).join('');
-    return `<div class="dash-card ins-card"><div class="ins-h">How do my sections compare?</div><div class="ins-sub">Each garden bed = one section · band distribution</div>
-      <div class="cmp-list">${rows}</div>
-      <div class="ins-key"><span style="color:#b08968">● Beginner</span><span style="color:#4e6b43">● Learner</span><span style="color:#c07689">● Expert</span></div></div>`;
+    const pending = phases.filter((p) => !meas[p.win]);
+    const note = pending.length
+      ? `<div class="pot-note">🕒 ${pending.map((p) => `${esc(p.meta.label)}${p.meta.date ? ' opens ' + esc(p.meta.date) : ' hasn\'t opened yet'}`).join(' · ')}</div>` : '';
+    return `<div class="dash-card ins-card" style="margin-top:16px">
+      <div class="ins-h">Growth over time</div>
+      <div class="ins-sub">Baseline → Mid-year → End of year, side by side, so movement is visible.</div>
+      <div class="pot-list">${rows}</div>
+      ${note}
+      <div class="ins-foot"><button class="sc-ask focus" data-ask-ins="grow" style="width:auto;padding:10px 16px">Ask Tilli what to do with this →</button></div>
+    </div>`;
+  }
+  function shortWin(label) { return label === 'Mid-year' ? 'Mid' : label === 'End of year' ? 'End' : 'Base'; }
+
+  // c) Detailed skill breakdown — one card per skill, SEL / EF toggle.
+  function breakdownCard(stats, meas) {
+    const g = S.skillGroup === 'cog' ? 'cog' : 'sel';
+    const toggle = `<div class="sb-toggle" role="tablist">
+      <button class="pill-tab${g === 'sel' ? ' on' : ''}" data-skillgroup="sel" role="tab" aria-selected="${g === 'sel'}">Social-Emotional</button>
+      <button class="pill-tab${g === 'cog' ? ' on' : ''}" data-skillgroup="cog" role="tab" aria-selected="${g === 'cog'}">Executive Function</button></div>`;
+    const phases = phaseMeta();
+    const cards = stats.filter((s) => s.group === g).map((s) => {
+      const prog = phases.map((p) => meas[p.win]
+        ? `<div class="scph"><span class="scph-l">${esc(shortWin(p.meta.label))}</span><span class="scph-v">${s[p.field]}%</span></div>`
+        : `<div class="scph scph-empty"><span class="scph-l">${esc(shortWin(p.meta.label))}</span><span class="scph-v">—</span></div>`).join('');
+      const persp = `<div class="scpv">
+        <span title="How you rate the class">👩‍🏫 <b>${s.teacher}%</b> <em>Teacher</em></span>
+        <span title="How parents rate at home">🏠 <b>${s.parent}%</b> <em>Parent</em></span>
+        <span title="The children's own view">🧒 <b>${s.student}%</b> <em>Student</em></span></div>`;
+      return `<button class="sb-card focus" data-ask="build" data-skill="${esc(s.name)}" data-band="${s.plurality}" aria-label="Ask Tilli how to build ${esc(s.name)}">
+        <div class="sb-top"><span class="sb-name">${esc(s.name)}</span><span class="sb-tag sb-tag-${g}">${groupLabel(g)}</span></div>
+        <div class="scprog">${prog}</div>
+        ${persp}
+        <span class="sb-ask">Ask Tilli how to build this →</span>
+      </button>`;
+    }).join('');
+    return `<div class="dash-card ins-card" style="margin-top:16px">
+      <div class="ins-h">Every skill, up close</div>
+      <div class="ins-sub">Tap a skill for a Tilli idea to build it. Perspectives show how teacher, parent and child each see it.</div>
+      ${toggle}
+      <div class="sb-grid">${cards}</div>
+    </div>`;
+  }
+
+  // --- Sub-tab 2: Perspectives ----------------------------------------------
+  function insPerspectives(stats, scope) {
+    const prompts = worthCloserLook(stats);
+    const cards = stats.map((s) => `<div class="pv-card">
+      <div class="pv-skill">${esc(s.name)}</div>
+      <div class="pv-nums">
+        <span class="pv-num"><i>👩‍🏫</i><b>${s.teacher}%</b><em>Teacher</em></span>
+        <span class="pv-num"><i>🏠</i><b>${s.parent}%</b><em>Parent</em></span>
+        <span class="pv-num"><i>🧒</i><b>${s.student}%</b><em>Student</em></span>
+      </div></div>`).join('');
+    return `<div class="persp-note">Teachers, parents and children each see a skill from where they stand. A difference isn't right or wrong — it's a clue about where the skill shows up. 🌤️</div>
+      ${prompts}
+      <div class="dash-card ins-card" style="margin-top:16px">
+        <div class="ins-h">Every skill, three viewpoints</div>
+        <div class="ins-sub">The same numbers from your skill cards, lined up to compare.</div>
+        <div class="pv-grid">${cards}</div>
+      </div>`;
+  }
+  // "Worth a closer look" — the few biggest, most meaningful gaps, reframed as
+  // gentle prompts (never "you're wrong"), each ending in an Ask Tilli action.
+  function worthCloserLook(stats) {
+    const PERSP_NOUN = { teacher: 'you', parent: 'parents at home', student: 'the children themselves' };
+    const picked = stats.map((s) => {
+      const ps = [['teacher', s.teacher], ['parent', s.parent], ['student', s.student]];
+      const hi = ps.reduce((a, b) => (b[1] > a[1] ? b : a));
+      const lo = ps.reduce((a, b) => (b[1] < a[1] ? b : a));
+      return Object.assign({}, s, { hiKey: hi[0], loKey: lo[0] });
+    }).sort((a, b) => b.gap - a.gap).filter((s) => s.gap >= 12).slice(0, 3);
+    if (!picked.length) return '';
+    const items = picked.map((s) => {
+      const line = `${cap(PERSP_NOUN[s.hiKey])} rate ${esc(s.name)} noticeably higher than ${PERSP_NOUN[s.loKey]} do. That's worth a closer look — a skill can simply show up differently at home, in play, or in class.`;
+      return `<div class="wcl-item">
+        <div class="wcl-skill">${esc(s.name)} <span class="wcl-gap">${s.gap} pts apart</span></div>
+        <p class="wcl-text">${line}</p>
+        <button class="sc-ask focus" data-ask="persp" data-skill="${esc(s.name)}" data-hi="${esc(s.hiKey)}" data-lo="${esc(s.loKey)}" style="width:auto;padding:9px 15px">Ask Tilli why this happens →</button>
+      </div>`;
+    }).join('');
+    return `<div class="dash-card ins-card">
+      <div class="ins-h">Worth a closer look</div>
+      <div class="ins-sub">The few places your class's views differ most — each a conversation, never a correction.</div>
+      <div class="wcl-list">${items}</div>
+    </div>`;
+  }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // --- Sub-tab 3: Compare my sections (own sections, one grade, no benchmark) -
+  function insCompare() {
+    const grades = comparableGrades();
+    if (!grades.length) return '';
+    const active = grades.find((g) => g.grade === S.compareGrade) || grades[0];
+    const gsel = grades.length > 1
+      ? `<div class="log-tabs" style="margin:0 0 14px">${grades.map((g) => `<button class="pill-tab${g.grade === active.grade ? ' on' : ''}" data-cmpgrade="${esc(g.grade)}">${esc(g.grade)}</button>`).join('')}</div>` : '';
+    const secs = active.sections;
+    const secStats = secs.map((sec) => ({ sec, stats: skillStatsFor(sec.students) }));
+    const cols = `repeat(${secs.length}, minmax(0,1fr))`;
+
+    const head = `<div class="cmp2-row cmp2-head"><div class="cmp2-skill"></div><div class="cmp2-cells" style="grid-template-columns:${cols}">${secs.map((sec) => `<div class="cmp2-secname">${esc(sec.name)}</div>`).join('')}</div></div>`;
+    const rows = S.data.skills.map((sk) => {
+      const cells = secStats.map(({ stats }) => {
+        const v = (stats.find((x) => x.key === sk.key) || {}).post || 0;
+        return `<div class="cmp2-cell"><div class="cmp2-mini"><div class="bs-fill-${toneOf(v)}" style="width:${Math.max(4, v)}%"></div></div><span>${v}%</span></div>`;
+      }).join('');
+      return `<div class="cmp2-row"><div class="cmp2-skill">${esc(sk.name)}</div><div class="cmp2-cells" style="grid-template-columns:${cols}">${cells}</div></div>`;
+    }).join('');
+
+    // Curiosity prompts: biggest section-to-section differences, never a ranking.
+    const diffs = S.data.skills.map((sk) => {
+      const vals = secStats.map(({ sec, stats }) => ({ sec, v: (stats.find((x) => x.key === sk.key) || {}).post || 0 }));
+      const hi = vals.reduce((a, b) => (b.v > a.v ? b : a));
+      const lo = vals.reduce((a, b) => (b.v < a.v ? b : a));
+      return { name: sk.name, gap: hi.v - lo.v, hi, lo };
+    }).sort((a, b) => b.gap - a.gap).filter((d) => d.gap >= 10).slice(0, 3);
+    const prompts = diffs.length ? `<div class="wcl-list" style="margin-top:16px">${diffs.map((d) => `<div class="wcl-item">
+      <div class="wcl-skill">${esc(d.name)} <span class="wcl-gap">${esc(d.hi.sec.name)} +${d.gap}</span></div>
+      <p class="wcl-text">${esc(d.hi.sec.name)} is ahead of ${esc(d.lo.sec.name)} on ${esc(d.name)}. What's working in ${esc(d.hi.sec.name)} that could help ${esc(d.lo.sec.name)}?</p>
+      <button class="sc-ask focus" data-ask="cmp" data-skill="${esc(d.name)}" data-hi="${esc(d.hi.sec.name)}" data-lo="${esc(d.lo.sec.name)}" style="width:auto;padding:9px 15px">Ask Tilli for an activity to bring to ${esc(d.lo.sec.name)} →</button>
+    </div>`).join('')}</div>` : '';
+
+    return `<div class="persp-note" style="background:var(--wash-green);color:#3d6b2b">Two of your own classes, side by side. This is for learning from yourself — what's working in one room you could carry to the other. Never a ranking. 🌿</div>
+      ${gsel}
+      <div class="dash-card ins-card">
+        <div class="ins-h">${esc(active.grade)} — section by section</div>
+        <div class="ins-sub">Current level per skill. No grade average, no benchmark — just your rooms compared to each other.</div>
+        <div class="cmp2-table">${head}${rows}</div>
+      </div>
+      ${prompts}`;
   }
 
   // Resolve this school's id once (S.teacher.school is the display name).
@@ -1468,7 +1691,7 @@
           ${codes}
         </div>` : '';
       step = `<div class="add-center" style="padding:14px 0 4px">
-        <div style="display:flex;justify-content:center;margin:6px 0 14px">${plantSVG('growing', 96, false, true)}</div>
+        <div style="display:flex;justify-content:center;margin:6px 0 14px">${flowerArt('growing', 96, 0)}</div>
         <div class="add-done-title">${created.length || a.total} seeds planted 🌱</div>
         <p class="add-done-sub">Your ${esc(addGradeName())} bed is ready. Time to help them grow.</p>
         ${dedupeNote}
@@ -1532,7 +1755,7 @@
   function askPanel() {
     const a = S.ask;
     const thread = a.thread.map((m) => `<div class="ask-msg ${m.role}">${esc(m.text)}</div>`).join('');
-    const empty = a.thread.length === 0 ? `<div class="ask-empty">${plantSVG('growing', 76, false, false)}<div>Edit the prompt below and send — I’ll suggest something you can use today.</div></div>` : '';
+    const empty = a.thread.length === 0 ? `<div class="ask-empty">${flowerArt('growing', 76, 0)}<div>Edit the prompt below and send — I’ll suggest something you can use today.</div></div>` : '';
     return `<div class="ask-scrim" data-close-ask></div>
       <div class="ask-panel">
         <div class="ask-head">
@@ -1653,6 +1876,8 @@
 
     // insights
     root.querySelectorAll('[data-inview]').forEach((b) => b.addEventListener('click', () => { S.insightsView = b.dataset.inview; render(); }));
+    root.querySelectorAll('[data-skillgroup]').forEach((b) => b.addEventListener('click', () => { S.skillGroup = b.dataset.skillgroup; render(); }));
+    root.querySelectorAll('[data-cmpgrade]').forEach((b) => b.addEventListener('click', () => { S.compareGrade = b.dataset.cmpgrade; render(); }));
     root.querySelectorAll('[data-ask-ins]').forEach((b) => b.addEventListener('click', () => {
       const sec = section();
       if (b.dataset.askIns === 'grow') openAsk(`${sec.name} · class growth`, `My ${sec.name} class data shows most skills rising since baseline, with a few still at Beginner level. What are 2–3 practical next steps?`);
@@ -1676,8 +1901,13 @@
     });
     root.querySelectorAll('[data-ask]').forEach((b) => b.addEventListener('click', () => {
       const sec = section();
-      if (b.dataset.ask === 'activity') openAsk(`${sec.name} · ${b.dataset.skill}`, `Suggest a 10-minute classroom activity to build ${b.dataset.skill} for a ${sec.grade} student currently at ${b.dataset.band} level. My class has ~${sec.students.length} students and limited materials.`);
-      else openAsk(`${sec.name} · ${b.dataset.skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${b.dataset.skill}. ${b.dataset.beg} of my students are at Beginner level in it.`);
+      const skill = b.dataset.skill, band = b.dataset.band;
+      const PN = { teacher: 'you (the teacher)', parent: 'parents at home', student: 'the children themselves' };
+      if (b.dataset.ask === 'activity') openAsk(`${sec.name} · ${skill}`, `Suggest a 10-minute classroom activity to build ${skill} for a ${sec.grade} student currently at ${band} level. My class has ~${sec.students.length} students and limited materials.`);
+      else if (b.dataset.ask === 'build') openAsk(`${sec.name} · ${skill}`, `Most of my ${sec.grade} class sit at ${band} level on ${skill}. Give me 2–3 practical, low-prep ways to build this skill across the whole class over the next few weeks.`);
+      else if (b.dataset.ask === 'persp') openAsk(`${sec.name} · ${skill} · perspectives`, `On ${skill}, ${PN[b.dataset.hi] || b.dataset.hi} rate my ${sec.grade} class noticeably higher than ${PN[b.dataset.lo] || b.dataset.lo} do. Why might this happen, and what could I try — kindly, without assuming anyone is wrong?`);
+      else if (b.dataset.ask === 'cmp') openAsk(`${b.dataset.hi} → ${b.dataset.lo} · ${skill}`, `In my ${sec.grade}, ${b.dataset.hi} is ahead of ${b.dataset.lo} on ${skill}. Give me one activity or routine that might be working in ${b.dataset.hi} that I could bring to ${b.dataset.lo}.`);
+      else openAsk(`${sec.name} · ${skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Beginner level in it.`);
     }));
 
     // profile redo → hand back to onboarding (teacher.js owns that)
@@ -2042,6 +2272,88 @@
   .cmp-top .nm { font-weight: 800; font-size: 14px; } .cmp-top .sub { font-size: 12px; color: var(--ink-300); font-weight: 600; }
   .cmp-bar { display: flex; height: 24px; border-radius: 12px; overflow: hidden; background: var(--surface-100); }
 
+  /* ===== Insights — teacher planning view ===== */
+  /* Growth-tone fills (design-system band tones, never traffic-light red). */
+  .bs-fill-focus { background: #E8C4A8; } .bs-fill-devel { background: #A9CE8C; } .bs-fill-strong { background: #EFA9B8; }
+
+  /* a) Skill-band summary — the 3 headline boxes */
+  .bs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 4px; }
+  .bs-box { border-radius: 18px; padding: 16px 16px 18px; border: 1px solid transparent; }
+  .bs-box.bs-wide { grid-column: span 2; }
+  .bs-focus  { background: #FBF1E8; border-color: #EED8C2; }
+  .bs-devel  { background: #F1F8EC; border-color: #D8E8CB; }
+  .bs-strong { background: #FCEEF1; border-color: #F3D6DD; }
+  .bs-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+  .bs-count { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 26px; line-height: 1; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #fff; }
+  .bs-focus .bs-count { color: #a06a44; } .bs-devel .bs-count { color: #4e6b43; } .bs-strong .bs-count { color: #b0546b; }
+  .bs-title { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 15px; color: var(--ink-900); }
+  .bs-sub { font-size: 11.5px; font-weight: 600; color: var(--ink-450); }
+  .bs-skills { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .bs-skills.two-col { columns: 2; column-gap: 16px; display: block; }
+  .bs-skills.two-col li { break-inside: avoid; margin-bottom: 6px; }
+  .bs-skills li { font-size: 13px; font-weight: 700; color: #4e463a; padding-left: 14px; position: relative; }
+  .bs-skills li::before { content: '•'; position: absolute; left: 0; color: var(--ink-300); }
+  .bs-none { font-size: 12.5px; color: var(--ink-300); font-weight: 600; font-style: italic; }
+
+  /* b) Progress over time — grouped columns per skill */
+  .pot-list { display: flex; flex-direction: column; }
+  .pot-skill { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line-200); }
+  .pot-skill:first-child { border-top: none; }
+  .pot-name { font-size: 13px; font-weight: 700; color: #4e463a; }
+  .pot-cells { display: flex; gap: 16px; align-items: flex-end; }
+  .pot-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 40px; }
+  .pot-barwrap { height: 56px; width: 22px; background: var(--surface-100); border-radius: 6px; display: flex; align-items: flex-end; overflow: hidden; }
+  .pot-hollow { border: 1px dashed #D9CFC0; background: transparent; }
+  .pot-bar { width: 100%; border-radius: 6px 6px 0 0; transition: height .45s var(--ease); }
+  .pot-val { font-size: 11px; font-weight: 800; color: var(--ink-450); }
+  .pot-empty .pot-val { color: var(--ink-300); }
+  .pot-lab { font-size: 10px; font-weight: 700; color: var(--ink-300); text-transform: uppercase; letter-spacing: .02em; }
+  .pot-note { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-450); background: var(--surface-100); border-radius: 10px; padding: 9px 13px; }
+
+  /* c) Detailed skill breakdown */
+  .sb-toggle { display: flex; gap: 6px; margin: 4px 0 16px; }
+  .sb-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .sb-card { text-align: left; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: 16px; padding: 14px 15px; cursor: pointer; font-family: 'Montserrat',sans-serif; transition: border-color .2s, transform .2s var(--ease); }
+  .sb-card:hover { border-color: #CFE3BF; transform: translateY(-1px); }
+  @media (prefers-reduced-motion: reduce) { .sb-card:hover { transform: none; } }
+  .sb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .sb-name { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 14.5px; color: var(--ink-900); }
+  .sb-tag { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 7px; white-space: nowrap; }
+  .sb-tag-sel { background: #E7F0FA; color: #3f6377; } .sb-tag-cog { background: #EFEAF7; color: #6a5a93; }
+  .scprog { display: flex; gap: 8px; margin-bottom: 10px; }
+  .scph { flex: 1; background: #fff; border-radius: 9px; padding: 6px 4px; text-align: center; }
+  .scph-l { display: block; font-size: 9.5px; font-weight: 700; color: var(--ink-300); text-transform: uppercase; }
+  .scph-v { display: block; font-size: 13px; font-weight: 800; color: #4e463a; }
+  .scph-empty .scph-v { color: var(--ink-300); }
+  .scpv { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--ink-450); font-weight: 600; }
+  .scpv b { color: var(--ink-900); } .scpv em { font-style: normal; color: var(--ink-300); font-size: 10.5px; }
+  .sb-ask { display: inline-block; margin-top: 11px; font-size: 12px; font-weight: 800; color: var(--green-700); }
+
+  /* Perspectives */
+  .pv-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 4px; }
+  .pv-card { background: var(--surface-100); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pv-skill { font-size: 13px; font-weight: 700; color: #4e463a; }
+  .pv-nums { display: flex; gap: 12px; }
+  .pv-num { display: flex; flex-direction: column; align-items: center; line-height: 1.25; }
+  .pv-num i { font-style: normal; font-size: 13px; } .pv-num b { font-size: 13px; font-weight: 800; color: var(--ink-900); } .pv-num em { font-style: normal; font-size: 9.5px; font-weight: 700; color: var(--ink-300); text-transform: uppercase; }
+  .wcl-list { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+  .wcl-item { background: var(--surface-100); border-radius: 14px; padding: 14px 16px; }
+  .wcl-skill { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 14.5px; color: var(--ink-900); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .wcl-gap { font-size: 10.5px; font-weight: 800; color: var(--ink-450); background: #fff; border-radius: 7px; padding: 2px 8px; }
+  .wcl-text { font-size: 13.5px; line-height: 1.5; color: var(--ink-450); margin: 6px 0 12px; }
+
+  /* Compare my sections */
+  .cmp2-table { display: flex; flex-direction: column; }
+  .cmp2-row { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line-200); }
+  .cmp2-head { border-top: none; padding-bottom: 4px; }
+  .cmp2-skill { font-size: 12.5px; font-weight: 700; color: #4e463a; }
+  .cmp2-cells { display: grid; gap: 12px; }
+  .cmp2-secname { font-size: 11.5px; font-weight: 800; color: var(--ink-450); text-align: center; }
+  .cmp2-cell { display: flex; align-items: center; gap: 8px; }
+  .cmp2-mini { flex: 1; height: 12px; background: var(--surface-100); border-radius: 6px; overflow: hidden; }
+  .cmp2-mini > div { height: 100%; border-radius: 6px; }
+  .cmp2-cell span { font-size: 11.5px; font-weight: 800; color: var(--ink-450); width: 34px; text-align: right; }
+
   /* add student modal */
   .add-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(30,40,30,.32); display: flex; align-items: center; justify-content: center; padding: 20px; }
   .add-card { width: 100%; max-width: 520px; max-height: calc(100vh - 40px); overflow-y: auto; background: #fff; border-radius: 26px; padding: 28px 26px; box-shadow: 0 24px 60px rgba(40,50,40,.3); }
@@ -2202,6 +2514,13 @@
     .dash-h1 { font-size: 24px; }
     .two-col { grid-template-columns: 1fr; }
     .ask-panel { top: 12%; border-radius: 24px 24px 0 0; }
+    /* Insights: reflow every multi-column grid to a single readable column. */
+    .bs-grid { grid-template-columns: 1fr; }
+    .bs-box.bs-wide { grid-column: auto; }
+    .bs-skills.two-col { columns: 1; }
+    .sb-grid, .pv-grid { grid-template-columns: 1fr; }
+    .pot-skill, .cmp2-row { grid-template-columns: 96px 1fr; gap: 10px; }
+    .pv-card { flex-direction: column; align-items: flex-start; gap: 8px; }
   }`;
 
   window.TilliDashboard = { mount };

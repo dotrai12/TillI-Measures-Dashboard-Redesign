@@ -106,12 +106,18 @@
   ];
 
   // ---- sections (derived) ----
+  // Kavya Rao (t-kga) is the demo's logged-in teacher and owns BOTH Kindergarten
+  // sections (A + B) so the "Compare my sections" Insights tab has 2 same-grade
+  // sections to compare. Nadia stays in TEACHERS but no longer owns a section.
   const SECTION_DEFS = [
     { id: 'kg_a', name: 'Kindergarten A', grade: 'Kindergarten', section: 'A', teacherId: 't-kga' },
-    { id: 'kg_b', name: 'Kindergarten B', grade: 'Kindergarten', section: 'B', teacherId: 't-kgb' },
+    { id: 'kg_b', name: 'Kindergarten B', grade: 'Kindergarten', section: 'B', teacherId: 't-kga' },
     { id: 'g1_a', name: 'Grade 1 A',      grade: 'Grade 1',      section: 'A', teacherId: 't-g1a' },
     { id: 'g1_b', name: 'Grade 1 B',      grade: 'Grade 1',      section: 'B', teacherId: 't-g1b' },
   ];
+
+  // Which teacher the demo dashboard opens as (the "selected" teacher).
+  const ACTIVE_TEACHER_ID = 't-kga';
 
   // ---- assessment engine: per skill → baseline/mid/post + 3 perspectives ----
   // Seeded by admission number so every reload is identical.
@@ -149,7 +155,10 @@
 
   // ---- assemble students with scores ----
   const STUDENTS = ROSTER.map((r) => {
-    const teacher = TEACHERS.find((t) => t.grade === r.grade && t.section === r.section);
+    // Resolve the teacher through the section's owner (teacherId) rather than a
+    // grade+section match, so a teacher who owns multiple sections is respected.
+    const secDef = SECTION_DEFS.find((sd) => sd.grade === r.grade && sd.section === r.section);
+    const teacher = secDef ? TEACHERS.find((t) => t.id === secDef.teacherId) : null;
     const skills = buildSkills(r);
     const overallPct = Math.round(skills.reduce((a, s) => a + s.pct, 0) / skills.length);
     return Object.assign({}, r, {
@@ -195,6 +204,7 @@
     school: SCHOOL,
     skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES,
     teachers: TEACHERS, sections: SECTION_DEFS, students: STUDENTS,
+    activeTeacherId: ACTIVE_TEACHER_ID,
     parents: PARENTS, credentials, passwords,
     childrenForParent, findByAdm,
   };

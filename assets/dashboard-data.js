@@ -234,8 +234,17 @@ function buildAllData(opts) {
   // Prefer the shared dummy-school roster (school-data.js) when it's loaded,
   // so the teacher dashboard shows the same students as the parent flow.
   const TS = typeof window !== "undefined" ? window.TILLI_SCHOOL : null;
-  const sectionDefs = TS && TS.sections
-    ? TS.sections.map((s) => ({ id: s.id, name: s.name, grade: s.grade, section: s.section,
+  // The dashboard opens AS one teacher and only ever contains HER own sections —
+  // a teacher never sees another teacher's classes. Everything downstream (section
+  // picker, garden, roster, insights) scopes automatically off this filtered list.
+  const activeTeacherId = TS && TS.activeTeacherId ? TS.activeTeacherId : null;
+  const activeTeacher = TS && TS.teachers && activeTeacherId
+    ? TS.teachers.find((t) => t.id === activeTeacherId) || null : null;
+  const ownedDefs = TS && TS.sections
+    ? (activeTeacherId ? TS.sections.filter((s) => s.teacherId === activeTeacherId) : TS.sections)
+    : null;
+  const sectionDefs = ownedDefs
+    ? ownedDefs.map((s) => ({ id: s.id, name: s.name, grade: s.grade, section: s.section, teacherId: s.teacherId,
         n: TS.students.filter((st) => st.grade === s.grade && st.section === s.section).length }))
     : SECTIONS;
 
@@ -278,7 +287,8 @@ function buildAllData(opts) {
     });
     return { ...sec, students };
   });
-  return { sections, skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES };
+  return { sections, skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES,
+    activeTeacherId, activeTeacher, teachers: (TS && TS.teachers) || [] };
 }
 
 window.buildAllData = buildAllData;

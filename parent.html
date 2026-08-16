@@ -150,6 +150,44 @@
   .t-badge.progress { color: #8a6100; background: var(--wash-yellow); }
   .t-badge.pending { color: var(--ink-600); background: var(--surface-100); }
 
+  /* resting card shown for the "In between" window (no assessments open) */
+  .win-rest { display: flex; align-items: center; gap: 16px; background: var(--wash-cyan);
+    border: 1.5px solid #B7E6F1; border-radius: var(--radius-card); padding: 20px 22px; margin-top: 6px; }
+  .win-rest .ico { width: 48px; height: 48px; border-radius: 50%; background: #fff; flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 3px 10px rgba(20,20,20,.08); }
+  .win-rest .rt b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
+  .win-rest .rt span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600;
+    font-size: 13px; color: var(--ink-600); margin-top: 3px; }
+
+  /* ---- Phases overview (Baseline → Midline → Endline timeline) ----
+     Intermediate screen between child-select and home: one card, a vertical
+     line, and a dot per assessment phase with its own completion + CTA. */
+  /* phases view fills the viewport height so the timeline spans it fully */
+  .p-main.phases-main { flex: 1; display: flex; flex-direction: column; }
+  .phase-head { text-align: center; font-weight: 700; font-size: clamp(20px,2.6vw,27px);
+    color: var(--ink-900); margin: clamp(6px,2vh,16px) 0 clamp(18px,3vh,28px); text-wrap: balance; }
+  .phase-head span { color: var(--pink-600); }
+  .phase-timeline { position: relative; flex: 1; display: flex; flex-direction: column;
+    justify-content: space-between; }
+  .phase-timeline::before { content: ''; position: absolute; left: 10px; top: 14px; bottom: 14px;
+    width: 3px; background: var(--line-200); border-radius: 2px; }
+  .phase-row { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 16px;
+    padding: clamp(10px,2vh,20px) 0; }
+  .phase-dot { position: relative; z-index: 1; width: 22px; height: 22px; border-radius: 50%;
+    box-sizing: border-box; margin-top: 3px; }
+  .phase-dot.done     { background: var(--green-500); border: 4px solid var(--green-600); }
+  .phase-dot.progress { background: var(--yellow-500); border: 4px solid var(--orange-500); }
+  .phase-dot.pending  { background: #fff; border: 3px solid #C9CDD6; }
+  .phase-title { display: block; font-weight: 700; font-size: clamp(16px,2vw,20px); color: var(--ink-900); }
+  .phase-title .ph-date { color: var(--pink-600); }
+  .phase-meta { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13.5px;
+    color: var(--ink-450); margin: 7px 0 15px; line-height: 1.5; }
+  .phase-meta b { color: var(--ink-700); }
+  .phase-cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-locked { display: inline-block; background: var(--surface-100); border: 1.5px solid var(--line-200);
+    color: var(--ink-300); font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14px;
+    border-radius: var(--radius-pill); padding: 11px 24px; cursor: not-allowed; }
+
   /* ---- Report CTA ---- */
   .report-cta { margin-top: 18px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
     border-radius: var(--radius-card); padding: 22px 24px; border: 2px solid; transition: border-color .2s, background .2s; }
@@ -436,10 +474,13 @@
     seedling:  { tag: 'Seedling',  color: 'var(--pink-600)',  bg: 'var(--wash-pink)',   fill: 'var(--pink-400)' },
   };
 
-  // Build a child's 12-skill garden (stable per name).
-  function buildSkills(name) {
-    const rnd = mulberry32(hashStr(name + ':garden'));
-    const base = 40 + rnd() * 26; // child's overall tilt
+  // Build a child's 12-skill garden (stable per name + window). Later windows get
+  // a gentle upward bump so toggling Baseline → Midline → Endline shows real growth.
+  function buildSkills(name, winId) {
+    const wk = winId || 'baseline';
+    const rnd = mulberry32(hashStr(name + ':' + wk + ':garden'));
+    const bump = ({ baseline: 0, midline: 9, endline: 18 })[wk] || 0;
+    const base = 40 + rnd() * 26 + bump; // child's overall tilt, rising across the year
     return SKILLS.map((sk) => {
       const pct = Math.round(clamp(base + (rnd() - 0.5) * 60, 6, 98));
       const band = bandOf(pct);
@@ -539,18 +580,62 @@
     { id: 'emt2',   title: 'EMT 2',             sub: 'Child activity · about 4 min' },
     { id: 'emt3',   title: 'EMT 3',             sub: 'Child activity · about 4 min' },
   ];
-  // Per-child assessment status (the "unlocked" child is pre-populated so its report opens).
+  // ---- Assessment windows across the year ----
+  // The parent can toggle between these to see each window's completion history
+  // and its report. `milestone:false` marks the resting "In between" state, which
+  // has no checklist of its own. Order is chronological.
+  const WINDOWS = [
+    { id: 'baseline', label: 'Baseline',  sub: 'Start of year',       date: 'Apr 2',  milestone: true  },
+    { id: 'between',  label: 'In between', sub: 'Between assessments', date: '',       milestone: false },
+    { id: 'midline',  label: 'Midline',   sub: 'Mid year',            date: 'Jun 18', milestone: true  },
+    { id: 'endline',  label: 'Endline',   sub: 'End of year',         date: 'Sep 24', milestone: true  },
+  ];
+  const WINDOW_ORDER = WINDOWS.map((w) => w.id);
+  // Where "today" sits on the timeline: the open window. Everything before it is
+  // completed history; everything after is upcoming. Change this one constant to
+  // move the whole flow to a different point in the year.
+  const CURRENT_WINDOW = 'midline';
+  const winById = (id) => WINDOWS.find((w) => w.id === id) || WINDOWS[0];
+  function winPhase(id) {
+    if (!winById(id).milestone) return 'between';
+    const d = WINDOW_ORDER.indexOf(id) - WINDOW_ORDER.indexOf(CURRENT_WINDOW);
+    return d < 0 ? 'past' : d > 0 ? 'future' : 'current';
+  }
+  const milestones = () => WINDOWS.filter((w) => w.milestone);
+  function lastCompletedMilestone(c) {
+    if (!c.unlocked) return null;
+    const past = milestones().filter((w) => winPhase(w.id) === 'past');
+    return past.length ? past[past.length - 1] : null;
+  }
+  function nextOpenMilestone() {
+    return milestones().find((w) => winPhase(w.id) === 'current')
+        || milestones().find((w) => winPhase(w.id) === 'future') || null;
+  }
+
+  // Per-child, per-window assessment status. The unlocked demo child shows a real
+  // progression: past windows fully done (history + report), the open window
+  // mid-flight, future windows not started. Locked children are all pending.
+  // `between` has no checklist (null).
+  const blank = (v) => ({ parent: v, hearts: v, memory: v, emt1: v, emt2: v, emt3: v });
   const STATUS = {};
   children.forEach((c) => {
-    if (c.unlocked) STATUS[c.name] = { parent: 'done', hearts: 'done', memory: 'done', emt1: 'done', emt2: 'progress', emt3: 'pending' };
-    else STATUS[c.name] = { parent: 'pending', hearts: 'pending', memory: 'pending', emt1: 'pending', emt2: 'pending', emt3: 'pending' };
+    STATUS[c.name] = {};
+    WINDOWS.forEach((w) => {
+      if (!w.milestone) { STATUS[c.name][w.id] = null; return; }
+      if (!c.unlocked) { STATUS[c.name][w.id] = blank('pending'); return; }
+      const ph = winPhase(w.id);
+      STATUS[c.name][w.id] = ph === 'past' ? blank('done')
+        : ph === 'current' ? { parent: 'done', hearts: 'done', memory: 'done', emt1: 'done', emt2: 'progress', emt3: 'pending' }
+        : blank('pending');
+    });
   });
 
   // Default visibility of the decorative flower row on the report.
-  const state = { view: 'home', selected, switcherOpen: false, saved: '' };
+  const state = { view: 'phases', selected, window: CURRENT_WINDOW, switcherOpen: false, saved: '' };
   const app = document.getElementById('app');
   const child = () => children[state.selected];
-  const status = () => STATUS[child().name];
+  const curWindow = () => winById(state.window);
+  const status = () => STATUS[child().name][state.window];
   const set = (patch) => { Object.assign(state, patch); render(); };
 
   // ---- shared bits ----
@@ -594,11 +679,66 @@
   }
 
   // ============================================================
+  // PHASES VIEW — the child's assessment journey across the year.
+  // Sits between child-select and home: pick a phase to open its
+  // checklist (continue) or its report (view report). Locked = upcoming.
+  // ============================================================
+  const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th'];
+  function phasesView() {
+    const c = child();
+    const total = ASSESSMENTS.length;
+
+    const rows = milestones().map((w, i) => {
+      const ph = winPhase(w.id);
+      const st = STATUS[c.name][w.id];
+      const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
+      const complete = done === total;
+      const dotCls = ph === 'past' ? 'done' : ph === 'current' ? 'progress' : 'pending';
+      const ord = ORDINALS[i] || (i + 1) + 'th';
+
+      const meta = complete
+        ? 'All assessments completed for ' + esc(c.name)
+        : '<b>' + done + '/' + total + '</b> assessments completed for ' + esc(c.name);
+
+      // Future windows are locked; otherwise a finished window shows its report,
+      // an unfinished one invites the parent to continue.
+      const cta = ph === 'future'
+        ? '<span class="btn-locked">Locked</span>'
+        : complete
+        ? `<div class="phase-cta">
+             <button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">View details →</button>
+             <button class="btn-outline focus" data-act="phase-report" data-win="${w.id}">View report</button>
+           </div>`
+        : `<button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">Continue assessment →</button>`;
+
+      return `<div class="phase-row">
+        <span class="phase-dot ${dotCls}"></span>
+        <div>
+          <b class="phase-title">${ord} phase · ${esc(w.label)}${ph === 'current' && w.date ? ' · <span class="ph-date">' + esc(w.date) + '</span>' : ''}</b>
+          <span class="phase-meta">${meta}</span>
+          ${cta}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}${switcher()}</div>
+      <div class="p-main phases-main" data-rise>
+        <h1 class="phase-head">Get a full view of <span>${esc(c.name)}</span></h1>
+        <div class="phase-timeline">${rows}</div>
+        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>
+      </div>
+    </div>`;
+  }
+
+  // ============================================================
   // HOME VIEW
   // ============================================================
   function homeView() {
     return `<div class="p-wrap">
-      <div class="p-top">${lockup}${switcher()}</div>
+      <div class="p-top">${lockup}
+        <button class="btn-ghost focus" data-act="back-phases">&#8592; All phases</button>
+        ${switcher()}</div>
       <div class="p-main">${homeMainInner()}</div>
     </div>`;
   }
@@ -607,12 +747,8 @@
   // assessment status change never rebuilds (and re-animates) the whole screen.
   function homeMainInner() {
     const c = child();
-    const st = status();
-    const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
-    const total = ASSESSMENTS.length;
-    const pct = Math.round((done / total) * 100);
-    const reportReady = st.parent === 'done';   // snapshot is generated once the parent report is done
-    const allDone = done === total;              // but it can only be opened once every assessment is complete
+    const w = curWindow();
+    const phase = winPhase(w.id);
     const faceColor = smileColor(state.selected);
 
     const chips = [
@@ -621,45 +757,101 @@
       c.adm ? `<span class="chip adm"><span class="cd" style="background:var(--yellow-500)"></span>Admission ${esc(c.adm)}</span>` : '',
     ].filter(Boolean).join('');
 
-    const rows = ASSESSMENTS.map((a) => {
-      const s = st[a.id];
-      const badge = s === 'done' ? 'Completed' : s === 'progress' ? 'In progress' : 'Start';
-      return `<button class="t-row focus" data-tap="${a.id}">
-        <span class="t-dot ${s}"></span>
-        <span class="t-body"><b>${esc(a.title)}</b><span>${esc(a.sub)}</span></span>
-        <span class="t-badge ${s}">${badge}</span>
-      </button>`;
-    }).join('');
-
-    return `
+    const heroTop = `
         <div class="p-hero" data-rise>
           <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a">
             <img src="${SMILEY}" alt="">
           </div>
           <div>
-            <p class="p-eyebrow">Parent home · Week 14</p>
+            <p class="p-eyebrow">__EYEBROW__</p>
             <h1 class="p-title">Watch <span>${esc(c.name)}</span> grow</h1>
-            <p class="p-sub">${done < total
-              ? done + ' of ' + total + " check-ins done — finish them to complete " + esc(c.name) + "'s garden."
-              : "Every check-in is complete — " + esc(c.name) + "'s garden report is ready below."}</p>
+            <p class="p-sub">__SUB__</p>
             <div class="chips">${chips}</div>
           </div>
+        </div>`;
+
+    // ---- BETWEEN (resting): no checklist — offer the last completed report ----
+    if (!w.milestone) {
+      const last = lastCompletedMilestone(c);
+      const next = nextOpenMilestone();
+      const nextTxt = next ? esc(next.label) + (next.date ? ' opens ' + esc(next.date) : ' opens soon') : 'the next window opens soon';
+      const restCta = last
+        ? `<div class="report-cta ready">
+             <span class="ico"><img src="${DS}icons/chart-up.png" alt=""></span>
+             <span class="rt"><b>${esc(c.name)}'s ${esc(last.label)} snapshot</b>
+               <span>Revisit the warm summary from ${esc(c.name)}'s last completed window.</span></span>
+             <button class="btn btn-primary focus" data-act="open-last-report" data-win="${last.id}" style="flex:none">See snapshot →</button>
+           </div>`
+        : `<div class="report-cta locked">
+             <span class="ico"><img src="${DS}icons/clock.png" alt=""></span>
+             <span class="rt"><b>No snapshot yet</b><span>${esc(c.name)}'s first report appears once a window is complete.</span></span>
+             <button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>
+           </div>`;
+      return heroTop
+        .replace('__EYEBROW__', 'Parent home · In between windows')
+        .replace('__SUB__', `No check-ins are open right now — ${esc(c.name)}'s garden is resting until ${nextTxt}.`)
+        + `
+        <div class="win-rest">
+          <span class="ico">🌿</span>
+          <div class="rt"><b>Nothing to complete right now</b>
+            <span>${nextTxt.charAt(0).toUpperCase() + nextTxt.slice(1)}. You can revisit past reports any time.</span></div>
         </div>
+        ${restCta}
+        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+    }
 
-        <div class="sec-head">
-          <h2>Assessments for ${esc(c.name)}</h2>
-          <span class="muted due">Due <span class="accent">15 August</span></span>
-        </div>
+    // ---- MILESTONE window (baseline / midline / endline) ----
+    const st = status();
+    const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
+    const total = ASSESSMENTS.length;
+    const pct = Math.round((done / total) * 100);
+    const reportReady = st.parent === 'done';   // snapshot is generated once the parent report is done
+    const allDone = done === total;             // but it can only be opened once every assessment is complete
+    const editable = phase === 'current';        // only the open window is tappable; history is read-only
+    const locked = phase === 'future';
 
-        <button class="prog-card focus" data-act="progress-tap" style="margin-bottom:14px">
-          ${donut(pct)}
-          <span class="txt"><b>${done} of ${total} completed</b>
-          <span>Tap an assessment to start it, then tap again to mark it done.</span></span>
-        </button>
+    const eyebrow = phase === 'past' ? 'Completed window · ' + esc(w.label)
+      : phase === 'future' ? 'Upcoming window · ' + esc(w.label)
+      : 'Open now · ' + esc(w.label);
+    const sub = locked
+      ? esc(w.label) + ' opens ' + (w.date ? esc(w.date) : 'soon') + ' — nothing to do just yet.'
+      : done < total
+      ? done + ' of ' + total + " check-ins done — finish them to complete " + esc(c.name) + "'s garden."
+      : "Every check-in is complete — " + esc(c.name) + "'s " + esc(w.label) + ' report is ready below.';
 
-        <div class="timeline">${rows}</div>
+    const rows = ASSESSMENTS.map((a) => {
+      const s = locked ? 'pending' : st[a.id];
+      const badge = locked ? 'Upcoming' : s === 'done' ? 'Completed' : s === 'progress' ? 'In progress' : 'Start';
+      const tag = editable ? 'button' : 'div';
+      return `<${tag} class="t-row${editable ? ' focus' : ''}"${editable ? ` data-tap="${a.id}"` : ' style="cursor:default"'}>
+        <span class="t-dot ${s}"></span>
+        <span class="t-body"><b>${esc(a.title)}</b><span>${esc(a.sub)}</span></span>
+        <span class="t-badge ${s}">${badge}</span>
+      </${tag}>`;
+    }).join('');
 
-        <div class="report-cta ${reportReady ? 'ready' : 'locked'}">
+    const dueTag = locked ? `<span class="muted due">Opens <span class="accent">${esc(w.date || 'soon')}</span></span>`
+      : phase === 'past' ? `<span class="muted due">Completed <span class="accent">${esc(w.date || '')}</span></span>`
+      : `<span class="muted due">Due <span class="accent">15 August</span></span>`;
+
+    const progStyle = 'margin-bottom:14px' + (editable ? '' : ';cursor:default');
+    const progHint = phase === 'current' ? 'Tap an assessment to start it, then tap again to mark it done.'
+      : phase === 'past' ? 'This window is complete — a look back at ' + esc(c.name) + "'s history."
+      : esc(w.label) + ' opens ' + (w.date ? esc(w.date) : 'soon') + '.';
+    const progCard = `<button class="prog-card${editable ? ' focus' : ''}" ${editable ? 'data-act="progress-tap" ' : ''}style="${progStyle}">
+          ${donut(locked ? 0 : pct)}
+          <span class="txt"><b>${locked ? 'Not started yet' : done + ' of ' + total + ' completed'}</b>
+          <span>${progHint}</span></span>
+        </button>`;
+
+    const cta = locked
+      ? `<div class="report-cta locked">
+          <span class="ico"><img src="${DS}icons/clock.png" alt=""></span>
+          <span class="rt"><b>${esc(c.name)}'s ${esc(w.label)} snapshot</b>
+            <span>Opens ${w.date ? esc(w.date) : 'soon'} — complete the window to unlock it.</span></span>
+          <button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>
+        </div>`
+      : `<div class="report-cta ${reportReady ? 'ready' : 'locked'}">
           <span class="ico"><img src="${DS}icons/${reportReady ? 'chart-up.png' : 'clock.png'}" alt=""></span>
           <span class="rt">
             <b>${reportReady ? esc(c.name) + "'s snapshot is ready" : esc(c.name) + "'s parent snapshot"}</b>
@@ -673,7 +865,20 @@
                      <span class="snap-gate-note">Complete all assessments to access it</span>
                    </span>`)
             : `<button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>`}
+        </div>`;
+
+    return heroTop.replace('__EYEBROW__', eyebrow).replace('__SUB__', sub) + `
+
+        <div class="sec-head">
+          <h2>Assessments for ${esc(c.name)}</h2>
+          ${dueTag}
         </div>
+
+        ${progCard}
+
+        <div class="timeline">${rows}</div>
+
+        ${cta}
 
         <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
   }
@@ -683,7 +888,8 @@
   // ============================================================
   function reportView() {
     const c = child();
-    const skills = buildSkills(c.name);
+    const w = curWindow();
+    const skills = buildSkills(c.name, w.id);
     const avg = Math.round(skills.reduce((a, s) => a + s.pct, 0) / skills.length);
     const blooms = skills.filter((s) => s.band === 'blooming').length;
 
@@ -715,7 +921,7 @@
       </div>
       <div class="p-main" data-rise>
 
-        <p class="p-eyebrow" style="margin-top:8px">${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
+        <p class="p-eyebrow" style="margin-top:8px">${esc(w.label)} · ${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
         <h1 class="p-title" style="font-size:clamp(26px,3.4vw,40px)">${esc(c.name)}'s garden</h1>
         <p class="p-sub" style="max-width:52ch">${esc(c.name)}'s garden is growing — ${blooms} of ${skills.length} skills are blooming, with a few still finding the sun. Here's the whole picture.</p>
 
@@ -846,8 +1052,8 @@
   };
 
   // Pick the strengths (top 2–3) and the single growth area from the child's standings.
-  function snapshotStandings(c) {
-    const skills = buildSkills(c.name);
+  function snapshotStandings(c, winId) {
+    const skills = buildSkills(c.name, winId);
     const sorted = [...skills].sort((a, b) => b.pct - a.pct);
     // Mockup shows exactly three "places where {name} is shining".
     const strengths = sorted.slice(0, 3);
@@ -871,7 +1077,9 @@
 
   function snapshotView() {
     const c = child();
-    const { strengths, growth } = snapshotStandings(c);
+    const w = curWindow();
+    const winLabel = w.milestone ? w.label : TERM;
+    const { strengths, growth } = snapshotStandings(c, w.id);
     const gf = GROWTH_FRAME[growth.key];
     const acts = GROWTH_ACTIONS[growth.key];
 
@@ -898,7 +1106,7 @@
           <p class="note-kicker">A note for</p>
           <h1 class="p-title"><span>${esc(c.name)}</span>’s family</h1>
           <p class="note-lead">Here is a brief analysis based on your observations and how ${esc(c.name)}
-            did in the ${esc(TERM)} Tilli games.</p>
+            did in the ${esc(winLabel)} Tilli games.</p>
         </div>
 
         <!-- grey band groups the graded report (shining → work with teacher) -->
@@ -956,8 +1164,11 @@
   // ============================================================
   function profileView() {
     const total = ASSESSMENTS.length;
+    // Profile completion reflects the active milestone window (fall back to the
+    // open window when the "in between" state is selected, which has no checklist).
+    const pw = curWindow().milestone ? state.window : CURRENT_WINDOW;
     const kids = children.map((k, i) => {
-      const st = STATUS[k.name];
+      const st = STATUS[k.name][pw];
       const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
       const remaining = total - done;
       const pct = Math.round((done / total) * 100);
@@ -1013,6 +1224,7 @@
     app.innerHTML = state.view === 'report' ? reportView()
       : state.view === 'snapshot' ? snapshotView()
       : state.view === 'profile' ? profileView()
+      : state.view === 'phases' ? phasesView()
       : homeView();
     app.querySelectorAll('[data-rise]').forEach((el) => el.classList.add('tm-rise'));
     wire(app);
@@ -1060,8 +1272,12 @@
           break;
         }
         case 'open-profile': set({ view: 'profile', switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'back-phases': set({ view: 'phases', switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'phase-open': set({ view: 'home', window: b.dataset.win, switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'phase-report': set({ view: 'snapshot', window: b.dataset.win, switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'logout': location.href = 'index.html'; break;
         case 'open-snapshot': set({ view: 'snapshot', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
+        case 'open-last-report': set({ view: 'snapshot', window: b.dataset.win, switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'open-report': set({ view: 'report', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'back-home': set({ view: 'home' }); window.scrollTo(0, 0); break;
         case 'save-pdf':
@@ -1083,11 +1299,12 @@
       patchHome();
     }));
 
-    // switcher select (child switch genuinely changes everything → full render)
+    // switcher / profile select — a child switch opens that child's phase overview
     root.querySelectorAll('[data-select]').forEach((b) => b.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      set({ selected: +b.dataset.select, switcherOpen: false, view: 'home' });
+      set({ selected: +b.dataset.select, switcherOpen: false, view: 'phases', window: CURRENT_WINDOW });
     }));
+
   }
 
   // click outside closes switcher (targeted — no full render)

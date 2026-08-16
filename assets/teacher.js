@@ -122,8 +122,11 @@
   // ---------- boot: resume or start ----------
   (function boot() {
     const saved = TeacherStore.load(ctx.email);
-    // Returning, already-onboarded teacher (and not explicitly re-doing) → dashboard.
-    if (saved && saved.onboarded && !ctx.isNew) {
+    // A completed onboarding wins on reload — even if the URL still carries the
+    // one-shot ?new=1 sign-up flag. Without this, a refresh keeps forcing the
+    // reflection intro forever because new=1 never leaves the address bar.
+    if (saved && saved.onboarded) {
+      consumeNewFlag();
       Object.assign(state, { phase: 'complete' });
       if (saved.demo) state.demo = Object.assign(blankDemo(), saved.demo);
       if (saved.selfAnswers) state.selfAnswers = saved.selfAnswers;
@@ -862,7 +865,24 @@
 
   function finishOnboard() {
     persist({ onboarded: true, completedAt: new Date().toISOString() });
+    // `new=1` is a one-shot sign-up flag. Consume it here so a page reload no
+    // longer forces the reflection intro — a returning/reloading teacher whose
+    // onboarding is saved now boots straight into the dashboard. (To redo the
+    // reflection on purpose, use "Redo reflection" in the profile panel.)
+    consumeNewFlag();
     set({ phase: 'complete' });
+  }
+
+  // Drops ?new=1 from the address bar without a navigation, and flips ctx.isNew
+  // so boot()'s "already-onboarded → dashboard" check passes on the next reload.
+  function consumeNewFlag() {
+    if (!ctx.isNew) return;
+    ctx.isNew = false;
+    try {
+      const u = new URL(location.href);
+      u.searchParams.delete('new');
+      history.replaceState(null, '', u.pathname + u.search + u.hash);
+    } catch (e) {}
   }
 
   // Return to the reflection flow from the dashboard (profile → "Redo reflection").
