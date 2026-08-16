@@ -171,6 +171,9 @@
   let historyReady = false;
   let suppressPush = false; // true while restoring from popstate — don't re-push
   let popBound = false;
+  // Screen-transition gating: only a genuine destination change (not a modal
+  // open, sub-tab, or in-place edit) plays the fade+zoom. See render().
+  let lastScreenKey = null;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function firstName() { return ((S.teacher.demo && S.teacher.demo.name || '').trim().split(/\s+/)[0]) || 'there'; }
@@ -286,8 +289,28 @@
   }
 
   // ---------------- render ----------------
+  // Which destination we're on, for transition gating. Deliberately excludes
+  // modals (classModal/ask) and sub-tabs so those swap instantly — only moving
+  // between the five screens (or a student) plays the animation.
+  function screenKey() { return [S.nav, S.gardenLevel, S.sectionId, S.studentId].join('|'); }
+
+  // render() decides whether this repaint is a "screen change" worth animating,
+  // then paints. The actual DOM build lives in paintDom(); the View Transitions
+  // API cross-fades the old screen into the new one with a subtle zoom (styled
+  // in tilli.css). Falls back to a plain paint where the API is unsupported or
+  // the user prefers reduced motion. History stays synchronous (outside the
+  // transition) so the back button is never out of step with a fast tap.
   function render() {
     syncHistory();
+    const key = screenKey();
+    const changed = lastScreenKey !== null && key !== lastScreenKey;
+    lastScreenKey = key;
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (changed && !reduce && document.startViewTransition) document.startViewTransition(paintDom);
+    else paintDom();
+  }
+
+  function paintDom() {
     const { isPhone, isDesktop } = bp();
     const sideWide = isDesktop;
     const showSidebar = !isPhone;
@@ -1755,7 +1778,10 @@
   function askPanel() {
     const a = S.ask;
     const thread = a.thread.map((m) => `<div class="ask-msg ${m.role}">${esc(m.text)}</div>`).join('');
-    const empty = a.thread.length === 0 ? `<div class="ask-empty">${flowerArt('growing', 76, 0)}<div>Edit the prompt below and send — I’ll suggest something you can use today.</div></div>` : '';
+    // While "thinking", a shimmering three-dot bubble stands in for Tilli's reply
+    // so the assistant reads as considering the question, not answering instantly.
+    const typing = a.thinking ? `<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>` : '';
+    const empty = a.thread.length === 0 && !a.thinking ? `<div class="ask-empty">${flowerArt('growing', 76, 0)}<div>Edit the prompt below and send — I’ll suggest something you can use today.</div></div>` : '';
     return `<div class="ask-scrim" data-close-ask></div>
       <div class="ask-panel">
         <div class="ask-head">
@@ -1765,7 +1791,7 @@
         </div>
         <div class="ask-body">
           ${a.context ? `<div class="ask-ctx">From: ${esc(a.context)}</div>` : ''}
-          ${thread}${empty}
+          ${thread}${typing}${empty}
         </div>
         <div class="ask-foot">
           <textarea class="ask-input" rows="4" placeholder="Ask me anything about your class or a student…">${esc(a.prompt)}</textarea>
@@ -1893,11 +1919,19 @@
     if (ai) ai.addEventListener('input', (e) => { S.ask.prompt = e.target.value; });
     const send = root.querySelector('[data-send-ask]');
     if (send) send.addEventListener('click', () => {
-      const p = (S.ask.prompt || '').trim(); if (!p) return;
-      S.ask.thread = S.ask.thread.concat([{ role: 'user', text: p },
-        { role: 'tilli', text: "Here's a warm, practical idea you can try today — open with a 3-minute feelings check-in, then a paired activity, and close with one sentence of specific praise. Want me to tailor it to your materials?" }]);
+      const p = (S.ask.prompt || '').trim(); if (!p || S.ask.thinking) return;
+      // Show the question immediately + a "thinking" bubble, then reveal Tilli's
+      // reply after a short beat so it feels like the assistant is composing it.
+      S.ask.thread = S.ask.thread.concat([{ role: 'user', text: p }]);
       S.ask.prompt = '';
+      S.ask.thinking = true;
       render();
+      setTimeout(() => {
+        if (!S.ask.open) return; // panel closed mid-think — drop the reply
+        S.ask.thinking = false;
+        S.ask.thread = S.ask.thread.concat([{ role: 'tilli', text: "Here's a warm, practical idea you can try today — open with a 3-minute feelings check-in, then a paired activity, and close with one sentence of specific praise. Want me to tailor it to your materials?" }]);
+        render();
+      }, 900);
     });
     root.querySelectorAll('[data-ask]').forEach((b) => b.addEventListener('click', () => {
       const sec = section();

@@ -13,7 +13,11 @@
   /* ---- Parent-flow layout ---- */
   .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
     padding: clamp(18px,3.4vh,34px) clamp(24px,6vw,90px) clamp(40px,6vh,72px); }
-  .p-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  /* Pinned during screen transitions so only .p-main fades+zooms (see tilli.css).
+     view-transition-name makes .p-top a stacking context, so it needs an explicit
+     z-index (above .p-main's ~5, below the 50 modal overlay uses) or the child
+     switcher dropdown gets painted over by the later-in-DOM .p-main. */
+  .p-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: relative; z-index: 40; view-transition-name: parent-top; }
   .p-main { max-width: 860px; width: 100%; margin: 22px auto 0; }
 
   /* ---- Child switcher ---- */
@@ -1220,14 +1224,24 @@
   // Full (re)mount of a view: rebuilds everything and plays the entrance
   // animation once. Only used for view/child transitions — never for in-place
   // edits, which patch their own region so the header can't re-fade.
+  let painted = false;
   function render() {
-    app.innerHTML = state.view === 'report' ? reportView()
-      : state.view === 'snapshot' ? snapshotView()
-      : state.view === 'profile' ? profileView()
-      : state.view === 'phases' ? phasesView()
-      : homeView();
-    app.querySelectorAll('[data-rise]').forEach((el) => el.classList.add('tm-rise'));
-    wire(app);
+    const paint = () => {
+      app.innerHTML = state.view === 'report' ? reportView()
+        : state.view === 'snapshot' ? snapshotView()
+        : state.view === 'profile' ? profileView()
+        : state.view === 'phases' ? phasesView()
+        : homeView();
+      app.querySelectorAll('[data-rise]').forEach((el) => el.classList.add('tm-rise'));
+      wire(app);
+    };
+    // Fade + subtle zoom between views (View Transitions API). The persistent
+    // top bar is pinned via view-transition-name so only .p-main animates.
+    // First paint and reduced-motion users get a plain, instant render.
+    const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (painted && !reduce && document.startViewTransition) document.startViewTransition(paint);
+    else paint();
+    painted = true;
   }
 
   // Targeted patch: rebuild just .p-main's contents (home view). No tm-rise is

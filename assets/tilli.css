@@ -185,6 +185,66 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Quicksand', sans-serif; }
   .tm-sway, .tm-rise { animation: none !important; }
 }
 
+/* ---- Screen transitions (View Transitions API) ----
+   Both dashboards swap a screen by rewriting innerHTML; startViewTransition()
+   (in teacher-dashboard.js render() and parent.html render()) cross-fades the
+   old screen into the new one. Persistent chrome — the side rail, header chips,
+   bottom nav, and the parent top bar — carry their own view-transition-name so
+   they hold still while only the main content fades + gently zooms. */
+.dash-side      { view-transition-name: dash-side; }
+.dash-header    { view-transition-name: dash-header; }
+.dash-bottomnav { view-transition-name: dash-bottomnav; }
+
+@keyframes tmVtIn  { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: scale(1); } }
+@keyframes tmVtOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.012); } }
+
+/* The main content lives in the default "root" group (always viewport-sized,
+   so it never distorts). Old fades out quickly, new fades + zooms up into place. */
+::view-transition-old(root) { animation: tmVtOut .18s var(--ease) both; }
+::view-transition-new(root) { animation: tmVtIn  .34s var(--ease) both; }
+
+/* Pinned chrome: hold in place (or gently morph if it changed) — never fade. */
+::view-transition-group(dash-side),
+::view-transition-group(dash-header),
+::view-transition-group(dash-bottomnav),
+::view-transition-group(parent-top) { animation-duration: .28s; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ---- Ask Tilli "thinking" bubble ---- */
+.ask-typing { display: inline-flex; align-items: center; gap: 5px; }
+.ask-typing span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green-500, #56C02B);
+  opacity: .35; animation: tmTypingDot 1s var(--ease) infinite;
+}
+.ask-typing span:nth-child(2) { animation-delay: .16s; }
+.ask-typing span:nth-child(3) { animation-delay: .32s; }
+@keyframes tmTypingDot {
+  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* ---- Skeleton shimmer (reusable) ---- */
+.skeleton {
+  position: relative; overflow: hidden;
+  background: var(--surface-100, #f1f1f0); border-radius: 10px;
+}
+.skeleton::after {
+  content: ''; position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+  animation: tmShimmer 1.2s infinite;
+}
+@keyframes tmShimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .ask-typing span, .skeleton::after { animation: none !important; }
+}
+
 /* ---- Spinner ---- */
 .spinner {
   width: 44px; height: 44px; border-radius: 50%;
