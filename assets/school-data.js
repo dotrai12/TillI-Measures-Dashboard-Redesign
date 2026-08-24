@@ -170,6 +170,22 @@
     });
   });
 
+  // ---- school leadership (admin dashboard) ----
+  // The Coordinator/Admin sees the whole school. Routed by email at login
+  // (landing.js) to admin.html, the same way the teacher is routed to
+  // teacher.html. A Principal (view-only) can be added here later with
+  // role:'principal'; the admin dashboard already understands both roles.
+  const ADMINS = [
+    {
+      id: 'a-coord',
+      name: 'Meera Krishnan',
+      email: 'meera.krishnan@littlesprouts.edu',
+      password: 'Tilli@Admin1',
+      role: 'coordinator',            // 'coordinator' (full) | 'principal' (view-only)
+      title: 'Programme Coordinator',
+    },
+  ];
+
   // ---- the ONE parent that logs in, linked to 2 kids in different grades ----
   const PARENTS = [
     {
@@ -195,17 +211,28 @@
 
   // Accounts + passwords the app should honour (email → password).
   const credentials = {
-    parent:  { email: 'priya.menon@example.com',   password: 'Tilli@Parent1' },
-    teacher: { email: 'kavya.rao@littlesprouts.edu', password: 'Tilli@Teacher1' },
+    parent:      { email: 'priya.menon@example.com',      password: 'Tilli@Parent1' },
+    teacher:     { email: 'kavya.rao@littlesprouts.edu',  password: 'Tilli@Teacher1' },
+    coordinator: { email: 'meera.krishnan@littlesprouts.edu', password: 'Tilli@Admin1' },
   };
-  const passwords = { 'priya.menon@example.com': 'Tilli@Parent1', 'kavya.rao@littlesprouts.edu': 'Tilli@Teacher1' };
+  const passwords = {
+    'priya.menon@example.com': 'Tilli@Parent1',
+    'kavya.rao@littlesprouts.edu': 'Tilli@Teacher1',
+    'meera.krishnan@littlesprouts.edu': 'Tilli@Admin1',
+  };
+
+  // email → admin record (used by landing.js to route leadership logins).
+  const findAdmin = (email) => {
+    const e = String(email || '').toLowerCase();
+    return ADMINS.find((a) => a.email.toLowerCase() === e) || null;
+  };
 
   window.TILLI_SCHOOL = {
     school: SCHOOL,
     skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES,
     teachers: TEACHERS, sections: SECTION_DEFS, students: STUDENTS,
     activeTeacherId: ACTIVE_TEACHER_ID,
-    parents: PARENTS, credentials, passwords,
-    childrenForParent, findByAdm,
+    parents: PARENTS, admins: ADMINS, credentials, passwords,
+    childrenForParent, findByAdm, findAdmin,
   };
 })();

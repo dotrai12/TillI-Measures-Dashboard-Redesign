@@ -179,9 +179,22 @@
   </span>`;
 
   // ---- navigation actions ----
+  // School leadership accounts (coordinator / principal) resolve by email —
+  // the "School" role card is shared with teachers; the email decides which
+  // dashboard opens (spec: "Route by email/account", like the teacher path).
+  const admin = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.findAdmin) ? window.TILLI_SCHOOL.findAdmin : () => null;
+
   function go() {
     const isNew = state.step === 'signup';
     if (state.role === 'teacher') {
+      // Leadership email → admin dashboard (never the onboarding flow).
+      const a = admin(state.email);
+      if (a) {
+        setSession(a.role || 'coordinator', state.email);
+        window.location.href = 'admin.html?school=' + encodeURIComponent(state.school)
+          + '&email=' + encodeURIComponent(state.email);
+        return;
+      }
       // New teachers run the self-reflection onboarding; returning teachers
       // whose onboarding is already saved skip straight to their dashboard.
       let url = 'teacher.html?school=' + encodeURIComponent(state.school)
