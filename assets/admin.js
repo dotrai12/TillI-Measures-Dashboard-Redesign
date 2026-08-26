@@ -391,6 +391,7 @@
   //  2) IMPLEMENTATION  (spec §5.2) — continuous data
   // ========================================================
   var implSort = { key: 'lastActivityDays', dir: 'desc' };  // default: problems on top
+  var cmpTwo = { a: null, b: null };  // "Compare two classes" picker state (Outcomes) — any two sections, school-wide
   SCREEN.implementation = function (params, body) {
     var grade = params.grade || '';
     var section = params.section || '';
@@ -570,9 +571,46 @@
     var radarCard = '';
     if (level !== 'school') radarCard = '<div style="margin-top:var(--ad-gap)">' + card('Multi-perspective view', 'How teachers, parents and children each rate this group — mock data for now.', radarBlock(students, point), '', '<div>' + cadence(point) + '</div>') + '</div>';
 
+    // Compare two classes — pick ANY two sections school-wide and read their
+    // skill-band distributions side by side at the selected point. Independent
+    // of the scope filters above (kept in module state, not the URL). Re-renders
+    // in place on change so it never yanks the page back to the top.
+    var validIds = AD.sections.map(function (s) { return s.id; });
+    if (validIds.indexOf(cmpTwo.a) < 0) cmpTwo.a = AD.sections[0].id;
+    if (validIds.indexOf(cmpTwo.b) < 0) cmpTwo.b = (AD.sections[1] || AD.sections[0]).id;
+    function cmp2Options(sel) { return AD.sections.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join(''); }
+    function cmp2HTML() {
+      var secA = AD.sections.find(function (s) { return s.id === cmpTwo.a; });
+      var secB = AD.sections.find(function (s) { return s.id === cmpTwo.b; });
+      var pickers = '<div class="cmp-pickers">' +
+        '<div class="cmp-pick"><span class="cmp-cap">Class A</span><label class="select-wrap"><select class="select" id="o-classa" title="First class to compare">' + cmp2Options(cmpTwo.a) + '</select></label></div>' +
+        '<span class="cmp-vs">vs</span>' +
+        '<div class="cmp-pick"><span class="cmp-cap">Class B</span><label class="select-wrap"><select class="select" id="o-classb" title="Second class to compare">' + cmp2Options(cmpTwo.b) + '</select></label></div>' +
+        '</div>';
+      var inner;
+      if (cmpTwo.a === cmpTwo.b) {
+        inner = pickers + stEmpty('Pick two different classes.', 'Choose another class in one of the dropdowns to compare them side by side.');
+      } else {
+        function cmpRow(nm, d) { return '<div class="cmp-row"><span class="cmp-row-lbl">' + esc(nm) + '</span>' + bandBar(d, true) + '</div>'; }
+        inner = pickers + '<div style="margin:2px 0 14px">' + bandLegend() + '</div>' + AD.skills.map(function (sk) {
+          var dA = AD.distribution(AD.studentsInSection(secA), sk.key, point);
+          var dB = AD.distribution(AD.studentsInSection(secB), sk.key, point);
+          return '<div class="ad-skillrow"><div class="ad-skillname">' + esc(sk.name) + '</div><div style="display:flex;flex-direction:column;gap:8px">' + cmpRow(secA.name, dA) + cmpRow(secB.name, dB) + '</div></div>';
+        }).join('');
+      }
+      return card('Compare two classes', '<span class="ad-chip status-new" style="margin-right:8px">New</span>Any two classes, side by side at the selected point.', inner, 'span2', '<div>' + cadence(point) + '</div>');
+    }
+    function wireCmp2() {
+      var host = document.getElementById('o-cmp2'); if (!host) return;
+      var a = document.getElementById('o-classa'), b = document.getElementById('o-classb');
+      if (a) a.addEventListener('change', function (e) { cmpTwo.a = e.target.value; host.innerHTML = cmp2HTML(); wireCmp2(); });
+      if (b) b.addEventListener('change', function (e) { cmpTwo.b = e.target.value; host.innerHTML = cmp2HTML(); wireCmp2(); });
+    }
+
     body.innerHTML = screenHead('Outcomes', 'Is it working? Skill bands and movement — never individual results.') +
       crumbs + filters + navCards + gsCard +
       card('Skill band distribution', 'Where children sit across bands for each skill, at the selected point.', distBody, 'span2', '<div>' + cadence(point) + '</div>') +
+      '<div id="o-cmp2" style="margin-top:var(--ad-gap)">' + cmp2HTML() + '</div>' +
       radarCard +
       '<div style="margin-top:var(--ad-gap)">' + card('Movement since baseline', 'Net band movement per skill, Baseline → ' + AD.latestComplete.label + '.', moveBody, '', '<div>' + cadence(AD.latestComplete.key) + '</div>') + '</div>' +
       '<div style="margin-top:var(--ad-gap)">' + card('Progress over time', 'The three assessment points as named markers.', progBody, '', '<div>' + cadence(point) + '</div>') + '</div>' +
@@ -585,6 +623,7 @@
     body.querySelector('#o-grade').addEventListener('change', function (e) { setParams({ grade: e.target.value, section: '', point: point }); });
     body.querySelector('#o-section').addEventListener('change', function (e) { setParams({ grade: grade, section: e.target.value, point: point }); });
     body.querySelector('#o-point').addEventListener('change', function (e) { setParams({ grade: grade, section: section, point: e.target.value }); });
+    wireCmp2();
   };
   // scoped target = grade target; school = enrolment-weighted avg of grade targets; section = its grade's target
   function scopedTarget(scope, skillKey) {

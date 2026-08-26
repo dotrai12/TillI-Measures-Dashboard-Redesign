@@ -297,6 +297,14 @@
   .ad-gs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; font-size: 13px; color: var(--ink-800); }
   .ad-gs li .p { font-weight: 800; font-size: 12px; color: var(--ink-450); }
 
+  /* ---- Compare two classes (Outcomes) ---- */
+  .cmp-pickers { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
+  .cmp-pick { display: flex; flex-direction: column; gap: 6px; flex: 1 1 200px; min-width: 0; }
+  .cmp-cap { font-weight: 800; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-450); }
+  .cmp-vs { font-weight: 800; font-size: 12px; color: var(--ink-300); padding-bottom: 14px; }
+  .cmp-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; }
+  .cmp-row-lbl { font-size: 11.5px; font-weight: 700; color: var(--ink-450); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   /* ---- Multi-perspective radar ---- */
   .ad-radar-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .ad-radar-wrap svg { width: 100%; max-width: 380px; height: auto; }
@@ -313,10 +321,20 @@
   .ad-bottomnav { display: none; }
 
   @media (max-width: 860px) {
-    .ad-app { grid-template-columns: 1fr; }
+    /* minmax(0,1fr) + min-width:0 lets the single column actually shrink to the
+       viewport. Without this, the tables' min-width:640px forces the whole grid
+       track wider than the screen and the entire page scrolls sideways (clipping
+       content) instead of the tables scrolling inside their own wrapper. */
+    .ad-app { grid-template-columns: minmax(0, 1fr); overflow-x: clip; }
+    .ad-app > * { min-width: 0; }
     .ad-side { display: none; }
-    .ad-grid.two, .ad-grid.tri { grid-template-columns: 1fr; }
-    .ad-sumgrid, .ad-navcards { grid-template-columns: 1fr; }
+    /* Same minmax(0,1fr) + min-width:0 on every inner grid: a child with an
+       intrinsic min-width (e.g. a table's min-width:420px) must NOT be able to
+       stretch its track past the viewport and re-introduce sideways page scroll
+       (which also drags the fixed bottom nav along). */
+    .ad-grid.two, .ad-grid.tri { grid-template-columns: minmax(0, 1fr); }
+    .ad-sumgrid, .ad-navcards { grid-template-columns: minmax(0, 1fr); }
+    .ad-grid > *, .ad-sumgrid > *, .ad-navcards > * { min-width: 0; }
     .ad-skillrow { grid-template-columns: 1fr; gap: 8px; }
     .ad-main { padding-bottom: 96px; }
     .ad-bottomnav {
@@ -325,14 +343,47 @@
       padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     }
     .ad-bottomnav button {
-      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+      flex: 1 1 0; min-width: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
       background: none; border: none; cursor: pointer; color: var(--ink-300);
       font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 10.5px;
     }
+    /* Keep every tab label on one line inside its slice — no wrap, no overflow. */
+    .ad-bottomnav button span {
+      max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .ad-bottomnav button.on { color: var(--green-700); }
-    .ad-bottomnav svg { width: 21px; height: 21px; }
+    .ad-bottomnav svg { width: 21px; height: 21px; flex: none; }
     .ad-header { gap: 10px; padding: 0 16px; }
     .ad-header .ad-year, .ad-header .desk-only { display: none; }
+    /* Let the school-name block shrink and truncate instead of wrapping past the fixed header height. */
+    .ad-header > div:first-child { min-width: 0; }
+    .ad-header .ad-school { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Module headers stack their cadence pill below the title rather than crushing it. */
+    .ad-mod-h { flex-wrap: wrap; }
+  }
+
+  /* ---- Phone-specific tightening (portrait) ---- */
+  @media (max-width: 560px) {
+    :root { --ad-gap: 16px; }
+    .ad-main { padding: 16px 14px 96px; }
+    .ad-card { padding: 15px 14px; }
+    /* Role badge is redundant on a phone and steals header width — drop it, keep the avatar. */
+    .ad-header .ad-rolebadge { display: none; }
+    .ad-header .ad-acct { width: 34px; height: 34px; font-size: 14px; }
+    .ad-header .ad-school { font-size: 15.5px; }
+    /* Filters go full-width and stack cleanly; hide the decorative divider span. */
+    .ad-filters .select-wrap { min-width: 0; flex: 1 1 46%; }
+    .ad-filters .input { flex: 1 1 100%; max-width: none !important; }
+    .ad-filters .ad-refresh { margin-left: 0; flex: 1 1 100%; }
+    .ad-filters > span[style] { display: none; }
+    .ad-bottomnav button { font-size: 9.5px; letter-spacing: -0.01em; gap: 2px; }
+    /* 3-marker progress tracks read better stacked than squeezed into thirds. */
+    .ad-track { flex-wrap: wrap; gap: 8px; }
+    .ad-track .ad-point { flex: 1 1 100%; }
+    /* Stack the two class pickers; the "vs" reads oddly between stacked rows. */
+    .cmp-pick { flex: 1 1 100%; }
+    .cmp-vs { display: none; }
   }
   @media (max-width: 640px) { .brand-rail { display: none; } }
 </style>
