@@ -258,6 +258,75 @@
   }
 
   // ---------------------------------------------------------------
+  //  DERIVED READS added for the mockup-inspired modules.
+  // ---------------------------------------------------------------
+
+  // Mean 0–100 score for a set of students on one skill, at one point.
+  function avgScore(students, skillKey, field) {
+    var sum = 0, n = 0;
+    students.forEach(function (st) { var sk = st.skills.find(function (x) { return x.key === skillKey; }); if (sk) { sum += sk[field]; n++; } });
+    return n ? sum / n : 0;
+  }
+
+  // Group every skill by the band MOST children sit in, school-wide
+  // (the mockup's "colour is whichever group is largest" rule). Powers
+  // the Overview skill-summary cards. Periodic → carries a cadence label.
+  function schoolSkillGroups(pointKey) {
+    var groups = { emerging: [], developing: [], secure: [] };
+    SKILLS.forEach(function (sk) {
+      var p = distribution(STUDENTS, sk.key, pointKey).pct;
+      var dom = (p.secure >= p.developing && p.secure >= p.emerging) ? 'secure' : (p.emerging >= p.developing ? 'emerging' : 'developing');
+      groups[dom].push({ key: sk.key, name: sk.name, pct: p });
+    });
+    return groups;
+  }
+
+  // Areas of growth (lowest Secure %) and strength (highest Secure %)
+  // for a scope, at a point. Aggregate only — never per child.
+  function growthStrength(students, pointKey, topN) {
+    var n = topN || 2;
+    var rows = SKILLS.map(function (sk) { var d = distribution(students, sk.key, pointKey); return { key: sk.key, name: sk.name, secure: d.pct.secure, emerging: d.pct.emerging }; });
+    return {
+      growth: rows.slice().sort(function (a, b) { return (a.secure - b.secure) || (b.emerging - a.emerging); }).slice(0, n),
+      strength: rows.slice().sort(function (a, b) { return b.secure - a.secure; }).slice(0, n),
+    };
+  }
+
+  // MOCK: three assessment perspectives (Teacher / Parent / Student-Direct)
+  // per skill, for a scope. The real product carries three streams; the
+  // prototype has a single (student) reading, so we synthesise three
+  // deterministically around it — students self-rate highest, parents
+  // next, teachers most conservative. Swap for the real per-perspective
+  // API when it exists.
+  function perspectiveRadar(students, pointKey) {
+    var pt = POINTS.find(function (p) { return p.key === pointKey; }) || LATEST_COMPLETE;
+    var field = pt.scoreField;
+    return SKILLS.map(function (sk) {
+      var base = avgScore(students, sk.key, field);
+      var j = mulberry32(hashStr(sk.key + ':persp'));
+      return {
+        key: sk.key, name: sk.name,
+        studentDirect: clamp(Math.round(base + 6 + j() * 8), 0, 100),
+        parent: clamp(Math.round(base + 2 + j() * 6), 0, 100),
+        teacher: clamp(Math.round(base - 4 - j() * 6), 0, 100),
+      };
+    });
+  }
+
+  // A single child's overall developmental stage = band of their mean
+  // score at a point.
+  // >>> SPEC CONFLICT (§2): this is an INDIVIDUAL child's SEL result,
+  //     which leadership is not meant to see. It is computed here but
+  //     only rendered when the UI flag SHOW_STUDENT_STAGE is on. Flip
+  //     that flag (admin.js) off to restore the privacy wall.
+  function studentStage(student, pointKey) {
+    var pt = POINTS.find(function (p) { return p.key === pointKey; }) || LATEST_COMPLETE;
+    var sum = 0, n = 0;
+    student.skills.forEach(function (sk) { sum += sk[pt.scoreField]; n++; });
+    return bandMeta(bandOf(n ? sum / n : 0));
+  }
+
+  // ---------------------------------------------------------------
   //  Roster (identity only — never SEL). Parent-claim status derived
   //  from the linked-parent data; enrolment all active for the demo.
   // ---------------------------------------------------------------
@@ -270,8 +339,11 @@
       return {
         adm: s.adm, name: s.name, first: s.first, last: s.last,
         grade: s.grade, section: s.section,
+        parentEmail: s.parentEmail || '—',
         enrolment: 'Enrolled',
         claim: claimed ? 'Claimed' : invited ? 'Invited' : 'Not invited',
+        // Individual stage — gated in the UI (spec §2). See studentStage().
+        stage: studentStage(s, LATEST_COMPLETE.key),
       };
     });
   }
@@ -321,6 +393,9 @@
     // periodic
     distribution: distribution, movement: movement, shapeOf: shapeOf, interpret: interpret,
     targets: TARGETS, targetsSet: TARGETS_SET,
+    // mockup-inspired derived reads
+    schoolSkillGroups: schoolSkillGroups, growthStrength: growthStrength,
+    perspectiveRadar: perspectiveRadar, studentStage: studentStage,
     // continuous
     activity: ACTIVITY, activityFor: activityFor, windowCompletion: windowCompletion,
     concerns: CONCERNS, concernCounts: concernCounts,

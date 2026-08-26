@@ -65,6 +65,65 @@
       (next ? '<span class="next">Next: ' + esc(next.label) + ' · ' + esc(next.month) + '</span>' : '') + '</span>';
   }
 
+  // ============================================================
+  //  Config flag — see spec §2. Showing an individual child's stage
+  //  to leadership breaks the "identity, not outcomes" wall. Kept
+  //  behind this single flag so it is a one-line change to remove.
+  //  TODO(privacy): set to false to honour the spec.
+  // ============================================================
+  var SHOW_STUDENT_STAGE = true;
+
+  // Aggregate band distribution across ALL skills, for any set of
+  // students at a point (used by the grade/section navigator cards).
+  function distAllSkills(students, pointKey) {
+    var c = { emerging: 0, developing: 0, secure: 0 }, n = 0;
+    var f = AD.points.find(function (p) { return p.key === pointKey; }).scoreField;
+    students.forEach(function (st) { st.skills.forEach(function (sk) { c[AD.bandOf(sk[f])]++; n++; }); });
+    n = n || 1;
+    return { n: n, counts: c, pct: { emerging: Math.round(c.emerging / n * 100), developing: Math.round(c.developing / n * 100), secure: Math.round(c.secure / n * 100) } };
+  }
+  function pctLine(d) { return '<div class="nc-pcts">' + AD.bands.map(function (b) { return '<span>' + d.pct[b.key] + '% ' + esc(b.label) + '</span>'; }).join('') + '</div>'; }
+
+  // ---------- multi-perspective radar (mock; spec-new) ----------
+  var PERSP_COLORS = { teacher: '#4A90D9', parent: '#56C02B', studentDirect: '#F0A84A' };
+  function perspSeries(students, pointKey) {
+    var rows = AD.perspectiveRadar(students, pointKey);
+    return {
+      axes: rows.map(function (r) { return r.name; }),
+      series: [
+        { label: 'Teacher', color: PERSP_COLORS.teacher, values: rows.map(function (r) { return r.teacher; }) },
+        { label: 'Parent', color: PERSP_COLORS.parent, values: rows.map(function (r) { return r.parent; }) },
+        { label: 'Student Direct', color: PERSP_COLORS.studentDirect, values: rows.map(function (r) { return r.studentDirect; }) },
+      ],
+    };
+  }
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  function shortAxis(name) { return name.length > 15 ? name.replace(/\s*\(.*\)\s*/, ' ').trim().slice(0, 15) : name; }
+  function radarSVG(series, axes) {
+    var N = axes.length, cx = 190, cy = 165, R = 108, W = 380, H = 320, top = -Math.PI / 2;
+    function pt(i, r) { var a = top + (i / N) * Math.PI * 2; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Multi-perspective radar across skills">';
+    [0.25, 0.5, 0.75, 1].forEach(function (f) {
+      var p = []; for (var i = 0; i < N; i++) { var q = pt(i, R * f); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
+      s += '<polygon points="' + p.join(' ') + '" fill="none" stroke="var(--line-200)" stroke-width="1"/>';
+    });
+    for (var i = 0; i < N; i++) {
+      var e = pt(i, R); s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + e[0].toFixed(1) + '" y2="' + e[1].toFixed(1) + '" stroke="var(--line-200)" stroke-width="1"/>';
+      var l = pt(i, R + 13); var anchor = Math.abs(l[0] - cx) < 8 ? 'middle' : (l[0] < cx ? 'end' : 'start');
+      s += '<text x="' + l[0].toFixed(1) + '" y="' + l[1].toFixed(1) + '" text-anchor="' + anchor + '" dominant-baseline="middle" font-size="8" font-weight="700" fill="var(--ink-450)" font-family="Montserrat,sans-serif">' + esc(shortAxis(axes[i])) + '</text>';
+    }
+    series.forEach(function (ser) {
+      var p = []; for (var i = 0; i < N; i++) { var r = R * clamp01(ser.values[i] / 100); var q = pt(i, r); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
+      s += '<polygon points="' + p.join(' ') + '" fill="' + ser.color + '" fill-opacity="0.13" stroke="' + ser.color + '" stroke-width="2" stroke-linejoin="round"/>';
+    });
+    return s + '</svg>';
+  }
+  function radarBlock(students, pointKey) {
+    var ps = perspSeries(students, pointKey);
+    return '<div class="ad-radar-wrap">' + radarSVG(ps.series, ps.axes) +
+      '<div class="ad-radar-legend">' + ps.series.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span>'; }).join('') + '</div></div>';
+  }
+
   // ---------- state components ----------
   function stEmpty(bigLine, sub, ok) {
     return '<div class="ad-empty' + (ok ? ' ok' : '') + '"><span class="big">' + esc(bigLine) + '</span>' + (sub ? esc(sub) : '') + '</div>';
@@ -110,6 +169,7 @@
   //  CHROME (sidebar / header / bottom nav)
   // ========================================================
   var ICONS = {
+    asktilli: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg>',
     overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
     implementation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>',
     outcomes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
@@ -117,6 +177,7 @@
     reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
   };
   var NAV = [
+    { key: 'asktilli', label: 'Ask Tilli', disabled: true },   // placeholder — out of scope for v1 (spec §12)
     { key: 'overview', label: 'Overview' },
     { key: 'implementation', label: 'Implementation' },
     { key: 'outcomes', label: 'Outcomes' },
@@ -134,6 +195,7 @@
     var side = '<aside class="ad-side dash-side">' +
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
       '<nav class="ad-nav">' + navItems().map(function (n) {
+        if (n.disabled) return '<button class="ad-nav-item disabled" data-navsoon="1" title="Coming soon to the leadership view"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '<span class="ad-soon">Soon</span></button>';
         return '<button class="ad-nav-item' + (n.key === r.screen ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
       }).join('') + '</nav>' +
       '<div class="ad-side-foot">Leadership view · data updates 3× a year for outcomes, daily for activity.</div></aside>';
@@ -144,7 +206,7 @@
       '<span class="ad-rolebadge">' + esc(roleLabel) + '</span>' +
       '<button class="ad-acct" id="ad-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
-    var bottom = '<nav class="ad-bottomnav dash-bottomnav">' + navItems().map(function (n) {
+    var bottom = '<nav class="ad-bottomnav dash-bottomnav">' + navItems().filter(function (n) { return !n.disabled; }).map(function (n) {
       return '<button class="' + (n.key === r.screen ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.key] + '<span>' + esc(n.label) + '</span></button>';
     }).join('') + '</nav>';
 
@@ -154,6 +216,7 @@
 
   function wireChrome() {
     app.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
+    app.querySelectorAll('[data-navsoon]').forEach(function (b) { b.addEventListener('click', function () { toast('Ask Tilli is coming to the leadership view soon.'); }); });
     var acct = document.getElementById('ad-acct-btn');
     if (acct) acct.addEventListener('click', function (ev) { ev.stopPropagation(); openAcctMenu(); });
   }
@@ -255,7 +318,36 @@
     // 5) Last outcome snapshot (periodic)
     var snap = outcomeSnapshot();
 
+    // Quick-count chips (identity/setup counts — continuous, no cadence).
+    var chips = '<div class="ad-chiprow">' +
+      metachip(AD.students.length, 'students') +
+      metachip(AD.teachers.length, 'staff members') +
+      metachip(AD.sections.length, 'sections') +
+      metachip(AD.skills.length, 'skills tracked') + '</div>';
+
+    // Skill-summary cards — grouped by the band MOST children sit in
+    // (periodic → carries a cadence label). Neutral band colours, no red.
+    var summarySection = '';
+    if (AD.completedPoints.length) {
+      var groups = AD.schoolSkillGroups(AD.latestComplete.key);
+      var order = [
+        { key: 'emerging', head: 'skills where most children are still emerging' },
+        { key: 'developing', head: 'skills where most children are developing' },
+        { key: 'secure', head: 'skills where most children are secure' },
+      ];
+      var sumBody = '<div class="ad-sumgrid">' + order.map(function (o) {
+        var g = groups[o.key], bm = AD.bandMeta(o.key);
+        return '<div class="ad-sumcard" style="--band:' + bm.color + '">' +
+          '<div class="n">' + g.length + '</div><div class="h">' + esc(o.head) + '</div>' +
+          (g.length ? '<ul>' + g.map(function (s) { return '<li>' + esc(s.name) + '</li>'; }).join('') + '</ul>' : '<div class="none">None in this group.</div>') +
+          '</div>';
+      }).join('') + '</div>' +
+      '<p class="ad-mod-note" style="margin-top:14px">Each skill is placed by whichever band most children are in — the same reading as the colour bars in Outcomes. <button class="link-btn" data-tooutcomes="1">See every skill →</button></p>';
+      summarySection = '<div style="margin-top:var(--ad-gap)">' + card('How each skill is doing', 'Where most children sit for each skill, school-wide.', sumBody, 'span2', '<div>' + cadence(AD.latestComplete.key) + '</div>') + '</div>';
+    }
+
     body.innerHTML = screenHead('Overview', 'A calm read on whether the programme is running, working, and where to step in.') +
+      chips +
       '<div class="ad-status" style="margin-bottom:var(--ad-gap)">' + esc(AD.statusLine()) + '</div>' +
       card('Quiet sections', 'Sections with no activity in ' + AD.quietThresholdDays + '+ days, most silent first.', quietBody, 'span2 accent') +
       '<div class="ad-grid two" style="margin-top:var(--ad-gap)">' +
@@ -264,14 +356,16 @@
       '</div>' +
       '<div style="margin-top:var(--ad-gap)">' +
         card('Last outcome snapshot', null, snap, '', '<div>' + cadence(AD.latestComplete.key) + '</div>') +
-      '</div>';
+      '</div>' +
+      summarySection;
 
     // wiring
     body.querySelectorAll('[data-viewsec]').forEach(function (b) { b.addEventListener('click', function () { var a = AD.activityFor(b.dataset.viewsec); go('implementation', { grade: a.grade, section: a.id }); }); });
     body.querySelectorAll('[data-msg]').forEach(function (b) { b.addEventListener('click', function () { composeMessage(AD.activityFor(b.dataset.msg)); }); });
     var oq = body.querySelector('[data-openqueue]'); if (oq) oq.addEventListener('click', openConcernQueue);
-    var toOut = body.querySelector('[data-tooutcomes]'); if (toOut) toOut.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); });
+    body.querySelectorAll('[data-tooutcomes]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
   };
+  function metachip(n, label) { return '<span class="ad-metachip"><b>' + n + '</b> ' + esc(label) + '</span>'; }
 
   function outcomeSnapshot() {
     if (!AD.completedPoints.length) return stEmpty('Not yet measured.', 'Skill bands appear after Baseline · ' + AD.points[0].month + '.');
@@ -450,18 +544,43 @@
             gsecs.map(function (s) { var d = AD.distribution(AD.studentsInSection(s), sk.key, point); return '<div style="display:grid;grid-template-columns:92px 1fr;gap:10px;align-items:center"><span style="font-size:11.5px;font-weight:700;color:var(--ink-450)">' + esc(s.name) + '</span>' + bandBar(d, true) + '</div>'; }).join('') +
             '</div></div>';
         }).join('');
-        compareCard = '<div style="margin-top:var(--ad-gap)">' + card('Compare sections — ' + compareGrade, 'Side-by-side band distribution across this grade.', cmpBody, '', '<div>' + cadence(point) + '</div>') + '</div>';
+        var cmpRadars = '<div style="margin-top:18px;border-top:1px solid var(--line-200);padding-top:16px"><div class="ad-mod-note" style="margin-bottom:10px">Multi-perspective view per section (mock data).</div><div class="ad-grid two">' +
+          gsecs.slice(0, 2).map(function (s) { return '<div><div style="text-align:center;font-weight:800;font-size:13px;color:var(--ink-700);margin-bottom:2px">' + esc(s.name) + '</div>' + radarBlock(AD.studentsInSection(s), point) + '</div>'; }).join('') + '</div></div>';
+        compareCard = '<div style="margin-top:var(--ad-gap)">' + card('Compare sections — ' + compareGrade, 'Side-by-side band distribution across this grade.', cmpBody + cmpRadars, '', '<div>' + cadence(point) + '</div>') + '</div>';
       }
     }
 
+    // Grade/section navigator — the mockup's "See your school as grades"
+    // → "Look deeper into [grade]" drill. Sits above the skill detail.
+    var navCards = '';
+    if (level === 'school') navCards = '<div style="margin-bottom:var(--ad-gap)">' + card('See your school as grades', 'Open a grade to look deeper.', gradeNavHTML(point), 'span2') + '</div>';
+    else if (level === 'grade') navCards = '<div style="margin-bottom:var(--ad-gap)">' + card('Look deeper into ' + esc(grade), 'Open a section for its full skill view.', sectionNavHTML(grade, point), 'span2') + '</div>';
+
+    // Areas of growth / strength (grade + section scope).
+    var gsCard = '';
+    if (level !== 'school') {
+      var gs = AD.growthStrength(students, point, 2);
+      var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
+      var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4><ul>' + gs.growth.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul></div>';
+      var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4><ul>' + gs.strength.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul></div>';
+      gsCard = '<div class="ad-grid two" style="margin-bottom:var(--ad-gap)">' + gGrowth + gStrength + '</div>';
+    }
+
+    // Multi-perspective radar (grade + section scope) — mock data.
+    var radarCard = '';
+    if (level !== 'school') radarCard = '<div style="margin-top:var(--ad-gap)">' + card('Multi-perspective view', 'How teachers, parents and children each rate this group — mock data for now.', radarBlock(students, point), '', '<div>' + cadence(point) + '</div>') + '</div>';
+
     body.innerHTML = screenHead('Outcomes', 'Is it working? Skill bands and movement — never individual results.') +
-      crumbs + filters +
+      crumbs + filters + navCards + gsCard +
       card('Skill band distribution', 'Where children sit across bands for each skill, at the selected point.', distBody, 'span2', '<div>' + cadence(point) + '</div>') +
+      radarCard +
       '<div style="margin-top:var(--ad-gap)">' + card('Movement since baseline', 'Net band movement per skill, Baseline → ' + AD.latestComplete.label + '.', moveBody, '', '<div>' + cadence(AD.latestComplete.key) + '</div>') + '</div>' +
       '<div style="margin-top:var(--ad-gap)">' + card('Progress over time', 'The three assessment points as named markers.', progBody, '', '<div>' + cadence(point) + '</div>') + '</div>' +
       targetCard + compareCard;
 
     // wiring
+    body.querySelectorAll('[data-gradenav]').forEach(function (b) { b.addEventListener('click', function () { setParams({ grade: b.dataset.gradenav, section: '', point: point }); }); });
+    body.querySelectorAll('[data-sectionnav]').forEach(function (b) { b.addEventListener('click', function () { setParams({ grade: grade, section: b.dataset.sectionnav, point: point }); }); });
     body.querySelectorAll('[data-scope]').forEach(function (b) { b.addEventListener('click', function () { var lv = b.dataset.scope; if (lv === 'school') setParams({ point: point }); else if (lv === 'grade') setParams({ grade: grade, point: point }); }); });
     body.querySelector('#o-grade').addEventListener('change', function (e) { setParams({ grade: e.target.value, section: '', point: point }); });
     body.querySelector('#o-section').addEventListener('change', function (e) { setParams({ grade: grade, section: e.target.value, point: point }); });
@@ -475,6 +594,21 @@
     var acc = { emerging: 0, developing: 0, secure: 0 }, tot = 0;
     AD.grades.forEach(function (g) { var n = AD.studentsInGrade(g).length; tot += n; var t = AD.targets[g][skillKey]; acc.emerging += t.emerging * n; acc.developing += t.developing * n; acc.secure += t.secure * n; });
     return { emerging: Math.round(acc.emerging / tot), developing: Math.round(acc.developing / tot), secure: Math.round(acc.secure / tot) };
+  }
+  // Grade cards (school scope) and section cards (grade scope) — the drill navigator.
+  function gradeNavHTML(point) {
+    return '<div class="ad-navcards">' + AD.grades.map(function (g) {
+      var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; }), d = distAllSkills(studs, point);
+      return '<button class="ad-navcard" data-gradenav="' + esc(g) + '"><div class="nc-top"><span class="nc-name">' + esc(g) + '</span><span style="color:var(--ink-300)">›</span></div>' +
+        '<div class="nc-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
+    }).join('') + '</div>';
+  }
+  function sectionNavHTML(grade, point) {
+    return '<div class="ad-navcards">' + AD.sections.filter(function (s) { return s.grade === grade; }).map(function (s) {
+      var studs = AD.studentsInSection(s), d = distAllSkills(studs, point);
+      return '<button class="ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="nc-name">' + esc(s.name) + '</span><span style="color:var(--ink-300)">›</span></div>' +
+        '<div class="nc-meta">' + plural(studs.length, 'student') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
+    }).join('') + '</div>';
   }
 
   // ========================================================
@@ -503,10 +637,12 @@
       '<input class="input" id="r-q" placeholder="Search name or student ID…" value="' + esc(q) + '" style="max-width:280px" aria-label="Search roster">' +
       selectWrap('r-grade', gradeOpts, grade, 'Grade') + selectWrap('r-section', secOpts, section, 'Section') + '</div>' +
       (!rows.length ? stEmpty('No students match your search.', 'Clear the search or change the filters.') :
-      '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Student ID</th><th>Grade</th><th>Section</th><th>Enrolment</th><th>Parent claim</th></tr></thead><tbody>' +
+      (SHOW_STUDENT_STAGE ? '<div class="ad-privacy"><span aria-hidden="true">⚠️</span><span><b>Temporary:</b> the developmental-stage column shows an individual child\'s SEL result, which leadership is not normally shown (spec §2). It is behind a flag and will be removed.</span></div>' : '') +
+      '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Student ID</th><th>Grade</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '<th>Enrolment</th><th>Parent claim</th></tr></thead><tbody>' +
         pageRows.map(function (r) {
           var claimChip = r.claim === 'Claimed' ? '<span class="ad-chip active"><span class="dot"></span>Claimed</span>' : r.claim === 'Invited' ? '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>' : '<span class="ad-chip quiet"><span class="dot"></span>Not invited</span>';
-          return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.grade) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.enrolment) + '</td><td>' + claimChip + '</td></tr>';
+          var stageCell = SHOW_STUDENT_STAGE ? '<td><span class="ad-bandchip"><i style="background:' + r.stage.color + '"></i>' + esc(r.stage.label) + '</span></td>' : '';
+          return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.grade) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '<td>' + esc(r.enrolment) + '</td><td>' + claimChip + '</td></tr>';
         }).join('') + '</tbody></table></div>' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--ink-450);font-weight:700">' +
         '<span>' + rows.length + ' students · page ' + page + ' of ' + pages + '</span><span>' +
@@ -514,10 +650,11 @@
         '<button class="btn btn-outline btn-sm" data-pg="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>Next →</button></span></div>');
 
     // teacher-section assignment
-    var assignBody = '<div class="ad-tablewrap"><table class="ad-table" style="min-width:460px"><thead><tr><th>Section</th><th>Assigned teacher</th><th></th></tr></thead><tbody>' +
+    var assignBody = '<div class="ad-tablewrap"><table class="ad-table" style="min-width:520px"><thead><tr><th>Section</th><th>Assigned teacher</th><th>Persona</th><th></th></tr></thead><tbody>' +
       AD.sections.map(function (s) {
         var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
-        return '<tr><td class="name">' + esc(s.name) + '</td><td><label class="select-wrap" style="max-width:220px"><select class="select" data-assign="' + s.id + '">' + opts + '</select></label></td><td style="color:var(--ink-300);font-size:12px">Ending an assignment keeps the section\'s history.</td></tr>';
+        var t = AD.teachers.find(function (x) { return x.id === s.teacherId; });
+        return '<tr><td class="name">' + esc(s.name) + '</td><td><label class="select-wrap" style="max-width:220px"><select class="select" data-assign="' + s.id + '">' + opts + '</select></label></td><td>' + esc((t && t.role) || '—') + '</td><td style="color:var(--ink-300);font-size:12px">Ending an assignment keeps the section\'s history.</td></tr>';
       }).join('') + '</tbody></table></div>';
 
     // user management
@@ -529,8 +666,8 @@
           '<td style="text-align:right;white-space:nowrap">' + (u.status === 'Invited' ? '<button class="link-btn" data-resend="' + i + '">Resend</button> · ' : '') + '<button class="link-btn" data-revoke="' + i + '" style="color:#B22447">Revoke</button></td></tr>';
       }).join('') + '</tbody></table></div>';
 
-    body.innerHTML = screenHead('Roster', 'Operational identity data. No SEL results ever appear here.') +
-      card('Students', AD.students.length + ' enrolled · identity and enrolment only.', listBody, 'span2') +
+    body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Operational identity data — plus a temporary developmental-stage column (see the note in Students).' : 'Operational identity data. No SEL results ever appear here.') +
+      card('Students', AD.students.length + ' enrolled · ' + (SHOW_STUDENT_STAGE ? 'identity, enrolment and a temporary stage column.' : 'identity and enrolment only.'), listBody, 'span2') +
       '<div style="margin-top:var(--ad-gap)">' + card('Grade migration', 'Promote, retain, remove and add students at year boundary.', '<p class="ad-mod-note" style="margin-bottom:14px">A full year-end flow — reviewable per student, with a preview and a 24-hour undo. Historical results always stay attached to the child and their prior section.</p><button class="btn btn-primary btn-sm" data-migrate="1">Start grade migration</button>') + '</div>' +
       '<div class="ad-grid two" style="margin-top:var(--ad-gap)">' +
         card('Teacher–section assignment', null, assignBody) +
