@@ -44,6 +44,39 @@
   var toastTimer;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2200); }
 
+  // ---------- hover info boxes (tooltips) ----------
+  // The domain vocabulary this dashboard quietly assumes. Each string is
+  // shown in a small dark bubble when its label is hovered/focused, so a
+  // leader who visits a few times a year never has to remember the jargon.
+  var TIP = {
+    emerging: 'Just starting to appear — the child needs regular adult support and prompts to use this skill.',
+    developing: 'Shows up often but is not consistent yet — used with the occasional reminder.',
+    secure: 'Steady and independent — the child uses it reliably across everyday situations.',
+    cadence: 'Skill outcomes are measured three times a year: Baseline (start), Midline (middle) and Endline (end). This tag shows the point you are viewing and the next one due.',
+    lastActivity: 'Days since anyone in this section last used Tilli.',
+    sessions: 'Ask Tilli learning sessions children completed in the selected date range — a read on how actively the class is using the programme.',
+    completion: 'How many students have finished the open assessment window. Completion only — never their scores.',
+    statusCol: 'A quick read of recent momentum. Hover a status chip to see what Active, Slowing and Quiet mean.',
+    active: 'Active — used Tilli recently and steadily.',
+    slowing: 'Slowing — still active, but activity has dropped off lately.',
+    quiet: 'Quiet — no activity for a while. A good place to check in.',
+    quietSections: 'Sections with no Tilli activity for a while, most silent first. A prompt to offer help — never a judgement of the teacher.',
+    movement: 'For each skill: how many children moved up a band, held steady, or moved down since Baseline. "Net up" is ups minus downs.',
+    perspective: 'The same skills rated from three viewpoints — teacher, parent and the child\'s own answers. The gaps between them are often the interesting part.',
+    effort: 'Support requests the teacher answered for children, per section — a measure of care given, not a ranking or a target.',
+  };
+  var PERSP_TIP = {
+    'Teacher': 'How the class teacher rates these skills.',
+    'Parent': 'How parents rate these skills at home.',
+    'Student Direct': 'The children\'s own answers, gathered directly through Ask Tilli.',
+  };
+  // Wrap an already-safe label so hovering it (and the little ⓘ) shows `text`.
+  // `cls` adds tooltip modifiers, e.g. 'down', 'down end'.
+  function withInfo(labelHTML, text, cls) {
+    return '<span class="ad-tip' + (cls ? ' ' + cls : '') + '" data-tip="' + esc(text) + '" tabindex="0">' +
+      labelHTML + '<span class="ad-info" aria-hidden="true">i</span></span>';
+  }
+
   // ---------- band rendering (shared by Outcomes + Reports) ----------
   function bandBar(dist, slim) {
     var p = dist.pct;
@@ -54,15 +87,17 @@
   }
   function bandLegend() {
     return '<div class="ad-legend">' + AD.bands.map(function (b) {
-      return '<span class="ad-bandchip"><i style="background:' + b.color + '"></i>' + b.label + '</span>';
+      return '<span class="ad-bandchip ad-tip" data-tip="' + esc(TIP[b.key] || '') + '" tabindex="0"><i style="background:' + b.color + '"></i>' + b.label + '</span>';
     }).join('') + '</div>';
   }
   // Cadence label — every periodic module carries one (spec §3).
   function cadence(pointKey) {
     var pt = AD.points.find(function (p) { return p.key === pointKey; }) || AD.latestComplete;
+    if (!pt) return '';   // no completed point yet (No-data lifecycle state)
     var next = AD.openPoint;
-    return '<span class="ad-cadence">' + esc(pt.label) + ' · ' + esc(pt.month) +
-      (next ? '<span class="next">Next: ' + esc(next.label) + ' · ' + esc(next.month) + '</span>' : '') + '</span>';
+    return '<span class="ad-cadence ad-tip end" data-tip="' + esc(TIP.cadence) + '" tabindex="0">' + esc(pt.label) + ' · ' + esc(pt.month) +
+      (next ? '<span class="next">Next: ' + esc(next.label) + ' · ' + esc(next.month) + '</span>' : '') +
+      '<span class="ad-info" aria-hidden="true">i</span></span>';
   }
 
   // ============================================================
@@ -121,7 +156,7 @@
   function radarBlock(students, pointKey) {
     var ps = perspSeries(students, pointKey);
     return '<div class="ad-radar-wrap">' + radarSVG(ps.series, ps.axes) +
-      '<div class="ad-radar-legend">' + ps.series.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span>'; }).join('') + '</div></div>';
+      '<div class="ad-radar-legend">' + ps.series.map(function (s) { return '<span class="ad-tip" data-tip="' + esc(PERSP_TIP[s.label] || '') + '" tabindex="0"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span>'; }).join('') + '</div></div>';
   }
 
   // ---------- state components ----------
@@ -187,7 +222,7 @@
   function navItems() { return NAV.filter(function (n) { return !(n.key === 'roster' && isPrincipal); }); }
 
   function chromeHTML(r) {
-    var roleLabel = isPrincipal ? 'Principal' : 'Coordinator';
+    var roleLabel = isPrincipal ? 'Principal' : (role === 'tilli' ? 'Tilli Team' : 'Coordinator');
     var yr = AD.academicYears;
     var yearCtrl = yr.length > 1
       ? '<span class="ad-year">' + esc(yr[yr.length - 1]) + ' ▾</span>'   // selector only when >1 year (spec §10.3)
@@ -224,10 +259,14 @@
     closeAcctMenu();
     var m = document.createElement('div');
     m.className = 'ad-acct-menu'; m.id = 'ad-acct-menu';
+    // Tilli Team drilled in from the internal platform — offer a way back to it.
+    var fromTilli = qp.get('from') === 'tilli' || role === 'tilli';
     m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span></div>' +
+      (fromTilli ? '<button data-am="tilli">← Tilli platform</button>' : '') +
       '<button data-am="switch">Switch school year</button>' +
       '<button data-am="signout">Sign out</button>';
     document.querySelector('.ad-header').parentNode.appendChild(m);
+    if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
     m.querySelector('[data-am="switch"]').addEventListener('click', function () { toast('Only one academic year of data exists yet.'); closeAcctMenu(); });
     setTimeout(function () { document.addEventListener('click', closeAcctMenu, { once: true }); }, 0);
@@ -256,9 +295,10 @@
   }
 
   // small helpers for building modules
-  function card(title, note, bodyHTML, extraClass, headRight) {
+  function card(title, note, bodyHTML, extraClass, headRight, tipText) {
+    var titleHTML = tipText ? withInfo(esc(title), tipText) : esc(title);
     return '<div class="ad-card ' + (extraClass || '') + '">' +
-      (title ? '<div class="ad-mod-h"><div><h3 class="ad-mod-title">' + esc(title) + '</h3>' + (note ? '<p class="ad-mod-note">' + note + '</p>' : '') + '</div>' + (headRight || '') + '</div>' : '') +
+      (title ? '<div class="ad-mod-h"><div><h3 class="ad-mod-title">' + titleHTML + '</h3>' + (note ? '<p class="ad-mod-note">' + note + '</p>' : '') + '</div>' + (headRight || '') + '</div>' : '') +
       bodyHTML + '</div>';
   }
   function screenHead(title, sub) { return '<h1 class="ad-screen-title">' + esc(title) + '</h1><p class="ad-screen-sub">' + esc(sub) + '</p>'; }
@@ -274,47 +314,6 @@
   //  1) OVERVIEW  (spec §5.1)
   // ========================================================
   SCREEN.overview = function (params, body) {
-    var wc = AD.windowCompletion();
-    var counts = AD.concernCounts();
-    var quiet = AD.activity.filter(function (a) { return a.lastActivityDays >= AD.quietThresholdDays; })
-      .sort(function (a, b) { return b.lastActivityDays - a.lastActivityDays; });
-
-    // 2) Quiet sections — the most important module.
-    var quietBody;
-    if (!quiet.length) {
-      quietBody = stEmpty('All sections active in the last ' + AD.quietThresholdDays + ' days.', 'Nothing needs your attention here right now.', true);
-    } else {
-      quietBody = '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Section</th><th>Teacher</th><th>Last activity</th><th></th></tr></thead><tbody>' +
-        quiet.map(function (s) {
-          return '<tr><td class="name">' + esc(s.name) + '</td><td>' + esc(s.teacher) + '</td>' +
-            '<td class="ad-num">' + relDays(s.lastActivityDays) + '</td>' +
-            '<td style="text-align:right;white-space:nowrap"><button class="link-btn" data-viewsec="' + s.id + '">View section</button>' +
-            (isCoordinator ? ' <span style="color:var(--ink-300)">·</span> <button class="link-btn" data-msg="' + s.id + '">Message teacher</button>' : '') +
-            '</td></tr>';
-        }).join('') + '</tbody></table></div>';
-    }
-
-    // 4) Open concerns
-    var concernsBody;
-    if (isCoordinator) {
-      concernsBody = '<div style="display:flex;gap:22px;flex-wrap:wrap">' +
-        [['New', 'status-new'], ['Routed', 'status-routed'], ['Closed', 'status-closed']].map(function (p) {
-          return '<div class="ad-stat"><div class="num">' + counts[p[0]] + '</div><div class="lbl"><span class="ad-chip ' + p[1] + '">' + p[0] + '</span></div></div>';
-        }).join('') + '</div>' +
-        '<button class="btn btn-outline btn-sm" data-openqueue="1" style="margin-top:16px">Open concern queue →</button>';
-    } else {
-      concernsBody = '<div style="display:flex;gap:22px;flex-wrap:wrap">' +
-        [['New'], ['Routed'], ['Closed']].map(function (p) { return '<div class="ad-stat"><div class="num">' + counts[p[0]] + '</div><div class="lbl">' + p[0] + '</div></div>'; }).join('') + '</div>' +
-        '<div class="ad-privacy"><span aria-hidden="true">🔒</span><span>Names are visible to the counsellor and coordinator only.</span></div>';
-    }
-
-    // 3) Assessment window status
-    var op = AD.openPoint;
-    var windowBody = op
-      ? '<div class="ad-stat"><div class="num">' + wc.sections.done + ' <span style="font-size:18px;color:var(--ink-300)">of ' + wc.sections.total + '</span></div><div class="lbl">sections complete</div></div>' +
-        '<p class="ad-mod-note" style="margin-top:12px">' + esc(op.label) + ' is <b>open</b> · closes ' + esc(AD.endlineCloses) + '. ' + wc.students.done + ' of ' + wc.students.total + ' students assessed.</p>'
-      : stEmpty('No assessment window is open.', 'Next: ' + AD.openPoint);
-
     // 5) Last outcome snapshot (periodic)
     var snap = outcomeSnapshot();
 
@@ -325,45 +324,33 @@
       metachip(AD.sections.length, 'sections') +
       metachip(AD.skills.length, 'skills tracked') + '</div>';
 
-    // Skill-summary cards — grouped by the band MOST children sit in
-    // (periodic → carries a cadence label). Neutral band colours, no red.
-    var summarySection = '';
+    // Areas of growth / strength — whole-school digest (top 2 each). Mirrors the
+    // per-class cards on Outcomes; the "See class breakdown" link drills in.
+    var gsSection = '';
     if (AD.completedPoints.length) {
-      var groups = AD.schoolSkillGroups(AD.latestComplete.key);
-      var order = [
-        { key: 'emerging', head: 'skills where most children are still emerging' },
-        { key: 'developing', head: 'skills where most children are developing' },
-        { key: 'secure', head: 'skills where most children are secure' },
-      ];
-      var sumBody = '<div class="ad-sumgrid">' + order.map(function (o) {
-        var g = groups[o.key], bm = AD.bandMeta(o.key);
-        return '<div class="ad-sumcard" style="--band:' + bm.color + '">' +
-          '<div class="n">' + g.length + '</div><div class="h">' + esc(o.head) + '</div>' +
-          (g.length ? '<ul>' + g.map(function (s) { return '<li>' + esc(s.name) + '</li>'; }).join('') + '</ul>' : '<div class="none">None in this group.</div>') +
-          '</div>';
-      }).join('') + '</div>' +
-      '<p class="ad-mod-note" style="margin-top:14px">Each skill is placed by whichever band most children are in — the same reading as the colour bars in Outcomes. <button class="link-btn" data-tooutcomes="1">See every skill →</button></p>';
-      summarySection = '<div style="margin-top:var(--ad-gap)">' + card('How each skill is doing', 'Where most children sit for each skill, school-wide.', sumBody, 'span2', '<div>' + cadence(AD.latestComplete.key) + '</div>') + '</div>';
+      var gs = AD.growthStrength(AD.students, AD.latestComplete.key, 2);
+      var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
+      var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
+      var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4>' + gsList(gs.growth) + '</div>';
+      var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4>' + gsList(gs.strength) + '</div>';
+      gsSection = '<div style="margin-top:var(--ad-gap)">' +
+        '<div class="ad-gs-head"><span class="ad-scopepill">All classes</span>' +
+        '<button class="link-btn" data-tobreakdown="1">See class breakdown →</button></div>' +
+        '<div class="ad-grid two" style="margin-top:12px">' + gGrowth + gStrength + '</div></div>';
     }
 
     body.innerHTML = screenHead('Overview', 'A calm read on whether the programme is running, working, and where to step in.') +
       chips +
-      '<div class="ad-status" style="margin-bottom:var(--ad-gap)">' + esc(AD.statusLine()) + '</div>' +
-      card('Quiet sections', 'Sections with no activity in ' + AD.quietThresholdDays + '+ days, most silent first.', quietBody, 'span2 accent') +
-      '<div class="ad-grid two" style="margin-top:var(--ad-gap)">' +
-        card('Assessment window', null, windowBody) +
-        card('Open concerns', 'Teacher-raised, by status.', concernsBody) +
-      '</div>' +
+      '<div style="margin-top:var(--ad-gap)">' + sectionActivityUI(params) + '</div>' +
       '<div style="margin-top:var(--ad-gap)">' +
-        card('Last outcome snapshot', null, snap, '', '<div>' + cadence(AD.latestComplete.key) + '</div>') +
+        card('Last outcome snapshot', null, snap, '', AD.latestComplete ? '<div>' + cadence(AD.latestComplete.key) + '</div>' : '') +
       '</div>' +
-      summarySection;
+      gsSection;
 
     // wiring
-    body.querySelectorAll('[data-viewsec]').forEach(function (b) { b.addEventListener('click', function () { var a = AD.activityFor(b.dataset.viewsec); go('implementation', { grade: a.grade, section: a.id }); }); });
-    body.querySelectorAll('[data-msg]').forEach(function (b) { b.addEventListener('click', function () { composeMessage(AD.activityFor(b.dataset.msg)); }); });
-    var oq = body.querySelector('[data-openqueue]'); if (oq) oq.addEventListener('click', openConcernQueue);
+    wireSectionActivity(body, params);
     body.querySelectorAll('[data-tooutcomes]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
+    body.querySelectorAll('[data-tobreakdown]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
   };
   function metachip(n, label) { return '<span class="ad-metachip"><b>' + n + '</b> ' + esc(label) + '</span>'; }
 
@@ -392,12 +379,21 @@
   // ========================================================
   var implSort = { key: 'lastActivityDays', dir: 'desc' };  // default: problems on top
   var cmpTwo = { a: null, b: null };  // "Compare two classes" picker state (Outcomes) — any two sections, school-wide
-  SCREEN.implementation = function (params, body) {
-    var grade = params.grade || '';
-    var section = params.section || '';
-    var range = params.range || '30';
 
-    // filters
+  // Section activity (filters + table) — lives on the Overview screen. Kept as a
+  // screen-agnostic helper: setParams/render act on whatever route is current.
+  function sortableTh(key, label, num, tipText, tipCls) { var on = implSort.key === key; var lbl = tipText ? withInfo(esc(label), tipText, tipCls || 'down') : esc(label); return '<th class="sortable' + (num ? ' ad-num' : '') + '" data-sort="' + key + '">' + lbl + (on ? ' <span class="arw">' + (implSort.dir === 'asc' ? '▲' : '▼') + '</span>' : '') + '</th>'; }
+  function sectionActivityRows(grade, section) {
+    var rows = AD.activity.filter(function (a) { return (!grade || a.grade === grade) && (!section || a.id === section); });
+    return rows.slice().sort(function (a, b) {
+      var k = implSort.key, av = a[k], bv = b[k];
+      if (k === 'name' || k === 'teacher') { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+      if (k === 'completion') { av = a.completion.done / a.completion.total; bv = b.completion.done / b.completion.total; }
+      var r = av < bv ? -1 : av > bv ? 1 : 0; return implSort.dir === 'asc' ? r : -r;
+    });
+  }
+  function sectionActivityUI(params) {
+    var grade = params.grade || '', section = params.section || '', range = params.range || '30';
     var gradeOpts = [{ v: '', t: 'All grades' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
     var secOpts = [{ v: '', t: 'All sections' }].concat(AD.sections.filter(function (s) { return !grade || s.grade === grade; }).map(function (s) { return { v: s.id, t: s.name }; }));
     var rangeOpts = [{ v: '7', t: 'Last 7 days' }, { v: '30', t: 'Last 30 days' }, { v: '90', t: 'Last 90 days' }];
@@ -406,64 +402,49 @@
       selectWrap('f-section', secOpts, section, 'Section') +
       selectWrap('f-range', rangeOpts, range, 'Date range') +
       '<button class="btn btn-outline btn-sm ad-refresh" id="f-refresh" title="Data changes rarely — refresh to re-pull activity">↻ Refresh</button></div>';
-
-    // filtered rows
-    var rows = AD.activity.filter(function (a) { return (!grade || a.grade === grade) && (!section || a.id === section); });
-    rows = rows.slice().sort(function (a, b) {
-      var k = implSort.key, av = a[k], bv = b[k];
-      if (k === 'name' || k === 'teacher') { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
-      if (k === 'completion') { av = a.completion.done / a.completion.total; bv = b.completion.done / b.completion.total; }
-      var r = av < bv ? -1 : av > bv ? 1 : 0; return implSort.dir === 'asc' ? r : -r;
-    });
-    function sortableTh(key, label, num) { var on = implSort.key === key; return '<th class="sortable' + (num ? ' ad-num' : '') + '" data-sort="' + key + '">' + esc(label) + (on ? ' <span class="arw">' + (implSort.dir === 'asc' ? '▲' : '▼') + '</span>' : '') + '</th>'; }
+    var rows = sectionActivityRows(grade, section);
     var tableBody = !rows.length ? stEmpty('No sections match these filters.', 'Try widening the grade or section filter.') :
       '<div class="ad-tablewrap"><table class="ad-table"><thead><tr>' +
-        sortableTh('name', 'Section') + sortableTh('teacher', 'Teacher') + sortableTh('lastActivityDays', 'Last activity') +
-        sortableTh('sessions30', 'Ask Tilli sessions', true) + sortableTh('completion', 'Assessment completion') + sortableTh('status', 'Status') +
+        sortableTh('name', 'Section') + sortableTh('teacher', 'Teacher') + sortableTh('lastActivityDays', 'Last activity', false, TIP.lastActivity) +
+        sortableTh('completion', 'Assessment completion', false, TIP.completion) + sortableTh('status', 'Status', false, TIP.statusCol, 'down end') +
       '</tr></thead><tbody>' + rows.map(function (a) {
         return '<tr class="clickable" data-secdetail="' + a.id + '"><td class="name">' + esc(a.name) + '</td><td>' + esc(a.teacher) + '</td>' +
           '<td class="ad-num">' + relDays(a.lastActivityDays) + '</td>' +
-          '<td class="ad-num">' + a.sessions30 + '</td>' +
-          '<td class="ad-num">' + a.completion.done + ' / ' + a.completion.total + ' students</td>' +
+          '<td class="ad-num">' + (AD.openPoint ? a.completion.done + ' / ' + a.completion.total + ' students' : '<span style="color:var(--ink-300)">— no open window</span>') + '</td>' +
           '<td>' + statusChip(a.status) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-
-    // activity over time (aggregate weeks of filtered rows)
-    var weeks = [];
-    for (var w = 0; w < 12; w++) weeks.push(rows.reduce(function (sum, a) { return sum + (a.weeks[w] || 0); }, 0));
-    var maxW = Math.max.apply(null, weeks.concat([1]));
-    var colChart = '<div class="ad-cols">' + weeks.map(function (v) { return '<div class="col' + (v === 0 ? ' dim' : '') + '" style="height:' + Math.max(3, Math.round(v / maxW * 130)) + 'px" title="' + v + ' sessions"></div>'; }).join('') +
-      '</div><div class="ad-colx">' + weeks.map(function (_, i) { return '<span>' + (i % 3 === 0 ? 'W' + (i + 1) : '') + '</span>'; }).join('') + '</div>';
-
-    // teacher effort (support delivered — never surveillance)
-    var maxSup = Math.max.apply(null, rows.map(function (a) { return a.supportAnswered; }).concat([1]));
-    var effort = '<div class="ad-tablewrap"><table class="ad-table" style="min-width:420px"><thead><tr><th>Section</th><th>Teacher</th><th class="ad-num">Support requests answered</th></tr></thead><tbody>' +
-      rows.slice().sort(function (a, b) { return b.supportAnswered - a.supportAnswered; }).map(function (a) {
-        return '<tr><td class="name">' + esc(a.name) + '</td><td>' + esc(a.teacher) + '</td><td class="ad-num"><div style="display:flex;align-items:center;gap:10px"><div style="flex:1;max-width:140px;height:8px;border-radius:4px;background:var(--surface-100);overflow:hidden"><span style="display:block;height:100%;width:' + Math.round(a.supportAnswered / maxSup * 100) + '%;background:var(--green-500)"></span></div>' + a.supportAnswered + '</div></td></tr>';
-      }).join('') + '</tbody></table></div>';
-
-    body.innerHTML = screenHead('Implementation', 'Is it happening? Live activity across every section.') +
-      filters +
-      card('Section activity', 'Sorted with the sections that need attention first. Click a row for completion detail.', tableBody, 'span2') +
-      '<div class="ad-grid two" style="margin-top:var(--ad-gap)">' +
-        card('Activity over time', 'Ask Tilli sessions per week' + (grade || section ? ', filtered.' : ', school-wide.'), colChart) +
-        card('Teacher effort', 'Support delivered to children, per section — not a ranking.', effort) +
-      '</div>';
-
-    // wiring
-    body.querySelector('#f-grade').addEventListener('change', function (e) { setParams({ grade: e.target.value, section: '', range: range }); });
+    return filters + card('Section activity', 'Sorted with the sections that need attention first. Click a row for completion detail.', tableBody, 'span2');
+  }
+  function wireSectionActivity(body, params) {
+    var grade = params.grade || '', section = params.section || '', range = params.range || '30';
+    var g = body.querySelector('#f-grade'); if (!g) return;   // table may be absent (no rows / empty state)
+    g.addEventListener('change', function (e) { setParams({ grade: e.target.value, section: '', range: range }); });
     body.querySelector('#f-section').addEventListener('change', function (e) { setParams({ grade: grade, section: e.target.value, range: range }); });
     body.querySelector('#f-range').addEventListener('change', function (e) { setParams({ grade: grade, section: section, range: e.target.value }); });
     body.querySelector('#f-refresh').addEventListener('click', function () { toast('Activity refreshed.'); });
     body.querySelectorAll('[data-sort]').forEach(function (th) { th.addEventListener('click', function () { var k = th.dataset.sort; if (implSort.key === k) implSort.dir = implSort.dir === 'asc' ? 'desc' : 'asc'; else { implSort.key = k; implSort.dir = (k === 'name' || k === 'teacher') ? 'asc' : 'desc'; } render(); }); });
     if (isCoordinator) body.querySelectorAll('[data-secdetail]').forEach(function (tr) { tr.addEventListener('click', function () { completionDetail(tr.dataset.secdetail); }); });
+  }
+
+  SCREEN.implementation = function (params, body) {
+    // Section activity now lives on Overview; this screen just points there.
+    body.innerHTML = screenHead('Implementation', 'Is it happening? Live activity across every section.') +
+      stEmpty('Section activity moved to Overview.', 'Live activity across every section now sits at the top of the Overview screen.');
   };
-  function statusChip(s) { var lbl = { active: 'Active', slowing: 'Slowing', quiet: 'Quiet' }[s]; return '<span class="ad-chip ' + s + '"><span class="dot"></span>' + lbl + '</span>'; }
+  function statusChip(s) { var lbl = { active: 'Active', slowing: 'Slowing', quiet: 'Quiet' }[s]; return '<span class="ad-chip ' + s + '" title="' + esc(TIP[s] || '') + '"><span class="dot"></span>' + lbl + '</span>'; }
 
   // ========================================================
   //  3) OUTCOMES  (spec §5.3) — periodic data only
   // ========================================================
   SCREEN.outcomes = function (params, body) {
+    // No completed assessment point yet (No-data lifecycle state): every
+    // outcome module needs at least one measured point, so show one calm
+    // empty state instead of the full skill grid.
+    if (!AD.completedPoints.length) {
+      body.innerHTML = screenHead('Outcomes', 'Is it working? Skill bands and movement — never individual results.') +
+        card('Skill outcomes', null, stEmpty('Not yet measured.', 'Skill bands appear after the Baseline assessment · ' + AD.points[0].month + '.'), 'span2');
+      return;
+    }
     // scope from filters (School → Grade → Section)
     var grade = params.grade || '';
     var section = params.section || '';
@@ -488,14 +469,27 @@
       '<span style="width:1px;height:26px;background:var(--line-200)"></span>' +
       selectWrap('o-point', pointOpts, point, 'Assessment point') + '</div>';
 
-    // Module 1+2: skill band distribution + interpretation line
+    // Module 1+2: skill band distribution + interpretation line.
+    // Split into two collapsible buckets (Social-Emotional / Executive Function)
+    // keyed off each skill's `group` field (sel | cog).
     var gradeBand = grade || 'school';
-    var distBody = '<div style="margin-bottom:14px">' + bandLegend() + '</div>' + AD.skills.map(function (sk) {
+    function distSkillRow(sk) {
       var d = AD.distribution(students, sk.key, point);
       var interp = AD.interpret(sk.key, gradeBand, point, AD.shapeOf(d));
-      return '<div class="ad-skillrow"><div class="ad-skillname">' + esc(sk.name) + '<small>' + (sk.group === 'sel' ? 'Social-emotional' : 'Cognitive') + '</small></div>' +
+      return '<div class="ad-skillrow"><div class="ad-skillname">' + esc(sk.name) + '<small>' + (sk.group === 'sel' ? 'Social-emotional' : 'Executive function') + '</small></div>' +
         '<div>' + bandBar(d) + '<p class="ad-interp' + (interp.placeholder ? ' placeholder' : '') + '">' + esc(interp.text) + '</p></div></div>';
-    }).join('');
+    }
+    function distBucket(title, groupKey) {
+      var list = AD.skills.filter(function (s) { return s.group === groupKey; });
+      return '<details class="ad-bucket" open>' +
+        '<summary class="ad-bucket-sum"><span class="ad-bucket-chev">▾</span>' +
+        '<span class="ad-bucket-title">' + esc(title) + '</span>' +
+        '<span class="ad-bucket-count">' + list.length + ' skills</span></summary>' +
+        '<div class="ad-bucket-body">' + list.map(distSkillRow).join('') + '</div></details>';
+    }
+    var distBody = '<div style="margin-bottom:14px">' + bandLegend() + '</div>' +
+      distBucket('Social-Emotional', 'sel') +
+      distBucket('Executive Function', 'cog');
 
     // Module 3: movement since baseline (needs ≥2 complete points)
     var moveBody;
@@ -569,16 +563,21 @@
 
     // Multi-perspective radar (grade + section scope) — mock data.
     var radarCard = '';
-    if (level !== 'school') radarCard = '<div style="margin-top:var(--ad-gap)">' + card('Multi-perspective view', 'How teachers, parents and children each rate this group — mock data for now.', radarBlock(students, point), '', '<div>' + cadence(point) + '</div>') + '</div>';
+    if (level !== 'school') radarCard = '<div style="margin-top:var(--ad-gap)">' + card('Multi-perspective view', 'How teachers, parents and children each rate this group — mock data for now.', radarBlock(students, point), '', '<div>' + cadence(point) + '</div>', TIP.perspective) + '</div>';
 
     // Compare two classes — pick ANY two sections school-wide and read their
     // skill-band distributions side by side at the selected point. Independent
     // of the scope filters above (kept in module state, not the URL). Re-renders
     // in place on change so it never yanks the page back to the top.
+    // Nothing is pre-selected — the user picks both classes. Only clear a
+    // selection if it points at a section that no longer exists.
     var validIds = AD.sections.map(function (s) { return s.id; });
-    if (validIds.indexOf(cmpTwo.a) < 0) cmpTwo.a = AD.sections[0].id;
-    if (validIds.indexOf(cmpTwo.b) < 0) cmpTwo.b = (AD.sections[1] || AD.sections[0]).id;
-    function cmp2Options(sel) { return AD.sections.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join(''); }
+    if (cmpTwo.a && validIds.indexOf(cmpTwo.a) < 0) cmpTwo.a = null;
+    if (cmpTwo.b && validIds.indexOf(cmpTwo.b) < 0) cmpTwo.b = null;
+    function cmp2Options(sel) {
+      return '<option value=""' + (sel ? '' : ' selected') + ' disabled>Select a class…</option>' +
+        AD.sections.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+    }
     function cmp2HTML() {
       var secA = AD.sections.find(function (s) { return s.id === cmpTwo.a; });
       var secB = AD.sections.find(function (s) { return s.id === cmpTwo.b; });
@@ -588,15 +587,19 @@
         '<div class="cmp-pick"><span class="cmp-cap">Class B</span><label class="select-wrap"><select class="select" id="o-classb" title="Second class to compare">' + cmp2Options(cmpTwo.b) + '</select></label></div>' +
         '</div>';
       var inner;
-      if (cmpTwo.a === cmpTwo.b) {
+      if (!secA || !secB) {
+        inner = pickers + stEmpty('Pick two classes.', 'Choose a class in each dropdown to compare them side by side.');
+      } else if (cmpTwo.a === cmpTwo.b) {
         inner = pickers + stEmpty('Pick two different classes.', 'Choose another class in one of the dropdowns to compare them side by side.');
       } else {
-        function cmpRow(nm, d) { return '<div class="cmp-row"><span class="cmp-row-lbl">' + esc(nm) + '</span>' + bandBar(d, true) + '</div>'; }
-        inner = pickers + '<div style="margin:2px 0 14px">' + bandLegend() + '</div>' + AD.skills.map(function (sk) {
-          var dA = AD.distribution(AD.studentsInSection(secA), sk.key, point);
-          var dB = AD.distribution(AD.studentsInSection(secB), sk.key, point);
-          return '<div class="ad-skillrow"><div class="ad-skillname">' + esc(sk.name) + '</div><div style="display:flex;flex-direction:column;gap:8px">' + cmpRow(secA.name, dA) + cmpRow(secB.name, dB) + '</div></div>';
-        }).join('');
+        // T-table: skills down the rows, one column per class.
+        inner = pickers + '<div style="margin:2px 0 14px">' + bandLegend() + '</div>' +
+          '<div class="ad-tablewrap"><table class="cmp-table"><thead><tr><th>Skill</th><th>' + esc(secA.name) + '</th><th>' + esc(secB.name) + '</th></tr></thead><tbody>' +
+          AD.skills.map(function (sk) {
+            var dA = AD.distribution(AD.studentsInSection(secA), sk.key, point);
+            var dB = AD.distribution(AD.studentsInSection(secB), sk.key, point);
+            return '<tr><td class="cmp-skill">' + esc(sk.name) + '</td><td>' + bandBar(dA, true) + '</td><td>' + bandBar(dB, true) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
       }
       return card('Compare two classes', '<span class="ad-chip status-new" style="margin-right:8px">New</span>Any two classes, side by side at the selected point.', inner, 'span2', '<div>' + cadence(point) + '</div>');
     }
@@ -612,7 +615,7 @@
       card('Skill band distribution', 'Where children sit across bands for each skill, at the selected point.', distBody, 'span2', '<div>' + cadence(point) + '</div>') +
       '<div id="o-cmp2" style="margin-top:var(--ad-gap)">' + cmp2HTML() + '</div>' +
       radarCard +
-      '<div style="margin-top:var(--ad-gap)">' + card('Movement since baseline', 'Net band movement per skill, Baseline → ' + AD.latestComplete.label + '.', moveBody, '', '<div>' + cadence(AD.latestComplete.key) + '</div>') + '</div>' +
+      '<div style="margin-top:var(--ad-gap)">' + card('Movement since baseline', 'Net band movement per skill, Baseline → ' + AD.latestComplete.label + '.', moveBody, '', '<div>' + cadence(AD.latestComplete.key) + '</div>', TIP.movement) + '</div>' +
       '<div style="margin-top:var(--ad-gap)">' + card('Progress over time', 'The three assessment points as named markers.', progBody, '', '<div>' + cadence(point) + '</div>') + '</div>' +
       targetCard + compareCard;
 
@@ -680,7 +683,7 @@
       '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Student ID</th><th>Grade</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '<th>Enrolment</th><th>Parent claim</th></tr></thead><tbody>' +
         pageRows.map(function (r) {
           var claimChip = r.claim === 'Claimed' ? '<span class="ad-chip active"><span class="dot"></span>Claimed</span>' : r.claim === 'Invited' ? '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>' : '<span class="ad-chip quiet"><span class="dot"></span>Not invited</span>';
-          var stageCell = SHOW_STUDENT_STAGE ? '<td><span class="ad-bandchip"><i style="background:' + r.stage.color + '"></i>' + esc(r.stage.label) + '</span></td>' : '';
+          var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ad-bandchip"><i style="background:' + r.stage.color + '"></i>' + esc(r.stage.label) + '</span>' : '<span style="color:var(--ink-300)">not yet measured</span>') + '</td>' : '';
           return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.grade) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '<td>' + esc(r.enrolment) + '</td><td>' + claimChip + '</td></tr>';
         }).join('') + '</tbody></table></div>' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--ink-450);font-weight:700">' +
@@ -742,6 +745,12 @@
   //  5) REPORTS  (spec §5.5) — both roles
   // ========================================================
   SCREEN.reports = function (params, body) {
+    // Nothing measured yet → nothing to report (No-data lifecycle state).
+    if (!AD.completedPoints.length) {
+      body.innerHTML = screenHead('Reports', 'The screen you came for. Everything here is safe to share.') +
+        card('Reports', null, stEmpty('Nothing to report yet.', 'Reports become available after the Baseline assessment · ' + AD.points[0].month + '.'), 'span2');
+      return;
+    }
     var scope = params.rscope || 'school';        // school | <grade>
     var point = params.rpoint || AD.latestComplete.key;
     var scopeOpts = [{ v: 'school', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
@@ -938,7 +947,8 @@
     // deterministic "outstanding" set sized to match the activity completion count
     var outstandingN = a.completion.total - a.completion.done;
     var outstanding = students.slice(students.length - outstandingN);
-    openModal(modalHead(a.name + ' — ' + AD.openPoint.label + ' completion') +
+    var winLabel = AD.openPoint ? AD.openPoint.label : 'Assessment';
+    openModal(modalHead(a.name + ' — ' + winLabel + ' completion') +
       '<p class="ad-mod-note" style="margin-bottom:14px">' + a.completion.done + ' of ' + a.completion.total + ' students complete. This is completion only — no scores, bands or skill data.</p>' +
       (outstanding.length ? '<div style="font-weight:800;font-size:12px;color:var(--ink-450);margin-bottom:8px">STILL TO COMPLETE</div><div class="ad-tablewrap"><table class="ad-table" style="min-width:360px"><thead><tr><th>Student</th><th>Student ID</th></tr></thead><tbody>' +
         outstanding.map(function (s) { return '<tr><td class="name">' + esc(s.name) + '</td><td class="ad-num">' + esc(s.adm) + '</td></tr>'; }).join('') + '</tbody></table></div>'
@@ -1039,6 +1049,50 @@
     return { promote: s.promote, retain: s.retain, graduate: s.graduate, remove: s.remove, add: s.add, headcounts: hc };
   }
 
+  // ============================================================
+  //  PREVIEW-STATE TOGGLE  (demo / dev tooling — NOT part of the
+  //  shipped leadership UI). Lets you see the coordinator dashboard
+  //  at every stage of a school's assessment year by flipping the
+  //  lifecycle state in ADMIN_DATA, then re-rendering. Lives OUTSIDE
+  //  #ad-app so it survives full re-renders. Delete this block (and
+  //  the LIFECYCLE_STATES layer in admin-data.js) to ship.
+  // ============================================================
+  function buildStatePanel() {
+    if (document.getElementById('ad-statepanel')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'ad-statepanel'; wrap.id = 'ad-statepanel';
+    document.body.appendChild(wrap);
+    renderStatePanel();
+  }
+  function renderStatePanel() {
+    var wrap = document.getElementById('ad-statepanel'); if (!wrap) return;
+    var active = AD.lifecycleState;
+    var collapsed = wrap.classList.contains('collapsed');
+    wrap.innerHTML =
+      '<div class="ad-sp-head">' +
+        '<span class="ad-sp-title">Preview stage <span class="ad-sp-new" title="Newly added demo control — remove before shipping">*</span></span>' +
+        '<button class="ad-sp-toggle" data-sptoggle="1" title="Show / hide the preview-stage buttons">' + (collapsed ? '▸' : '▾') + '</button>' +
+      '</div>' +
+      '<div class="ad-sp-body">' +
+        '<p class="ad-sp-hint">See the coordinator dashboard at each point of a school\'s year. Not shown to real users.</p>' +
+        AD.lifecycleStates.map(function (s) {
+          return '<button class="ad-sp-btn' + (s.key === active ? ' on' : '') + '" data-spstate="' + esc(s.key) + '" title="' + esc(s.hint) + '">' +
+            '<span class="ad-sp-dot"></span>' + esc(s.label) + '</button>';
+        }).join('') +
+      '</div>';
+    wrap.querySelector('[data-sptoggle]').addEventListener('click', function () { wrap.classList.toggle('collapsed'); renderStatePanel(); });
+    wrap.querySelectorAll('[data-spstate]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        AD.setLifecycleState(b.dataset.spstate);
+        render();
+        renderStatePanel();
+        var s = AD.lifecycleStates.find(function (x) { return x.key === AD.lifecycleState; });
+        toast('Preview: ' + (s ? s.label : '') + ' stage.');
+      });
+    });
+  }
+
   // ---------- boot ----------
+  buildStatePanel();
   if (!location.hash) go('overview', {}, { replace: true }); else render();
 })();

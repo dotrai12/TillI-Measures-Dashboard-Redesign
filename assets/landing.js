@@ -186,6 +186,13 @@
 
   function go() {
     const isNew = state.step === 'signup';
+    // Tilli Team → the internal managing platform (NOT a single school).
+    // A cross-school portfolio, analytics and ops surface lives at tilli.html.
+    if (state.role === 'tilli') {
+      setSession('tilli', state.email);
+      window.location.href = 'tilli.html?email=' + encodeURIComponent(state.email);
+      return;
+    }
     if (state.role === 'teacher') {
       // Leadership email → admin dashboard (never the onboarding flow).
       const a = admin(state.email);
@@ -364,11 +371,12 @@
       <div style="display:flex;flex-direction:column;gap:14px">
         ${card('#FCC30B', 'family.png', 'Parent / Home', "Follow your child's assessments", 'parent')}
         ${card('#26BDE2', 'graduation-cap.png', 'School', 'See your whole class garden', 'teacher')}
+        ${card('#56C02B', 'sparkle.png', 'Tilli Team', 'Internal view across the school', 'tilli')}
       </div>`;
   }
 
   function schoolView() {
-    const isTeacher = state.role === 'teacher';
+    const isTeacher = state.role !== 'parent';   // teacher + Tilli Team see the school-facing wording
     const q = (state.schoolQuery || '').trim().toLowerCase();
     // Only search once the user has typed enough — no full-list-on-focus.
     const enoughChars = q.length >= SCHOOL_MIN_CHARS;
@@ -401,14 +409,21 @@
   }
 
   function emailView() {
+    const isTilli = state.role === 'tilli';
+    const pill = isTilli
+      ? `<span class="pill-info">Tilli Team &#183; internal</span>`
+      : `<span class="pill-info">${esc(state.school)}</span>`;
+    const hint = isTilli
+      ? 'Demo: use team@tilli.org to sign in to the internal platform.'
+      : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
     return `
       <h2 style="font-weight:700;font-size:24px;text-align:center;margin:0 0 10px">Enter your email</h2>
-      <p style="text-align:center;margin:0 0 20px"><span class="pill-info">${esc(state.school)}</span></p>
+      <p style="text-align:center;margin:0 0 20px">${pill}</p>
       <form id="email-form" style="display:flex;flex-direction:column;gap:14px">
         <input id="email-input" class="input focus" type="email" required value="${esc(state.email)}" placeholder="you@email.com" aria-label="Email address" autofocus>
         <button type="submit" class="btn btn-primary block focus">Enter &#8594;</button>
       </form>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12px;color:var(--ink-300);text-align:center;margin:14px 0 0">Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.</p>`;
+      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12px;color:var(--ink-300);text-align:center;margin:14px 0 0">${hint}</p>`;
   }
 
   function checkingView() {
@@ -585,7 +600,16 @@
     scope = scope || root;
     // buttons with data-act / data-role / data-child etc.
     scope.querySelectorAll('[data-role]').forEach((b) =>
-      b.addEventListener('click', () => set({ step: 'school', role: b.dataset.role, school: '', schoolQuery: '', schoolListOpen: false })));
+      b.addEventListener('click', () => {
+        const role = b.dataset.role;
+        // Tilli Team is internal — it doesn't belong to a school, so skip the
+        // school picker and go straight to the email/password step.
+        if (role === 'tilli') {
+          set({ step: 'email', role, school: 'Tilli Internal', schoolQuery: '', schoolListOpen: false, email: '', password: '' });
+          return;
+        }
+        set({ step: 'school', role, school: '', schoolQuery: '', schoolListOpen: false });
+      }));
 
     scope.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => handleAct(b.dataset.act, ev)));
 
@@ -781,7 +805,8 @@
     clearTimeout(checkTimer);
     const s = state.step;
     if (s === 'school') set({ step: 'role' });
-    else if (s === 'email') set({ step: 'school' });
+    // Tilli Team skipped the school step, so its email screen goes back to role.
+    else if (s === 'email') set({ step: state.role === 'tilli' ? 'role' : 'school' });
     else set({ step: 'email', password: '' });
   }
 

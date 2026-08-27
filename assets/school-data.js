@@ -181,8 +181,19 @@
       name: 'Meera Krishnan',
       email: 'meera.krishnan@littlesprouts.edu',
       password: 'Tilli@Admin1',
-      role: 'coordinator',            // 'coordinator' (full) | 'principal' (view-only)
+      role: 'coordinator',            // 'coordinator' (full) | 'principal' (view-only) | 'tilli' (full, internal)
       title: 'Programme Coordinator',
+    },
+    {
+      // Tilli's own team — internal staff who log in to view a partner school.
+      // Full (coordinator-level) access; the admin dashboard treats 'tilli'
+      // like a coordinator but shows a "Tilli Team" badge.
+      id: 'a-tilli',
+      name: 'Tilli Team',
+      email: 'team@tilli.org',
+      password: 'Tilli@Team1',
+      role: 'tilli',
+      title: 'Tilli Team',
     },
   ];
 
@@ -214,11 +225,13 @@
     parent:      { email: 'priya.menon@example.com',      password: 'Tilli@Parent1' },
     teacher:     { email: 'kavya.rao@littlesprouts.edu',  password: 'Tilli@Teacher1' },
     coordinator: { email: 'meera.krishnan@littlesprouts.edu', password: 'Tilli@Admin1' },
+    tilli:       { email: 'team@tilli.org',               password: 'Tilli@Team1' },
   };
   const passwords = {
     'priya.menon@example.com': 'Tilli@Parent1',
     'kavya.rao@littlesprouts.edu': 'Tilli@Teacher1',
     'meera.krishnan@littlesprouts.edu': 'Tilli@Admin1',
+    'team@tilli.org': 'Tilli@Team1',
   };
 
   // email → admin record (used by landing.js to route leadership logins).

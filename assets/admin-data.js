@@ -54,15 +54,54 @@
   //  completion is live, but no bands exist for it yet).
   // ---------------------------------------------------------------
   var POINTS = [
-    { key: 'baseline', label: 'Baseline', month: 'April 2026',     scoreField: 'baseline', status: 'complete' },
-    { key: 'midline',  label: 'Midline',  month: 'July 2026',      scoreField: 'mid',      status: 'complete' },
-    { key: 'endline',  label: 'Endline',  month: 'September 2026', scoreField: 'post',     status: 'open' },
+    { key: 'baseline', label: 'Baseline', month: 'April 2026',     scoreField: 'baseline', status: 'upcoming' },
+    { key: 'midline',  label: 'Midline',  month: 'July 2026',      scoreField: 'mid',      status: 'upcoming' },
+    { key: 'endline',  label: 'Endline',  month: 'September 2026', scoreField: 'post',     status: 'upcoming' },
   ];
-  var COMPLETED_POINTS = POINTS.filter(function (p) { return p.status === 'complete'; });
-  var LATEST_COMPLETE = COMPLETED_POINTS[COMPLETED_POINTS.length - 1]; // Midline
-  var OPEN_POINT = POINTS.find(function (p) { return p.status === 'open'; }); // Endline
   var ENDLINE_CLOSES = 'Sep 24, 2026';
   var ENDLINE_OPENS_IN_DAYS = 6; // for the Overview status line countdown
+
+  // ---------------------------------------------------------------
+  //  LIFECYCLE STATES  (preview / demo tooling — NOT shipped state).
+  //  The whole dashboard's "what data exists yet" is a function of
+  //  each assessment point's status. These named states let the
+  //  coordinator dashboard be previewed at every stage of a school's
+  //  year. The GUI toggle in admin.js flips between them (persisted in
+  //  localStorage). 100% presentational — a real deployment derives
+  //  these statuses from the backend, not from a dropdown.
+  //
+  //    status per point:  upcoming | open | complete
+  // ---------------------------------------------------------------
+  var LIFECYCLE_STATES = [
+    { key: 'nodata',   label: 'No data',    hint: 'Programme just started. The Baseline window is open; nothing has been measured yet, so every outcome view is empty.',
+      status: { baseline: 'open',     midline: 'upcoming', endline: 'upcoming' } },
+    { key: 'baseline', label: 'Baseline',   hint: 'Baseline is complete. The first skill bands appear; movement still waits on a second point.',
+      status: { baseline: 'complete', midline: 'upcoming', endline: 'upcoming' } },
+    { key: 'between',  label: 'In between', hint: 'The Midline window is open and collecting. Baseline results stay visible alongside a live completion count.',
+      status: { baseline: 'complete', midline: 'open',     endline: 'upcoming' } },
+    { key: 'midline',  label: 'Midline',    hint: 'Baseline + Midline complete. Movement since Baseline and target-vs-actual now populate.',
+      status: { baseline: 'complete', midline: 'complete', endline: 'upcoming' } },
+    { key: 'endline',  label: 'Endline',    hint: 'All three points complete. The full-year arc is filled in and no window is open.',
+      status: { baseline: 'complete', midline: 'complete', endline: 'complete' } },
+  ];
+  var LIFECYCLE_DEFAULT = 'endline';
+  function readLifecycleKey() {
+    try { var k = localStorage.getItem('tilliMeasures.lifecycleState'); if (k && LIFECYCLE_STATES.some(function (s) { return s.key === k; })) return k; } catch (e) {}
+    return LIFECYCLE_DEFAULT;
+  }
+
+  // Recomputed whenever the lifecycle state changes.
+  var COMPLETED_POINTS, LATEST_COMPLETE, OPEN_POINT, ACTIVE_LIFECYCLE;
+  function applyLifecycle(key) {
+    var st = LIFECYCLE_STATES.find(function (s) { return s.key === key; }) ||
+             LIFECYCLE_STATES.find(function (s) { return s.key === LIFECYCLE_DEFAULT; });
+    ACTIVE_LIFECYCLE = st.key;
+    POINTS.forEach(function (p) { p.status = st.status[p.key] || 'upcoming'; });
+    COMPLETED_POINTS = POINTS.filter(function (p) { return p.status === 'complete'; });
+    LATEST_COMPLETE = COMPLETED_POINTS[COMPLETED_POINTS.length - 1] || null;
+    OPEN_POINT = POINTS.find(function (p) { return p.status === 'open'; }) || null;
+  }
+  applyLifecycle(readLifecycleKey());
 
   var SKILLS = TS.skills;                 // shared source of truth (12 skills)
   var SECTIONS = TS.sections.slice();     // 4 sections
@@ -343,7 +382,8 @@
         enrolment: 'Enrolled',
         claim: claimed ? 'Claimed' : invited ? 'Invited' : 'Not invited',
         // Individual stage — gated in the UI (spec §2). See studentStage().
-        stage: studentStage(s, LATEST_COMPLETE.key),
+        // null before any point is complete (the "No data" lifecycle state).
+        stage: LATEST_COMPLETE ? studentStage(s, LATEST_COMPLETE.key) : null,
       };
     });
   }
@@ -375,6 +415,17 @@
     bandThresholds: { emergingMax: BAND_EMERGING_MAX, developingMax: BAND_DEVELOPING_MAX },
     points: POINTS, completedPoints: COMPLETED_POINTS, latestComplete: LATEST_COMPLETE,
     openPoint: OPEN_POINT, endlineCloses: ENDLINE_CLOSES,
+    // lifecycle preview state (demo tooling; see LIFECYCLE_STATES above)
+    lifecycleStates: LIFECYCLE_STATES, lifecycleState: ACTIVE_LIFECYCLE,
+    setLifecycleState: function (key) {
+      applyLifecycle(key);
+      try { localStorage.setItem('tilliMeasures.lifecycleState', ACTIVE_LIFECYCLE); } catch (e) {}
+      var AD = window.ADMIN_DATA;
+      AD.points = POINTS; AD.completedPoints = COMPLETED_POINTS;
+      AD.latestComplete = LATEST_COMPLETE; AD.openPoint = OPEN_POINT;
+      AD.lifecycleState = ACTIVE_LIFECYCLE;
+      return ACTIVE_LIFECYCLE;
+    },
     skills: SKILLS, sections: SECTIONS, grades: GRADES, teachers: TEACHERS, students: STUDENTS,
     quietThresholdDays: QUIET_THRESHOLD_DAYS,
     // Per-school flag (spec §2). Default false; toggled by Tilli staff only.

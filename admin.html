@@ -169,6 +169,18 @@
   .ad-interp { font-weight: 600; font-size: 12.5px; color: var(--ink-450); line-height: 1.5; margin: 6px 0 0; }
   .ad-interp.placeholder { color: #A96518; background: #FFF1DC; border-radius: 8px; padding: 8px 10px; display: inline-block; }
 
+  /* ---- Collapsible skill buckets (Social-Emotional / Executive Function) ---- */
+  .ad-bucket { border: 1px solid var(--line-200); border-radius: 12px; margin-bottom: 12px; overflow: hidden; background: var(--surface-0, #fff); }
+  .ad-bucket:last-child { margin-bottom: 0; }
+  .ad-bucket-sum { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface-100); user-select: none; }
+  .ad-bucket-sum::-webkit-details-marker { display: none; }
+  .ad-bucket-title { font-weight: 800; font-size: 14px; color: var(--ink-900); letter-spacing: .01em; }
+  .ad-bucket-count { font-weight: 700; font-size: 11.5px; color: var(--ink-300); text-transform: uppercase; letter-spacing: .04em; margin-left: auto; }
+  .ad-bucket-chev { font-size: 12px; color: var(--ink-450); transition: transform .18s var(--ease); }
+  .ad-bucket[open] .ad-bucket-chev { transform: rotate(0deg); }
+  .ad-bucket:not([open]) .ad-bucket-chev { transform: rotate(-90deg); }
+  .ad-bucket-body { padding: 4px 16px 8px; }
+
   /* ---- Legend ---- */
   .ad-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 4px; }
 
@@ -250,6 +262,52 @@
   }
   .ad-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* ============================================================
+     Hover info boxes (tooltips). One trigger class `.ad-tip` with
+     a `data-tip="..."` string; the bubble is drawn with ::after and
+     the arrow with ::before, so no JS wiring is needed and they
+     survive every re-render. `.ad-info` is the little ⓘ affordance.
+     Modifiers: `.down` opens the bubble below (used inside the
+     scroll-clipped table headers); `.end` right-anchors it so a
+     right-edge trigger doesn't overflow. `--tx` carries the x-offset
+     so the same hover-reset works for centred and end-anchored tips.
+     ============================================================ */
+  .ad-tip { position: relative; display: inline-flex; align-items: center; cursor: help; }
+  .ad-tip:hover, .ad-tip:focus-within { z-index: 70; }
+  .ad-tip:focus { outline: none; }
+  .ad-tip:focus-visible { outline: 2px solid var(--cyan-500); outline-offset: 2px; border-radius: 6px; }
+  .ad-info {
+    display: inline-grid; place-items: center; flex: none;
+    width: 15px; height: 15px; margin-left: 5px; border-radius: 50%;
+    border: 1.3px solid var(--ink-300); color: var(--ink-300);
+    font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 10px; line-height: 1;
+    text-transform: none; letter-spacing: 0; transition: border-color .15s, color .15s;
+  }
+  .ad-tip:hover .ad-info, .ad-tip:focus-within .ad-info { border-color: var(--cyan-500); color: var(--cyan-700); }
+
+  .ad-tip[data-tip]::after {
+    content: attr(data-tip); --tx: -50%;
+    position: absolute; left: 50%; bottom: calc(100% + 9px);
+    transform: translate(var(--tx), 4px);
+    width: max-content; max-width: 240px; white-space: normal; text-align: left;
+    background: var(--ink-900); color: #fff;
+    font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 12px; line-height: 1.45;
+    letter-spacing: 0; text-transform: none;
+    padding: 9px 12px; border-radius: 10px; box-shadow: 0 12px 30px rgba(20, 20, 20, .24);
+    opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
+  }
+  .ad-tip[data-tip]::before {
+    content: ''; position: absolute; left: 50%; bottom: calc(100% + 3px);
+    transform: translate(-50%, 4px); border: 6px solid transparent; border-top-color: var(--ink-900);
+    opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
+  }
+  .ad-tip.down[data-tip]::after { bottom: auto; top: calc(100% + 9px); transform: translate(var(--tx), -4px); }
+  .ad-tip.down[data-tip]::before { bottom: auto; top: calc(100% + 3px); transform: translate(-50%, -4px); border-top-color: transparent; border-bottom-color: var(--ink-900); }
+  .ad-tip.end[data-tip]::after { --tx: 0; left: auto; right: 0; }
+  .ad-tip.end[data-tip]::before { display: none; }
+  .ad-tip:hover::after, .ad-tip:focus-within::after { opacity: 1; transform: translate(var(--tx), 0); }
+  .ad-tip:hover::before, .ad-tip:focus-within::before { opacity: 1; transform: translate(-50%, 0); }
+
   /* ---- Copy block (newsletter) ---- */
   .ad-copyblock { border: 1px solid var(--line-200); border-radius: 14px; padding: 14px; font-family: 'Montserrat', sans-serif; font-size: 14px; line-height: 1.6; color: var(--ink-700); width: 100%; resize: vertical; min-height: 150px; }
   .ad-copyblock:focus { outline: none; border-color: var(--cyan-500); }
@@ -296,6 +354,10 @@
   .ad-gs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
   .ad-gs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; font-size: 13px; color: var(--ink-800); }
   .ad-gs li .p { font-weight: 800; font-size: 12px; color: var(--ink-450); }
+  /* Overview growth/strength header: scope pill + drill-in link */
+  .ad-gs-head { display: flex; align-items: center; gap: 12px; }
+  .ad-scopepill { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-800); background: var(--surface-100, #fff); border: 1.5px solid var(--line-200); border-radius: 999px; padding: 6px 14px; }
+  .ad-gs-head .link-btn { margin-left: auto; }
 
   /* ---- Compare two classes (Outcomes) ---- */
   .cmp-pickers { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
@@ -304,6 +366,13 @@
   .cmp-vs { font-weight: 800; font-size: 12px; color: var(--ink-300); padding-bottom: 14px; }
   .cmp-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; }
   .cmp-row-lbl { font-size: 11.5px; font-weight: 700; color: var(--ink-450); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cmp-table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 520px; }
+  .cmp-table th { text-align: left; font-size: 12px; font-weight: 800; color: var(--ink-450); text-transform: uppercase; letter-spacing: .04em; padding: 0 0 10px; border-bottom: 1px solid var(--line-200); }
+  .cmp-table th:first-child { width: 190px; }
+  .cmp-table td { padding: 12px 0; border-bottom: 1px solid var(--line-200); vertical-align: middle; }
+  .cmp-table th + th, .cmp-table td + td { padding-left: 18px; }
+  .cmp-table tbody tr:last-child td, .cmp-table tr:last-child td { border-bottom: none; }
+  .cmp-skill { font-weight: 700; font-size: 13.5px; color: var(--ink-900); }
 
   /* ---- Multi-perspective radar ---- */
   .ad-radar-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
@@ -386,6 +455,26 @@
     .cmp-vs { display: none; }
   }
   @media (max-width: 640px) { .brand-rail { display: none; } }
+  /* ---- Preview-stage panel (demo tooling; remove to ship) ---- */
+  .ad-statepanel { position: fixed; left: 16px; bottom: 16px; z-index: 60; width: 214px;
+    background: #fff; border: 1px solid var(--line-200, #E7E9EF); border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(20,20,20,.16); font-family: Montserrat, system-ui, sans-serif; overflow: hidden; }
+  .ad-sp-head { display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 12px; background: var(--surface-100, #F5F6F9); border-bottom: 1px solid var(--line-200, #E7E9EF); }
+  .ad-sp-title { font-size: 12px; font-weight: 800; color: var(--ink-700, #141414); letter-spacing: .02em; }
+  .ad-sp-new { color: #E0348B; font-weight: 900; }
+  .ad-sp-toggle { border: none; background: none; cursor: pointer; font-size: 13px; color: var(--ink-450, #5B6170); line-height: 1; padding: 2px 4px; }
+  .ad-sp-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .ad-statepanel.collapsed .ad-sp-body { display: none; }
+  .ad-sp-hint { margin: 0 0 4px; font-size: 10.5px; line-height: 1.45; color: var(--ink-450, #5B6170); }
+  .ad-sp-btn { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+    padding: 8px 10px; border: 1px solid var(--line-200, #E7E9EF); border-radius: 9px; background: #fff;
+    cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--ink-600, #2C2F36); transition: border-color .12s, background .12s; }
+  .ad-sp-btn:hover { border-color: #26BDE2; }
+  .ad-sp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-200, #D3D7E0); flex: none; }
+  .ad-sp-btn.on { background: #EAF8FD; border-color: #26BDE2; color: #0E7CA0; }
+  .ad-sp-btn.on .ad-sp-dot { background: #26BDE2; }
+  @media (max-width: 900px) { .ad-statepanel { left: 8px; bottom: 74px; width: 176px; } }
 </style>
 </head>
 <body>
