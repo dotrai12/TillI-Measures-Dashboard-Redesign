@@ -214,7 +214,6 @@
   var NAV = [
     { key: 'asktilli', label: 'Ask Tilli', disabled: true },   // placeholder — out of scope for v1 (spec §12)
     { key: 'overview', label: 'Overview' },
-    { key: 'implementation', label: 'Implementation' },
     { key: 'outcomes', label: 'Outcomes' },
     { key: 'roster', label: 'Roster' },      // absent for principal
     { key: 'reports', label: 'Reports' },
@@ -280,6 +279,7 @@
     lastHash = location.hash;
     var r = currentRoute();
     if (r.screen === 'roster' && !isCoordinator) { go('overview', {}, { replace: true }); return; }
+    if (r.screen === 'implementation') { go('overview', {}, { replace: true }); return; }   // Implementation removed from nav
     closeAcctMenu();
     app.innerHTML = chromeHTML(r);
     var body = document.getElementById('ad-main-body');
@@ -341,14 +341,14 @@
 
     body.innerHTML = screenHead('Overview', 'A calm read on whether the programme is running, working, and where to step in.') +
       chips +
-      '<div style="margin-top:var(--ad-gap)">' + sectionActivityUI(params) + '</div>' +
+      (AD.openPoint ? '<div style="margin-top:var(--ad-gap)">' + sectionActivityUI(params) + '</div>' : '') +   // hidden when no window is open
+      gsSection +
       '<div style="margin-top:var(--ad-gap)">' +
         card('Last outcome snapshot', null, snap, '', AD.latestComplete ? '<div>' + cadence(AD.latestComplete.key) + '</div>' : '') +
-      '</div>' +
-      gsSection;
+      '</div>';
 
     // wiring
-    wireSectionActivity(body, params);
+    if (AD.openPoint && AD.lifecycleState !== 'nodata') wireSectionActivity(body, params);   // filters/sort/row clicks only apply when the table is shown
     body.querySelectorAll('[data-tooutcomes]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
     body.querySelectorAll('[data-tobreakdown]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
   };
@@ -393,6 +393,11 @@
     });
   }
   function sectionActivityUI(params) {
+    // Window just opened, nothing measured yet (the "No data" stage) → nudge, no table.
+    if (AD.lifecycleState === 'nodata') {
+      return card('Section activity', 'Live activity across every section.',
+        stEmpty('No assessments yet.', 'Ask your teachers to start assessing their students — section activity will appear here as they do.'), 'span2');
+    }
     var grade = params.grade || '', section = params.section || '', range = params.range || '30';
     var gradeOpts = [{ v: '', t: 'All grades' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
     var secOpts = [{ v: '', t: 'All sections' }].concat(AD.sections.filter(function (s) { return !grade || s.grade === grade; }).map(function (s) { return { v: s.id, t: s.name }; }));
@@ -637,13 +642,29 @@
     AD.grades.forEach(function (g) { var n = AD.studentsInGrade(g).length; tot += n; var t = AD.targets[g][skillKey]; acc.emerging += t.emerging * n; acc.developing += t.developing * n; acc.secure += t.secure * n; });
     return { emerging: Math.round(acc.emerging / tot), developing: Math.round(acc.developing / tot), secure: Math.round(acc.secure / tot) };
   }
-  // Grade cards (school scope) and section cards (grade scope) — the drill navigator.
+  // Grade breakdown (school scope) — each grade in the Overview snapshot format:
+  // % Secure headline + band bar, then Areas of growth / strength, plus a
+  // drill-in link. Section cards (grade scope) stay as the compact navigator.
   function gradeNavHTML(point) {
-    return '<div class="ad-navcards">' + AD.grades.map(function (g) {
-      var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; }), d = distAllSkills(studs, point);
-      return '<button class="ad-navcard" data-gradenav="' + esc(g) + '"><div class="nc-top"><span class="nc-name">' + esc(g) + '</span><span style="color:var(--ink-300)">›</span></div>' +
-        '<div class="nc-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
-    }).join('') + '</div>';
+    var ptObj = AD.points.find(function (p) { return p.key === point; }) || AD.latestComplete;
+    var ptLabel = ptObj ? ptObj.label : '';
+    var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
+    var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
+    return '<div style="margin-bottom:14px">' + bandLegend() + '</div>' +
+      '<div class="ad-gradebreaks">' + AD.grades.map(function (g) {
+        var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; });
+        var d = distAllSkills(studs, point), gs = AD.growthStrength(studs, point, 2);
+        var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4>' + gsList(gs.growth) + '</div>';
+        var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4>' + gsList(gs.strength) + '</div>';
+        return '<div class="ad-gradebreak">' +
+          '<div class="gb-head"><div><div class="gb-name">' + esc(g) + '</div>' +
+            '<div class="gb-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div></div>' +
+            '<button class="link-btn" data-gradenav="' + esc(g) + '">Look deeper →</button></div>' +
+          '<div class="gb-snap"><div class="ad-stat"><div class="num">' + d.pct.secure + '%</div>' +
+            '<div class="lbl">' + esc(se.label) + ' at ' + esc(ptLabel) + '</div></div>' +
+            '<div class="gb-bar">' + bandBar(d) + '</div></div>' +
+          '<div class="ad-grid two gb-gs">' + gGrowth + gStrength + '</div></div>';
+      }).join('') + '</div>';
   }
   function sectionNavHTML(grade, point) {
     return '<div class="ad-navcards">' + AD.sections.filter(function (s) { return s.grade === grade; }).map(function (s) {
@@ -656,48 +677,23 @@
   // ========================================================
   //  4) ROSTER  (spec §5.4) — coordinator only. Identity, never SEL.
   // ========================================================
-  var rosterPage = 1, rosterQ = '';
   SCREEN.roster = function (params, body) {
-    var q = params.q != null ? params.q : rosterQ; rosterQ = q;
-    var grade = params.grade || '';
-    var section = params.section || '';
-    var page = parseInt(params.page || '1', 10) || 1;
-    var PER = 10;
-
-    var rows = AD.rosterRows().filter(function (r) {
-      return (!grade || r.grade === grade) && (!section || AD.sections.find(function (s) { return s.id === section; }) && (function () { var sd = AD.sections.find(function (s) { return s.id === section; }); return r.grade === sd.grade && r.section === sd.section; })()) &&
-        (!q || (r.name.toLowerCase().indexOf(q.toLowerCase()) >= 0 || r.adm.toLowerCase().indexOf(q.toLowerCase()) >= 0));
-    });
-    var pages = Math.max(1, Math.ceil(rows.length / PER));
-    page = Math.min(page, pages);
-    var pageRows = rows.slice((page - 1) * PER, page * PER);
-
-    var gradeOpts = [{ v: '', t: 'All grades' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
-    var secOpts = [{ v: '', t: 'All sections' }].concat(AD.sections.filter(function (s) { return !grade || s.grade === grade; }).map(function (s) { return { v: s.id, t: s.name }; }));
-
-    var listBody = '<div class="ad-filters">' +
-      '<input class="input" id="r-q" placeholder="Search name or student ID…" value="' + esc(q) + '" style="max-width:280px" aria-label="Search roster">' +
-      selectWrap('r-grade', gradeOpts, grade, 'Grade') + selectWrap('r-section', secOpts, section, 'Section') + '</div>' +
-      (!rows.length ? stEmpty('No students match your search.', 'Clear the search or change the filters.') :
-      (SHOW_STUDENT_STAGE ? '<div class="ad-privacy"><span aria-hidden="true">⚠️</span><span><b>Temporary:</b> the developmental-stage column shows an individual child\'s SEL result, which leadership is not normally shown (spec §2). It is behind a flag and will be removed.</span></div>' : '') +
-      '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Student ID</th><th>Grade</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '<th>Enrolment</th><th>Parent claim</th></tr></thead><tbody>' +
-        pageRows.map(function (r) {
-          var claimChip = r.claim === 'Claimed' ? '<span class="ad-chip active"><span class="dot"></span>Claimed</span>' : r.claim === 'Invited' ? '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>' : '<span class="ad-chip quiet"><span class="dot"></span>Not invited</span>';
-          var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ad-bandchip"><i style="background:' + r.stage.color + '"></i>' + esc(r.stage.label) + '</span>' : '<span style="color:var(--ink-300)">not yet measured</span>') + '</td>' : '';
-          return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.grade) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '<td>' + esc(r.enrolment) + '</td><td>' + claimChip + '</td></tr>';
-        }).join('') + '</tbody></table></div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--ink-450);font-weight:700">' +
-        '<span>' + rows.length + ' students · page ' + page + ' of ' + pages + '</span><span>' +
-        '<button class="btn btn-outline btn-sm" data-pg="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>← Prev</button> ' +
-        '<button class="btn btn-outline btn-sm" data-pg="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>Next →</button></span></div>');
-
-    // teacher-section assignment
-    var assignBody = '<div class="ad-tablewrap"><table class="ad-table" style="min-width:520px"><thead><tr><th>Section</th><th>Assigned teacher</th><th>Persona</th><th></th></tr></thead><tbody>' +
-      AD.sections.map(function (s) {
-        var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
-        var t = AD.teachers.find(function (x) { return x.id === s.teacherId; });
-        return '<tr><td class="name">' + esc(s.name) + '</td><td><label class="select-wrap" style="max-width:220px"><select class="select" data-assign="' + s.id + '">' + opts + '</select></label></td><td>' + esc((t && t.role) || '—') + '</td><td style="color:var(--ink-300);font-size:12px">Ending an assignment keeps the section\'s history.</td></tr>';
-      }).join('') + '</tbody></table></div>';
+    // Grade-select-first: one clickable box per grade. Tapping a box opens the
+    // grade's roster (students + teacher-per-section) in a popup. Fast global
+    // "find one child" search now lives inside each grade popup.
+    var gradeCards = !AD.grades.length ? stEmpty('No grades yet.', 'Students appear here once enrolment is imported.') :
+      '<div class="ad-navcards">' + AD.grades.map(function (g) {
+        var studs = AD.studentsInGrade(g);
+        var secs = AD.sections.filter(function (s) { return s.grade === g; });
+        var teacherLine = '<div class="nc-pcts">' + secs.map(function (s) {
+          return '<span>' + esc(s.section) + ' · ' + esc(AD.teacherFor(s)) + '</span>';
+        }).join('') + '</div>';
+        return '<button class="ad-navcard" data-graderoster="' + esc(g) + '">' +
+          '<div class="nc-top"><span class="nc-name">' + esc(g) + '</span><span style="color:var(--ink-300)">›</span></div>' +
+          '<div class="nc-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div>' +
+          teacherLine + '</button>';
+      }).join('') + '</div>';
+    var listBody = gradeCards;
 
     // user management
     var users = seedUsers();
@@ -709,27 +705,84 @@
       }).join('') + '</tbody></table></div>';
 
     body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Operational identity data — plus a temporary developmental-stage column (see the note in Students).' : 'Operational identity data. No SEL results ever appear here.') +
-      card('Students', AD.students.length + ' enrolled · ' + (SHOW_STUDENT_STAGE ? 'identity, enrolment and a temporary stage column.' : 'identity and enrolment only.'), listBody, 'span2') +
-      '<div style="margin-top:var(--ad-gap)">' + card('Grade migration', 'Promote, retain, remove and add students at year boundary.', '<p class="ad-mod-note" style="margin-bottom:14px">A full year-end flow — reviewable per student, with a preview and a 24-hour undo. Historical results always stay attached to the child and their prior section.</p><button class="btn btn-primary btn-sm" data-migrate="1">Start grade migration</button>') + '</div>' +
-      '<div class="ad-grid two" style="margin-top:var(--ad-gap)">' +
-        card('Teacher–section assignment', null, assignBody) +
+      card('Students', AD.students.length + ' enrolled · pick a grade to see its students and assigned teachers.', listBody, 'span2', '<button class="btn btn-primary btn-sm" data-migrate="1" title="Promote, retain, remove and add students at year boundary. Reviewable per student, with a preview and a 24-hour undo.">Start grade migration</button>') +
+      '<div style="margin-top:var(--ad-gap)">' +
         card('User management', 'Invite, resend, revoke. Revoke is immediate.', userBody) +
       '</div>';
     // NOTE: Duplicate review queue (spec §5.4.5) sits behind the near-match config
     // flag, which is OFF for this school — so the module is intentionally absent.
 
     // wiring
-    var qi = body.querySelector('#r-q');
-    qi.addEventListener('input', function (e) { rosterQ = e.target.value; setParams({ q: e.target.value, grade: grade, section: section, page: '1' }); var el = document.getElementById('r-q'); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (x) {} } });
-    body.querySelector('#r-grade').addEventListener('change', function (e) { setParams({ q: q, grade: e.target.value, section: '', page: '1' }); });
-    body.querySelector('#r-section').addEventListener('change', function (e) { setParams({ q: q, grade: grade, section: e.target.value, page: '1' }); });
-    body.querySelectorAll('[data-pg]').forEach(function (b) { b.addEventListener('click', function () { if (b.disabled) return; setParams({ q: q, grade: grade, section: section, page: b.dataset.pg }); }); });
-    body.querySelectorAll('[data-assign]').forEach(function (s) { s.addEventListener('change', function () { toast('Teacher reassigned. Section history is unchanged.'); }); });
+    body.querySelectorAll('[data-graderoster]').forEach(function (b) { b.addEventListener('click', function () { openGradeRoster(b.dataset.graderoster); }); });
     body.querySelector('[data-migrate]').addEventListener('click', startMigration);
     body.querySelector('[data-invite]').addEventListener('click', inviteUser);
     body.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { toast('Access revoked — session invalidated immediately.'); }); });
     body.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { toast('Invitation resent.'); }); });
   };
+  // ---- Grade roster popup (grade-select-first) — students + teacher per section ----
+  function openGradeRoster(grade) {
+    var secs = AD.sections.filter(function (s) { return s.grade === grade; });
+    var rows = AD.rosterRows().filter(function (r) { return r.grade === grade; });
+
+    // Teacher-per-section: editable inline. Writes back to the shared AD.sections
+    // object, so the roster screen's Teacher–section assignment card stays in sync.
+    var teacherBlock = '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-bottom:16px">' +
+      secs.map(function (s) {
+        var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
+        return '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span class="ad-metachip" style="padding:7px 13px"><b>' + esc(s.section) + '</b></span>' +
+          '<label class="select-wrap" style="min-width:180px"><select class="select" style="padding:9px 32px 9px 13px;font-size:13px" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label></div>';
+      }).join('') + '</div>';
+
+    var tableHTML = '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Student ID</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '</tr></thead><tbody id="gr-tbody">' +
+      rows.map(function (r) {
+        var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ad-bandchip"><i style="background:' + r.stage.color + '"></i>' + esc(r.stage.label) + '</span>' : '<span style="color:var(--ink-300)">not yet measured</span>') + '</td>' : '';
+        return '<tr data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
+      }).join('') + '</tbody></table></div>';
+
+    openModal(modalHead(grade + ' · roster') +
+      '<p class="ad-mod-note" style="margin-bottom:14px">' + plural(rows.length, 'student') + ' · ' + plural(secs.length, 'section') + '. ' + (SHOW_STUDENT_STAGE ? 'Identity, enrolment and a temporary stage column.' : 'Identity and enrolment only — no SEL results.') + '</p>' +
+      (SHOW_STUDENT_STAGE ? '<div class="ad-privacy"><span aria-hidden="true">⚠️</span><span><b>Temporary:</b> the developmental-stage column shows an individual child\'s SEL result, which leadership is not normally shown (spec §2). It is behind a flag and will be removed.</span></div>' : '') +
+      '<div style="font-weight:800;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450);margin-bottom:8px">Teachers</div>' + teacherBlock +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">' +
+        '<button type="button" class="ad-filterchip on" data-secfilter="" aria-pressed="true">All sections</button>' +
+        secs.map(function (s) { return '<button type="button" class="ad-filterchip" data-secfilter="' + esc(s.section) + '" aria-pressed="false">Section ' + esc(s.section) + '</button>'; }).join('') +
+      '</div>' +
+      '<input class="input" id="gr-q" placeholder="Search name or student ID…" style="max-width:280px;margin-bottom:14px" aria-label="Search students in ' + esc(grade) + '">' +
+      tableHTML, { wide: true });
+
+    var q = document.getElementById('gr-q');
+    var activeSec = '';   // '' = all sections
+    function applyRosterFilter() {
+      var v = q.value.toLowerCase();
+      modalRoot.querySelectorAll('#gr-tbody tr').forEach(function (tr) {
+        var okName = !v || tr.dataset.nm.indexOf(v) >= 0;
+        var okSec = !activeSec || tr.dataset.sec === activeSec;
+        tr.style.display = (okName && okSec) ? '' : 'none';
+      });
+    }
+    q.addEventListener('input', applyRosterFilter);
+    modalRoot.querySelectorAll('[data-secfilter]').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        activeSec = chip.dataset.secfilter;
+        modalRoot.querySelectorAll('[data-secfilter]').forEach(function (c) {
+          var on = c === chip;
+          c.classList.toggle('on', on);
+          c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        applyRosterFilter();
+      });
+    });
+
+    modalRoot.querySelectorAll('[data-grteacher]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        var sec = AD.sections.find(function (x) { return x.id === sel.dataset.grteacher; });
+        if (sec) sec.teacherId = sel.value;
+        toast('Teacher reassigned. Section history is unchanged.');
+      });
+    });
+  }
+
   function seedUsers() {
     return [
       { name: 'Meera Krishnan', email: 'meera.krishnan@littlesprouts.edu', role: 'Coordinator', status: 'Active' },

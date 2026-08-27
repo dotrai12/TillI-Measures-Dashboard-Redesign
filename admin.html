@@ -26,7 +26,14 @@
   body { background: var(--surface-100); }
 
   /* ---- App grid: sidebar + (header / main) ---- */
-  .ad-app { min-height: 100dvh; display: grid; grid-template-columns: var(--ad-side-w) 1fr; }
+  /* minmax(0,…) lets the content track shrink below its min-content, so a wide
+     table scrolls inside its own .ad-tablewrap instead of forcing a page-wide
+     horizontal scrollbar. */
+  .ad-app { min-height: 100dvh; display: grid; grid-template-columns: var(--ad-side-w) minmax(0, 1fr); }
+  /* min-width:0 lets the content column shrink below its children's intrinsic
+     min-width (tables carry min-width:520–640px). Without it a wide card forces
+     the track past the viewport and the whole page scrolls sideways. */
+  .ad-app > * { min-width: 0; }
 
   /* ---- Sidebar (desktop) ---- */
   .ad-side {
@@ -95,8 +102,11 @@
 
   /* ---- Cards / modules ---- */
   .ad-grid { display: grid; gap: var(--ad-gap); }
-  .ad-grid.two { grid-template-columns: 1fr 1fr; }
-  .ad-grid.tri { grid-template-columns: repeat(3, 1fr); }
+  /* minmax(0,…) + min-width:0 on children: a card holding a min-width table must
+     not stretch its 1fr track past half the row and overflow the page sideways. */
+  .ad-grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ad-grid.tri { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ad-grid > * { min-width: 0; }
   .ad-card {
     background: #fff; border: 1px solid var(--line-200); border-radius: var(--radius-card);
     padding: clamp(16px, 2vw, 22px);
@@ -135,6 +145,11 @@
   .ad-chip.status-new { background: var(--wash-cyan); color: var(--cyan-700); }
   .ad-chip.status-routed { background: #FFF1DC; color: #A96518; }
   .ad-chip.status-closed { background: #F1F1F4; color: #5B6170; }
+  /* Toggleable filter chips (section filter in grade roster) */
+  .ad-filterchip { display: inline-flex; align-items: center; cursor: pointer; background: #fff; border: 1px solid var(--line-200); color: var(--ink-450); border-radius: var(--radius-pill); padding: 7px 15px; font-weight: 700; font-size: 12.5px; transition: background .12s, border-color .12s, color .12s; }
+  .ad-filterchip:hover { border-color: var(--green-500); color: var(--green-700); }
+  .ad-filterchip.on { background: var(--wash-green); border-color: var(--green-500); color: var(--green-700); }
+  .ad-filterchip:focus-visible { outline: 2px solid var(--green-500); outline-offset: 2px; }
 
   /* band chips */
   .ad-bandchip { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 11.5px; color: var(--ink-600); }
@@ -331,7 +346,8 @@
   .ad-metachip b { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 15px; color: var(--ink-900); }
 
   /* ---- Skill-summary cards (neutral band colours — NO red/alarm) ---- */
-  .ad-sumgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--ad-gap); }
+  .ad-sumgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ad-gap); }
+  .ad-sumgrid > * { min-width: 0; }
   .ad-sumcard { border: 1px solid var(--line-200); border-top: 4px solid var(--band, var(--line-200)); border-radius: var(--radius-card); padding: 16px 18px; background: #fff; }
   .ad-sumcard .n { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 30px; line-height: 1; color: var(--ink-900); }
   .ad-sumcard .h { font-weight: 800; font-size: 12px; letter-spacing: .01em; color: var(--ink-600); margin: 8px 0 12px; }
@@ -340,13 +356,24 @@
   .ad-sumcard .none { font-weight: 600; font-size: 12.5px; color: var(--ink-300); }
 
   /* ---- Grade / section navigator cards (Outcomes drill) ---- */
-  .ad-navcards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ad-gap); }
+  .ad-navcards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--ad-gap); }
+  .ad-navcards > * { min-width: 0; }
   .ad-navcard { display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 18px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
   .ad-navcard:hover { border-color: var(--cyan-500); box-shadow: 0 6px 18px rgba(20,20,20,.06); }
   .ad-navcard .nc-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .ad-navcard .nc-name { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 16px; color: var(--ink-900); }
   .ad-navcard .nc-meta { font-weight: 700; font-size: 12px; color: var(--ink-300); margin: 4px 0 12px; }
   .ad-navcard .nc-pcts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-weight: 700; font-size: 11.5px; color: var(--ink-450); }
+
+  /* ---- Per-grade breakdown (Outcomes school scope — Overview snapshot format) ---- */
+  .ad-gradebreaks { display: flex; flex-direction: column; gap: var(--ad-gap); }
+  .ad-gradebreak { border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 18px; background: #fff; }
+  .ad-gradebreak .gb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .ad-gradebreak .gb-name { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 17px; color: var(--ink-900); }
+  .ad-gradebreak .gb-meta { font-weight: 700; font-size: 12px; color: var(--ink-300); margin-top: 4px; }
+  .ad-gradebreak .gb-snap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 14px 0 16px; }
+  .ad-gradebreak .gb-bar { flex: 1; min-width: 220px; }
+  .ad-gradebreak .gb-gs { margin: 0; }
 
   /* ---- Areas of growth / strength ---- */
   .ad-gs { border-radius: var(--radius-card); padding: 16px 18px; border: 1.5px solid var(--band, var(--line-200)); background: var(--bandwash, #fff); }
@@ -357,7 +384,6 @@
   /* Overview growth/strength header: scope pill + drill-in link */
   .ad-gs-head { display: flex; align-items: center; gap: 12px; }
   .ad-scopepill { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-800); background: var(--surface-100, #fff); border: 1.5px solid var(--line-200); border-radius: 999px; padding: 6px 14px; }
-  .ad-gs-head .link-btn { margin-left: auto; }
 
   /* ---- Compare two classes (Outcomes) ---- */
   .cmp-pickers { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
