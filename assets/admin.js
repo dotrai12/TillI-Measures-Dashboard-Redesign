@@ -36,6 +36,8 @@
 
   // ---------- tiny utils ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // Number-aware noun: countNoun(1,'child','children') → "1 child".
+  function countNoun(n, singular, plural) { return n + ' ' + (Number(n) === 1 ? singular : plural); }
   function initials(name) { var p = String(name || '').trim().split(/\s+/); return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || ''); }
   function relDays(d) { return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d + ' days ago'; }
   function plural(n, s) { return n + ' ' + s + (n === 1 ? '' : 's'); }
@@ -97,7 +99,7 @@
     if (targetSecure == null) return '';
     var gap = targetSecure - actualSecure;
     return '<span class="ad-targetdelta' + (gap <= 0 ? ' met' : '') + '">Target ' + targetSecure + '% Secure · ' +
-      (gap <= 0 ? 'met' : gap + ' pts to go') + '</span>';
+      (gap <= 0 ? 'met' : gap + (gap === 1 ? ' pt to go' : ' pts to go')) + '</span>';
   }
   function bandLegend() {
     return '<div class="ad-legend">' + AD.bands.map(function (b) {
@@ -503,7 +505,7 @@
       cls = v.deltaSecure > 0 ? ' good' : v.deltaSecure < 0 ? ' watch' : '';
       head = v.pctSecure + '% of skill readings are Secure at ' + v.point.label + ' — ' +
         (v.deltaSecure === 0 ? 'level with Baseline.' : arrow + ' ' + Math.abs(v.deltaSecure) + ' points since Baseline.');
-      var moved = v.movementAvail ? v.childrenUp + ' of ' + v.childrenN + ' children moved up a band' : '';
+      var moved = v.movementAvail ? v.childrenUp + ' of ' + countNoun(v.childrenN, 'child', 'children') + ' moved up a band' : '';
       sub = [actLine, moved, windowLine].filter(Boolean).join(' · ');
     }
     var right = '';
@@ -637,7 +639,7 @@
       '</tr></thead><tbody>' + rows.map(function (a) {
         return '<tr class="clickable" data-secdetail="' + a.id + '"><td class="name">' + esc(a.name) + '</td><td>' + esc(a.teacher) + '</td>' +
           '<td class="ad-num">' + relDays(a.lastActivityDays) + '</td>' +
-          '<td class="ad-num">' + (AD.openPoint ? a.completion.done + ' / ' + a.completion.total + ' students' : '<span style="color:var(--ink-300)">— no open window</span>') + '</td>' +
+          '<td class="ad-num">' + (AD.openPoint ? a.completion.done + ' / ' + countNoun(a.completion.total, 'student', 'students') : '<span style="color:var(--ink-300)">— no open window</span>') + '</td>' +
           '<td>' + statusChip(a.status) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     return filters + card('Section activity', 'Sorted with the sections that need attention first. Click a row for completion detail.', tableBody, 'span2');
@@ -1128,8 +1130,8 @@
     if (/work|secure|outcome|result|improv|progress|effect/.test(t)) {
       if (!v.hasOutcomes) return { html: 'Nothing is measured yet — the ' + esc(v.openPoint ? v.openPoint.label : 'Baseline') + ' window is still collecting. Skill outcomes appear once it closes.' };
       var s = '<b>' + v.pctSecure + '%</b> of skill readings are Secure at ' + esc(v.point.label) + '.';
-      if (v.deltaSecure != null) { s += ' That is ' + (v.deltaSecure >= 0 ? 'up ' : 'down ') + Math.abs(v.deltaSecure) + ' points since Baseline'; if (v.movementAvail) s += ', and ' + v.childrenUp + ' of ' + v.childrenN + ' children moved up a band'; s += '.'; }
-      if (v.targetSecure != null) { var gap = v.targetSecure - v.pctSecure; s += ' Your target is ' + v.targetSecure + '% (' + (gap <= 0 ? 'met' : gap + ' points to go') + ').'; }
+      if (v.deltaSecure != null) { s += ' That is ' + (v.deltaSecure >= 0 ? 'up ' : 'down ') + Math.abs(v.deltaSecure) + ' points since Baseline'; if (v.movementAvail) s += ', and ' + v.childrenUp + ' of ' + countNoun(v.childrenN, 'child', 'children') + ' moved up a band'; s += '.'; }
+      if (v.targetSecure != null) { var gap = v.targetSecure - v.pctSecure; s += ' Your target is ' + v.targetSecure + '% (' + (gap <= 0 ? 'met' : gap + (gap === 1 ? ' point to go' : ' points to go')) + ').'; }
       return { html: s + ' ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
     }
     if (/quiet|inactiv|activity|adoption|happening|using|engag/.test(t)) {
@@ -1334,7 +1336,7 @@
     var outstanding = students.slice(students.length - outstandingN);
     var winLabel = AD.openPoint ? AD.openPoint.label : 'Assessment';
     openModal(modalHead(a.name + ' — ' + winLabel + ' completion') +
-      '<p class="ad-mod-note" style="margin-bottom:14px">' + a.completion.done + ' of ' + a.completion.total + ' students complete. This is completion only — no scores, bands or skill data.</p>' +
+      '<p class="ad-mod-note" style="margin-bottom:14px">' + a.completion.done + ' of ' + countNoun(a.completion.total, 'student', 'students') + ' complete. This is completion only — no scores, bands or skill data.</p>' +
       (outstanding.length ? '<div style="font-weight:800;font-size:12px;color:var(--ink-450);margin-bottom:8px">STILL TO COMPLETE</div><div class="ad-tablewrap"><table class="ad-table" style="min-width:360px"><thead><tr><th>Student</th><th>Student ID</th></tr></thead><tbody>' +
         outstanding.map(function (s) { return '<tr><td class="name">' + esc(s.name) + '</td><td class="ad-num">' + esc(s.adm) + '</td></tr>'; }).join('') + '</tbody></table></div>'
         : stEmpty('All students complete.', 'Nothing outstanding for this window.', true)));
@@ -1394,7 +1396,7 @@
         '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:18px">' +
         [['Promoted', sum.promote], ['Retained', sum.retain], ['Graduating', sum.graduate], ['Removed', sum.remove], ['Added', sum.add]].map(function (p) { return '<div class="ad-stat"><div class="num">' + p[1] + '</div><div class="lbl">' + p[0] + '</div></div>'; }).join('') + '</div>' +
         '<div style="font-weight:800;font-size:12px;color:var(--ink-450);margin-bottom:8px">RESULTING SECTION HEADCOUNTS</div><div class="ad-tablewrap"><table class="ad-table" style="min-width:360px"><tbody>' +
-        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(k) + '</td><td class="ad-num">' + n + ' students' + (n > SECTION_LIMIT ? ' <span class="ad-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(k) + '</td><td class="ad-num">' + countNoun(n, 'student', 'students') + (n > SECTION_LIMIT ? ' <span class="ad-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn btn-outline btn-sm" data-mig="add">Back</button><button class="btn btn-primary btn-sm" data-mig="commit">Commit migration</button></div>';
     } else if (mig.step === 'commit') {
       var s2 = migSummary();

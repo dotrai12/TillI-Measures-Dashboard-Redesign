@@ -46,12 +46,15 @@
     transform: translate(var(--stats-x), var(--stats-y));
   }
 
-  /* Milo Hand — decorative, sits above the landing, ignores clicks */
+  /* Milo Hand — decorative brush stroke. Sits BEHIND the hero copy (z-index 1,
+     under .landing-inner's z-index 2) so it can never paint over the subtitle or
+     the Get started CTA — it reads as a flourish behind the words, not on top of
+     them. It still floats above the page background and flower band. */
   .milo-hand {
     position: absolute;
     left: 50%;
     top: 50%;
-    z-index: 3;
+    z-index: 1;
     width: clamp(160px, 22vw, 320px);
     height: auto;
     transform:
@@ -89,7 +92,7 @@
     font-weight: 700;
     letter-spacing: .16em;
     text-transform: uppercase;
-    color: var(--green-500);
+    color: var(--green-700); /* darker green passes WCAG AA on white; green-500 did not */
     margin: 0 0 clamp(12px, 2vh, 20px);
     font-size: calc(clamp(11px, 1.1vw, 14px) * var(--eyebrow-scale));
   }
@@ -161,6 +164,11 @@
 
   /* ---- Mobile (portrait phones ≤ 640px) ---- */
   @media (max-width: 640px) {
+    /* The desktop composition bakes the hero + stats a long way down (offsets
+       below). On a tall phone the grid already centres them, so those baked
+       offsets just open a large gap at the top — trim them here. Tune in the
+       Section layout GUI if needed; desktop values are untouched. */
+    .landing { --herocopy-y: 24px; --stats-y: 12px; }
     .landing-inner { padding: 18px 20px 20px 26px; }
     .hero { gap: 22px; padding-top: 14px; }
     .hero-eyebrow { margin-bottom: 10px; }

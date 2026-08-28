@@ -1,7 +1,9 @@
 /* ============================================================
    Tilli Measures — teacher onboarding / self-reflection flow
-   intro → demographics (4 steps) → greeting → self-assessment
+   intro → demographics (4 steps) → greeting → self-assessment (OPTIONAL)
         → profile done → add students → enter garden
+   The greeting offers "I'll do this later", which skips the 10-question
+   self-assessment and goes straight to add-students → dashboard.
    Vanilla state machine (no framework), rendered into #onb-root.
    Ported from the "Teacher Dashboard" prototype into the live
    design system. Phase 1 = onboarding; the dashboard slots in at
@@ -94,6 +96,7 @@
   const state = {
     phase: 'intro',   // intro | demo | greet | assess | done | roster | complete
     openSelect: null, // id of the currently-open custom dropdown (only one at a time)
+    skippedReflection: false, // true when the teacher chose "I'll do this later" on greet
     selfQ: 0,
     selfAnswers: {},
     demo: blankDemo(),
@@ -403,8 +406,9 @@
     return `<div style="text-align:center;padding:16px 0">
       ${petals('sm')}
       <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Hi ${esc(first)}, it&rsquo;s nice to meet you!</h1>
-      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">Let&rsquo;s get you to understand yourself deeper.</p>
+      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">A short reflection helps Tilli understand you — about 3 minutes, 10 quick questions. You can do it now, or head straight to your class and come back to it later.</p>
       <button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button>
+      <button class="btn btn-ghost focus" data-act="greet-skip" style="display:block;margin:12px auto 0">I&rsquo;ll do this later &#8594;</button>
     </div>`;
   }
 
@@ -525,7 +529,7 @@
         ${r.students.length ? `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px">
             <span style="font-weight:800;font-size:13px;color:var(--ink-700)">Your students</span>
-            <span class="onb-badge">${r.students.length} students</span>
+            <span class="onb-badge">${r.students.length} ${r.students.length === 1 ? 'student' : 'students'}</span>
           </div>
           <div class="onb-chips">${chips}</div>` : ''}`;
     } else if (showBody && r.method === 'csv') {
@@ -765,7 +769,7 @@
       const rd = new FileReader();
       rd.onload = () => {
         const n = Math.max(0, String(rd.result).trim().split(/\r?\n/).length - 1);
-        setRoster({ csvMsg: '✓ ' + f.name + ' — ' + n + ' students ready to plant' });
+        setRoster({ csvMsg: '✓ ' + f.name + ' — ' + n + (n === 1 ? ' student' : ' students') + ' ready to plant' });
       };
       rd.readAsText(f);
     });
@@ -817,6 +821,10 @@
         break;
       }
       case 'greet-next': set({ phase: 'assess', selfQ: 0 }); break;
+      // Reflection is optional — jump straight to the class roster (and on to the
+      // dashboard). skippedReflection routes the roster Back button to 'greet'
+      // rather than the 'done' celebration the teacher never saw.
+      case 'greet-skip': set({ phase: 'roster', skippedReflection: true }); break;
       case 'self-next': {
         if (!selfAnswered(state.selfQ)) return;
         if (state.selfQ >= SELF.length - 1) set({ phase: 'done' });
@@ -859,7 +867,7 @@
     } else if (p === 'roster') {
       const r = state.roster;
       if (r.method) setRoster({ method: null, csvMsg: '', picMsg: '' });
-      else set({ phase: 'done' });
+      else set({ phase: state.skippedReflection ? 'greet' : 'done' });
     }
   }
 

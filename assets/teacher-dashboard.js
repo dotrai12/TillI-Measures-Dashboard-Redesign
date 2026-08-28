@@ -124,7 +124,7 @@
       windowOpen: true, winKey: 'baseline', maturity: 'seedling', week: 'week 1',
       caption: 'Freshly planted — this is where the year begins.',
       heroTitle: 'Baseline is open',
-      heroBlurb: 'Set the starting point for all {N} children — the garden they grow from.',
+      heroBlurb: 'Set the starting point for all {N} {kids} — the garden they grow from.',
       deadline: 'Apr 2',
     },
     between: {
@@ -175,6 +175,9 @@
   // open, sub-tab, or in-place edit) plays the fade+zoom. See render().
   let lastScreenKey = null;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Number-aware noun. countNoun(1,'child','children') → "1 child"; nounFor is just the word.
+  function nounFor(n, singular, plural) { return Number(n) === 1 ? singular : plural; }
+  function countNoun(n, singular, plural) { return n + ' ' + nounFor(n, singular, plural); }
 
   function firstName() { return ((S.teacher.demo && S.teacher.demo.name || '').trim().split(/\s+/)[0]) || 'there'; }
   function initials() {
@@ -513,9 +516,9 @@
     return `<section class="mg-hero mg-hero-window">
       <div class="mg-eyebrow">Do what you came for</div>
       <h2 class="mg-hero-t">${esc(st.heroTitle)}</h2>
-      <p class="mg-hero-b">${esc(fill(st.heroBlurb, { N }))}</p>
+      <p class="mg-hero-b">${esc(fill(st.heroBlurb, { N, kids: nounFor(N, 'child', 'children') }))}</p>
       <div class="mg-prog"><span style="width:${pct}%"></span></div>
-      <div class="mg-prog-row"><span><b>${pg.done}</b> of ${pg.total} children done</span><span class="mg-deadline">Window closes ${esc(st.deadline)}</span></div>
+      <div class="mg-prog-row"><span><b>${pg.done}</b> of ${pg.total} ${nounFor(pg.total, 'child', 'children')} done</span><span class="mg-deadline">Window closes ${esc(st.deadline)}</span></div>
       <button class="btn btn-primary focus mg-hero-cta" data-continue-assess="${esc(pg.next ? pg.next.id : '')}">Continue → next: ${esc(nextName)}</button>
     </section>`;
   }
@@ -583,11 +586,11 @@
     // Slot 5 — band mix (hidden at baseline; there's no prior data to mix).
     let bandBlock;
     if (state === 'baseline') {
-      bandBlock = `<div class="mg-bandmix mg-bandmix-empty">${N} children, ready to begin their year.</div>`;
+      bandBlock = `<div class="mg-bandmix mg-bandmix-empty">${countNoun(N, 'child', 'children')}, ready to begin their year.</div>`;
     } else {
-      const note = state === 'between' ? `Last measured at baseline · ${N} children`
-        : state === 'midline' ? `Your ${sec.name} · ${N} children`
-        : `The year's story · ${N} children`;
+      const note = state === 'between' ? `Last measured at baseline · ${countNoun(N, 'child', 'children')}`
+        : state === 'midline' ? `Your ${sec.name} · ${countNoun(N, 'child', 'children')}`
+        : `The year's story · ${countNoun(N, 'child', 'children')}`;
       bandBlock = bandMix(ld, note);
     }
 
@@ -757,7 +760,7 @@
           </svg>
           ${plants}
         </div>
-        <div class="bed-label"><span class="nm">${esc(bd.name)}</span><span class="ct">${bd.count} students</span></div>
+        <div class="bed-label"><span class="nm">${esc(bd.name)}</span><span class="ct">${countNoun(bd.count, 'student', 'students')}</span></div>
       </button>`;
     }).join('');
 
@@ -829,7 +832,7 @@
     return `<div class="cm-backdrop" data-close-modal>
       <div class="cm-card" data-stop>
         <div class="cm-head">
-          <div><div class="cm-title">${esc(sec.name)}</div><div class="cm-sub">${sec.students.length} students · one bloom each</div></div>
+          <div><div class="cm-title">${esc(sec.name)}</div><div class="cm-sub">${countNoun(sec.students.length, 'student', 'students')} · one bloom each</div></div>
           <button class="cm-x" data-close-modal>✕</button>
         </div>
         <div class="cm-list">${rows}</div>
@@ -885,7 +888,7 @@
 
     const highlights = top.map((t) => `<span class="hl-chip">${esc(t.name)} · ${t.now}%</span>`).join('');
     const growingRows = low.map((l) => `
-      <div class="grow-row"><div class="gm"><div class="nm">${esc(l.name)}</div><div class="sub">${l.beginner} students at Beginner level</div></div>
+      <div class="grow-row"><div class="gm"><div class="nm">${esc(l.name)}</div><div class="sub">${countNoun(l.beginner, 'student', 'students')} at Beginner level</div></div>
       <button class="grow-ask focus" data-ask="class" data-skill="${esc(l.name)}" data-beg="${l.beginner}">Ask Tilli for a class activity</button></div>`).join('');
 
     return `<div class="dash-wrap section-garden">
@@ -946,7 +949,7 @@
       .map(([k, l]) => `<button class="pill-tab rsort${S.rosterSort === k ? ' on' : ''}" data-sort="${k}">${l}</button>`).join('');
     return `<div class="dash-wrap" style="max-width:900px">
       <h1 class="dash-h1">Students</h1>
-      <p class="dash-sub">${esc(sec.name)} · ${sec.students.length} students</p>
+      <p class="dash-sub">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
       <div class="roster-tools">
         <div class="roster-search">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#9AA3AF" stroke-width="2"/><path d="M16 16l4 4" stroke="#9AA3AF" stroke-width="2" stroke-linecap="round"/></svg>
@@ -1170,7 +1173,7 @@
     const nStu = sec.students.length;
     const journey = [
       { key: 'pre', title: 'Pre-training survey', meta: 'Completed · Apr 2', body: 'Your baseline reflection on the class.', st: 'done' },
-      { key: 'base', title: 'Baseline observations', meta: 'Completed · Apr 18', body: 'All ' + nStu + ' students observed', st: 'done' },
+      { key: 'base', title: 'Baseline observations', meta: 'Completed · Apr 18', body: 'All ' + countNoun(nStu, 'student', 'students') + ' observed', st: 'done' },
       { key: 'post', title: 'Post-training survey', meta: 'Due Apr 25', body: 'Reflect on your class after training', st: 'active' },
       { key: 'm18', title: '18-week check-in', meta: 'Locked', body: '', st: 'locked' },
       { key: 'mid', title: 'Mid-year report', meta: 'Locked', body: '', st: 'locked' },

@@ -273,12 +273,21 @@
   //  key falls back to a shape-generic developmental line; if even
   //  that is missing, a visible placeholder is returned (authored:false).
   // ---------------------------------------------------------------
+  // {skill} is filled with the skill's own name so a page of 12 skills reads as
+  // twelve distinct notes, not one line pasted twelve times. Still developmental
+  // and non-empirical (authored:false) — never a stand-in for signed-off copy.
   var SHAPE_GENERIC = {
-    mostly_emerging: 'Most children here are at an emerging stage for this skill — this is common at this age, and it responds well to short, frequent, playful practice.',
-    balanced: 'Children are spread across the stages for this skill, which is developmentally typical for a group of this age. Growth tends to come in uneven spurts.',
-    bimodal: 'This group splits into two clusters for this skill. Small-group activities that meet children where they are tend to help the emerging group catch up.',
-    mostly_secure: 'Most children are secure in this skill. Keeping it lively with slightly harder challenges helps it hold as they grow.',
+    mostly_emerging: 'Most children here are at an emerging stage for {skill} — common at this age, and it responds well to short, frequent, playful practice.',
+    balanced: 'Children are spread across the stages for {skill} — developmentally typical for this age group. Growth here comes in uneven spurts, so steady practice matters more than quick jumps.',
+    bimodal: 'For {skill}, the group splits into two clusters. Small-group activities that meet children where they are tend to help the emerging group catch up.',
+    mostly_secure: 'Most children are secure in {skill}. Keeping it lively with slightly harder challenges helps it hold as they grow.',
   };
+  var SKILL_NAME = {};
+  SKILLS.forEach(function (sk) { SKILL_NAME[sk.key] = sk.name; });
+  function fillSkill(tpl, skillKey) {
+    var nm = SKILL_NAME[skillKey] || 'this skill';
+    return String(tpl).replace(/\{skill\}/g, nm);
+  }
   // A few authored, skill-specific lines (stand-in for Masoomi's signed-off table).
   var AUTHORED = {
     emotion_regulation: {
@@ -292,7 +301,7 @@
     var a = AUTHORED[skillKey] && AUTHORED[skillKey][shape];
     if (a) return { text: a, authored: true };
     var g = SHAPE_GENERIC[shape];
-    if (g) return { text: g, authored: false };
+    if (g) return { text: fillSkill(g, skillKey), authored: false };
     return { text: 'Interpretation for this skill is pending sign-off and will appear here.', authored: false, placeholder: true };
   }
 
