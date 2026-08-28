@@ -404,6 +404,67 @@
     return parts.join(' ');
   }
 
+  // ---------------------------------------------------------------
+  //  LEADERSHIP VERDICT  (feedback §1/§2/§3) — the one-line answer at
+  //  the top of Overview: is it happening, is it working, and where is
+  //  it against target. All derived; never invents a number.
+  // ---------------------------------------------------------------
+  // % of skill×student readings that are Secure, pooled across all skills.
+  function pooledSecurePct(students, pointKey) {
+    var pt = POINTS.find(function (p) { return p.key === pointKey; }); if (!pt) return null;
+    var f = pt.scoreField, secure = 0, tot = 0;
+    students.forEach(function (st) { st.skills.forEach(function (sk) { tot++; if (bandOf(sk[f]) === 'secure') secure++; }); });
+    return tot ? Math.round((secure / tot) * 100) : 0;
+  }
+  function meanScore(student, field) { var s = 0, n = 0; student.skills.forEach(function (sk) { s += sk[field]; n++; }); return n ? s / n : 0; }
+  // Per-child overall band movement, Baseline → latest complete point.
+  // Counts CHILDREN (not skill readings), so the headline can say
+  // "18 of 24 children moved up a band" honestly.
+  function overallBandMovement(students) {
+    if (!LATEST_COMPLETE || !COMPLETED_POINTS.length) return { up: 0, down: 0, same: 0, n: 0, avail: false };
+    var toF = LATEST_COMPLETE.scoreField, fromF = COMPLETED_POINTS[0].scoreField;
+    if (toF === fromF) return { up: 0, down: 0, same: 0, n: students.length, avail: false };
+    var up = 0, down = 0, same = 0;
+    students.forEach(function (st) {
+      var a = BAND_INDEX[bandOf(meanScore(st, fromF))], b = BAND_INDEX[bandOf(meanScore(st, toF))];
+      if (b > a) up++; else if (b < a) down++; else same++;
+    });
+    return { up: up, down: down, same: same, n: students.length, avail: true };
+  }
+  // Enrolment-weighted Secure target for one skill, school-wide.
+  function skillSecureTarget(skillKey) {
+    var sum = 0, cnt = 0;
+    GRADES.forEach(function (g) { var n = studentsInGrade(g).length; sum += TARGETS[g][skillKey].secure * n; cnt += n; });
+    return cnt ? Math.round(sum / cnt) : 0;
+  }
+  // Enrolment-weighted Secure target pooled across every skill, school-wide —
+  // the single number the pooled band bars compare against.
+  function pooledSecureTarget() {
+    var sum = 0, cnt = 0;
+    GRADES.forEach(function (g) { var n = studentsInGrade(g).length; SKILLS.forEach(function (sk) { sum += TARGETS[g][sk.key].secure * n; cnt += n; }); });
+    return cnt ? Math.round(sum / cnt) : 0;
+  }
+  function leadershipVerdict() {
+    var sectionsActive = ACTIVITY.filter(function (a) { return a.status !== 'quiet'; }).length;
+    var v = {
+      sectionsActive: sectionsActive, sectionsTotal: ACTIVITY.length,
+      openPoint: OPEN_POINT, endlineInDays: ENDLINE_OPENS_IN_DAYS,
+      hasOutcomes: !!LATEST_COMPLETE, point: LATEST_COMPLETE,
+      pctSecure: null, targetSecure: null, deltaSecure: null,
+      childrenUp: 0, childrenDown: 0, childrenN: 0, movementAvail: false,
+    };
+    if (LATEST_COMPLETE) {
+      v.pctSecure = pooledSecurePct(STUDENTS, LATEST_COMPLETE.key);
+      v.targetSecure = TARGETS_SET ? pooledSecureTarget() : null;
+      if (COMPLETED_POINTS.length >= 2) {
+        v.deltaSecure = v.pctSecure - pooledSecurePct(STUDENTS, COMPLETED_POINTS[0].key);
+        var m = overallBandMovement(STUDENTS);
+        v.childrenUp = m.up; v.childrenDown = m.down; v.childrenN = m.n; v.movementAvail = m.avail;
+      }
+    }
+    return v;
+  }
+
   // ---- academic year (single year → header shows a static label, no selector) ----
   var ACADEMIC_YEARS = ['2026–27'];
 
@@ -444,6 +505,10 @@
     // periodic
     distribution: distribution, movement: movement, shapeOf: shapeOf, interpret: interpret,
     targets: TARGETS, targetsSet: TARGETS_SET,
+    // leadership verdict + targets (feedback §1/§2/§3)
+    leadershipVerdict: leadershipVerdict, pooledSecurePct: pooledSecurePct,
+    pooledSecureTarget: pooledSecureTarget, skillSecureTarget: skillSecureTarget,
+    overallBandMovement: overallBandMovement,
     // mockup-inspired derived reads
     schoolSkillGroups: schoolSkillGroups, growthStrength: growthStrength,
     perspectiveRadar: perspectiveRadar, studentStage: studentStage,

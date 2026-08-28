@@ -206,13 +206,16 @@
   .ad-colx { display: flex; gap: 6px; margin-top: 8px; }
   .ad-colx span { flex: 1; text-align: center; font-size: 10px; color: var(--ink-300); font-weight: 700; }
 
-  /* ---- Progress-over-time markers ---- */
-  .ad-track { display: flex; align-items: stretch; gap: 10px; }
-  .ad-point { flex: 1; text-align: center; }
-  .ad-point .plabel { font-weight: 800; font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-450); margin-bottom: 8px; }
-  .ad-point.pending .ad-bar { opacity: .5; }
-  .ad-point .pmeta { font-size: 10.5px; color: var(--ink-300); font-weight: 700; margin-top: 6px; }
-  .ad-point.pending .pmeta { color: #A96518; }
+  /* ---- Progress-over-time stacked-area chart ---- */
+  .ad-proghead { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+  .ad-progselects { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ad-proghead .select-wrap { min-width: 150px; }
+  .ad-progcap { font-size: 12px; font-weight: 700; color: var(--ink-450); margin: 2px 0 12px; }
+  .ad-progchart { width: 100%; }
+  .ad-progchart svg { display: block; width: 100%; overflow: hidden; }
+  .ad-progfuts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 12px; }
+  .ad-progfut { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--ink-300); background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: 999px; padding: 4px 11px; }
+  .ad-progfut i { font-style: normal; font-weight: 800; color: var(--ink-450); }
 
   /* ---- Movement indicator ---- */
   .ad-move { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; }
@@ -366,7 +369,8 @@
   .ad-navcard .nc-pcts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-weight: 700; font-size: 11.5px; color: var(--ink-450); }
 
   /* ---- Per-grade breakdown (Outcomes school scope — Overview snapshot format) ---- */
-  .ad-gradebreaks { display: flex; flex-direction: column; gap: var(--ad-gap); }
+  .ad-gradebreaks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ad-gap); }
+  @media (max-width: 900px) { .ad-gradebreaks { grid-template-columns: 1fr; } }
   .ad-gradebreak { border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 18px; background: #fff; }
   .ad-gradebreak .gb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .ad-gradebreak .gb-name { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 17px; color: var(--ink-900); }
@@ -374,6 +378,10 @@
   .ad-gradebreak .gb-snap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 14px 0 16px; }
   .ad-gradebreak .gb-bar { flex: 1; min-width: 220px; }
   .ad-gradebreak .gb-gs { margin: 0; }
+
+  /* ---- Grade drill snapshot (Outcomes grade scope — mirrors the grade card's headline) ---- */
+  .ad-gradesnap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 4px 0 20px; }
+  .ad-gradesnap .gs-bar { flex: 1; min-width: 220px; }
 
   /* ---- Areas of growth / strength ---- */
   .ad-gs { border-radius: var(--radius-card); padding: 16px 18px; border: 1.5px solid var(--band, var(--line-200)); background: var(--bandwash, #fff); }
@@ -481,6 +489,84 @@
     .cmp-vs { display: none; }
   }
   @media (max-width: 640px) { .brand-rail { display: none; } }
+
+  /* ============================================================
+     Verdict banner (feedback §1/§3) — the one-line answer at the top
+     of Overview. Lead with the conclusion; evidence sits below it.
+     ============================================================ */
+  .ad-verdict { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .ad-verdict.good { border-left-color: var(--green-500); }
+  .ad-verdict.watch { border-left-color: #F0A84A; }
+  .ad-verdict-main { flex: 1 1 300px; min-width: 260px; }
+  .ad-verdict-head { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: clamp(17px, 2.1vw, 21px); color: var(--ink-900); line-height: 1.35; }
+  .ad-verdict-sub { font-weight: 600; font-size: 13px; color: var(--ink-450); margin-top: 7px; line-height: 1.55; }
+  .ad-verdict-right { flex: 1 1 240px; min-width: 220px; }
+  .ad-verdict-tgt { font-weight: 700; font-size: 11.5px; color: var(--ink-600); margin: 9px 0; display: inline-flex; align-items: center; gap: 6px; }
+  .ad-verdict-tgt .tk { display: inline-block; width: 2px; height: 12px; background: var(--ink-700); border-radius: 2px; }
+
+  /* ---- Band-bar target marker (feedback §2) — "compared to what?" ----
+     Secure is the right-most segment, so a target of N% Secure sits at
+     (100−N)% from the left: the green should reach this line. */
+  .ad-barwrap { position: relative; }
+  .ad-bar-target { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink-700); border-radius: 2px; pointer-events: none; }
+  .ad-bar-target::after { content: ''; position: absolute; top: -3px; left: -2px; border: 3px solid transparent; border-top-color: var(--ink-700); }
+  .ad-targetdelta { display: inline-block; margin-top: 6px; font-weight: 700; font-size: 11.5px; color: var(--ink-450); }
+  .ad-targetdelta.met { color: var(--green-700); }
+
+  /* ============================================================
+     Ask Tilli — floating assistant + full screen (feedback §5).
+     A chat surface that answers from the school's own dashboard data.
+     ============================================================ */
+  .ask-fab {
+    position: fixed; right: 22px; bottom: 22px; z-index: 55;
+    display: inline-flex; align-items: center; gap: 9px;
+    background: var(--green-600, #3E9B23); color: #fff; border: none;
+    border-radius: var(--radius-pill); padding: 13px 18px; cursor: pointer;
+    font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 13.5px;
+    box-shadow: 0 12px 30px rgba(20, 20, 20, .24); transition: background .15s, transform .15s;
+  }
+  .ask-fab:hover { background: var(--green-700); transform: translateY(-1px); }
+  .ask-fab svg { width: 20px; height: 20px; }
+  @media (max-width: 860px) { .ask-fab { bottom: 78px; right: 14px; padding: 12px 15px; } }
+
+  .ask-panel {
+    position: fixed; right: 22px; bottom: 22px; z-index: 60;
+    width: min(384px, calc(100vw - 28px)); height: min(564px, calc(100dvh - 40px));
+    background: #fff; border: 1px solid var(--line-200); border-radius: 20px;
+    box-shadow: 0 20px 54px rgba(20, 20, 20, .28); display: flex; flex-direction: column; overflow: hidden;
+  }
+  @media (max-width: 860px) { .ask-panel { right: 8px; left: 8px; bottom: 74px; width: auto; height: min(72dvh, 560px); } }
+
+  .ask-head { display: flex; align-items: center; gap: 11px; padding: 13px 15px; border-bottom: 1px solid var(--line-200); }
+  .ask-ava { width: 34px; height: 34px; border-radius: 50%; background: var(--wash-green); color: var(--green-700); display: grid; place-items: center; flex: none; }
+  .ask-ava svg { width: 19px; height: 19px; }
+  .ask-head b { font-family: 'Quicksand', sans-serif; font-size: 15px; color: var(--ink-900); display: flex; align-items: center; }
+  .ask-head .ask-sub { display: block; font-size: 11.5px; color: var(--ink-300); font-weight: 600; }
+  .ask-beta { margin-left: 7px; font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--cyan-700); background: var(--wash-cyan); border-radius: var(--radius-pill); padding: 2px 7px; }
+  .ask-x { margin-left: auto; border: none; background: none; font-size: 21px; color: var(--ink-300); cursor: pointer; line-height: 1; padding: 0 4px; }
+  .ask-x:hover { color: var(--ink-700); }
+
+  .ask-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 11px; background: var(--surface-100); }
+  .ask-msg { max-width: 88%; font-size: 13.5px; line-height: 1.5; font-weight: 600; padding: 11px 14px; border-radius: 15px; }
+  .ask-msg.tilli { background: #fff; border: 1px solid var(--line-200); color: var(--ink-800); align-self: flex-start; border-bottom-left-radius: 5px; }
+  .ask-msg.me { background: var(--green-600, #3E9B23); color: #fff; align-self: flex-end; border-bottom-right-radius: 5px; }
+  .ask-msg b { font-weight: 800; }
+  .ask-link { display: inline-block; margin-top: 9px; background: none; border: none; color: var(--cyan-700); font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 0; }
+  .ask-link:hover { text-decoration: underline; }
+  .ask-sugs { display: flex; flex-wrap: wrap; gap: 7px; align-self: flex-start; }
+  .ask-sug { background: #fff; border: 1px solid var(--line-200); color: var(--ink-600); border-radius: var(--radius-pill); padding: 7px 12px; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 12px; cursor: pointer; transition: border-color .12s, color .12s; }
+  .ask-sug:hover { border-color: var(--green-500); color: var(--green-700); }
+  .ask-foot { display: flex; gap: 8px; padding: 11px; border-top: 1px solid var(--line-200); background: #fff; }
+  .ask-input { flex: 1; border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 10px 15px; font-family: 'Montserrat', sans-serif; font-size: 13.5px; color: var(--ink-900); outline: none; }
+  .ask-input:focus { border-color: var(--green-500); }
+  .ask-send { border: none; background: var(--green-600, #3E9B23); color: #fff; border-radius: 50%; width: 40px; height: 40px; flex: none; cursor: pointer; font-size: 15px; }
+  .ask-send:hover { background: var(--green-700); }
+
+  /* Ask Tilli full screen (nav destination) — same engine, roomier shell. */
+  .ask-screen { max-width: 720px; }
+  .ask-shell { display: flex; flex-direction: column; height: min(62dvh, 560px); border: 1px solid var(--line-200); border-radius: var(--radius-card); overflow: hidden; background: #fff; }
+  .ask-shell .ask-body { background: var(--surface-100); }
+
   /* ---- Preview-stage panel (demo tooling; remove to ship) ---- */
   .ad-statepanel { position: fixed; left: 16px; bottom: 16px; z-index: 60; width: 214px;
     background: #fff; border: 1px solid var(--line-200, #E7E9EF); border-radius: 14px;
