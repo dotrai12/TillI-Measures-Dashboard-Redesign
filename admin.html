@@ -393,20 +393,28 @@
   .ad-gs-head { display: flex; align-items: center; gap: 12px; }
   .ad-scopepill { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-800); background: var(--surface-100, #fff); border: 1.5px solid var(--line-200); border-radius: 999px; padding: 6px 14px; }
 
-  /* ---- Compare two classes (Outcomes) ---- */
-  .cmp-pickers { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 16px; }
-  .cmp-pick { display: flex; flex-direction: column; gap: 6px; flex: 1 1 200px; min-width: 0; }
-  .cmp-cap { font-weight: 800; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-450); }
-  .cmp-vs { font-weight: 800; font-size: 12px; color: var(--ink-300); padding-bottom: 14px; }
-  .cmp-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; }
-  .cmp-row-lbl { font-size: 11.5px; font-weight: 700; color: var(--ink-450); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cmp-table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 520px; }
-  .cmp-table th { text-align: left; font-size: 12px; font-weight: 800; color: var(--ink-450); text-transform: uppercase; letter-spacing: .04em; padding: 0 0 10px; border-bottom: 1px solid var(--line-200); }
-  .cmp-table th:first-child { width: 190px; }
-  .cmp-table td { padding: 12px 0; border-bottom: 1px solid var(--line-200); vertical-align: middle; }
-  .cmp-table th + th, .cmp-table td + td { padding-left: 18px; }
-  .cmp-table tbody tr:last-child td, .cmp-table tr:last-child td { border-bottom: none; }
-  .cmp-skill { font-weight: 700; font-size: 13.5px; color: var(--ink-900); }
+  /* ---- Compare two classes (Outcomes) — two full section reads, side by side ---- */
+  .cmp-head { margin-bottom: 18px; }
+  .cmp-head-kicker { font-weight: 700; font-size: 12.5px; color: var(--ink-450); }
+  .cmp-head-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+  .cmp-head-title { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: clamp(18px, 2.4vw, 24px); color: var(--ink-900); margin: 0; }
+  .cmp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ad-gap); align-items: start; }
+  .cmp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .cmp-select { width: 100%; }
+  .cmp-select .select { width: 100%; text-align: center; font-family: 'Quicksand', sans-serif; font-weight: 700; }
+  .cmp-body { display: flex; flex-direction: column; gap: 18px; }
+  .cmp-gs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cmp-legend { margin: -4px 0 -6px; }
+  .cmp-skills { display: flex; flex-direction: column; }
+  .cmp-skillrow { display: grid; grid-template-columns: minmax(84px, 1.05fr) 1.5fr auto; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-200); }
+  .cmp-skillrow:last-child { border-bottom: none; }
+  .cmp-sk-name { font-weight: 700; font-size: 12.5px; color: var(--ink-800); line-height: 1.25; }
+  .cmp-sk-bar { min-width: 0; }
+  .cmp-sk-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 12px; white-space: nowrap; justify-self: end; }
+  .cmp-sk-status i { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+  .cmp-radar { margin-top: 2px; }
+  @media (max-width: 860px) { .cmp-cols { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 560px) { .cmp-gs { grid-template-columns: minmax(0, 1fr); } }
 
   /* ---- Multi-perspective radar ---- */
   .ad-radar-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
@@ -484,9 +492,6 @@
     /* 3-marker progress tracks read better stacked than squeezed into thirds. */
     .ad-track { flex-wrap: wrap; gap: 8px; }
     .ad-track .ad-point { flex: 1 1 100%; }
-    /* Stack the two class pickers; the "vs" reads oddly between stacked rows. */
-    .cmp-pick { flex: 1 1 100%; }
-    .cmp-vs { display: none; }
   }
   @media (max-width: 640px) { .brand-rail { display: none; } }
 

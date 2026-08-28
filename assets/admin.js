@@ -740,34 +740,51 @@
     var validIds = AD.sections.map(function (s) { return s.id; });
     if (cmpTwo.a && validIds.indexOf(cmpTwo.a) < 0) cmpTwo.a = null;
     if (cmpTwo.b && validIds.indexOf(cmpTwo.b) < 0) cmpTwo.b = null;
-    function cmp2Options(sel) {
-      return '<option value=""' + (sel ? '' : ' selected') + ' disabled>Select a class…</option>' +
+    function cmp2Options(sel, side) {
+      return '<option value=""' + (sel ? '' : ' selected') + ' disabled>Select class ' + (side === 'a' ? 'A' : 'B') + '…</option>' +
         AD.sections.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
     }
-    function cmp2HTML() {
-      var secA = AD.sections.find(function (s) { return s.id === cmpTwo.a; });
-      var secB = AD.sections.find(function (s) { return s.id === cmpTwo.b; });
-      var pickers = '<div class="cmp-pickers">' +
-        '<div class="cmp-pick"><span class="cmp-cap">Class A</span><label class="select-wrap"><select class="select" id="o-classa" title="First class to compare">' + cmp2Options(cmpTwo.a) + '</select></label></div>' +
-        '<span class="cmp-vs">vs</span>' +
-        '<div class="cmp-pick"><span class="cmp-cap">Class B</span><label class="select-wrap"><select class="select" id="o-classb" title="Second class to compare">' + cmp2Options(cmpTwo.b) + '</select></label></div>' +
-        '</div>';
+    // Single-word standing for one skill in one class: whichever band most of
+    // the children sit in. Used for the little status chip on each skill row.
+    function cmpSkillVerdict(d) {
+      var p = d.pct;
+      if (p.secure >= p.developing && p.secure >= p.emerging) return { label: 'Strong', color: AD.bandMeta('secure').color };
+      if (p.emerging >= p.developing && p.emerging >= p.secure) return { label: 'Emerging', color: AD.bandMeta('emerging').color };
+      return { label: 'Developing', color: AD.bandMeta('developing').color };
+    }
+    // One class column: picker on top, then (once picked) growth/strength,
+    // a skill-band-bar list, and the multi-perspective radar — the full
+    // section read, so two classes can be scanned side by side.
+    function cmpColHTML(side) {
+      var selId = cmpTwo[side], otherId = cmpTwo[side === 'a' ? 'b' : 'a'];
+      var sec = AD.sections.find(function (s) { return s.id === selId; });
+      var picker = '<label class="select-wrap cmp-select"><select class="select" id="o-class' + side + '" title="Class to show in this column">' + cmp2Options(selId, side) + '</select></label>';
       var inner;
-      if (!secA || !secB) {
-        inner = pickers + stEmpty('Pick two classes.', 'Choose a class in each dropdown to compare them side by side.');
-      } else if (cmpTwo.a === cmpTwo.b) {
-        inner = pickers + stEmpty('Pick two different classes.', 'Choose another class in one of the dropdowns to compare them side by side.');
+      if (!sec) {
+        inner = stEmpty('No class chosen yet.', 'Pick a class above to see its strengths, growth areas and skill bands.');
+      } else if (selId === otherId) {
+        inner = stEmpty('Already shown.', 'This class is on the other side — pick a different one to compare.');
       } else {
-        // T-table: skills down the rows, one column per class.
-        inner = pickers + '<div style="margin:2px 0 14px">' + bandLegend() + '</div>' +
-          '<div class="ad-tablewrap"><table class="cmp-table"><thead><tr><th>Skill</th><th>' + esc(secA.name) + '</th><th>' + esc(secB.name) + '</th></tr></thead><tbody>' +
-          AD.skills.map(function (sk) {
-            var dA = AD.distribution(AD.studentsInSection(secA), sk.key, point);
-            var dB = AD.distribution(AD.studentsInSection(secB), sk.key, point);
-            return '<tr><td class="cmp-skill">' + esc(sk.name) + '</td><td>' + bandBar(dA, true) + '</td><td>' + bandBar(dB, true) + '</td></tr>';
-          }).join('') + '</tbody></table></div>';
+        var studs = AD.studentsInSection(sec);
+        var gs = AD.growthStrength(studs, point, 2), em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
+        var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
+        var gsBlock = '<div class="cmp-gs">' +
+          '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4>' + gsList(gs.growth) + '</div>' +
+          '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4>' + gsList(gs.strength) + '</div></div>';
+        var skillList = '<div class="cmp-skills">' + AD.skills.map(function (sk) {
+          var d = AD.distribution(studs, sk.key, point), v = cmpSkillVerdict(d);
+          return '<div class="cmp-skillrow"><span class="cmp-sk-name">' + esc(sk.name) + '</span>' +
+            '<div class="cmp-sk-bar">' + bandBar(d, true) + '</div>' +
+            '<span class="cmp-sk-status" style="color:' + v.color + '"><i style="background:' + v.color + '"></i>' + v.label + '</span></div>';
+        }).join('') + '</div>';
+        inner = gsBlock + '<div class="cmp-legend">' + bandLegend() + '</div>' + skillList + '<div class="cmp-radar">' + radarBlock(studs, point) + '</div>';
       }
-      return card('Compare two classes', '<span class="ad-chip status-new" style="margin-right:8px">New</span>Any two classes, side by side at the selected point.', inner, 'span2', '<div>' + cadence(point) + '</div>');
+      return '<div class="cmp-col">' + picker + '<div class="ad-card cmp-body">' + inner + '</div></div>';
+    }
+    function cmp2HTML() {
+      return '<div class="cmp-head"><div class="cmp-head-kicker">You can compare two classes here</div>' +
+        '<div class="cmp-head-row"><h2 class="cmp-head-title">Which two classes do you want to see?</h2>' + cadence(point) + '</div></div>' +
+        '<div class="cmp-cols">' + cmpColHTML('a') + cmpColHTML('b') + '</div>';
     }
     function wireCmp2() {
       var host = document.getElementById('o-cmp2'); if (!host) return;
