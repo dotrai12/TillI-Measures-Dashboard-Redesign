@@ -492,6 +492,8 @@
 
     body.innerHTML = crumbs([{ label: 'All Schools', screen: 'schools' }, { label: g.name }]) +
       screenHead(g.name, counts.active + ' school' + (counts.active === 1 ? '' : 's') + ' in this group.',
+        '<button class="btn btn-outline btn-sm" id="grp-dl-assess" title="Assessment completion log for every school in this group — responses vs expected per teacher / parent / student assessment.">↓ Assessments CSV</button>' +
+        '<button class="btn btn-outline btn-sm" id="grp-dl-staff" title="Every staff member across this group — name, email, role and sections.">↓ Staff CSV</button>' +
         '<button class="btn btn-primary btn-sm" id="grp-add">+ Add School</button>') +
       '<div class="tl-tabs">' +
         '<button class="tl-tab' + (grpState.tab === 'active' ? ' on' : '') + '" data-gtab="active">Active <b>' + counts.active + '</b></button>' +
@@ -507,8 +509,97 @@
     body.querySelectorAll('[data-view]').forEach(function (b) { b.addEventListener('click', function () { schState.view = b.dataset.view; SCREEN.group(params, body); }); });
     body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); go('school', { id: b.dataset.open }); }); });
     var ab = body.querySelector('#grp-add'); if (ab) ab.addEventListener('click', openAddSchool);
+    // Group-wide CSV exports — active schools in this group, regardless of the search filter.
+    var groupSchools = inGroup.filter(function (s) { return !s.archived; });
+    var slug = g.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group';
+    var da = body.querySelector('#grp-dl-assess'); if (da) da.addEventListener('click', function () { exportGroupAssessments(groupSchools, slug); });
+    var dst = body.querySelector('#grp-dl-staff'); if (dst) dst.addEventListener('click', function () { exportGroupStaff(groupSchools, slug); });
     var qi = body.querySelector('#grp-q'); if (qi) qi.addEventListener('input', function () { grpState.q = qi.value; var pos = qi.selectionStart; SCREEN.group(params, body); var nq = body.querySelector('#grp-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
   };
+
+  // Group CSV builders — one row per (school × assessment) and one per staff member.
+  function exportGroupAssessments(schools, slug) {
+    var ids = {}; schools.forEach(function (s) { ids[s.id] = s; });
+    var rows = ORG.results.filter(function (r) { return ids[r.schoolId]; }).map(function (r) {
+      var s = ids[r.schoolId];
+      return [s.name, s.code, r.assessment, r.phase, r.audience, r.responses, r.expected, r.completion, r.status, r.updated];
+    });
+    if (!rows.length) { toast('No assessment data for this group yet.'); return; }
+    downloadCsv(slug + '-assessments.csv',
+      ['School', 'Code', 'Assessment', 'Phase', 'Audience', 'Responses', 'Expected', 'Completion %', 'Status', 'Updated'], rows);
+  }
+  function exportGroupStaff(schools, slug) {
+    var ids = {}; schools.forEach(function (s) { ids[s.id] = s; });
+    var rows = ORG.users.filter(function (u) { return ids[u.schoolId]; }).map(function (u) {
+      var s = ids[u.schoolId];
+      return [s.name, s.code, u.name, u.email, u.role, (u.sections && u.sections.length) ? u.sections.join('; ') : ''];
+    });
+    if (!rows.length) { toast('No staff on record for this group yet.'); return; }
+    downloadCsv(slug + '-staff.csv', ['School', 'Code', 'Name', 'Email', 'Role', 'Sections'], rows);
+  }
+
+  // ---- Per-student assessment log (school hub → Assessments) ----
+  // A student × assessment matrix of Completed / In Progress / Not Started.
+  // The one live-wired school uses its real roster; every other school gets a
+  // deterministic synthetic roster from its grades/sections tree (seeded by
+  // code, so re-exports are stable). Cell statuses are weighted by each
+  // assessment's real completion %, so the matrix agrees with the aggregate log.
+  function seededRng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function strSeed(str) { var h = 2166136261 >>> 0; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  var ROSTER_FIRSTS = ['Aarav', 'Diya', 'Vivaan', 'Ananya', 'Aditya', 'Isha', 'Kabir', 'Sara', 'Rohan', 'Meera', 'Arjun', 'Anaya', 'Ishaan', 'Riya', 'Vihaan', 'Kiara', 'Reyansh', 'Myra', 'Advait', 'Navya', 'Dhruv', 'Aadhya', 'Krish', 'Pari', 'Yash'];
+  var ROSTER_LASTS = ['Sharma', 'Iyer', 'Nair', 'Menon', 'Kapoor', 'Reddy', 'Gupta', 'Rao', 'Shah', 'Krishnan', 'Desai', 'Bose', 'Patel', 'Verma', 'Chopra', 'Malhotra', 'Pillai', 'Jain', 'Das', 'Sinha'];
+  function studentRosterFor(s) {
+    if (s.id === 'little-sprouts' && TS && TS.students) {
+      return TS.students.map(function (st) { return { gradeSection: st.grade + ' - ' + st.section, id: st.adm, name: st.first + ' ' + st.last }; });
+    }
+    var rows = [], rnd = seededRng(strSeed(s.code));
+    ((s.structure && s.structure.grades) || []).forEach(function (g) {
+      (g.sections || []).forEach(function (sec) {
+        for (var k = 0; k < sec.students; k++) {
+          var f = ROSTER_FIRSTS[Math.floor(rnd() * ROSTER_FIRSTS.length)];
+          var l = ROSTER_LASTS[Math.floor(rnd() * ROSTER_LASTS.length)];
+          var id = rnd() > 0.5 ? ('2025' + String(100000 + Math.floor(rnd() * 899999))) : String(20000 + Math.floor(rnd() * 79999));
+          rows.push({ gradeSection: g.grade + ' - ' + sec.name, id: id, name: f + ' ' + l });
+        }
+      });
+    });
+    return rows;
+  }
+  var STUDENTLOG_TONE = { 'Completed': 'ok', 'In Progress': 'warn', 'Not Started': 'danger' };
+  function renderStudentAssessmentLog(d, mount) {
+    var s = d.school;
+    // Only student-facing assessments belong in a per-student log; a teacher
+    // observation is completed once per class, not per child.
+    var cols = d.deployments.filter(function (x) { return x.audience === 'Direct Assessment' || x.audience === 'Parent'; });
+    if (!cols.length) { mount.innerHTML = '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-empty">No student-facing assessments deployed for this school yet.</div></div>'; return; }
+    var roster = studentRosterFor(s);
+    if (!roster.length) { mount.innerHTML = '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-empty">No students on record for this school yet.</div></div>'; return; }
+    var frac = cols.map(function (dep) {
+      if (dep.status === 'Scheduled') return 0;
+      var res = ORG.results.find(function (r) { return r.schoolId === s.id && r.assessment === dep.assessment && r.audience === dep.audience; });
+      return res ? Math.max(0, Math.min(1, res.completion / 100)) : 0.4;
+    });
+    var tally = cols.map(function () { return { 'Completed': 0, 'In Progress': 0, 'Not Started': 0 }; });
+    var rnd = seededRng(strSeed(s.code + '|log'));
+    var bodyRows = roster.map(function (st) {
+      var cells = cols.map(function (dep, ci) {
+        var status;
+        if (dep.status === 'Scheduled') status = 'Not Started';
+        else { var done = frac[ci], prog = Math.min(0.15, (1 - done) * 0.4), u = rnd(); status = u < done ? 'Completed' : (u < done + prog ? 'In Progress' : 'Not Started'); }
+        tally[ci][status]++;
+        return '<td>' + statusPill(status, STUDENTLOG_TONE[status]) + '</td>';
+      }).join('');
+      return '<tr><td>' + esc(st.gradeSection) + '</td><td class="mono">' + esc(st.id) + '</td><td class="name">' + esc(st.name) + '</td>' + cells + '</tr>';
+    }).join('');
+    var head = '<tr><th>Grade + Section</th><th>Student ID</th><th>Student Name</th>' +
+      cols.map(function (dep, ci) {
+        var t = tally[ci];
+        return '<th>' + esc(dep.assessment) + '<small style="display:block;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ink-300);margin-top:3px">' + t['Completed'] + ' done · ' + t['In Progress'] + ' in progress · ' + t['Not Started'] + ' not started</small></th>';
+      }).join('') + '</tr>';
+    mount.innerHTML = '<div class="tl-card" style="margin-top:var(--tl-gap)">' +
+      '<div class="tl-mod-h"><div><h3 class="tl-mod-title">Student assessment log</h3><p class="tl-mod-note">' + roster.length + ' students · ' + cols.length + ' student-facing assessment' + (cols.length === 1 ? '' : 's') + ' · <span class="tl-pill ok">Completed</span> <span class="tl-pill warn">In Progress</span> <span class="tl-pill danger">Not Started</span></p></div></div>' +
+      '<div class="tl-tablewrap"><table class="tl-table" style="min-width:' + (420 + cols.length * 190) + 'px"><thead>' + head + '</thead><tbody>' + bodyRows + '</tbody></table></div></div>';
+  }
 
   function schoolCard(s) {
     var flags = ORG.server.schoolFlags(s);
@@ -701,11 +792,22 @@
       return '<div class="tl-linkrow"><div><b>' + esc(kind) + '</b><span class="mono">' + esc(url) + '</span></div><button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></div>';
     }).join('');
 
-    el.innerHTML = '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Deployments</h3></div><button class="btn btn-outline btn-sm" data-newdep>+ New deployment</button></div>' +
+    el.innerHTML = '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Deployments</h3></div>' +
+        '<div class="tl-inline-actions">' +
+          '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
+          '<button class="btn btn-outline btn-sm" data-newdep>+ New deployment</button></div></div>' +
         '<div class="tl-tablewrap"><table class="tl-table" style="min-width:720px"><thead><tr><th>Assessment</th><th>Audience</th><th>Phase</th><th>Window</th><th>Status</th><th></th></tr></thead><tbody>' + depRows + '</tbody></table></div></div>' +
       '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Master Links</h3><p class="tl-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
-        '<div style="margin-top:14px"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>';
+        '<div style="margin-top:14px"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
+      '<div id="hub-studentlog"></div>';
     el.querySelector('[data-newdep]').addEventListener('click', function () { openNewDeployment(s.id, true); });
+    var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
+    slBtn.addEventListener('click', function () {
+      if (slMount.innerHTML) { slMount.innerHTML = ''; slBtn.textContent = 'Student assessment log'; slBtn.classList.remove('on'); return; }
+      renderStudentAssessmentLog(d, slMount);
+      slBtn.textContent = 'Hide student assessment log'; slBtn.classList.add('on');
+      slMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
     el.querySelector('[data-dlcsv]').addEventListener('click', function () {
       var rows = ORG.results.filter(function (r) { return r.schoolId === s.id; });
       downloadCsv(s.code.toLowerCase() + '-results.csv', ['Assessment', 'Phase', 'Audience', 'Responses', 'Expected', 'Completion %', 'Status', 'Updated'],
