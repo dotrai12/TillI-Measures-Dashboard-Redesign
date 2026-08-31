@@ -120,7 +120,7 @@
 
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
-  var SCREEN_PARENT = { school: 'schools', group: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
+  var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
     observation: 'templates', results: 'deployments', 'master-links': 'deployments' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
@@ -739,7 +739,7 @@
       return { name: st.first + ' ' + st.last, admission: st.adm, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
     }) : [];
     var rows = roster.length ? roster.map(function (r) {
-      return '<tr><td class="name">' + esc(r.name) + '</td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
+      return '<tr><td class="name"><button class="link-btn" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
         '<td style="text-align:right"><button class="link-btn" data-edit-st="' + esc(r.admission) + '">Edit</button> <button class="link-btn danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '">Delete</button></td></tr>';
     }).join('') : '';
     el.innerHTML = '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Student Directory</h3><p class="tl-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
@@ -749,6 +749,7 @@
       '<div class="tl-inline-link"><button class="link-btn" data-hubtab="issues">This school\'s deletion logs →</button></div></div>';
     el.querySelector('[data-add-st]').addEventListener('click', function () { go('add-students', { school: s.id }); });
     el.querySelector('[data-merge-here]').addEventListener('click', function () { go('merge', { school: s.id }); });
+    el.querySelectorAll('[data-open-student]').forEach(function (b) { b.addEventListener('click', function () { go('student', { school: s.id, adm: b.dataset.openStudent }); }); });
     el.querySelectorAll('[data-hubtab]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: s.id, tab: 'issues' }); }); });
     el.querySelectorAll('[data-del-st]').forEach(function (b) { b.addEventListener('click', function () {
       gated({ title: 'Delete student', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(b.dataset.nm) + '</b> (' + esc(b.dataset.delSt) + ')? This writes to Deletion Logs.</p>', confirmLabel: 'Delete student', audit: { action: 'student.delete', entity: b.dataset.nm, entityType: 'student', schoolId: s.id }, onConfirm: function () { toast('Student deleted — logged.'); } });
@@ -849,6 +850,183 @@
       else openSchoolEditor(s); // profile + group assignment both live in the school editor
     }); });
   };
+
+  // ============================================================
+  //  STUDENT REPORT  (skill scores · multi-perspective · 5-yr progress)
+  //  Only the one live-wired school (window.TILLI_SCHOOL) carries real
+  //  per-student skill data; the report reads it straight off the student.
+  // ============================================================
+  var STUDENT_TABS = [
+    { key: 'skills', label: 'Skill Scores' },
+    { key: 'perspective', label: 'Multi-Perspective Report' },
+    { key: 'progress', label: 'Progress (5-year)' },
+  ];
+  // Plain-language descriptions for the 12 measured skills.
+  var SKILL_DESC = {
+    emotion_awareness: 'Recognizing and understanding emotions in self and others',
+    emotion_regulation: 'Managing and controlling emotional responses',
+    empathy: 'Understanding and sharing the feelings of others',
+    relationship_skills: 'Building and maintaining healthy relationships',
+    metacognition: "Thinking about one's own thinking and learning processes",
+    critical_thinking: 'Analyzing and evaluating information to form judgments',
+    working_memory: 'Holding and manipulating information in mind',
+    planning: 'Setting goals and organizing steps to achieve them',
+    cognitive_flexibility: 'Adapting thinking to new or changing situations',
+    inhibition_distraction: 'Resisting distractions and maintaining focus',
+    inhibition_response: 'Controlling impulsive responses and actions',
+    attention: 'Sustaining focus on tasks and filtering distractions',
+  };
+  // Score → proficiency level. Thresholds mirror the garden bands (34 / 67).
+  function skillLevel(p) {
+    if (p < 34) return { label: 'Beginner', tone: 'danger' };
+    if (p < 67) return { label: 'Learner', tone: 'warn' };
+    if (p < 85) return { label: 'Proficient', tone: 'sched' };
+    return { label: 'Advanced', tone: 'ok' };
+  }
+  function gapStatus(g) {
+    if (g <= 10) return { label: 'Aligned', tone: 'ok', mark: '↗' };
+    if (g <= 30) return { label: 'Moderate', tone: 'muted', mark: '–' };
+    return { label: 'High Gap', tone: 'danger', mark: '⚠' };
+  }
+  var SR_ICON = {
+    heart: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#E1543E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>',
+    brain: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#4A90D9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 1 5 3 3 0 0 0 5 2V4.5A1.5 1.5 0 0 0 9 3z"/><path d="M15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-1 5 3 3 0 0 1-5 2V4.5A1.5 1.5 0 0 1 15 3z"/></svg>',
+  };
+  var SR_PERSP = [
+    { key: 'teacher', label: 'Teacher', color: '#4A90D9' },
+    { key: 'parent', label: 'Parent', color: '#56C02B' },
+    { key: 'student', label: 'Student Direct', color: '#F0A84A' },
+  ];
+
+  SCREEN.student = function (params, body) {
+    var s = ORG.byId(params.school);
+    var stu = (TS && TS.findByAdm) ? TS.findByAdm(params.adm) : null;
+    if (!s || !stu) { body.innerHTML = '<div class="tl-empty">Student report is only available for schools with a live-wired roster.</div>'; return; }
+    var tab = params.tab && STUDENT_TABS.some(function (t) { return t.key === params.tab; }) ? params.tab : 'skills';
+
+    var crumbParts = [{ label: 'All Schools', screen: 'schools' }];
+    if (s.groupId && s.groupId !== 'g-none') crumbParts.push({ label: s.groupName, screen: 'group', params: { id: s.groupId } });
+    crumbParts.push({ label: s.name, screen: 'school', params: { id: s.id, tab: 'students' } });
+    crumbParts.push({ label: stu.name });
+
+    var sel = stu.skills.filter(function (k) { return k.group === 'sel'; });
+    var cog = stu.skills.filter(function (k) { return k.group === 'cog'; });
+
+    body.innerHTML = crumbs(crumbParts) +
+      '<div class="tl-hub-head"><div><h1 class="tl-screen-title" style="margin-bottom:4px">' + esc(stu.name) + '</h1>' +
+        '<p class="tl-screen-sub" style="margin:0"><span class="mono">' + esc(stu.adm) + '</span> · ' + esc(stu.grade + ' ' + stu.section) + ' · ' + esc(s.name) + (stu.teacherName ? ' · Teacher: ' + esc(stu.teacherName) : '') + '</p></div>' +
+        '<div class="tl-hub-actions"><div class="tl-kpi" style="min-width:120px"><div class="num">' + pct(stu.overallPct) + '%</div><div class="lbl">Overall skill score</div></div></div></div>' +
+      '<div class="tl-tabs hub">' + STUDENT_TABS.map(function (t) {
+        return '<button class="tl-tab' + (t.key === tab ? ' on' : '') + '" data-sttab="' + t.key + '">' + esc(t.label) + '</button>';
+      }).join('') + '</div>' +
+      '<div id="st-tab"></div>';
+
+    var host = document.getElementById('st-tab');
+    if (tab === 'skills') host.innerHTML = srSkillsTab(sel, cog);
+    else if (tab === 'perspective') host.innerHTML = srPerspectiveTab(stu);
+    else host.innerHTML = srProgressTab(stu);
+
+    wireCrumbs(body);
+    body.querySelectorAll('[data-sttab]').forEach(function (b) { b.addEventListener('click', function () { go('student', { school: s.id, adm: stu.adm, tab: b.dataset.sttab }); }); });
+  };
+
+  function srSkillRow(k) {
+    var lv = skillLevel(k.pct);
+    return '<div class="sr-skill"><div class="sr-sk-body"><div class="sr-sk-name">' + esc(k.name) + '</div>' +
+      '<div class="sr-sk-desc">' + esc(SKILL_DESC[k.key] || '') + '</div></div>' +
+      '<div class="sr-sk-pct">' + pct(k.pct) + '%</div>' + statusPill(lv.label, lv.tone) + '</div>';
+  }
+  function srSkillsTab(sel, cog) {
+    return '<div class="tl-grid two">' +
+      '<div class="tl-card"><div class="sr-secthead">' + SR_ICON.heart + '<h3>Social-Emotional Learning</h3></div>' + sel.map(srSkillRow).join('') + '</div>' +
+      '<div class="tl-card"><div class="sr-secthead">' + SR_ICON.brain + '<h3>Cognitive Skills</h3></div>' + cog.map(srSkillRow).join('') + '</div></div>';
+  }
+
+  function srPerspectiveTab(stu) {
+    var axes = stu.skills.map(function (k) { return k.name; });
+    var series = SR_PERSP.map(function (p) { return { label: p.label, color: p.color, values: stu.skills.map(function (k) { return k[p.key]; }) }; });
+    var legend = '<div class="sr-legend">' + SR_PERSP.map(function (p) { return '<span><i style="background:' + p.color + '"></i>' + esc(p.label) + '</span>'; }).join('') + '</div>';
+
+    var gapRows = stu.skills.map(function (k) {
+      var st = gapStatus(k.gap);
+      return '<tr><td class="name">' + esc(k.name) + '</td><td class="tl-num">' + k.teacher + '%</td><td class="tl-num">' + k.parent + '%</td>' +
+        '<td class="tl-num">' + k.student + '%</td><td class="tl-num">' + k.gap + '%</td><td>' + statusPill(st.mark + ' ' + st.label, st.tone) + '</td></tr>';
+    }).join('');
+
+    return '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Multi-perspective view</h3>' +
+        '<p class="tl-mod-note">The same skills rated by teacher, parent and the child directly — the gaps between them are often the most useful part.</p></div></div>' +
+        '<div class="sr-radar-wrap">' + srRadar(axes, series) + legend + '</div></div>' +
+      '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Gap Analysis</h3>' +
+        '<p class="tl-mod-note">Discrepancies between perspectives — large gaps may indicate areas needing attention.</p></div></div>' +
+        '<div class="tl-tablewrap"><table class="tl-table" style="min-width:640px"><thead><tr><th>Skill</th><th>Teacher</th><th>Parent</th><th>Student Direct</th><th>Gap</th><th>Status</th></tr></thead><tbody>' + gapRows + '</tbody></table></div></div>';
+  }
+
+  // Radar: n axes, m series (values 0–100).
+  function srRadar(axes, series) {
+    var W = 640, H = 470, cx = W / 2, cy = H / 2, R = 150, n = axes.length;
+    function ang(i) { return -Math.PI / 2 + i * 2 * Math.PI / n; }
+    function pt(i, val) { var a = ang(i), r = R * (Math.max(0, Math.min(100, val)) / 100); return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; }
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-width:560px" role="img" aria-label="Multi-perspective radar across skills">';
+    [25, 50, 75, 100].forEach(function (g) {
+      var p = []; for (var i = 0; i < n; i++) { var q = pt(i, g); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
+      svg += '<polygon points="' + p.join(' ') + '" fill="none" stroke="#E4E6EC" stroke-width="1"/>';
+    });
+    for (var i = 0; i < n; i++) {
+      var edge = pt(i, 100);
+      svg += '<line x1="' + cx + '" y1="' + cy + '" x2="' + edge[0].toFixed(1) + '" y2="' + edge[1].toFixed(1) + '" stroke="#EDEEF2" stroke-width="1"/>';
+      var a = ang(i), lr = R + 20, lx = cx + lr * Math.cos(a), ly = cy + lr * Math.sin(a);
+      var anchor = Math.abs(lx - cx) < 10 ? 'middle' : (lx < cx ? 'end' : 'start');
+      svg += '<text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anchor + '" dominant-baseline="middle" font-size="10.5" fill="#6B7180">' + esc(axes[i]) + '</text>';
+    }
+    series.forEach(function (ser) {
+      var p = []; for (var j = 0; j < n; j++) { var q = pt(j, ser.values[j]); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
+      svg += '<polygon points="' + p.join(' ') + '" fill="' + ser.color + '" fill-opacity="0.13" stroke="' + ser.color + '" stroke-width="2" stroke-linejoin="round"/>';
+    });
+    return svg + '</svg>';
+  }
+
+  // 5-year progress: real data gives only in-year points, so trajectories are
+  // synthesised (seeded by admission #) ending at the child's current averages.
+  function srProgressTab(stu) {
+    var selNow = Math.round(avg(stu.skills.filter(function (k) { return k.group === 'sel'; }).map(function (k) { return k.pct; })));
+    var cogNow = Math.round(avg(stu.skills.filter(function (k) { return k.group === 'cog'; }).map(function (k) { return k.pct; })));
+    var years = 5, endYear = 2026;
+    var labels = []; for (var y = 0; y < years; y++) labels.push(String(endYear - (years - 1) + y));
+    function traj(end, tag) {
+      var r = seededRng(strSeed(stu.adm + tag));
+      var start = Math.max(6, end - (18 + Math.floor(r() * 22))), out = [];
+      for (var i = 0; i < years; i++) { var t = i / (years - 1), base = start + (end - start) * t, jit = (r() - 0.5) * 8; out.push(i === years - 1 ? end : Math.round(Math.max(2, Math.min(100, base + jit)))); }
+      return out;
+    }
+    var seriesList = [
+      { label: 'Social-Emotional', color: '#56C02B', values: traj(selNow, ':sel5') },
+      { label: 'Cognitive', color: '#4A90D9', values: traj(cogNow, ':cog5') },
+    ];
+    var legend = '<div class="sr-legend">' + seriesList.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span>'; }).join('') + '</div>';
+    return '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Progress over time</h3>' +
+      '<p class="tl-mod-note">' + esc(stu.name.split(' ')[0]) + '\'s social-emotional and cognitive averages across ' + years + ' years in the programme. The most recent point is the current score.</p></div></div>' +
+      srLineChart(seriesList, labels) + legend + '</div>';
+  }
+  function srLineChart(seriesList, xLabels) {
+    var W = 760, H = 300, padL = 34, padR = 16, padT = 14, padB = 32, n = xLabels.length;
+    var iw = W - padL - padR, ih = H - padT - padB;
+    function X(i) { return padL + iw * (n === 1 ? 0.5 : i / (n - 1)); }
+    function Y(v) { return padT + ih * (1 - Math.max(0, Math.min(100, v)) / 100); }
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Progress over five years">';
+    [0, 25, 50, 75, 100].forEach(function (g) {
+      var y = Y(g).toFixed(1);
+      svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="#EDEEF2"/>' +
+        '<text x="' + (padL - 6) + '" y="' + (Y(g) + 3).toFixed(1) + '" text-anchor="end" font-size="10" fill="#9AA0AC">' + g + '</text>';
+    });
+    xLabels.forEach(function (lb, i) { svg += '<text x="' + X(i).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="10.5" fill="#6B7180">' + esc(lb) + '</text>'; });
+    seriesList.forEach(function (ser) {
+      var dpath = ser.values.map(function (v, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(' ');
+      svg += '<path d="' + dpath + '" fill="none" stroke="' + ser.color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+      ser.values.forEach(function (v, i) { svg += '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(v).toFixed(1) + '" r="3.6" fill="#fff" stroke="' + ser.color + '" stroke-width="2"/>'; });
+    });
+    return svg + '</svg>';
+  }
+  function avg(arr) { return arr.length ? arr.reduce(function (a, x) { return a + x; }, 0) / arr.length : 0; }
 
   // ============================================================
   //  MERGE STUDENTS  (spec §4.3)
