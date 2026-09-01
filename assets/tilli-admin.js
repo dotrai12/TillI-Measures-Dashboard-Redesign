@@ -553,15 +553,19 @@
       return TS.students.map(function (st) { return { gradeSection: st.grade + ' - ' + st.section, id: st.adm, name: st.first + ' ' + st.last }; });
     }
     var rows = [], rnd = seededRng(strSeed(s.code));
+    function pushStudent(label) {
+      var f = ROSTER_FIRSTS[Math.floor(rnd() * ROSTER_FIRSTS.length)];
+      var l = ROSTER_LASTS[Math.floor(rnd() * ROSTER_LASTS.length)];
+      var id = rnd() > 0.5 ? ('2025' + String(100000 + Math.floor(rnd() * 899999))) : String(20000 + Math.floor(rnd() * 79999));
+      rows.push({ gradeSection: label, id: id, name: f + ' ' + l });
+    }
     ((s.structure && s.structure.grades) || []).forEach(function (g) {
-      (g.sections || []).forEach(function (sec) {
-        for (var k = 0; k < sec.students; k++) {
-          var f = ROSTER_FIRSTS[Math.floor(rnd() * ROSTER_FIRSTS.length)];
-          var l = ROSTER_LASTS[Math.floor(rnd() * ROSTER_LASTS.length)];
-          var id = rnd() > 0.5 ? ('2025' + String(100000 + Math.floor(rnd() * 899999))) : String(20000 + Math.floor(rnd() * 79999));
-          rows.push({ gradeSection: g.grade + ' - ' + sec.name, id: id, name: f + ' ' + l });
-        }
-      });
+      if (g.sections && g.sections.length) {
+        g.sections.forEach(function (sec) { for (var k = 0; k < sec.students; k++) pushStudent(g.grade + ' - ' + sec.name); });
+      } else {
+        // Sectionless grade: students belong to the grade as one cohort.
+        for (var k = 0; k < (parseInt(g.students, 10) || 0); k++) pushStudent(g.grade);
+      }
     });
     return rows;
   }
@@ -636,21 +640,316 @@
     }, 0);
   }
 
+  // ---------- Add-School wizard (spec §4.1: name, type, group, initial
+  //            grades/sections → land on the new hub). Multi-step so a
+  //            Super Admin can set up the whole school in one flow. ----------
+  var ADD_BOARDS = ['CBSE', 'ICSE', 'IB', 'Cambridge', 'National', 'State Board', 'Other'];
+  // Country → cities. City picker is filtered by the chosen country (country first).
+  var ADD_COUNTRIES = ['India', 'Sri Lanka'];
+  var ADD_CITIES = {
+    'India': ['Bengaluru', 'Mumbai', 'Delhi', 'Gurugram', 'Chennai', 'Hyderabad', 'Kolkata', 'Pune', 'Jaipur'],
+    'Sri Lanka': ['Colombo', 'Kandy', 'Galle', 'Jaffna', 'Negombo'],
+  };
+  var ADD_GRADE_PRESETS = ['LKG', 'UKG', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'];
+  var WIZ_STEPS = [
+    { key: 'profile', label: 'Profile' }, { key: 'rollout', label: 'Rollout' },
+    { key: 'structure', label: 'Grades' }, { key: 'admin', label: 'First admin', optional: true },
+    { key: 'review', label: 'Review' },
+  ];
+  function secLetter(i) { return String.fromCharCode(65 + i); }
+
+  // Canonical grade ordering: early years (Nursery → KG) first, then Grade 1..N
+  // numerically, then any unrecognised custom names alphabetically at the end.
+  var GRADE_EARLY_RANK = { 'playgroup': -7, 'pre-nursery': -7, 'nursery': -6, 'pre-k': -5, 'prek': -5, 'lkg': -4, 'ukg': -3, 'kg': -2, 'kindergarten': -1 };
+  function gradeRank(name) {
+    var n = String(name || '').trim().toLowerCase();
+    if (GRADE_EARLY_RANK[n] != null) return GRADE_EARLY_RANK[n];
+    var m = n.match(/\d+/);
+    if (m) return parseInt(m[0], 10);   // Grade 1 / Class 2 / Std 3 → 1, 2, 3
+    return 900;                          // unknown custom → sort last
+  }
+  function sortGrades(list) {
+    list.sort(function (a, b) {
+      var ra = gradeRank(a.grade), rb = gradeRank(b.grade);
+      return ra !== rb ? ra - rb : a.grade.localeCompare(b.grade);
+    });
+    return list;
+  }
+  // "Joined" is picked from a native date input (YYYY-MM-DD) but stored/shown as a friendly string.
+  var MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function todayISO() { var t = new Date(), p = function (x) { return (x < 10 ? '0' : '') + x; }; return t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate()); }
+  function fmtJoined(v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '')); return m ? (parseInt(m[3], 10) + ' ' + MONTHS_SHORT[parseInt(m[2], 10) - 1] + ' ' + m[1]) : (v || ''); }
+  // Students for a grade: sum of its sections, or — when it has none — the
+  // grade-level count entered directly against the grade.
+  function gradeStudents(g) { return g.sections.length ? g.sections.reduce(function (b, s) { return b + (parseInt(s.students, 10) || 0); }, 0) : (parseInt(g.students, 10) || 0); }
+  function draftStudentTotal(d) { return d.grades.reduce(function (a, g) { return a + gradeStudents(g); }, 0); }
+  function draftSectionTotal(d) { return d.grades.reduce(function (a, g) { return a + g.sections.length; }, 0); }
+
   function openAddSchool() {
-    var groupOpts = ORG.groups.map(function (g) { return '<option value="' + g.id + '">' + esc(g.name) + '</option>'; }).join('');
-    openModal('Add a partner school',
-      '<p class="tl-muted">Create the record, then land on its hub. <span class="tl-gated">gated</span></p>' +
-      '<div class="tl-stack">' +
-        '<label class="field">School name<input class="input" id="ns-name" placeholder="e.g. Harmony High"></label>' +
-        '<label class="field">Type<input class="input" id="ns-type" placeholder="e.g. Independent school"></label>' +
-        '<label class="field">Group<select class="select" id="ns-group">' + groupOpts + '</select></label>' +
-        '<label class="field">City & country<input class="input" id="ns-city" placeholder="e.g. Jaipur, India"></label>' +
-      '</div>', function (close) {
-        var nm = (document.getElementById('ns-name').value || '').trim();
-        if (!nm) { toast('School name is required.'); return false; }
-        ORG.server.logAudit(me.name, 'school.add', nm, 'school');
-        close(); toast(nm + ' added.');
-      }, 'Create school');
+    var d = {
+      name: '', boards: [], city: '', country: 'India',
+      groupId: 'g-none', stage: 'onboarding', joined: todayISO(),
+      grades: [], admin: { name: '', email: '' },
+    };
+    var step = 0;
+    var root = document.getElementById('tl-modal-root');
+
+    function close() { root.innerHTML = ''; }
+
+    // Pull the current step's inputs into the draft before we move/re-render.
+    function commit() {
+      var g = function (id) { return document.getElementById(id); };
+      if (step === 0) {
+        if (g('ws-name')) d.name = g('ws-name').value.trim();
+        var boxes = document.querySelectorAll('.ws-board:checked');
+        d.boards = Array.prototype.map.call(boxes, function (b) { return b.value; });
+        if (g('ws-country')) d.country = g('ws-country').value;
+        if (g('ws-city')) d.city = g('ws-city').value;
+        if (g('ws-group')) d.groupId = g('ws-group').value;
+      } else if (step === 1) {
+        if (g('ws-stage')) d.stage = g('ws-stage').value;
+        if (g('ws-joined')) d.joined = g('ws-joined').value.trim() || d.joined;
+      } else if (step === 3) {
+        if (g('ws-admin-name')) d.admin.name = g('ws-admin-name').value.trim();
+        if (g('ws-admin-email')) d.admin.email = g('ws-admin-email').value.trim();
+      }
+    }
+
+    function stepper() {
+      return '<div class="tl-steps" style="margin-bottom:18px">' + WIZ_STEPS.map(function (s, i) {
+        var cls = i < step ? 'done' : (i === step ? 'cur' : '');
+        var optTag = s.optional ? '<span class="ws-opt-tag">optional</span>' : '';
+        return '<div class="tl-step ' + cls + '"><div class="dot">' + (i < step ? '✓' : (i + 1)) + '</div><div class="slabel">' + esc(s.label) + optTag + '</div></div>';
+      }).join('') + '</div>';
+    }
+
+    // City options for the currently selected country (country must be chosen first).
+    function cityOptions() {
+      var list = ADD_CITIES[d.country] || [];
+      return '<option value="">Select a city…</option>' +
+        list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.city ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+    }
+
+    function bodyProfile() {
+      var boardBoxes = ADD_BOARDS.map(function (b) {
+        var on = d.boards.indexOf(b) !== -1;
+        return '<label class="ws-board-opt"><input class="ws-board" type="checkbox" value="' + esc(b) + '"' + (on ? ' checked' : '') + '> ' + esc(b) + '</label>';
+      }).join('');
+      var countryOpts = ADD_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.country ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+      var groupOpts = ORG.groups.map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
+        '<option value="__new">＋ New group…</option>';
+      return '<p class="tl-muted">The basics. Only the name is required — everything else can change later.</p>' +
+        '<div class="tl-stack">' +
+          '<label class="field">School name *<input class="input" id="ws-name" placeholder="e.g. Harmony High" value="' + esc(d.name) + '"></label>' +
+          '<div class="field">Board <span class="tl-muted" style="font-weight:400">(select all that apply)</span>' +
+            '<div class="ws-board-grid">' + boardBoxes + '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:10px">' +
+            '<label class="field" style="flex:1">Country<select class="select" id="ws-country">' + countryOpts + '</select></label>' +
+            '<label class="field" style="flex:1">City<select class="select" id="ws-city">' + cityOptions() + '</select></label>' +
+          '</div>' +
+          '<label class="field">Group<select class="select" id="ws-group">' + groupOpts + '</select></label>' +
+          '<div id="ws-newgroup-row" style="display:none;gap:8px">' +
+            '<input class="input grow" id="ws-newgroup" placeholder="New group name">' +
+            '<button class="btn btn-outline btn-sm" id="ws-newgroup-add" type="button">Create</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function bodyRollout() {
+      var stageOpts = ORG.stages.map(function (s) { return '<option value="' + s.key + '"' + (s.key === d.stage ? ' selected' : '') + '>' + esc(s.label) + '</option>'; }).join('');
+      return '<p class="tl-muted">Where this partnership sits today. New schools usually start at <b>Onboarding</b>.</p>' +
+        '<div class="tl-stack">' +
+          '<label class="field">Rollout stage<select class="select" id="ws-stage">' + stageOpts + '</select></label>' +
+          '<label class="field">Joined <span class="tl-muted" style="font-weight:400">(defaults to today)</span><input class="input" type="date" id="ws-joined" value="' + esc(d.joined) + '" max="' + todayISO() + '"></label>' +
+        '</div>';
+    }
+
+    function bodyStructure() {
+      var presetBtns = ADD_GRADE_PRESETS.filter(function (p) { return !d.grades.some(function (g) { return g.grade.toLowerCase() === p.toLowerCase(); }); })
+        .map(function (p) { return '<button class="ws-add-chip" type="button" data-preset="' + esc(p) + '">＋ ' + esc(p) + '</button>'; }).join('');
+      var list = d.grades.length ? d.grades.map(function (g, gi) {
+        var secs = g.sections.length ? g.sections.map(function (sec, si) {
+          return '<span class="ws-sec"><span class="ws-sec-name">' + esc(sec.name) + '</span>' +
+            '<input class="ws-secnum" type="number" min="0" data-gi="' + gi + '" data-si="' + si + '" value="' + (parseInt(sec.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade + ' ' + sec.name) + '">' +
+            '<button class="ws-secx" type="button" data-gi="' + gi + '" data-si="' + si + '" title="Remove section" aria-label="Remove section">×</button></span>';
+        }).join('') : '<span class="ws-nosec">No sections</span>' +
+          '<label class="ws-gradenum-wrap">Students' +
+            '<input class="ws-gradenum" type="number" min="0" data-gi="' + gi + '" value="' + (parseInt(g.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade) + '"></label>';
+        return '<div class="ws-grade-card">' +
+          '<input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename">' +
+          '<div class="ws-secs">' + secs + '</div>' +
+          '<div class="ws-grade-actions">' +
+            '<button class="ws-add-sec" type="button" data-addsec="' + gi + '">＋ Section</button>' +
+            '<button class="ws-grade-del" type="button" data-delgrade="' + gi + '" title="Remove grade">Remove</button>' +
+          '</div></div>';
+      }).join('') : '<div class="tl-empty">No grades yet — add one below, or tap a preset.</div>';
+      return '<p class="tl-muted">Add grades, rename any inline, and set how many students sit in each section. Grades sort automatically (early years first). Totals update as you type.</p>' +
+        '<div class="ws-grades">' + list + '</div>' +
+        '<div class="ws-addbar">' +
+          (presetBtns ? '<div class="ws-addbar-lbl">Quick add</div><div class="ws-presets">' + presetBtns + '</div>' : '') +
+          '<div class="ws-newgrade-row"><input class="input grow" id="ws-newgrade" placeholder="Custom grade (e.g. Grade 7)"><button class="btn btn-outline btn-sm" id="ws-addgrade" type="button">Add grade</button></div>' +
+        '</div>' +
+        '<div class="ws-total">' + d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students</div>';
+    }
+
+    function bodyAdmin() {
+      return '<div class="ws-optional-note"><span class="pill">Optional</span><span>Invite the first admin now, or skip and add people later from the school hub.</span></div>' +
+        '<p class="tl-muted">If you invite them, they\'ll get an activation email and can manage their own staff.</p>' +
+        '<div class="tl-stack">' +
+          '<label class="field">Admin name<input class="input" id="ws-admin-name" placeholder="e.g. Meera Krishnan" value="' + esc(d.admin.name) + '"></label>' +
+          '<label class="field">Admin email<input class="input" id="ws-admin-email" type="email" placeholder="name@school.edu" value="' + esc(d.admin.email) + '"></label>' +
+        '</div>' +
+        '<button class="link-btn" id="ws-skip-admin" type="button" style="margin-top:12px">Skip this step →</button>';
+    }
+
+    function bodyReview() {
+      var grp = (ORG.groups.find(function (g) { return g.id === d.groupId; }) || ORG.groups[0]).name;
+      var stageLbl = (ORG.stages.find(function (s) { return s.key === d.stage; }) || ORG.stages[0]).label;
+      function row(k, v) { return '<div class="ws-rev-row"><span>' + esc(k) + '</span><b>' + esc(v || '—') + '</b></div>'; }
+      var admin = d.admin.email ? (d.admin.name || d.admin.email) + ' · ' + d.admin.email : 'None — add later';
+      return '<p class="tl-muted">Confirm and create. You\'ll land on the new school\'s hub. <span class="tl-gated">gated</span></p>' +
+        '<div class="ws-review">' +
+          row('Name', d.name) + row('Board', d.boards.join(', ')) +
+          row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
+          row('Group', grp) + row('Stage', stageLbl) + row('Joined', fmtJoined(d.joined)) +
+          row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
+          row('First admin', admin) +
+        '</div>';
+    }
+
+    var BODIES = [bodyProfile, bodyRollout, bodyStructure, bodyAdmin, bodyReview];
+
+    function render() {
+      var last = step === WIZ_STEPS.length - 1;
+      root.innerHTML = '<div class="overlay" id="tl-ov"><div class="tl-modal-card">' +
+        '<div class="tl-modal-h"><h3>Add a partner school</h3><button class="dialog-close" id="tl-mx" aria-label="Close">×</button></div>' +
+        stepper() +
+        '<div id="ws-body">' + BODIES[step]() + '</div>' +
+        '<div class="tl-modal-foot" style="justify-content:space-between">' +
+          '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
+          '<button class="btn btn-primary btn-sm" id="ws-next" type="button">' + (last ? 'Create school' : 'Next') + '</button>' +
+        '</div></div></div>';
+
+      var ov = document.getElementById('tl-ov');
+      ov.addEventListener('click', function (ev) { if (ev.target === ov) close(); });
+      document.getElementById('tl-mx').addEventListener('click', close);
+      document.getElementById('ws-back').addEventListener('click', function () { commit(); step = Math.max(0, step - 1); render(); });
+      document.getElementById('ws-next').addEventListener('click', onNext);
+      wireStep();
+    }
+
+    function wireStep() {
+      if (step === 0) {
+        // Country drives the city list — reset city and repopulate on change.
+        var country = document.getElementById('ws-country');
+        var cityEl = document.getElementById('ws-city');
+        country.addEventListener('change', function () {
+          d.country = country.value; d.city = '';
+          cityEl.innerHTML = cityOptions();
+        });
+        var sel = document.getElementById('ws-group');
+        var row = document.getElementById('ws-newgroup-row');
+        sel.addEventListener('change', function () {
+          if (sel.value === '__new') { row.style.display = 'flex'; document.getElementById('ws-newgroup').focus(); }
+          else { row.style.display = 'none'; d.groupId = sel.value; }
+        });
+        document.getElementById('ws-newgroup-add').addEventListener('click', function () {
+          var nm = (document.getElementById('ws-newgroup').value || '').trim();
+          if (!nm) { toast('Group name required.'); return; }
+          var g = ORG.server.createGroup(nm); ORG.server.logAudit(me.name, 'group.create', g.name, 'group');
+          d.groupId = g.id; toast('Group “' + g.name + '” created.'); commit(); render();
+        });
+      } else if (step === 2) {
+        var body = document.getElementById('ws-body');
+        body.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { addGrade(b.dataset.preset); }); });
+        var ag = document.getElementById('ws-addgrade');
+        ag.addEventListener('click', function () { var v = (document.getElementById('ws-newgrade').value || '').trim(); if (!v) { toast('Grade name required.'); return; } addGrade(v); });
+        document.getElementById('ws-newgrade').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ag.click(); } });
+        body.querySelectorAll('[data-addsec]').forEach(function (b) { b.addEventListener('click', function () {
+          var g = d.grades[+b.dataset.addsec];
+          // First section inherits any grade-level count, so the cohort you already
+          // typed becomes Section A rather than being silently dropped.
+          if (!g.sections.length && (parseInt(g.students, 10) || 0) > 0) {
+            g.sections.push({ name: secLetter(0), students: parseInt(g.students, 10) || 0 }); g.students = 0;
+          } else {
+            g.sections.push({ name: secLetter(g.sections.length), students: 0 });
+          }
+          rerenderStructure();
+        }); });
+        body.querySelectorAll('[data-delgrade]').forEach(function (b) { b.addEventListener('click', function () { d.grades.splice(+b.dataset.delgrade, 1); rerenderStructure(); }); });
+        body.querySelectorAll('.ws-secx').forEach(function (b) { b.addEventListener('click', function () {
+          var g = d.grades[+b.dataset.gi]; g.sections.splice(+b.dataset.si, 1);
+          g.sections.forEach(function (sec, i) { sec.name = secLetter(i); }); // keep A,B,C… contiguous
+          rerenderStructure();
+        }); });
+        body.querySelectorAll('.ws-secnum').forEach(function (inp) { inp.addEventListener('input', function () {
+          d.grades[+inp.dataset.gi].sections[+inp.dataset.si].students = Math.max(0, parseInt(inp.value, 10) || 0);
+          var tot = document.querySelector('#ws-body .ws-total');
+          if (tot) tot.innerHTML = d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students';
+        }); });
+        // Grade-level student count, shown only when the grade has no sections.
+        body.querySelectorAll('.ws-gradenum').forEach(function (inp) { inp.addEventListener('input', function () {
+          d.grades[+inp.dataset.gi].students = Math.max(0, parseInt(inp.value, 10) || 0);
+          var tot = document.querySelector('#ws-body .ws-total');
+          if (tot) tot.innerHTML = d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students';
+        }); });
+        // Inline rename — commit on blur/Enter, then re-sort so it lands in the right place.
+        body.querySelectorAll('.ws-gradename').forEach(function (inp) {
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+          inp.addEventListener('change', function () {
+            var gi = +inp.dataset.gi, nv = (inp.value || '').trim();
+            if (!nv) { toast('Grade name can’t be empty.'); rerenderStructure(); return; }
+            if (d.grades.some(function (g, i) { return i !== gi && g.grade.toLowerCase() === nv.toLowerCase(); })) { toast('That grade already exists.'); rerenderStructure(); return; }
+            d.grades[gi].grade = nv; sortGrades(d.grades); rerenderStructure();
+          });
+        });
+      } else if (step === 3) {
+        var skip = document.getElementById('ws-skip-admin');
+        if (skip) skip.addEventListener('click', function () { d.admin = { name: '', email: '' }; step++; render(); });
+      }
+    }
+
+    function addGrade(name) {
+      if (d.grades.some(function (g) { return g.grade.toLowerCase() === name.toLowerCase(); })) { toast('Grade already added.'); return; }
+      // Grades start with no sections — a school may run a grade as a single
+      // ungrouped cohort. Sections are added explicitly via "+ Section".
+      d.grades.push({ grade: name, sections: [], students: 0 });
+      sortGrades(d.grades);
+      rerenderStructure();
+    }
+    function rerenderStructure() { document.getElementById('ws-body').innerHTML = bodyStructure(); wireStep(); }
+
+    function onNext() {
+      commit();
+      if (step === 0 && !d.name) { toast('School name is required.'); return; }
+      if (step === 3 && d.admin.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.admin.email)) { toast('Enter a valid admin email.'); return; }
+      if (step < WIZ_STEPS.length - 1) { step++; render(); return; }
+      // Final step → show a brief "creating" transition, then commit and land
+      // on the new school's hub. The create itself is synchronous; the delay is
+      // purely to give the action a beat of feedback before the screen swaps.
+      renderCreating();
+      setTimeout(function () {
+        d.board = d.boards.join(', ');
+        var s = ORG.server.createSchool(Object.assign({}, d, { joined: fmtJoined(d.joined) }));
+        ORG.server.logAudit(me.name, 'school.add', s.name, 'school', s.id);
+        if (d.admin.email) ORG.server.logAudit(me.name, 'invitation.send', d.admin.email, 'invitation', s.id);
+        close();
+        toast(s.name + ' created' + (draftSectionTotal(d) ? ' with ' + draftSectionTotal(d) + ' sections.' : '.'));
+        go('school', { id: s.id });
+      }, 1100);
+    }
+
+    // Full-modal "creating…" state shown between Create and landing on the hub.
+    function renderCreating() {
+      root.innerHTML = '<div class="overlay" id="tl-ov"><div class="tl-modal-card tl-creating">' +
+        '<div class="tl-creating-spin" aria-hidden="true"></div>' +
+        '<h3>Creating the school…</h3>' +
+        '<p class="tl-muted">Setting up <b>' + esc(d.name) + '</b> and its structure.</p>' +
+        '</div></div>';
+    }
+
+    render();
   }
 
   // ============================================================
@@ -686,10 +985,34 @@
       }).join('') + '</div>';
 
     body.innerHTML = header + '<div id="hub-tab"></div>';
-    HUB[tab](sum0, document.getElementById('hub-tab'));
+    var hubEl = document.getElementById('hub-tab');
+
+    // Switch tabs by swapping ONLY the #hub-tab section — no full-screen
+    // re-render, so scroll position holds and the sidebar/header/KPIs don't
+    // flash. The URL is kept in sync via replaceState (a refresh still lands
+    // on the right tab) without firing hashchange → render.
+    function selectTab(key) {
+      if (!HUB[key] || key === tab) return;
+      tab = key;
+      body.querySelectorAll('.tl-tab[data-hubtab]').forEach(function (b) { b.classList.toggle('on', b.dataset.hubtab === key); });
+      HUB[key](sum0, hubEl);
+      wireHubtabTriggers();
+      history.replaceState(null, '', buildHash('school', { id: s.id, tab: key }));
+    }
+    // (Re)bind every [data-hubtab] trigger — the tab bar plus in-content
+    // shortcuts like Overview's "View all →" — to the in-place swap. Called
+    // again after each swap because the hub content is fresh DOM each time.
+    function wireHubtabTriggers() {
+      body.querySelectorAll('[data-hubtab]').forEach(function (b) {
+        if (b._hubBound) return; b._hubBound = true;
+        b.addEventListener('click', function () { selectTab(b.dataset.hubtab); });
+      });
+    }
+
+    HUB[tab](sum0, hubEl);
+    wireHubtabTriggers();
 
     wireCrumbs(body);
-    body.querySelectorAll('[data-hubtab]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: s.id, tab: b.dataset.hubtab }); }); });
     body.querySelector('[data-hub-edit]').addEventListener('click', function () { openSchoolEditor(s); });
     body.querySelector('[data-hub-archive]').addEventListener('click', function () { archiveSchool(s); });
   };
@@ -708,7 +1031,10 @@
     var s = d.school;
     var structure = d.structure.grades.length
       ? '<div class="tl-tree">' + d.structure.grades.map(function (g) {
-          return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i></span>'; }).join('') + '</div>';
+          var body = g.sections.length
+            ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i></span>'; }).join('')
+            : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i></span>';
+          return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + body + '</div>';
         }).join('') + '</div>'
       : '<div class="tl-empty">No grades/sections yet.</div>';
 
@@ -730,7 +1056,8 @@
       '<div class="tl-card span2"><div class="tl-mod-h"><h3 class="tl-mod-title">Assessment progress</h3></div>' + progress + '</div>' +
       '<div class="tl-card span2"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Open issues</h3></div><button class="link-btn" data-hubtab="issues">View all →</button></div>' + issuesHtml + '</div>' +
     '</div>';
-    el.querySelectorAll('[data-hubtab]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: s.id, tab: 'issues' }); }); });
+    // [data-hubtab] triggers are wired by SCREEN.school's wireHubtabTriggers()
+    // so they swap the section in place instead of re-rendering the screen.
   };
 
   HUB.students = function (d, el) {
@@ -750,7 +1077,7 @@
     el.querySelector('[data-add-st]').addEventListener('click', function () { go('add-students', { school: s.id }); });
     el.querySelector('[data-merge-here]').addEventListener('click', function () { go('merge', { school: s.id }); });
     el.querySelectorAll('[data-open-student]').forEach(function (b) { b.addEventListener('click', function () { go('student', { school: s.id, adm: b.dataset.openStudent }); }); });
-    el.querySelectorAll('[data-hubtab]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: s.id, tab: 'issues' }); }); });
+    // [data-hubtab] deletion-logs link is wired in place by SCREEN.school.
     el.querySelectorAll('[data-del-st]').forEach(function (b) { b.addEventListener('click', function () {
       gated({ title: 'Delete student', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(b.dataset.nm) + '</b> (' + esc(b.dataset.delSt) + ')? This writes to Deletion Logs.</p>', confirmLabel: 'Delete student', audit: { action: 'student.delete', entity: b.dataset.nm, entityType: 'student', schoolId: s.id }, onConfirm: function () { toast('Student deleted — logged.'); } });
     }); });
@@ -781,6 +1108,135 @@
     el.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Remove from school', danger: true, body: '<p>Remove <b>' + esc(b.dataset.remove) + '</b> from ' + esc(s.name) + '?</p>', confirmLabel: 'Remove', audit: { action: 'user.remove', entity: b.dataset.remove, entityType: 'user', schoolId: s.id }, onConfirm: function () { toast('Removed from school.'); } }); }); });
   };
 
+  // ============================================================
+  //  DEPLOYMENT DRILL-DOWN TIMELINE  (school Assessments tab)
+  //  Level 1 phases → Level 2 audiences → Level 3 assessment chain.
+  //  Phase/audience states are derived LIVE from the school's real
+  //  deployments each render (so ending one updates instantly);
+  //  the Level-3 chains are synthesised once and then cached, so
+  //  drag re-ordering and mode edits persist for the session.
+  // ============================================================
+  var TL_AUD = [
+    { key: 'teacher', label: 'Teacher based', aud: 'Teacher' },
+    { key: 'parent', label: 'Parent based', aud: 'Parent' },
+    { key: 'direct', label: 'Student Direct', aud: 'Direct Assessment' },
+  ];
+  var TL_PHASES = ['Baseline', 'Midline', 'Endline'];
+  var TL_STATE_LABEL = { completed: 'Completed', inprogress: 'In progress', pending: 'Pending' };
+  var TL_MODE = { school: 'Do at school', home: 'Do at home', off: 'Off' };
+  var TL_MODE_ORDER = ['school', 'home', 'off'];
+  var TL_STATE_ORDER = ['pending', 'inprogress', 'completed'];
+  var TL_CHAIN = {};       // sid -> { 'Baseline|teacher': [{id,name,mode}], … }  (edits persist in-session)
+  var TL_NAV = {};         // sid -> { level, phase, audience }
+  var TL_OVERRIDE = {};    // sid -> { 'Baseline': state, 'Baseline|teacher': state }  (manual taps win over derived)
+
+  function tlNav(sid) { return TL_NAV[sid] || (TL_NAV[sid] = { level: 1, phase: null, audience: null }); }
+  function tlStateFrom(deps) {
+    if (!deps.length) return 'pending';
+    if (deps.some(function (d) { return d.status === 'Live'; })) return 'inprogress';
+    if (deps.every(function (d) { return d.status === 'Ended'; })) return 'completed';
+    return 'pending';
+  }
+  // Effective state = a manual tap-override if the user set one, else the state
+  // derived live from the school's real deployments.
+  function tlEffState(sid, key, derived) { var ov = TL_OVERRIDE[sid]; return (ov && ov[key]) || derived; }
+  function tlCycleState(sid, key, cur) { (TL_OVERRIDE[sid] || (TL_OVERRIDE[sid] = {}))[key] = TL_STATE_ORDER[(TL_STATE_ORDER.indexOf(cur) + 1) % 3]; }
+  function tlPhaseState(deps, phase) { return tlStateFrom(deps.filter(function (d) { return d.phase === phase; })); }
+  function tlAudState(deps, phase, aud) { return tlStateFrom(deps.filter(function (d) { return d.phase === phase && d.audience === aud; })); }
+  function tlPool(aud) {
+    if (aud === 'Teacher') return ['SEL Observation', 'EF Observation', 'Wellbeing Check', 'Classroom Climate', 'Term Review'];
+    if (aud === 'Parent') return ['Home SEL Survey', 'Routines Report', 'Wellbeing Check', 'Screen-time Survey', 'Term Review'];
+    return ['EMT 1', 'EMT 2', 'EMT 4', 'Hearts & Flowers', 'Memory Game'];
+  }
+  function tlChain(s, phase, aud, audKey) {
+    var byS = TL_CHAIN[s.id] || (TL_CHAIN[s.id] = {}), k = phase + '|' + audKey;
+    if (!byS[k]) {
+      var rnd = seededRng(strSeed(s.code + '|' + phase + '|' + audKey)), pool = tlPool(aud);
+      var n = Math.min(pool.length, 3 + Math.floor(rnd() * 3)); // 3–5
+      var out = [];
+      for (var i = 0; i < n; i++) out.push({ id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: pool[i], mode: i === 0 ? 'school' : (i === 1 ? 'home' : 'off') });
+      byS[k] = out;
+    }
+    return byS[k];
+  }
+  function tlRail(nodes) {
+    var n = nodes.length;
+    return '<div class="tl-tl-rail"><div class="tl-tl-line" style="left:calc(50% / ' + n + ');right:calc(50% / ' + n + ')"></div>' +
+      nodes.map(function (nd) {
+        return '<div class="tl-tl-node ' + nd.cls + '"' + (nd.attrs || '') + (nd.draggable ? ' draggable="true"' : '') + '>' +
+          '<div class="tl-tl-diamond"' + (nd.mkTitle ? ' title="' + esc(nd.mkTitle) + '"' : '') + '></div><div class="tl-tl-dot"></div>' +
+          '<div class="tl-tl-label' + (nd.navLabel ? ' nav' : '') + '"' + (nd.navTitle ? ' title="' + esc(nd.navTitle) + '"' : '') + '>' + esc(nd.label) + (nd.navLabel ? ' <span class="tl-tl-caret">›</span>' : '') + '</div>' +
+          (nd.sub ? '<div class="tl-tl-sub">' + esc(nd.sub) + '</div>' : '') + '</div>';
+      }).join('') + '</div>';
+  }
+  function tlLegend(items) { return '<div class="tl-tl-legend">' + items.map(function (it) { return '<span class="' + it[0] + '"><i></i>' + esc(it[1]) + '</span>'; }).join('') + '</div>'; }
+
+  function renderDeploymentTimeline(d, mount) {
+    var s = d.school, deps = d.deployments, nav = tlNav(s.id);
+    var crumbs, note, rail, legend;
+
+    if (nav.level === 1) {
+      crumbs = '<span class="cur">Program phases</span>';
+      note = 'Tap a diamond to change its status · tap the name to open its audiences.';
+      rail = tlRail(TL_PHASES.map(function (p) {
+        var st = tlEffState(s.id, p, tlPhaseState(deps, p));
+        return { label: p, sub: TL_STATE_LABEL[st], cls: 'st-' + st + ' clickable', attrs: ' data-phase="' + p + '"',
+          mkTitle: 'Tap to change status', navLabel: true, navTitle: 'Open ' + p + ' audiences' };
+      }));
+      legend = tlLegend([['completed', 'Completed'], ['inprogress', 'In progress'], ['pending', 'Pending']]);
+    } else if (nav.level === 2) {
+      crumbs = '<button data-tlup="1">Program phases</button><span class="sep">›</span><span class="cur">' + esc(nav.phase) + '</span>';
+      note = 'Tap a diamond to change its status · tap the name to open its assessments.';
+      rail = tlRail(TL_AUD.map(function (a) {
+        var key = nav.phase + '|' + a.key, st = tlEffState(s.id, key, tlAudState(deps, nav.phase, a.aud)), ch = tlChain(s, nav.phase, a.aud, a.key);
+        return { label: a.label, sub: ch.length + ' assessment' + (ch.length === 1 ? '' : 's'), cls: 'aud st-' + st + ' clickable', attrs: ' data-aud="' + a.key + '"',
+          mkTitle: 'Tap to change status', navLabel: true, navTitle: 'Open ' + a.label + ' assessments' };
+      }));
+      legend = tlLegend([['active', 'Active audience'], ['completed', 'Completed'], ['inprogress', 'In progress'], ['pending', 'Pending']]);
+    } else {
+      var a = TL_AUD.filter(function (x) { return x.key === nav.audience; })[0], ch = tlChain(s, nav.phase, a.aud, a.key);
+      crumbs = '<button data-tlup="1">Program phases</button><span class="sep">›</span><button data-tlup="2">' + esc(nav.phase) + '</button><span class="sep">›</span><span class="cur">' + esc(a.label) + '</span>';
+      note = 'Tap a diamond to set where it runs (School → Home → Off) · drag to re-chain the order.';
+      rail = tlRail(ch.map(function (as, i) {
+        return { label: as.name, sub: TL_MODE[as.mode], cls: 'asmt md-' + as.mode + ' clickable', draggable: true, attrs: ' data-asmt="' + i + '"', mkTitle: 'Tap: School → Home → Off · Drag: re-chain' };
+      }));
+      legend = tlLegend([['md-school', 'Do at school'], ['md-home', 'Do at home'], ['md-off', 'Off']]);
+    }
+
+    mount.innerHTML = '<div class="tl-tl"><div class="tl-tl-crumbs">' + crumbs + '</div><p class="tl-tl-note">' + note + '</p>' + rail + legend + '</div>';
+
+    mount.querySelectorAll('[data-tlup]').forEach(function (b) { b.addEventListener('click', function () { nav.level = +b.dataset.tlup; renderDeploymentTimeline(d, mount); }); });
+    // Phases (L1): diamond cycles status, name opens the audience flow.
+    mount.querySelectorAll('[data-phase]').forEach(function (nd) {
+      var p = nd.dataset.phase;
+      nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { tlCycleState(s.id, p, tlEffState(s.id, p, tlPhaseState(deps, p))); renderDeploymentTimeline(d, mount); });
+      nd.querySelector('.tl-tl-label').addEventListener('click', function () { nav.level = 2; nav.phase = p; renderDeploymentTimeline(d, mount); });
+    });
+    // Audiences (L2): diamond cycles status, name opens the assessment chain.
+    mount.querySelectorAll('[data-aud]').forEach(function (nd) {
+      var akey = nd.dataset.aud, adef = TL_AUD.filter(function (x) { return x.key === akey; })[0], key = nav.phase + '|' + akey;
+      nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { tlCycleState(s.id, key, tlEffState(s.id, key, tlAudState(deps, nav.phase, adef.aud))); renderDeploymentTimeline(d, mount); });
+      nd.querySelector('.tl-tl-label').addEventListener('click', function () { nav.level = 3; nav.audience = akey; renderDeploymentTimeline(d, mount); });
+    });
+
+    if (nav.level === 3) {
+      var aud = TL_AUD.filter(function (x) { return x.key === nav.audience; })[0], chain = tlChain(s, nav.phase, aud.aud, aud.key), dragIdx = null;
+      mount.querySelectorAll('[data-asmt]').forEach(function (nd) {
+        nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { var i = +nd.dataset.asmt, it = chain[i]; it.mode = TL_MODE_ORDER[(TL_MODE_ORDER.indexOf(it.mode) + 1) % 3]; renderDeploymentTimeline(d, mount); });
+        nd.addEventListener('dragstart', function (e) { dragIdx = +nd.dataset.asmt; nd.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+        nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); dragIdx = null; });
+        nd.addEventListener('dragover', function (e) { e.preventDefault(); nd.classList.add('dragover'); });
+        nd.addEventListener('dragleave', function () { nd.classList.remove('dragover'); });
+        nd.addEventListener('drop', function (e) {
+          e.preventDefault(); nd.classList.remove('dragover');
+          var to = +nd.dataset.asmt; if (dragIdx === null || dragIdx === to) return;
+          chain.splice(to, 0, chain.splice(dragIdx, 1)[0]);
+          renderDeploymentTimeline(d, mount); toast('Assessments re-chained.');
+        });
+      });
+    }
+  }
+
   HUB.assessments = function (d, el) {
     var s = d.school;
     var depRows = d.deployments.length ? d.deployments.map(function (x) {
@@ -797,11 +1253,13 @@
         '<div class="tl-inline-actions">' +
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
           '<button class="btn btn-outline btn-sm" data-newdep>+ New deployment</button></div></div>' +
+        '<div id="dep-timeline"></div>' +
         '<div class="tl-tablewrap"><table class="tl-table" style="min-width:720px"><thead><tr><th>Assessment</th><th>Audience</th><th>Phase</th><th>Window</th><th>Status</th><th></th></tr></thead><tbody>' + depRows + '</tbody></table></div></div>' +
       '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Master Links</h3><p class="tl-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
         '<div style="margin-top:14px"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
       '<div id="hub-studentlog"></div>';
     el.querySelector('[data-newdep]').addEventListener('click', function () { openNewDeployment(s.id, true); });
+    renderDeploymentTimeline(d, el.querySelector('#dep-timeline'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
     slBtn.addEventListener('click', function () {
       if (slMount.innerHTML) { slMount.innerHTML = ''; slBtn.textContent = 'Student assessment log'; slBtn.classList.remove('on'); return; }
@@ -1389,7 +1847,7 @@
   // ============================================================
   //  ADD STUDENTS  (spec §5.2 / hub Students) — manual + CSV import
   // ============================================================
-  var addState = { mode: 'manual', batch: [], preview: null };
+  var addState = { mode: 'manual', batch: [], preview: null, grade: '', section: '' };
   SCREEN['add-students'] = function (p, b) {
     var sc = p.school ? ORG.byId(p.school) : null;
     var crumb = sc ? crumbs([{ label: 'All Schools', screen: 'schools' }, { label: sc.name, screen: 'school', params: { id: sc.id, tab: 'students' } }, { label: 'Add Students' }]) : '';
@@ -1413,26 +1871,60 @@
   function renderAddPanel(sc, el) {
     if (addState.mode === 'manual') {
       var batchRows = addState.batch.length ? addState.batch.map(function (r, i) {
-        return '<tr><td class="name">' + esc(r.name) + '</td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.grade + ' ' + r.section) + '</td>' +
+        return '<tr><td class="name">' + esc(r.name) + '</td><td class="mono">' + esc(r.admission) + '</td><td>' + esc((r.grade + ' ' + (r.section || '')).trim()) + '</td>' +
           '<td style="text-align:right"><button class="link-btn danger" data-drop="' + i + '">Remove</button></td></tr>';
       }).join('') : '<tr><td colspan="4"><div class="tl-empty">No students staged yet — add one above.</div></td></tr>';
+      // Grade / section come from the school's structure and are chosen ONCE —
+      // the selection is sticky (kept in addState) so you can keep adding
+      // students into the same grade/section without re-picking each time.
+      // Changing the grade resets the section to that grade's first (or none).
+      var addSchool = currentAddSchool(sc);
+      var grades = (addSchool && addSchool.structure && addSchool.structure.grades) ? addSchool.structure.grades : [];
+      var gObj = grades.filter(function (g) { return g.grade === addState.grade; })[0];
+      if (!gObj && grades.length) { gObj = grades[0]; addState.grade = gObj.grade; }
+      var secs = gObj ? gObj.sections : [];
+      if (addState.section && !secs.some(function (s) { return s.name === addState.section; })) addState.section = '';
+      if (!addState.section && secs.length) addState.section = secs[0].name;
+
+      var gradeControl = grades.length
+        ? '<select class="select" id="m-grade">' + grades.map(function (g) {
+            return '<option value="' + esc(g.grade) + '"' + (g.grade === addState.grade ? ' selected' : '') + '>' + esc(g.grade) + '</option>';
+          }).join('') + '</select>'
+        : '<input class="input" id="m-grade" value="' + esc(addState.grade) + '" placeholder="Grade 1">';
+      var sectionControl = grades.length
+        ? '<select class="select" id="m-sec">' +
+            '<option value="">— No section —</option>' +
+            secs.map(function (s) { return '<option value="' + esc(s.name) + '"' + (s.name === addState.section ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('') +
+          '</select>'
+        : '<input class="input" id="m-sec" value="' + esc(addState.section) + '" placeholder="A">';
+
       el.innerHTML = '<div class="tl-card"><div class="tl-mod-h"><h3 class="tl-mod-title">Add a student</h3></div>' +
         '<div class="tl-stack" style="max-width:520px">' +
+          '<div style="display:flex;gap:10px"><label class="field" style="flex:1">Grade' + gradeControl + '</label>' +
+            '<label class="field" style="width:130px">Section' + sectionControl + '</label></div>' +
           '<label class="field">Full name<input class="input" id="m-name" placeholder="e.g. Aarav Sharma"></label>' +
-          '<div style="display:flex;gap:10px"><label class="field" style="flex:1">Admission #<input class="input" id="m-adm" placeholder="ADM-1234"></label>' +
-            '<label class="field" style="width:120px">Grade<input class="input" id="m-grade" placeholder="Grade 1"></label>' +
-            '<label class="field" style="width:90px">Section<input class="input" id="m-sec" placeholder="A"></label></div>' +
+          '<label class="field">Admission #<input class="input" id="m-adm" placeholder="ADM-1234"></label>' +
           '<div><button class="btn btn-outline btn-sm" id="m-add">+ Add to batch</button></div>' +
         '</div></div>' +
         '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Staged for import</h3><p class="tl-mod-note">' + addState.batch.length + ' student(s) ready.</p></div>' +
           (addState.batch.length ? '<button class="btn btn-primary btn-sm" id="m-import">Import ' + addState.batch.length + ' student(s)</button>' : '') + '</div>' +
           '<div class="tl-tablewrap"><table class="tl-table" style="min-width:520px"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th></th></tr></thead><tbody>' + batchRows + '</tbody></table></div></div>';
+      // Sticky grade/section: update addState and re-render (grade change also
+      // refreshes the section list for the newly selected grade).
+      var gradeEl = el.querySelector('#m-grade');
+      gradeEl.addEventListener('change', function () { addState.grade = gradeEl.value.trim(); addState.section = ''; renderAddPanel(sc, el); });
+      var secEl = el.querySelector('#m-sec');
+      secEl.addEventListener('change', function () { addState.section = secEl.value.trim(); });
       el.querySelector('#m-add').addEventListener('click', function () {
         var name = (document.getElementById('m-name').value || '').trim();
         var adm = (document.getElementById('m-adm').value || '').trim();
         if (!name || !adm) { toast('Name and admission # are required.'); return; }
-        addState.batch.push({ name: name, admission: adm, grade: (document.getElementById('m-grade').value || '').trim() || 'Grade 1', section: (document.getElementById('m-sec').value || '').trim() || 'A' });
+        // Read grade/section straight off the sticky selection.
+        addState.grade = (document.getElementById('m-grade').value || '').trim();
+        addState.section = (document.getElementById('m-sec').value || '').trim();
+        addState.batch.push({ name: name, admission: adm, grade: addState.grade || 'Grade 1', section: addState.section });
         renderAddPanel(sc, el);
+        var nm = document.getElementById('m-name'); if (nm) nm.focus(); // keep entering into the same grade
       });
       el.querySelectorAll('[data-drop]').forEach(function (btn) { btn.addEventListener('click', function () { addState.batch.splice(+btn.dataset.drop, 1); renderAddPanel(sc, el); }); });
       var imp = el.querySelector('#m-import'); if (imp) imp.addEventListener('click', function () { commitStudents(sc, addState.batch.slice()); });
@@ -1679,7 +2171,10 @@
 
   function openStructureEditor(s) {
     var tree = s.structure.grades.length ? s.structure.grades.map(function (g) {
-      return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i></span>'; }).join('') +
+      var body = g.sections.length
+        ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i></span>'; }).join('')
+        : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i></span>';
+      return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + body +
         '<button class="link-btn" data-addsec="' + esc(g.grade) + '">+ Section</button></div>';
     }).join('') : '<div class="tl-empty">No grades yet — add one below.</div>';
     openModal('Grades & sections · ' + s.name,

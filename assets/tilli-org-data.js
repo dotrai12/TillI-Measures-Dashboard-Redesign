@@ -586,6 +586,64 @@
     GROUPS.push(g);
     return g;
   }
+  // Real "POST /schools" for the Add-School wizard. Builds a live SCHOOLS
+  // record (structure, code, group, optional first admin) so the new school
+  // renders on its hub, in the portfolio, and in Control-Room stats.
+  function makeSchoolCode(name) {
+    var base = String(name || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+    while (base.length < 4) base += 'X';
+    var code, tries = 0;
+    do { code = base + '-' + (1000 + Math.floor(Math.random() * 9000)); tries++; }
+    while (SCHOOLS.some(function (s) { return s.code === code; }) && tries < 60);
+    return code;
+  }
+  function createSchool(input) {
+    input = input || {};
+    var name = String(input.name || '').trim();
+    var slugBase = normName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'school';
+    var id = slugBase, n = 1;
+    while (byId(id)) { id = slugBase + '-' + (++n); }
+
+    var grades = (input.grades || []).map(function (g) {
+      return { grade: g.grade, students: Math.max(0, parseInt(g.students, 10) || 0), sections: (g.sections || []).map(function (sec) {
+        return { name: sec.name, students: Math.max(0, parseInt(sec.students, 10) || 0) };
+      }) };
+    }).filter(function (g) { return g.grade; });
+    var sectionTotal = grades.reduce(function (a, g) { return a + g.sections.length; }, 0);
+    // A sectionless grade contributes its own grade-level count; otherwise the
+    // sections carry the students.
+    var studentTotal = grades.reduce(function (a, g) {
+      return a + (g.sections.length ? g.sections.reduce(function (b, sec) { return b + sec.students; }, 0) : g.students);
+    }, 0);
+
+    var group = GROUPS.find(function (g) { return g.id === input.groupId; }) || GROUPS[0];
+    var admin = (input.admin && String(input.admin.email || '').trim()) ? input.admin : null;
+
+    var s = {
+      id: id, live: false, code: makeSchoolCode(name), name: name,
+      type: input.type || 'Independent school',
+      city: input.city || '', country: input.country || '', region: input.country || '',
+      board: input.board || 'Other', groupId: group.id, groupName: group.name,
+      students: studentTotal, staff: admin ? 1 : 0,
+      coordinator: admin ? { name: (admin.name || admin.email).trim(), email: admin.email.trim() }
+                         : { name: '—', email: '' },
+      joined: input.joined || 'Sep 2025',
+      stage: input.stage || 'onboarding', status: 'active',
+      sessionsPerWeek: 0, completion: 0, sel: null, cog: null, archived: false,
+      structure: { grades: grades, sections: sectionTotal },
+      gradeCount: grades.length, sectionCount: sectionTotal,
+    };
+    SCHOOLS.unshift(s);
+
+    if (admin) {
+      USERS.push({ id: 'u-admin-' + id, name: (admin.name || admin.email).trim(), email: admin.email.trim(),
+        role: 'School Admin', schoolId: id, sections: [] });
+      INVITATIONS.unshift({ id: 'inv-' + id, name: (admin.name || admin.email).trim(), email: admin.email.trim(),
+        role: 'School Admin', schoolId: id, status: 'Account Created',
+        delivery: 'Email sent', created: iso(TODAY), expires: iso(addDays(14)) });
+    }
+    return s;
+  }
   function createTemplate(t) {
     var tpl = { id: 'tpl-' + Date.now(), title: t.title, audience: t.audience, phase: t.phase,
       status: t.status || 'Draft', desc: t.desc || '' };
@@ -696,7 +754,7 @@
       recentActivity: recentActivity,
       logAudit: logAudit,
       // §9 write helpers (gated in the client, computed here)
-      createGroup: createGroup,
+      createGroup: createGroup, createSchool: createSchool,
       createTemplate: createTemplate, publishTemplate: publishTemplate, deleteTemplate: deleteTemplate,
       createDeployment: createDeployment, endDeployment: endDeployment,
       setObsPhasePublish: setObsPhasePublish, setObsAccess: setObsAccess,
