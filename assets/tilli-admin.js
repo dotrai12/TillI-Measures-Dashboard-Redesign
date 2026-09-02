@@ -1148,14 +1148,42 @@
     if (aud === 'Parent') return ['Home SEL Survey', 'Routines Report', 'Wellbeing Check', 'Screen-time Survey', 'Term Review'];
     return ['EMT 1', 'EMT 2', 'EMT 4', 'Hearts & Flowers', 'Memory Game'];
   }
+  // Baseline has a fixed, curated chain per audience (not the randomised pool).
+  // Teacher assessments always run at school (no 'home' mode — see tlModeOrder).
+  function tlBaselineChain(aud) {
+    if (aud === 'Teacher') return [
+      { name: 'Pre-training', mode: 'school' },
+      { name: 'Post-training', mode: 'school' },
+      { name: 'Teacher observational report on student foundational skills', mode: 'school' },
+    ];
+    if (aud === 'Parent') return [
+      { name: 'Home SEL Survey', mode: 'school' },
+    ];
+    return [
+      { name: 'IDELA', mode: 'school' },
+      { name: 'Hearts & Flowers', mode: 'home' },
+      { name: 'Memory Game', mode: 'off' },
+      { name: 'EMT 1', mode: 'off' },
+      { name: 'EMT 2', mode: 'off' },
+      { name: 'EMT 4', mode: 'off' },
+    ];
+  }
+  // Mode cycle order per audience. Teacher has no 'home' option.
+  function tlModeOrder(aud) { return aud === 'Teacher' ? ['school', 'off'] : TL_MODE_ORDER; }
   function tlChain(s, phase, aud, audKey) {
     var byS = TL_CHAIN[s.id] || (TL_CHAIN[s.id] = {}), k = phase + '|' + audKey;
     if (!byS[k]) {
-      var rnd = seededRng(strSeed(s.code + '|' + phase + '|' + audKey)), pool = tlPool(aud);
-      var n = Math.min(pool.length, 3 + Math.floor(rnd() * 3)); // 3–5
-      var out = [];
-      for (var i = 0; i < n; i++) out.push({ id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: pool[i], mode: i === 0 ? 'school' : (i === 1 ? 'home' : 'off') });
-      byS[k] = out;
+      if (phase === 'Baseline') {
+        byS[k] = tlBaselineChain(aud).map(function (it, i) {
+          return { id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: it.name, mode: it.mode };
+        });
+      } else {
+        var rnd = seededRng(strSeed(s.code + '|' + phase + '|' + audKey)), pool = tlPool(aud);
+        var n = Math.min(pool.length, 3 + Math.floor(rnd() * 3)); // 3–5
+        var out = [];
+        for (var i = 0; i < n; i++) out.push({ id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: pool[i], mode: i === 0 ? 'school' : (i === 1 ? 'home' : 'off') });
+        byS[k] = out;
+      }
     }
     return byS[k];
   }
@@ -1170,79 +1198,236 @@
       }).join('') + '</div>';
   }
   function tlLegend(items) { return '<div class="tl-tl-legend">' + items.map(function (it) { return '<span class="' + it[0] + '"><i></i>' + esc(it[1]) + '</span>'; }).join('') + '</div>'; }
+  var TL_AUD_SHORT = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct' };
+  // ── Deployment planner (bottom of the school Assessments tab) ────────────
+  // This is now the single place assessments are configured and deployed.
+  // Per phase you set a Start/End window, give School and Home their own
+  // schedules, order the assessments inside each mode lane (order matters —
+  // it's the sequence they run in), and hit "Deploy phase". Off is the parking
+  // lot. The top timeline just reflects the resulting status. Per-item overrides
+  // (move / deploy one / end one) live in each row's ⋯ menu. All state is
+  // in-session (prototype), mirroring how TL_CHAIN / TL_OVERRIDE already work.
+  var TL_PLAN = {};   // sid -> { phase -> { start, end, sched:{school,home}, deployed, byId, order:{school,home,off} } }
+  var TL_POP = null;  // the open per-item ⋯ menu, if any
 
+  function tlPlan(s, phase) {
+    var byS = TL_PLAN[s.id] || (TL_PLAN[s.id] = {});
+    if (!byS[phase]) {
+      var byId = {}, order = { school: [], home: [], off: [] };
+      TL_AUD.forEach(function (a) {
+        tlChain(s, phase, a.aud, a.key).forEach(function (it) {
+          byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: it.mode, live: false };
+          (order[it.mode] || order.off).push(it.id);
+        });
+      });
+      byS[phase] = { start: '', end: '', sched: { school: '', home: '' }, deployed: false, byId: byId, order: order };
+    }
+    return byS[phase];
+  }
+
+  // Move an item into a mode lane (optionally before another item). Teacher
+  // assessments can't run at home — mirrors tlModeOrder in the timeline.
+  function planMove(s, phase, id, mode, beforeId) {
+    var p = tlPlan(s, phase), it = p.byId[id];
+    if (mode === 'home' && it.aud === 'teacher') { toast('Teacher assessments can’t run at home.'); return false; }
+    ['school', 'home', 'off'].forEach(function (m) { var i = p.order[m].indexOf(id); if (i > -1) p.order[m].splice(i, 1); });
+    var arr = p.order[mode], idx = arr.length;
+    if (beforeId != null) { var bi = arr.indexOf(beforeId); if (bi > -1) idx = bi; }
+    arr.splice(idx, 0, id); it.mode = mode;
+    return true;
+  }
+
+  function planPhaseCard(s, phase) {
+    var p = tlPlan(s, phase);
+    var running = p.order.school.length + p.order.home.length, parked = p.order.off.length;
+    var ready = running > 0 && p.start && p.end && !p.deployed;
+    var deployBtn = p.deployed
+      ? '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '">Undeploy</button>'
+      : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' +
+        (ready ? '' : ' disabled title="Set a start &amp; end date and keep at least one assessment on"') + '>Deploy phase</button>';
+    var statusPill = p.deployed
+      ? '<span class="dep-status is-deployed" title="This phase is live — its assessments have been deployed to the school">● Deployed</span>'
+      : '<span class="dep-status is-draft" title="Not yet deployed — configure and hit Deploy phase to send it to the school">○ Not deployed</span>';
+    var head = '<div class="dep-phase-head">' +
+      '<span class="dep-phase-name">' + esc(phase) + '</span>' +
+      statusPill +
+      '<span class="dep-phase-sum">' + running + ' running · ' + parked + ' off</span>' +
+      '<span class="dep-dates">' +
+        '<input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '" aria-label="' + esc(phase) + ' start date">' +
+        '<span class="dep-date-sep">→</span>' +
+        '<input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '" aria-label="' + esc(phase) + ' end date">' +
+      '</span>' + deployBtn + '</div>';
+    var lanes = TL_MODE_ORDER.map(function (mode) {
+      var ids = p.order[mode], off = mode === 'off';
+      var sched = off ? '' :
+        '<button class="dep-sched" data-sched="' + esc(phase) + '|' + mode + '" title="When ' + esc(TL_MODE[mode]) + ' assessments run">🕘 ' + esc(p.sched[mode] || 'Set schedule') + '</button>';
+      var nodes = ids.map(function (id, idx) {
+        var it = p.byId[id];
+        return '<div class="dep-node md-' + mode + (it.live ? ' is-live' : '') + '" draggable="true" data-item="' + esc(id) + '">' +
+          (off ? '' : '<span class="dep-ord">' + (idx + 1) + '</span>') +
+          '<span class="dep-node-name">' + esc(it.name) + '</span>' +
+          '<span class="dep-aud-tag aud-' + it.aud + '">' + esc(TL_AUD_SHORT[it.aud]) + '</span>' +
+          (it.live ? '<span class="dep-live-dot" title="Deployed">●</span>' : '') +
+          '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Move or deploy this assessment">⋯</button>' +
+        '</div>';
+      }).join('');
+      var empty = '<span class="dep-lane-empty">' + (off ? 'Nothing turned off' : 'Drag assessments here') + '</span>';
+      return '<div class="dep-lane' + (off ? ' dep-lane--off' : '') + '" data-lane="' + esc(phase) + '|' + mode + '">' +
+        '<div class="dep-lane-head"><span class="dep-mode-tag md-' + mode + '">' + esc(off ? 'Off' : TL_MODE[mode]) + '</span>' + sched + '</div>' +
+        '<div class="dep-lane-items">' + (nodes || empty) + '</div></div>';
+    }).join('');
+    return '<div class="dep-phase' + (p.deployed ? ' is-deployed' : '') + '" data-phase="' + esc(phase) + '">' + head + lanes + '</div>';
+  }
+
+  function renderPlanner(d, mount) {
+    if (!mount) return;
+    var s = d.school;
+    mount.innerHTML = TL_PHASES.map(function (phase) { return planPhaseCard(s, phase); }).join('');
+    wirePlanner(d, mount);
+  }
+
+  function closeItemMenu() { if (TL_POP) { TL_POP.remove(); TL_POP = null; } document.removeEventListener('mousedown', onPopOutside); }
+  function onPopOutside(e) { if (TL_POP && !TL_POP.contains(e.target)) closeItemMenu(); }
+  function refreshPlanner(d) {
+    closeItemMenu();
+    var pm = document.getElementById('dep-planner'); if (pm) renderPlanner(d, pm);
+    var tw = document.getElementById('dep-timeline'); if (tw) renderDeploymentTimeline(d, tw);
+  }
+
+  function openItemMenu(btn, d, s, phase, id) {
+    closeItemMenu();
+    var p = tlPlan(s, phase), it = p.byId[id];
+    var moves = [['school', 'Do at school'], ['home', 'Do at home'], ['off', 'Turn off']].map(function (o) {
+      var dis = (o[0] === it.mode) || (o[0] === 'home' && it.aud === 'teacher');
+      return '<button type="button" data-mv="' + o[0] + '"' + (dis ? ' disabled' : '') + '><i class="dep-swatch md-' + o[0] + '"></i>' + o[1] + '</button>';
+    }).join('');
+    var override = it.live
+      ? '<button type="button" class="danger" data-live="0">End this assessment</button>'
+      : '<button type="button" data-live="1"' + (it.mode === 'off' ? ' disabled' : '') + '>Deploy this one now</button>';
+    var pop = document.createElement('div');
+    pop.className = 'dep-pop';
+    pop.innerHTML = '<div class="dep-pop-h">' + esc(it.name) + '</div>' + moves + '<div class="dep-pop-sep"></div>' + override;
+    document.body.appendChild(pop);
+    TL_POP = pop;
+    var r = btn.getBoundingClientRect();
+    pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + 'px';
+    pop.addEventListener('click', function (e) {
+      var mv = e.target.closest('[data-mv]'), lv = e.target.closest('[data-live]');
+      if (mv && !mv.hasAttribute('disabled')) { planMove(s, phase, id, mv.dataset.mv); refreshPlanner(d); }
+      else if (lv && !lv.hasAttribute('disabled')) { it.live = lv.dataset.live === '1'; refreshPlanner(d); }
+    });
+    setTimeout(function () { document.addEventListener('mousedown', onPopOutside); }, 0);
+  }
+
+  function wirePlanner(d, mount) {
+    var s = d.school, dragId = null;
+
+    mount.querySelectorAll('.dep-date').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var parts = inp.dataset.date.split('|'); tlPlan(s, parts[0])[parts[1]] = inp.value; renderPlanner(d, mount);
+      });
+    });
+    mount.querySelectorAll('[data-sched]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.dataset.sched.split('|'), p = tlPlan(s, parts[0]), mode = parts[1];
+        var val = prompt('When do “' + TL_MODE[mode] + '” assessments run for ' + parts[0] + '?\n(e.g. “Mon & Wed, 9–10am” or “Week of 4 Aug”)', p.sched[mode] || '');
+        if (val !== null) { p.sched[mode] = val.trim(); renderPlanner(d, mount); }
+      });
+    });
+    mount.querySelectorAll('[data-deploy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var phase = b.dataset.deploy, p = tlPlan(s, phase), n = p.order.school.length + p.order.home.length;
+        gated({ title: 'Deploy ' + phase, confirmLabel: 'Deploy phase',
+          body: '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b> (' + esc(p.start) + ' → ' + esc(p.end) + ')?</p>' +
+                '<p class="tl-muted">School &amp; Home assessments go live on their set schedules, in the order shown. Off assessments are skipped.</p>',
+          audit: { action: 'phase.deploy', entity: phase, entityType: 'phase', schoolId: s.id },
+          onConfirm: function () {
+            p.deployed = true;
+            p.order.school.concat(p.order.home).forEach(function (id) { p.byId[id].live = true; });
+            (TL_OVERRIDE[s.id] || (TL_OVERRIDE[s.id] = {}))[phase] = 'inprogress';   // reflect in top timeline
+            refreshPlanner(d); toast(phase + ' deployed.');
+          } });
+      });
+    });
+    mount.querySelectorAll('[data-undeploy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var phase = b.dataset.undeploy, p = tlPlan(s, phase);
+        p.deployed = false; Object.keys(p.byId).forEach(function (id) { p.byId[id].live = false; });
+        var ov = TL_OVERRIDE[s.id]; if (ov) delete ov[phase];
+        refreshPlanner(d); toast(phase + ' returned to draft.');
+      });
+    });
+    mount.querySelectorAll('[data-menu]').forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openItemMenu(b, d, s, b.closest('[data-phase]').dataset.phase, b.dataset.menu); });
+    });
+
+    // Drag to reorder within a lane, or across lanes to change where it runs.
+    mount.querySelectorAll('.dep-node[draggable="true"]').forEach(function (nd) {
+      nd.addEventListener('dragstart', function (e) { dragId = nd.dataset.item; nd.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (e2) {} });
+      nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); dragId = null; mount.querySelectorAll('.dep-lane.dragover').forEach(function (l) { l.classList.remove('dragover'); }); });
+    });
+    mount.querySelectorAll('.dep-lane').forEach(function (lane) {
+      lane.addEventListener('dragover', function (e) { e.preventDefault(); lane.classList.add('dragover'); e.dataTransfer.dropEffect = 'move'; });
+      lane.addEventListener('dragleave', function (e) { if (!lane.contains(e.relatedTarget)) lane.classList.remove('dragover'); });
+      lane.addEventListener('drop', function (e) {
+        e.preventDefault(); lane.classList.remove('dragover');
+        if (!dragId) return;
+        var parts = lane.dataset.lane.split('|'), phase = parts[0], mode = parts[1], before = null;
+        var nodes = [].slice.call(lane.querySelectorAll('.dep-node[data-item]'));
+        for (var i = 0; i < nodes.length; i++) { var r = nodes[i].getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) { before = nodes[i].dataset.item; break; } }
+        if (before === dragId) before = null;
+        if (planMove(s, phase, dragId, mode, before)) renderPlanner(d, mount);
+      });
+    });
+  }
+
+  // Top timeline is now status-only (Phases → Audiences). Where each
+  // assessment runs — School / Home / Off — and the deploy action live in the
+  // planner below (renderPlanner), so there is a single place to configure.
   function renderDeploymentTimeline(d, mount) {
     var s = d.school, deps = d.deployments, nav = tlNav(s.id);
+    if (nav.level > 2) nav.level = 2;   // level 3 (assessment editing) moved to the planner
     var crumbs, note, rail, legend;
 
     if (nav.level === 1) {
       crumbs = '<span class="cur">Program phases</span>';
-      note = 'Tap a diamond to change its status · tap the name to open its audiences.';
+      note = 'Tap a diamond to change a phase’s status · tap the name to see its audiences. Set where assessments run below.';
       rail = tlRail(TL_PHASES.map(function (p) {
         var st = tlEffState(s.id, p, tlPhaseState(deps, p));
         return { label: p, sub: TL_STATE_LABEL[st], cls: 'st-' + st + ' clickable', attrs: ' data-phase="' + p + '"',
           mkTitle: 'Tap to change status', navLabel: true, navTitle: 'Open ' + p + ' audiences' };
       }));
       legend = tlLegend([['completed', 'Completed'], ['inprogress', 'In progress'], ['pending', 'Pending']]);
-    } else if (nav.level === 2) {
+    } else {
       crumbs = '<button data-tlup="1">Program phases</button><span class="sep">›</span><span class="cur">' + esc(nav.phase) + '</span>';
-      note = 'Tap a diamond to change its status · tap the name to open its assessments.';
+      note = 'Status per audience for ' + esc(nav.phase) + '. Configure & deploy this phase below.';
       rail = tlRail(TL_AUD.map(function (a) {
         var key = nav.phase + '|' + a.key, st = tlEffState(s.id, key, tlAudState(deps, nav.phase, a.aud)), ch = tlChain(s, nav.phase, a.aud, a.key);
         return { label: a.label, sub: ch.length + ' assessment' + (ch.length === 1 ? '' : 's'), cls: 'aud st-' + st + ' clickable', attrs: ' data-aud="' + a.key + '"',
-          mkTitle: 'Tap to change status', navLabel: true, navTitle: 'Open ' + a.label + ' assessments' };
+          mkTitle: 'Tap to change status' };
       }));
       legend = tlLegend([['active', 'Active audience'], ['completed', 'Completed'], ['inprogress', 'In progress'], ['pending', 'Pending']]);
-    } else {
-      var a = TL_AUD.filter(function (x) { return x.key === nav.audience; })[0], ch = tlChain(s, nav.phase, a.aud, a.key);
-      crumbs = '<button data-tlup="1">Program phases</button><span class="sep">›</span><button data-tlup="2">' + esc(nav.phase) + '</button><span class="sep">›</span><span class="cur">' + esc(a.label) + '</span>';
-      note = 'Tap a diamond to set where it runs (School → Home → Off) · drag to re-chain the order.';
-      rail = tlRail(ch.map(function (as, i) {
-        return { label: as.name, sub: TL_MODE[as.mode], cls: 'asmt md-' + as.mode + ' clickable', draggable: true, attrs: ' data-asmt="' + i + '"', mkTitle: 'Tap: School → Home → Off · Drag: re-chain' };
-      }));
-      legend = tlLegend([['md-school', 'Do at school'], ['md-home', 'Do at home'], ['md-off', 'Off']]);
     }
 
     mount.innerHTML = '<div class="tl-tl"><div class="tl-tl-crumbs">' + crumbs + '</div><p class="tl-tl-note">' + note + '</p>' + rail + legend + '</div>';
 
     mount.querySelectorAll('[data-tlup]').forEach(function (b) { b.addEventListener('click', function () { nav.level = +b.dataset.tlup; renderDeploymentTimeline(d, mount); }); });
-    // Phases (L1): diamond cycles status, name opens the audience flow.
+    // Phases (L1): diamond cycles status, name opens the audience status view.
     mount.querySelectorAll('[data-phase]').forEach(function (nd) {
       var p = nd.dataset.phase;
       nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { tlCycleState(s.id, p, tlEffState(s.id, p, tlPhaseState(deps, p))); renderDeploymentTimeline(d, mount); });
       nd.querySelector('.tl-tl-label').addEventListener('click', function () { nav.level = 2; nav.phase = p; renderDeploymentTimeline(d, mount); });
     });
-    // Audiences (L2): diamond cycles status, name opens the assessment chain.
+    // Audiences (L2): diamond cycles status. Assessment-level config is in the planner.
     mount.querySelectorAll('[data-aud]').forEach(function (nd) {
       var akey = nd.dataset.aud, adef = TL_AUD.filter(function (x) { return x.key === akey; })[0], key = nav.phase + '|' + akey;
       nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { tlCycleState(s.id, key, tlEffState(s.id, key, tlAudState(deps, nav.phase, adef.aud))); renderDeploymentTimeline(d, mount); });
-      nd.querySelector('.tl-tl-label').addEventListener('click', function () { nav.level = 3; nav.audience = akey; renderDeploymentTimeline(d, mount); });
     });
-
-    if (nav.level === 3) {
-      var aud = TL_AUD.filter(function (x) { return x.key === nav.audience; })[0], chain = tlChain(s, nav.phase, aud.aud, aud.key), dragIdx = null;
-      mount.querySelectorAll('[data-asmt]').forEach(function (nd) {
-        nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { var i = +nd.dataset.asmt, it = chain[i]; it.mode = TL_MODE_ORDER[(TL_MODE_ORDER.indexOf(it.mode) + 1) % 3]; renderDeploymentTimeline(d, mount); });
-        nd.addEventListener('dragstart', function (e) { dragIdx = +nd.dataset.asmt; nd.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
-        nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); dragIdx = null; });
-        nd.addEventListener('dragover', function (e) { e.preventDefault(); nd.classList.add('dragover'); });
-        nd.addEventListener('dragleave', function () { nd.classList.remove('dragover'); });
-        nd.addEventListener('drop', function (e) {
-          e.preventDefault(); nd.classList.remove('dragover');
-          var to = +nd.dataset.asmt; if (dragIdx === null || dragIdx === to) return;
-          chain.splice(to, 0, chain.splice(dragIdx, 1)[0]);
-          renderDeploymentTimeline(d, mount); toast('Assessments re-chained.');
-        });
-      });
-    }
   }
 
   HUB.assessments = function (d, el) {
     var s = d.school;
-    var depRows = d.deployments.length ? d.deployments.map(function (x) {
-      return '<tr><td class="name">' + esc(x.assessment) + '</td><td>' + esc(x.audience) + '</td><td>' + esc(x.phase) + '</td><td>' + esc(x.start + ' → ' + x.end) + '</td><td>' + depStatusPill(x.status) + '</td>' +
-        '<td style="text-align:right"><button class="link-btn" data-end="' + x.id + '">' + (x.status === 'Ended' ? '—' : 'End') + '</button></td></tr>';
-    }).join('') : '<tr><td colspan="6"><div class="tl-empty">No deployments for this school.</div></td></tr>';
 
     var links = ['Parent', 'Teacher', 'Direct Assessment'].map(function (kind) {
       var url = 'https://measures.tilli.app/' + s.code.toLowerCase() + '/' + kind.toLowerCase().replace(/\s+/g, '-');
@@ -1254,12 +1439,13 @@
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
           '<button class="btn btn-outline btn-sm" data-newdep>+ New deployment</button></div></div>' +
         '<div id="dep-timeline"></div>' +
-        '<div class="tl-tablewrap"><table class="tl-table" style="min-width:720px"><thead><tr><th>Assessment</th><th>Audience</th><th>Phase</th><th>Window</th><th>Status</th><th></th></tr></thead><tbody>' + depRows + '</tbody></table></div></div>' +
+        '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Master Links</h3><p class="tl-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
         '<div style="margin-top:14px"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
       '<div id="hub-studentlog"></div>';
     el.querySelector('[data-newdep]').addEventListener('click', function () { openNewDeployment(s.id, true); });
     renderDeploymentTimeline(d, el.querySelector('#dep-timeline'));
+    renderPlanner(d, el.querySelector('#dep-planner'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
     slBtn.addEventListener('click', function () {
       if (slMount.innerHTML) { slMount.innerHTML = ''; slBtn.textContent = 'Student assessment log'; slBtn.classList.remove('on'); return; }

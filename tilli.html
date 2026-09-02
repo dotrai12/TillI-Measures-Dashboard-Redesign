@@ -143,7 +143,13 @@
   .tl-tl-rail { position: relative; display: flex; align-items: flex-start; padding: 8px 0 4px; overflow-x: auto; }
   .tl-tl-line { position: absolute; top: 41px; height: 2px; background: var(--line-200); border-radius: 2px; z-index: 0; }
   .tl-tl-node { flex: 1 1 0; min-width: 96px; position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 6px; }
-  .tl-tl-diamond { width: 26px; height: 26px; border-radius: 6px; transform: rotate(45deg); background: #fff; border: 2px solid var(--line-200); transition: transform .15s var(--ease), box-shadow .15s var(--ease); }
+  .tl-tl-diamond { position: relative; width: 26px; height: 26px; border-radius: 6px; transform: rotate(45deg); background: #fff; border: 2px solid var(--line-200); transition: transform .15s var(--ease), box-shadow .15s var(--ease); }
+  /* Expand the tap target to ~48px without changing the diamond's size */
+  .tl-tl-node.clickable .tl-tl-diamond::before { content: ''; position: absolute; inset: -11px; }
+  /* Redundant shape cue so status reads without relying on colour alone */
+  .tl-tl-diamond::after { position: absolute; inset: 0; display: grid; place-items: center; transform: rotate(-45deg); color: #fff; line-height: 1; pointer-events: none; }
+  .tl-tl-node.st-completed .tl-tl-diamond::after { content: '✓'; font-size: 13px; font-weight: 900; }
+  .tl-tl-node.st-inprogress .tl-tl-diamond::after { content: '●'; font-size: 7px; }
   .tl-tl-dot { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid var(--line-200); margin-top: 9px; position: relative; z-index: 1; }
   .tl-tl-label { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-900); margin-top: 9px; line-height: 1.25; }
   .tl-tl-sub { font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-300); margin-top: 3px; }
@@ -448,6 +454,64 @@
   .tl-pill.danger { background: #FCE6E1; color: #C23A25; }
   .tl-pill.sched { background: var(--wash-cyan); color: var(--cyan-700); }
   .tl-pill.muted { background: #F1F1F4; color: #5B6170; }
+  /* Deployment planner (school Assessments tab) — configure & deploy per phase */
+  .dep-chains { display: flex; flex-direction: column; gap: 14px; }
+  .dep-phase { border: 1px solid var(--line-200); border-radius: var(--radius-card); background: var(--surface-50, #FAFAFA); padding: 14px 16px; }
+  /* Deployed phases read as live at a glance: green accent + tinted ground */
+  .dep-phase.is-deployed { border-left: 4px solid var(--green-500); background: var(--wash-green); }
+  .dep-phase-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+  .dep-phase-name { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 15px; color: var(--ink-900); }
+  .dep-phase-sum { font-weight: 700; font-size: 11px; color: var(--ink-300); }
+  .dep-dates { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+  .dep-date { font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 11.5px; color: var(--ink-600); background: #fff; border: 1px solid var(--line-200); border-radius: 8px; padding: 4px 7px; cursor: pointer; }
+  .dep-date:focus { outline: none; border-color: var(--green-500); }
+  .dep-date-sep { color: var(--ink-300); font-weight: 800; }
+  /* Always-present status pill so both states are labelled, not just the deployed one */
+  .dep-status { display: inline-flex; align-items: center; gap: 5px; font-weight: 800; font-size: 10.5px; letter-spacing: .02em; padding: 3px 9px; border-radius: var(--radius-pill); }
+  .dep-status.is-deployed { background: #DDF3D2; color: var(--green-700); }
+  .dep-status.is-draft { background: #F1F1F4; color: #5B6170; }
+  /* Lanes: mode tag + its own schedule on top, ordered assessments below */
+  .dep-lane { padding: 11px 0; border-top: 1px solid var(--line-200); }
+  .dep-lane:first-of-type { border-top: none; }
+  .dep-lane-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .dep-mode-tag { text-align: center; font-weight: 800; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-pill); }
+  .dep-mode-tag.md-school { background: #EDE7FE; color: var(--violet-500); }
+  .dep-mode-tag.md-home { background: #FFF1DC; color: #A96518; }
+  .dep-mode-tag.md-off { background: #F1F1F4; color: #5B6170; }
+  .dep-sched { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: var(--radius-pill); padding: 3px 10px; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 10.5px; color: var(--ink-450); cursor: pointer; }
+  .dep-sched:hover { border-color: var(--ink-300); color: var(--ink-600); }
+  .dep-lane-items { display: flex; flex-wrap: wrap; gap: 8px; min-height: 36px; align-content: flex-start; border-radius: 10px; }
+  .dep-lane.dragover .dep-lane-items { box-shadow: inset 0 0 0 2px var(--green-500); background: var(--wash-green); }
+  .dep-lane-empty { align-self: center; font-weight: 600; font-size: 11.5px; color: var(--ink-300); padding: 4px 2px; }
+  .dep-node { position: relative; display: inline-flex; align-items: center; gap: 9px; padding: 7px 8px 7px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--line-200); border-left: 4px solid var(--line-200); cursor: grab; }
+  .dep-node.dragging { opacity: .4; }
+  .dep-node-name { font-weight: 700; font-size: 12.5px; color: var(--ink-900); }
+  .dep-node.md-school { border-left-color: var(--violet-500); }
+  .dep-node.md-home { border-left-color: var(--orange-500); }
+  .dep-node.is-live { background: var(--wash-green); border-color: #CDEBC0; }
+  .dep-ord { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: 0 0 auto; border-radius: 50%; background: var(--surface-100); color: var(--ink-450); font-weight: 800; font-size: 10px; }
+  .dep-live-dot { color: var(--green-500); font-size: 9px; }
+  .dep-item-menu { background: none; border: none; cursor: pointer; color: var(--ink-300); font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: 6px; }
+  .dep-item-menu:hover { color: var(--ink-700); background: var(--surface-100); }
+  /* Off = parked, not deployed: quiet dashed chips so running work stays loudest */
+  .dep-lane--off .dep-node { padding: 4px 6px 4px 9px; background: transparent; border: 1px dashed var(--line-200); cursor: grab; }
+  .dep-lane--off .dep-node-name { font-weight: 600; font-size: 11.5px; color: var(--ink-450); }
+  /* Per-item ⋯ menu (move / deploy one / end one) */
+  .dep-pop { position: absolute; z-index: 60; min-width: 200px; background: #fff; border: 1px solid var(--line-200); border-radius: 12px; box-shadow: 0 12px 30px rgba(20,20,20,.16); padding: 6px; }
+  .dep-pop-h { font-weight: 800; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-300); padding: 6px 8px 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dep-pop button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: none; border: none; cursor: pointer; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-700); padding: 9px 10px; border-radius: 8px; }
+  .dep-pop button:hover:not([disabled]) { background: var(--surface-100); }
+  .dep-pop button[disabled] { opacity: .4; cursor: default; }
+  .dep-pop button.danger { color: var(--pink-600, #C64B63); }
+  .dep-pop-sep { height: 1px; background: var(--line-200); margin: 5px 4px; }
+  .dep-swatch { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 3px; transform: rotate(45deg); }
+  .dep-swatch.md-school { background: var(--violet-500); }
+  .dep-swatch.md-home { background: var(--orange-500); }
+  .dep-swatch.md-off { background: #fff; border: 2px solid var(--line-200); }
+  .dep-aud-tag { font-weight: 800; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-pill); }
+  .dep-aud-tag.aud-teacher { background: var(--wash-green); color: var(--green-700); }
+  .dep-aud-tag.aud-parent { background: var(--wash-cyan); color: var(--cyan-700); }
+  .dep-aud-tag.aud-direct { background: var(--wash-pink); color: var(--pink-600, #C64B63); }
   .tl-badge-gam { background: var(--wash-pink); color: var(--pink-600, #C64B63); font-weight: 800; font-size: 10px; border-radius: var(--radius-pill); padding: 2px 8px; margin-left: 6px; }
 
   /* ---- Student report (skill scores / perspective / progress) ---- */
