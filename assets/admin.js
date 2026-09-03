@@ -58,7 +58,11 @@
   // ========================================================
   var CREATED = (window.TilliAPI && window.TilliAPI.resolveSchool && qp.get('school'))
     ? window.TilliAPI.resolveSchool(qp.get('school')) : null;
-  if (CREATED && CREATED.source === 'created') { renderCreatedCoordinator(CREATED); return; }
+  // A created school now flows into the FULL leadership dashboard: the bridge
+  // (created-school-bridge.js) has synthesised a real TILLI_SCHOOL/ADMIN_DATA for
+  // it and set window.TILLI_CREATED. The focused single-column view below is kept
+  // only as a fallback for when the bridge didn't run (e.g. catalogue missing).
+  if (CREATED && CREATED.source === 'created' && !window.TILLI_CREATED) { renderCreatedCoordinator(CREATED); return; }
 
   function renderCreatedCoordinator(school) {
     var API = window.TilliAPI, id = school.school_id;
@@ -1090,6 +1094,25 @@
   }
 
   function seedUsers() {
+    // Created schools: show THIS school's real staff (coordinator + teachers),
+    // bridged from TilliAPI into window.TILLI_SCHOOL. All local memberships are
+    // active, so everyone reads as Active until real invitation status is wired.
+    if (window.TILLI_CREATED) {
+      var TS = window.TILLI_SCHOOL || {}, seen = {}, out = [];
+      (TS.admins || []).forEach(function (a) {
+        var e = String(a.email || '').toLowerCase();
+        if (!e || seen[e]) return; seen[e] = 1;
+        out.push({ name: a.name, email: a.email,
+          role: a.role === 'principal_view' ? 'Principal' : 'Coordinator', status: 'Active' });
+      });
+      (TS.teachers || []).forEach(function (t) {
+        var e = String(t.email || '').toLowerCase();
+        if (!e || seen[e]) return; seen[e] = 1;
+        out.push({ name: t.name, email: t.email, role: 'Teacher', status: 'Active' });
+      });
+      return out;
+    }
+    // Demo school keeps its illustrative fixed roster.
     return [
       { name: 'Meera Krishnan', email: 'meera.krishnan@littlesprouts.edu', role: 'Coordinator', status: 'Active' },
       { name: 'Kavya Rao', email: 'kavya.rao@littlesprouts.edu', role: 'Teacher', status: 'Active' },

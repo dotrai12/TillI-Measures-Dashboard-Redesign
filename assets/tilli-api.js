@@ -99,6 +99,11 @@
       // email(lower) -> { email, role, school_id, tempPassword, password, mustReset,
       //   status:'invited'|'active', invitedBy, createdAt, activatedAt }
       accounts: {},
+      // outcomes[school_id][student_id] = [{ key,name,group,pct,band,baseline,mid,post,
+      //   teacher,parent,student,gap }]. Prototype SEL scores, auto-generated the first
+      //   time a created school's dashboard is opened; a developer swaps this for real
+      //   scored-assessment results. Completion (WHO) gates which points are shown.
+      outcomes: {},
     };
   }
   function read(){
@@ -170,6 +175,7 @@
     // won't carry `accounts`. Add it without bumping SEED_VER (which would wipe
     // created schools).
     if (!db.accounts){ db.accounts = {}; write(db); }
+    if (!db.outcomes){ db.outcomes = {}; write(db); }
     return db;
   }
 
@@ -826,6 +832,84 @@
       status: dep ? dep.status : 'Not deployed' };
   }
 
+  /* ======================================================================
+     NEW — PROTOTYPE SEL OUTCOMES (auto-generated; local only)
+     ----------------------------------------------------------------------
+     Created schools carry a real roster + real completion but no scored
+     results. For the working prototype we synthesize per-student, per-skill
+     scores (baseline/mid/post + teacher/parent/student perspectives) with the
+     SAME deterministic algorithm the demo dataset uses (school-data.js
+     buildSkills), so a created school's dashboard reads exactly like the demo
+     one. Scores are generated once and persisted to localStorage; a developer
+     replaces genSkills()/outcomesForSchool() with real assessment results.
+     pointStatusFor() gates WHICH points are shown, from REAL completion — a
+     point becomes 'complete' only once its phase is fully completed (or ended).
+     ====================================================================== */
+  function _hashStr(s){ var h=2166136261; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+  function _mulberry32(a){ return function(){ a|=0; a=(a+0x6d2b79f5)|0; var t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+  function _clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+  function _band(p){ return p<34?'seedling':p<67?'sprouting':'blooming'; }
+  // Mirror of school-data.js buildSkills(): a plausible year-long trajectory
+  // (baseline < mid < post, with per-skill jitter) + 3 rater perspectives,
+  // seeded off the student id so every reload is identical.
+  function genSkills(student, skills){
+    var first = student.first || String(student.name||'').split(' ')[0] || student.student_id || '';
+    var seedId = student.student_id || student.adm || first;
+    var rndS = _mulberry32(_hashStr(first+':garden'));
+    var base = 40 + rndS()*26; var post = {};
+    skills.forEach(function(sk){ post[sk.key] = Math.round(_clamp(base+(rndS()-0.5)*60,6,98)); });
+    var rnd = _mulberry32(_hashStr(seedId+':assess'));
+    return skills.map(function(sk){
+      var p = post[sk.key];
+      var growth = Math.round(rnd()*22);
+      var mid = _clamp(p-Math.round(growth*0.55),2,99);
+      var pre = _clamp(mid-Math.round(growth*0.45),2,99);
+      var teacher = _clamp(p+Math.round((rnd()-0.5)*12),2,100);
+      var parent  = _clamp(p+Math.round((rnd()-0.4)*22),2,100);
+      var studentP= _clamp(p+Math.round((rnd()-0.55)*26),2,100);
+      return { key:sk.key, name:sk.name, group:sk.group, pct:p, band:_band(p),
+        baseline:pre, mid:mid, post:p, teacher:teacher, parent:parent, student:studentP,
+        gap:Math.max(teacher,parent,studentP)-Math.min(teacher,parent,studentP) };
+    });
+  }
+  // Generate (once) + persist + return outcomes for every current student.
+  // `skills` is the 12-skill catalogue (passed in so this layer needn't own it).
+  function outcomesForSchool(schoolId, skills){
+    if (!skills || !skills.length) return (getDB().outcomes||{})[schoolId] || {};
+    var db = getDB(); db.outcomes = db.outcomes || {};
+    var store = db.outcomes[schoolId] = db.outcomes[schoolId] || {};
+    var changed = false;
+    studentsForSchool(schoolId).forEach(function(s){
+      if (!store[s.student_id]){ store[s.student_id] = genSkills(s, skills); changed = true; }
+    });
+    if (changed) write(db);
+    return store;
+  }
+  // Per assessment point (baseline/midline/endline) → 'upcoming'|'open'|'complete',
+  // derived from REAL deployments + completion. 'complete' (bands appear) only when
+  // every deployed lane of that phase is 100% complete, or the phase was ended.
+  function pointStatusFor(schoolId){
+    var ids = studentsForSchool(schoolId).map(function(s){ return s.student_id; });
+    var db = getDB(); var deps = db.deployments[schoolId] || {};
+    var PH = [['baseline','Baseline'],['midline','Midline'],['endline','Endline']];
+    var AUD = ['Teacher','Parent','Direct Assessment'];
+    var out = {};
+    PH.forEach(function(pr){
+      var lanes = AUD.map(function(a){ return deps[pr[1]+'|'+a]; }).filter(Boolean);
+      if (!lanes.length){ out[pr[0]] = 'upcoming'; return; }
+      // 'complete' (bands appear) as soon as ANY deployed lane is ended or 100%
+      // complete — so one audience finishing (e.g. a teacher bulk-marking their
+      // class) publishes that point, rather than needing every lane to finish.
+      var done = lanes.some(function(d){
+        if (d.status==='Ended') return true;
+        var c = completionStats(schoolId, pr[1], d.audience, ids);
+        return c.expected>0 && c.done>=c.expected;
+      });
+      out[pr[0]] = done ? 'complete' : 'open';
+    });
+    return out;
+  }
+
   /* ---------- dev utilities ---------- */
   function reset(){ try{ localStorage.removeItem(STORE_KEY); }catch(e){} return seedFromSchool(); }
   function _dump(){ return getDB(); }
@@ -882,6 +966,9 @@
     markComplete: markComplete,
     isComplete: isComplete,
     completionStats: completionStats,
+    // NEW — prototype SEL outcomes (local, auto-generated) + point lifecycle
+    outcomesForSchool: outcomesForSchool,
+    pointStatusFor: pointStatusFor,
     // dev
     reset: reset,
     _dump: _dump,

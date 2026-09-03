@@ -500,9 +500,19 @@
   // signs in with its temporary password. They set their own password here.
   function setPwView() {
     const e = state.errs;
+    // Invited accounts carry their role + school_id; surface "joining as … for …"
+    // so the person knows which invite they're accepting before setting a password.
+    const acct = invitedAccount(state.email);
+    const sc = acct && acct.school_id && window.TilliAPI && window.TilliAPI.resolveSchool
+      ? window.TilliAPI.resolveSchool(acct.school_id) : null;
+    const roleLabel = acct && acct.role ? String(acct.role).replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+    const joinLine = roleLabel
+      ? `<p style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:13px;color:var(--ink-450);text-align:center;margin:-14px 0 20px">Joining as <span style="color:var(--ink-700)">${esc(roleLabel)}</span>${sc && sc.name ? ` for <span style="color:var(--ink-700)">${esc(sc.name)}</span>` : ''}</p>`
+      : '';
     return `
       <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 8px">Set your password</h2>
       <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-600);text-align:center;margin:0 0 20px;word-break:break-all">${esc(state.email)}</p>
+      ${joinLine}
       <form id="setpw-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
         <input id="np-input" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="New password (min 6 characters)" aria-label="New password" value="${esc(state.password)}">
         <input id="np-confirm" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="Confirm new password" aria-label="Confirm new password">

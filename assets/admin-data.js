@@ -97,6 +97,13 @@
              LIFECYCLE_STATES.find(function (s) { return s.key === LIFECYCLE_DEFAULT; });
     ACTIVE_LIFECYCLE = st.key;
     POINTS.forEach(function (p) { p.status = st.status[p.key] || 'upcoming'; });
+    // Created schools: the REAL assessment lifecycle (deployments + completion,
+    // via TilliAPI) overrides the demo lifecycle dropdown. Re-pinned on every
+    // applyLifecycle call so flipping the dev dropdown can't desync a real school.
+    if (window.TILLI_CREATED && window.TILLI_CREATED.pointStatus) {
+      var ps = window.TILLI_CREATED.pointStatus;
+      POINTS.forEach(function (p) { p.status = ps[p.key] || 'upcoming'; });
+    }
     COMPLETED_POINTS = POINTS.filter(function (p) { return p.status === 'complete'; });
     LATEST_COMPLETE = COMPLETED_POINTS[COMPLETED_POINTS.length - 1] || null;
     OPEN_POINT = POINTS.find(function (p) { return p.status === 'open'; }) || null;
@@ -236,6 +243,9 @@
       date: 'Jul 22, 2026', note: 'Big emotional reactions to transitions; settling plan needed.',
       status: 'Closed', routed_to: 'Counsellor', outcome: 'Counsellor met family; visual timetable in place. Resolved.' },
   ];
+  // Created schools have no raised concerns yet, and the demo entries above point
+  // at demo students that don't exist in a real roster — so start empty for them.
+  if (window.TILLI_CREATED) CONCERNS = [];
   function concernCounts() {
     return {
       New: CONCERNS.filter(function (c) { return c.status === 'New'; }).length,
