@@ -130,9 +130,17 @@
     Object.keys(SCHOOL_PW).forEach((e) => { if (!a[e]) a[e] = true; });
     return a;
   }
-  // Accounts listed in SCHOOL_PW require their exact password; everything
-  // else keeps the loose demo behaviour (any non-empty password works).
+  // Does this email have an invited account? (checked separately so we can force
+  // the temp-password gate + first-login reset).
+  function invitedAccount(email) {
+    return (window.TilliAPI && window.TilliAPI.getAccount) ? window.TilliAPI.getAccount(email) : null;
+  }
+  // Accounts listed in SCHOOL_PW require their exact password; invited accounts
+  // require their temp/own password (via TilliAPI); everything else keeps the
+  // loose demo behaviour (any non-empty password works).
   function passwordOk(email, pw) {
+    const acct = invitedAccount(email);
+    if (acct) return window.TilliAPI.checkPassword(email, pw).ok;
     const want = SCHOOL_PW[String(email || '').toLowerCase()];
     return want == null ? true : pw === want;
   }
@@ -301,13 +309,14 @@
   // The backdrop is built once and kept in the DOM for the whole auth flow.
   // Only the white card is swapped between steps: the outgoing card is pinned
   // in place and slid out while the incoming card slides in from the side.
-  const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, signup: 4 };
+  const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, signup: 4, setpw: 5 };
   let prevAuthStep = null;
   let slideCleanup = null;
 
   function dialogCard() {
     const s = state.step;
-    const showBack = s !== 'role' && s !== 'checking';
+    // No Back on the forced first-login reset — the temp password is spent.
+    const showBack = s !== 'role' && s !== 'checking' && s !== 'setpw';
     let inner = '';
 
     if (s === 'role') inner = roleView();
@@ -316,6 +325,7 @@
     else if (s === 'checking') inner = checkingView();
     else if (s === 'login') inner = loginView(false);
     else if (s === 'signup') inner = loginView(true);
+    else if (s === 'setpw') inner = setPwView();
 
     return `<div class="dialog" role="dialog" aria-label="Get started with Tilli Measures">
         ${showBack ? `<button class="btn-ghost dialog-back focus" data-act="back">&#8592; Back</button>` : ''}
@@ -483,6 +493,21 @@
         </div>
         ${state.errs.pw ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0">That password doesn't match this account. Please try again.</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">${verb} via password &#8594;</button>
+      </form>`;
+  }
+
+  // First-login password reset — shown once, right after an invited account
+  // signs in with its temporary password. They set their own password here.
+  function setPwView() {
+    const e = state.errs;
+    return `
+      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 8px">Set your password</h2>
+      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-600);text-align:center;margin:0 0 20px;word-break:break-all">${esc(state.email)}</p>
+      <form id="setpw-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
+        <input id="np-input" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="New password (min 6 characters)" aria-label="New password" value="${esc(state.password)}">
+        <input id="np-confirm" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="Confirm new password" aria-label="Confirm new password">
+        ${e.np ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0">${esc(e.np)}</p>` : ''}
+        <button type="submit" class="btn btn-primary block focus">Set password &amp; continue &#8594;</button>
       </form>`;
   }
 
@@ -669,7 +694,7 @@
         set({ email, step: 'checking', password: '' });
         clearTimeout(checkTimer);
         checkTimer = setTimeout(() => {
-          const exists = !!loadAccounts()[email.toLowerCase()];
+          const exists = !!loadAccounts()[email.toLowerCase()] || !!invitedAccount(email);
           set({ step: exists ? 'login' : 'signup' });
         }, 900);
       });
@@ -705,7 +730,35 @@
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
           return;
         }
+        // Invited accounts signing in with their temp password must choose their
+        // own password before continuing.
+        const acct = state.step === 'login' ? invitedAccount(state.email) : null;
+        if (acct && acct.mustReset) { set({ step: 'setpw', password: '', errs: {} }); return; }
         if (state.step === 'signup') saveAccount(state.email);
+        go();
+      });
+    }
+
+    // first-login password reset (invited accounts)
+    const sf = scope.querySelector('#setpw-form');
+    if (sf) {
+      const np = scope.querySelector('#np-input');
+      const nc = scope.querySelector('#np-confirm');
+      np.addEventListener('input', (ev) => { state.password = ev.target.value; if (state.errs.np) { state.errs = {}; np.classList.remove('err'); nc.classList.remove('err'); } });
+      sf.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const pw = (np.value || '').trim();
+        const cf = (nc.value || '').trim();
+        const fail = (msg) => {
+          set({ errs: { np: msg }, shake: true });
+          clearTimeout(shakeTimer);
+          shakeTimer = setTimeout(() => set({ shake: false }), 450);
+        };
+        if (pw.length < 6) return fail('Use at least 6 characters.');
+        if (pw !== cf) return fail("Those passwords don't match.");
+        const res = window.TilliAPI.setPassword(state.email, pw);
+        if (!res.ok) return fail('Could not set the password. Try again.');
+        saveAccount(state.email);   // mark known for the loose-demo account map too
         go();
       });
     }

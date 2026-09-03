@@ -295,6 +295,39 @@
   }
   var INVITATIONS = buildInvitations();
 
+  // Build an Invitations-table row from a TilliAPI account (created via the
+  // Platform Admin "New invitation" flow). status maps: an account still on its
+  // temp password reads "Account Created"; once the user sets their own it flips
+  // to "Activated". Expiry is 14 days from when the invite was minted.
+  var TITLES = function (s) { return String(s || '').replace(/(^|[\s.])([a-z])/g, function (m, p, c) { return p + c.toUpperCase(); }); };
+  function invFromAccount(acct) {
+    var local = String(acct.email || '').split('@')[0].replace(/[._-]+/g, ' ').trim();
+    var created = acct.createdAt ? new Date(acct.createdAt) : TODAY;
+    var expires = new Date(created.getTime() + 14 * DAY);
+    return {
+      id: 'inv-acct-' + String(acct.email || '').toLowerCase(),
+      name: TITLES(local) || acct.email, email: acct.email, role: acct.role || 'School Admin',
+      schoolId: acct.school_id || null,
+      status: acct.status === 'active' ? 'Activated' : 'Account Created',
+      delivery: 'Email sent', created: iso(created), expires: iso(expires),
+    };
+  }
+  // Fold any accounts provisioned in a previous session (persisted in TilliAPI)
+  // into the list so they survive a reload.
+  if (window.TilliAPI && window.TilliAPI.listAccounts) {
+    window.TilliAPI.listAccounts().forEach(function (acct) {
+      if (!INVITATIONS.some(function (i) { return i.email === acct.email; })) INVITATIONS.push(invFromAccount(acct));
+    });
+  }
+  // Insert (or refresh) an invitation row live, without a reload. Called by the
+  // admin app right after TilliAPI.createInvite succeeds.
+  function addInvitation(acct) {
+    var row = invFromAccount(acct);
+    var i = INVITATIONS.findIndex(function (x) { return x.email === row.email; });
+    if (i >= 0) INVITATIONS[i] = row; else INVITATIONS.unshift(row);
+    return row;
+  }
+
   // Now that USERS/INVITATIONS exist, fold in any schools created in a previous
   // session (persisted in the shared TilliAPI store) and mirror their
   // coordinators into the People roster + invitations list.
@@ -884,6 +917,7 @@
       updateTemplate: updateTemplate, renameGroup: renameGroup, deleteGroup: deleteGroup,
       updateSchool: updateSchool, deleteSchool: deleteSchool, setUserRole: setUserRole,
       addSection: addSection, addGrade: addGrade, updateGame: updateGame,
+      addInvitation: addInvitation,
     },
   };
 })();

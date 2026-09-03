@@ -1947,7 +1947,7 @@
     var banner = attn ? '<div class="tl-filterbanner">Filtered to <b>expiring / expired</b> invitations · <button class="link-btn" id="inv-clear">clear</button></div>' : '';
     var rows = list.map(function (i) {
       var s = i.schoolId ? ORG.byId(i.schoolId) : null;
-      return '<tr><td class="name">' + esc(i.name) + '<small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + (s ? esc(s.name) : '—') + '</td>' +
+      return '<tr><td class="name"><button class="link-btn" data-inv-detail="' + esc(i.email) + '" style="font-weight:700;color:var(--ink-900)">' + esc(i.name) + '</button><small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + (s ? esc(s.name) : '—') + '</td>' +
         '<td>' + invStatusPill(i) + '</td><td>' + esc(i.delivery) + '</td><td>' + esc(i.created) + '</td><td>' + esc(i.expires) + '</td>' +
         '<td style="text-align:right"><button class="link-btn" data-resend="' + esc(i.email) + '">Resend</button> <button class="link-btn danger" data-revoke="' + esc(i.email) + '">Revoke</button></td></tr>';
     }).join('') || '<tr><td colspan="8"><div class="tl-empty">No invitations.</div></td></tr>';
@@ -1955,6 +1955,7 @@
       '<div class="tl-card"><div class="tl-tablewrap"><table class="tl-table" style="min-width:820px"><thead><tr><th>Recipient</th><th>Role</th><th>School</th><th>Status</th><th>Delivery</th><th>Created</th><th>Expires</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     var c = body.querySelector('#inv-clear'); if (c) c.addEventListener('click', function () { go('invitations', {}); });
     var iv = body.querySelector('[data-invite]'); if (iv) iv.addEventListener('click', function () { openInvite(null); });
+    body.querySelectorAll('[data-inv-detail]').forEach(function (b) { b.addEventListener('click', function () { openInviteDetail(b.dataset.invDetail); }); });
     body.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation'); toast('Invitation resent.'); }); });
     body.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation' }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
   };
@@ -1971,13 +1972,86 @@
       '</div>', function (close) {
         var em = (document.getElementById('iv-email').value || '').trim();
         if (!em) { toast('Recipient email is required.'); return false; }
-        ORG.server.logAudit(me.name, 'invitation.send', em, 'invitation', document.getElementById('iv-school').value || null);
-        close(); toast('Invitation sent to ' + em + '.');
+        var role = document.getElementById('iv-role').value;
+        var schId = document.getElementById('iv-school').value || null;
+        var res = window.TilliAPI
+          ? window.TilliAPI.createInvite({ email: em, role: role, school_id: schId, invitedBy: me.email })
+          : { ok: false };
+        if (!res.ok) { toast('Could not create the invitation.'); return false; }
+        // Surface it in the Invitations table (live + persisted via TilliAPI).
+        if (window.TilliAPI.getAccount) ORG.server.addInvitation(window.TilliAPI.getAccount(em));
+        ORG.server.logAudit(me.name, 'invitation.send', em, 'invitation', schId);
+        close();
+        go('invitations', {});        // land on the list so the new row is visible
+        showInviteCredentials(res);   // reveal the one-time temp password to relay
       }, 'Send invite');
     // Reflect what the chosen role can do, live, so the provisioning
     // hierarchy is visible before the invite goes out.
     var ivRole = document.getElementById('iv-role'), ivCap = document.getElementById('iv-rolecap');
     if (ivRole && ivCap) ivRole.addEventListener('change', function () { ivCap.textContent = roleCap(ivRole.value); });
+  }
+
+  // Click a row's recipient to inspect the invite: role, school, status, dates
+  // and — for invites we minted that haven't been reset yet — the temp password.
+  function openInviteDetail(emailOrRow) {
+    var inv = ORG.invitations.filter(function (i) { return i.email === emailOrRow; })[0];
+    var acct = (window.TilliAPI && window.TilliAPI.getAccount) ? window.TilliAPI.getAccount(emailOrRow) : null;
+    if (!inv && !acct) { toast('No details for this invitation.'); return; }
+    var email = (inv && inv.email) || (acct && acct.email) || emailOrRow;
+    var role = (inv && inv.role) || (acct && acct.role) || '—';
+    var sc = inv && inv.schoolId ? ORG.byId(inv.schoolId) : (acct && acct.school_id ? ORG.byId(acct.school_id) : null);
+    var status = inv ? inv.status : (acct && acct.status === 'active' ? 'Activated' : 'Account Created');
+
+    // Password line: show the live temp password only while it's still valid
+    // (account exists and hasn't been reset). Seeded demo invites have none.
+    var pwLine;
+    if (acct && acct.mustReset && acct.tempPassword)
+      pwLine = '<div class="ws-rev-row"><span>Temporary password</span><b class="mono" id="ivd-temp">' + esc(acct.tempPassword) + '</b></div>';
+    else if (acct && !acct.mustReset)
+      pwLine = '<div class="ws-rev-row"><span>Temporary password</span><b class="tl-muted">Used — recipient set their own password</b></div>';
+    else
+      pwLine = '<div class="ws-rev-row"><span>Temporary password</span><b class="tl-muted">Not available (demo seed invite)</b></div>';
+
+    var canCopy = acct && acct.mustReset && acct.tempPassword;
+    openModal('Invitation · ' + esc((inv && inv.name) || email),
+      '<div class="tl-stack" style="margin-top:4px">' +
+        '<div class="ws-rev-row"><span>Email</span><b class="mono">' + esc(email) + '</b></div>' +
+        '<div class="ws-rev-row"><span>Role</span><b>' + esc(role) + '</b></div>' +
+        '<div class="ws-rev-row"><span>School</span><b>' + (sc ? esc(sc.name) : '—') + '</b></div>' +
+        '<div class="ws-rev-row"><span>Status</span><b>' + esc(status) + '</b></div>' +
+        (inv ? '<div class="ws-rev-row"><span>Created</span><b>' + esc(inv.created) + '</b></div>' +
+               '<div class="ws-rev-row"><span>Expires</span><b>' + esc(inv.expires) + '</b></div>' : '') +
+        pwLine +
+      '</div>' +
+      (canCopy ? '<p class="tl-muted" style="margin-top:12px;font-size:12.5px">The recipient signs in with this password at the Tilli Measures landing page, then sets their own.</p>'
+               : ''),
+      function (close) {
+        if (canCopy) {
+          var t = email + '\n' + acct.tempPassword;
+          if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () { toast('Credentials copied.'); }, function () { toast('Copy failed.'); });
+          return false;   // keep open after copy
+        }
+        close();
+      }, canCopy ? 'Copy credentials' : 'Close');
+  }
+
+  // After an invite is created, reveal the one-time temporary password so the
+  // Super Admin can pass it to the recipient. The recipient signs in with this
+  // + their email, then is forced to set their own password on first login.
+  function showInviteCredentials(res) {
+    openModal('Invitation created', '<p class="tl-muted">Share these one-time credentials with <b>' + esc(res.email) + '</b>. They\'ll sign in and set their own password.</p>' +
+      '<div class="tl-stack" style="margin-top:12px">' +
+        '<div class="ws-rev-row"><span>Email</span><b class="mono">' + esc(res.email) + '</b></div>' +
+        '<div class="ws-rev-row"><span>Temporary password</span><b class="mono" id="iv-temp">' + esc(res.tempPassword) + '</b></div>' +
+        '<div class="ws-rev-row"><span>Role</span><b>' + esc(res.role) + '</b></div>' +
+      '</div>' +
+      '<p class="tl-muted" style="margin-top:12px;font-size:12.5px">This password is shown once and expires when they set their own. Sign-in is at the Tilli Measures landing page.</p>',
+      function (close) {
+        var t = res.email + '\n' + res.tempPassword;
+        if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () { toast('Credentials copied.'); }, function () { toast('Copy failed — select manually.'); });
+        else toast('Copy not supported here.');
+        return false;   // keep the reveal open after copying
+      }, 'Copy credentials');
   }
 
   // Issue Reports (spec §8.1) — auto-crash grouped
@@ -2308,7 +2382,37 @@
     gated({ title: 'Import ' + rows.length + ' student(s)', typed: rows.length > 20 ? 'IMPORT' : null,
       body: '<p>Add <b>' + rows.length + '</b> student(s) to <b>' + esc(school.name) + '</b>? Duplicate admission numbers surface later in Merge.</p>',
       confirmLabel: 'Import students', audit: { action: 'student.add', entity: rows.length + ' students', entityType: 'student', schoolId: school.id },
-      onConfirm: function () { addState.batch = []; addState.preview = null; toast(rows.length + ' student(s) imported to ' + school.name + '.'); go('school', { id: school.id, tab: 'students' }); } });
+      onConfirm: function () {
+        var res = persistStudents(school, rows);
+        addState.batch = []; addState.preview = null;
+        if (res.persisted) {
+          var msg = res.added + ' student(s) added to ' + school.name + '.';
+          if (res.skipped) msg += ' ' + res.skipped + ' skipped (duplicate / conflict).';
+          toast(msg);
+        } else {
+          toast(rows.length + ' student(s) imported to ' + school.name + '.');
+        }
+        go('school', { id: school.id, tab: 'students' });
+      } });
+  }
+
+  // Write the staged rows into the shared TilliAPI roster so they persist and
+  // surface in the teacher/coordinator apps. Only wizard-created schools have a
+  // real backing store (and a coordinator/admin to act as); seeded demo schools
+  // fall back to the display-only toast.
+  function persistStudents(school, rows) {
+    if (!(school.created && window.TilliAPI && school.coordinator && school.coordinator.email))
+      return { persisted: false };
+    var actor = school.coordinator.email, added = 0, skipped = 0;
+    rows.forEach(function (r) {
+      var parts = String(r.name || '').trim().split(/\s+/);
+      var first = parts.shift() || '', last = parts.join(' ');
+      var secId = window.TilliAPI.ensureSection(school.id, r.grade || 'Grade 1', r.section || '');
+      var out = window.TilliAPI.addStudent({ actorEmail: actor, school_id: school.id, section_id: secId,
+        student_id: r.admission, first: first, last: last, grade: r.grade, section: r.section, source: 'admin' });
+      if (out && (out.result === 'created' || out.result === 'merged')) added++; else skipped++;
+    });
+    return { persisted: true, added: added, skipped: skipped };
   }
 
   // ============================================================

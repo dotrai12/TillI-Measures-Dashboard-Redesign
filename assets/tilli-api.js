@@ -95,6 +95,10 @@
       completions: {},
       staff: {},              // school_id -> [{ name, email, role:'coordinator'|'teacher', section_id }]  (display names)
       createdSchools: [],     // ids of schools made via createSchoolFull (portfolio hydration)
+      // Sign-in accounts provisioned by the Platform Admin "New invitation" flow.
+      // email(lower) -> { email, role, school_id, tempPassword, password, mustReset,
+      //   status:'invited'|'active', invitedBy, createdAt, activatedAt }
+      accounts: {},
     };
   }
   function read(){
@@ -160,7 +164,14 @@
     return write(db);
   }
 
-  function getDB(){ return read() || seedFromSchool(); }
+  function getDB(){
+    var db = read() || seedFromSchool();
+    // Lazy migration: stores written before the invitation/accounts feature
+    // won't carry `accounts`. Add it without bumping SEED_VER (which would wipe
+    // created schools).
+    if (!db.accounts){ db.accounts = {}; write(db); }
+    return db;
+  }
 
   /* ---------- role resolution (spec §2, §7) ---------- */
   // SERVER-SIDE: role/scope is derived from the authenticated session, never
@@ -521,6 +532,80 @@
     return { ok:true, role:inv.role, school_id:inv.school_id, section_ids:inv.section_ids };
   }
 
+  /* ======================================================================
+     ACCOUNTS — Platform Admin "New invitation" (temp password → first-login reset)
+     ----------------------------------------------------------------------
+     Real (for the demo) sign-in accounts. createInvite mints a one-time
+     temporary password the admin relays to the recipient; on first sign-in
+     the account is flagged mustReset, so the login flow forces the user to
+     choose their own password (setPassword) before continuing. When the
+     invite carries a school + a school-scoped role, we also create the
+     matching membership so the app routes them to the right dashboard.
+     ====================================================================== */
+  function makeTempPassword(){
+    // Readable one-time code: 3 letters + 4 digits (no lookalikes).
+    var abc='ABCDEFGHJKMNPQRSTUVWXYZ', dig='23456789', out='';
+    for (var i=0;i<3;i++) out += abc[Math.floor(Math.random()*abc.length)];
+    for (var j=0;j<4;j++) out += dig[Math.floor(Math.random()*dig.length)];
+    return out;
+  }
+  // Map the Platform Admin role label to an internal membership role.
+  function membershipRoleFor(label){
+    var r = low(label);
+    if (r.indexOf('teacher')>=0) return 'teacher';
+    if (r.indexOf('school admin')>=0 || r==='admin' || r.indexOf('coordinator')>=0) return 'admin';
+    return null;   // Super Admin / School Group Admin → account only, no per-school membership
+  }
+  function createInvite(input){
+    input = input || {};
+    var db = getDB();
+    var email = low(input.email);
+    if (!email) return { ok:false, error:'missing-email' };
+    var temp = makeTempPassword();
+    var acct = {
+      email: email, role: input.role || 'Super Admin', school_id: input.school_id || null,
+      tempPassword: temp, password: null, mustReset: true, status: 'invited',
+      invitedBy: low(input.invitedBy) || null, createdAt: Date.now(), activatedAt: null,
+    };
+    db.accounts[email] = acct;
+
+    // Best-effort: give a school-scoped invite the membership its dashboard needs
+    // so first login routes correctly (created schools resolve role via roleOf).
+    var mRole = membershipRoleFor(acct.role);
+    if (acct.school_id && mRole==='admin' && !db.adminMemberships.some(function(m){ return m.user_id===email && m.school_id===acct.school_id; }))
+      db.adminMemberships.push({ user_id:email, school_id:acct.school_id, role:'admin', status:'active' });
+    if (acct.school_id && mRole==='teacher' && !db.teacherMemberships.some(function(m){ return m.user_id===email && m.school_id===acct.school_id; }))
+      db.teacherMemberships.push({ user_id:email, school_id:acct.school_id, section_ids:[], status:'active' });
+
+    write(db);
+    return { ok:true, email:email, tempPassword:temp, role:acct.role, school_id:acct.school_id };
+  }
+  function getAccount(email){ var a = getDB().accounts[low(email)]; return a ? Object.assign({}, a) : null; }
+  function listAccounts(){ var db = getDB(); return Object.keys(db.accounts).map(function(k){ return Object.assign({}, db.accounts[k]); }); }
+  // Validate a sign-in attempt. Returns { ok, mustReset } on success. Only
+  // accounts we minted are enforced here; the loose demo default lives in the
+  // login flow for everyone else.
+  function checkPassword(email, pw){
+    var a = getDB().accounts[low(email)];
+    if (!a) return { ok:false, error:'no-account' };
+    var want = a.mustReset ? a.tempPassword : a.password;
+    if (want == null) return { ok:false, error:'no-password' };
+    if (norm(pw) !== want) return { ok:false, error:'mismatch' };
+    return { ok:true, mustReset:!!a.mustReset, role:a.role, school_id:a.school_id };
+  }
+  // First-login reset (or any later change): store the user's own password and
+  // clear the one-time temp + mustReset flag.
+  function setPassword(email, newPw){
+    var db = getDB();
+    var a = db.accounts[low(email)];
+    if (!a) return { ok:false, error:'no-account' };
+    if (norm(newPw).length < 6) return { ok:false, error:'too-short' };
+    a.password = norm(newPw); a.tempPassword = null; a.mustReset = false;
+    a.status = 'active'; a.activatedAt = a.activatedAt || Date.now();
+    write(db);
+    return { ok:true };
+  }
+
   /* ---------- read helpers the UI needs ---------- */
   function getStudent(schoolId, studentId){ var db=getDB(); var s=db.students[keyOf(schoolId,studentId)]; return s?Object.assign({},s):null; }
   function schoolSettings(schoolNameOrId){ var sc=resolveSchool(schoolNameOrId); return sc?{ claimMethod:sc.claimMethod, verified:sc.verified }:null; }
@@ -653,6 +738,22 @@
       coordinator: (staff.find(function(x){return x.role==='coordinator';})||null) };
   }
   function sectionsForSchool(schoolId){ var db=getDB(); return Object.keys(db.sections).map(function(k){ return db.sections[k]; }).filter(function(s){ return s.school_id===schoolId; }).map(function(s){ return Object.assign({},s); }); }
+  // Resolve a section by grade+section name, creating it (empty, no teacher) if it
+  // doesn't exist. Used by the roster/CSV import so students land under a real
+  // section even for grade/section combos the wizard didn't pre-create.
+  function ensureSection(schoolId, grade, section){
+    var db = getDB(); grade = norm(grade); section = norm(section);
+    var found = Object.keys(db.sections).map(function(k){ return db.sections[k]; })
+      .filter(function(s){ return s.school_id===schoolId && low(s.grade)===low(grade) && low(s.section||'')===low(section); })[0];
+    if (found) return found.section_id;
+    var secId = 'sec_' + schoolId + '_' + slugify(grade + '_' + (section||'na'));
+    if (!db.sections[secId]){
+      db.sections[secId] = { section_id:secId, school_id:schoolId, grade:grade, section:section,
+        name:(grade+' '+(section||'')).trim(), teacherId:null };
+      write(db);
+    }
+    return secId;
+  }
 
   /* ======================================================================
      NEW — ASSESSMENT DEPLOYMENT + COMPLETION  (the end of the flow)
@@ -752,6 +853,12 @@
     inviteAdmin: inviteAdmin,
     inviteTeacher: inviteTeacher,
     acceptInvite: acceptInvite,
+    // Accounts — Platform Admin invitation → temp password → first-login reset
+    createInvite: createInvite,
+    getAccount: getAccount,
+    listAccounts: listAccounts,
+    checkPassword: checkPassword,
+    setPassword: setPassword,
     // reads + config
     getStudent: getStudent,
     schoolSettings: schoolSettings,
@@ -763,6 +870,7 @@
     listSchools: listSchools,
     staffFor: staffFor,
     sectionsForSchool: sectionsForSchool,
+    ensureSection: ensureSection,
     studentsForSchool: studentsForSchool,
     schoolStats: schoolStats,
     // NEW — assessment lifecycle (deploy → complete → stats)
