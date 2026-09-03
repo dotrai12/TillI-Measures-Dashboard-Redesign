@@ -35,6 +35,22 @@
   var email = qp.get('email') || (session && session.email) || 'team@tilli.org';
   var me = { name: 'Tilli Team', email: email, role: 'Super Admin' };
 
+  // ---------- provisioning hierarchy (who can add whom) ----------
+  // Single source of truth for the onboarding flow: set up school → assign
+  // school admin → school admin adds teachers/students → teachers self-join
+  // with the school code and add their own students. Parents are NOT staff —
+  // they only verify a student UID, so they never appear here. This map drives
+  // the helper text in the invite modal and role editor so the hierarchy is
+  // explicit at the moment a role is granted. Keys must match ORG.roles.
+  var ROLE_CAPS = {
+    'Super Admin':        'Full access — sets up schools, assigns admins, and manages every user.',
+    'School Group Admin': 'Manages every school in the group — assigns school admins, teachers and students.',
+    'School Admin':       'Adds teachers and students, and shares the school join code so teachers can self-add.',
+    'Teacher':            'Joins with the school code and adds their own students. Cannot invite other staff.',
+    'none':               'No access yet — assign a role before this person can sign in.'
+  };
+  function roleCap(role) { return ROLE_CAPS[role] || ''; }
+
   // ---------- small utils ----------
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
   function initials(name) { return String(name || '').trim().split(/\s+/).map(function (w) { return w[0] || ''; }).slice(0, 2).join(''); }
@@ -205,7 +221,8 @@
     root.innerHTML = '<div class="overlay" id="tl-ov"><div class="tl-modal-card">' +
       '<div class="tl-modal-h"><h3>' + esc(opts.title) + '</h3><button class="dialog-close" id="tl-mx" aria-label="Close">×</button></div>' +
       '<div class="tl-confirm-body">' + (opts.body || '') + '</div>' +
-      (token ? '<label class="field" style="margin-top:14px">Type <b>' + esc(token) + '</b> to confirm<input class="input" id="tl-confirm-in" autocomplete="off" placeholder="' + esc(token) + '"></label>' : '') +
+      (token ? '<label class="field" style="margin-top:14px">Type <b>' + esc(token) + '</b> to confirm<input class="input" id="tl-confirm-in" autocomplete="off" placeholder="' + esc(token) + '"></label>' +
+        '<p id="tl-confirm-err" style="display:none;margin:6px 2px 0;color:var(--orange-500);font-size:13px;font-weight:600">Text doesn\'t match — type <b>' + esc(token) + '</b> exactly to continue.</p>' : '') +
       '<div class="tl-modal-foot">' +
         '<button class="btn btn-outline btn-sm" id="tl-cancel">Cancel</button>' +
         '<button class="btn ' + (opts.danger ? 'btn-danger' : 'btn-primary') + ' btn-sm" id="tl-ok"' + (token ? ' disabled' : '') + '>' + esc(opts.confirmLabel || 'Confirm') + '</button>' +
@@ -216,7 +233,22 @@
     document.getElementById('tl-mx').addEventListener('click', close);
     document.getElementById('tl-cancel').addEventListener('click', close);
     var ok = document.getElementById('tl-ok');
-    if (token) { var inp = document.getElementById('tl-confirm-in'); inp.focus(); inp.addEventListener('input', function () { ok.disabled = inp.value.trim().toUpperCase() !== token.toUpperCase(); }); }
+    if (token) {
+      var inp = document.getElementById('tl-confirm-in');
+      var err = document.getElementById('tl-confirm-err');
+      inp.focus();
+      // Error shows only once something's typed and it's still wrong; clears the
+      // moment it matches (or the field is emptied) so it never nags a blank box.
+      function sync() {
+        var val = inp.value.trim();
+        var match = val.toUpperCase() === token.toUpperCase();
+        ok.disabled = !match;
+        var showErr = val.length > 0 && !match;
+        err.style.display = showErr ? 'block' : 'none';
+        inp.classList.toggle('err', showErr);
+      }
+      inp.addEventListener('input', sync);
+    }
     ok.addEventListener('click', function () { close(); onOk(); });
   }
 
@@ -327,10 +359,10 @@
 
     body.innerHTML =
       screenHead('Control Room', 'What needs the team\'s attention right now.',
-        '<button class="btn btn-outline btn-sm" data-qa="school">+ Add School</button>' +
+        '<button class="btn btn-primary btn-sm" data-qa="school">+ Add School</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="invite">+ Invite User</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="deployment">+ Deployment</button>' +
-        '<button class="btn btn-primary btn-sm" data-qa="template">+ Template</button>') +
+        '<button class="btn btn-outline btn-sm" data-qa="template">+ Template</button>') +
       (anyQueue ? '' : '<div class="tl-allclear">Nothing needs your attention right now. 🌱</div>') +
       '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Needs attention</h3><p class="tl-mod-note">Each card links to the pre-filtered list that produced it.</p></div></div>' +
         '<div class="tl-queue-grid">' + cards + '</div></div>' +
@@ -795,7 +827,7 @@
 
     function bodyAdmin() {
       return '<div class="ws-optional-note"><span class="pill">Optional</span><span>Invite the first admin now, or skip and add people later from the school hub.</span></div>' +
-        '<p class="tl-muted">If you invite them, they\'ll get an activation email and can manage their own staff.</p>' +
+        '<p class="tl-muted">If you invite them, they\'ll get an activation email and can add teachers and students themselves. Teachers can also self-join later with the school code from the Staff tab.</p>' +
         '<div class="tl-stack">' +
           '<label class="field">Admin name<input class="input" id="ws-admin-name" placeholder="e.g. Meera Krishnan" value="' + esc(d.admin.name) + '"></label>' +
           '<label class="field">Admin email<input class="input" id="ws-admin-email" type="email" placeholder="name@school.edu" value="' + esc(d.admin.email) + '"></label>' +
@@ -820,6 +852,18 @@
 
     var BODIES = [bodyProfile, bodyRollout, bodyStructure, bodyAdmin, bodyReview];
 
+    // Whether the current step is missing required input (school name is the
+    // only hard requirement in the wizard). Gates the Next/Create button so you
+    // can't advance past step 1 with an empty name.
+    function stepBlocked() {
+      if (step === 0) return !d.name;              // school name is mandatory
+      if (step === 2) return !d.grades.length;     // at least one grade is mandatory
+      return false;
+    }
+    // Refresh the footer button's enabled state without re-rendering the whole
+    // step (grades/name update the body in place).
+    function syncNext() { var nb = document.getElementById('ws-next'); if (nb) nb.disabled = stepBlocked(); }
+
     function render() {
       var last = step === WIZ_STEPS.length - 1;
       root.innerHTML = '<div class="overlay" id="tl-ov"><div class="tl-modal-card">' +
@@ -828,7 +872,7 @@
         '<div id="ws-body">' + BODIES[step]() + '</div>' +
         '<div class="tl-modal-foot" style="justify-content:space-between">' +
           '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
-          '<button class="btn btn-primary btn-sm" id="ws-next" type="button">' + (last ? 'Create school' : 'Next') + '</button>' +
+          '<button class="btn btn-primary btn-sm" id="ws-next" type="button"' + (stepBlocked() ? ' disabled' : '') + '>' + (last ? 'Create school' : 'Next') + '</button>' +
         '</div></div></div>';
 
       var ov = document.getElementById('tl-ov');
@@ -841,6 +885,13 @@
 
     function wireStep() {
       if (step === 0) {
+        // Keep the Next button in sync with the name field as you type, so the
+        // gate lifts the moment a name is present (and re-locks if cleared).
+        var nameEl = document.getElementById('ws-name');
+        nameEl.addEventListener('input', function () {
+          d.name = nameEl.value.trim();
+          syncNext();
+        });
         // Country drives the city list — reset city and repopulate on change.
         var country = document.getElementById('ws-country');
         var cityEl = document.getElementById('ws-city');
@@ -918,11 +969,12 @@
       sortGrades(d.grades);
       rerenderStructure();
     }
-    function rerenderStructure() { document.getElementById('ws-body').innerHTML = bodyStructure(); wireStep(); }
+    function rerenderStructure() { document.getElementById('ws-body').innerHTML = bodyStructure(); wireStep(); syncNext(); }
 
     function onNext() {
       commit();
       if (step === 0 && !d.name) { toast('School name is required.'); return; }
+      if (step === 2 && !d.grades.length) { toast('Add at least one grade.'); return; }
       if (step === 3 && d.admin.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.admin.email)) { toast('Enter a valid admin email.'); return; }
       if (step < WIZ_STEPS.length - 1) { step++; render(); return; }
       // Final step → show a brief "creating" transition, then commit and land
@@ -975,7 +1027,8 @@
         '<p class="tl-screen-sub" style="margin:0">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + ' · ' + esc(s.city + ', ' + s.country) + '</p></div>' +
         '<div class="tl-hub-actions"><button class="btn btn-outline btn-sm" data-hub-edit>Edit</button>' +
           '<button class="btn btn-outline btn-sm" data-hub-archive>' + (s.archived ? 'Un-archive' : 'Archive') + '</button>' +
-          (s.live ? '<a class="btn btn-primary btn-sm" href="admin.html?school=' + encodeURIComponent(s.name) + '&email=' + encodeURIComponent(me.email) + '&from=tilli" style="text-decoration:none">Leadership dashboard →</a>' : '') + '</div>' +
+          (s.archived ? '<button class="btn btn-danger btn-sm" data-hub-delete>Delete</button>' : '') +
+          (s.live ? '<a class="btn btn-primary btn-sm" href="admin.html?school=' + encodeURIComponent(s.created ? s.id : s.name) + '&email=' + encodeURIComponent(s.created && s.coordinator ? s.coordinator.email : me.email) + '&from=tilli" style="text-decoration:none">Leadership dashboard →</a>' : '') + '</div>' +
       '</div>' +
       '<div class="tl-kpis five" style="margin-top:14px">' +
         kpi(s.gradeCount, 'Grades') + kpi(s.sectionCount, 'Sections') + kpi(s.students.toLocaleString(), 'Students') +
@@ -1015,7 +1068,17 @@
     wireCrumbs(body);
     body.querySelector('[data-hub-edit]').addEventListener('click', function () { openSchoolEditor(s); });
     body.querySelector('[data-hub-archive]').addEventListener('click', function () { archiveSchool(s); });
+    var delBtn = body.querySelector('[data-hub-delete]');
+    if (delBtn) delBtn.addEventListener('click', function () { deleteSchool(s); });
   };
+
+  function deleteSchool(s) {
+    if (!s.archived) { toast('Archive the school before deleting it.'); return; }
+    gated({ title: 'Delete ' + s.name, danger: true, typed: 'DELETE',
+      body: '<p>This <b>permanently removes</b> ' + esc(s.name) + ', its staff accounts and pending invitations. This cannot be undone.</p>',
+      confirmLabel: 'Delete school', audit: { action: 'school.delete', entity: s.name, entityType: 'school', schoolId: s.id },
+      onConfirm: function () { ORG.server.deleteSchool(s.id); toast(s.name + ' deleted.'); go('schools', {}); } });
+  }
 
   function archiveSchool(s) {
     if (s.archived) { gated({ title: 'Un-archive ' + s.name, body: '<p>Restore this school to the active list and its deployments/master links.</p>', confirmLabel: 'Un-archive', audit: { action: 'school.archive', entity: s.name, entityType: 'school', schoolId: s.id }, onConfirm: function () { s.archived = false; toast(s.name + ' restored.'); go('school', { id: s.id }); } }); return; }
@@ -1064,6 +1127,8 @@
     var s = d.school;
     var roster = s.id === 'little-sprouts' && TS ? TS.students.map(function (st) {
       return { name: st.first + ' ' + st.last, admission: st.adm, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
+    }) : (s.created && window.TilliAPI) ? window.TilliAPI.studentsForSchool(s.id).map(function (st) {
+      return { name: st.name, admission: st.student_id, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
     }) : [];
     var rows = roster.length ? roster.map(function (r) {
       return '<tr><td class="name"><button class="link-btn" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
@@ -1097,11 +1162,48 @@
         '<td style="text-align:right"><button class="link-btn" data-resend="' + esc(i.email) + '">Resend</button> <button class="link-btn danger" data-revoke="' + esc(i.email) + '">Revoke</button></td></tr>';
     }).join('') : '<tr><td colspan="5"><div class="tl-empty">No invitations.</div></td></tr>';
 
-    el.innerHTML = '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Staff at this school</h3></div><button class="btn btn-outline btn-sm" data-invite>+ Invite to this school</button></div>' +
+    // Teacher self-join: a teacher who enters this school code is auto-added
+    // as staff — no per-teacher invite needed. School Admins share it; the
+    // explicit invite above stays available for named onboarding.
+    var teacherJoin = (s.created && s.joinCode) ? s.joinCode : s.code;
+    var joinCode = '<div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Teacher join code</h3>' +
+        '<p class="tl-mod-note">Share with teachers — anyone who enters this code is auto-added to ' + esc(s.name) + ' as a Teacher. No invite required.</p></div></div>' +
+      '<div class="tl-linkrow"><div><b>School code</b><span class="mono">' + esc(teacherJoin) + '</span></div>' +
+        '<button class="btn btn-outline btn-sm" data-copy="' + esc(teacherJoin) + '">Copy code</button></div></div>';
+
+    // Demo access panel — the exact logins + codes needed to click through the
+    // whole flow (coordinator → teacher → parent) for a created school.
+    var codesCard = '';
+    if (s.created && window.TilliAPI) {
+      var teachers = (d.staff_users || []).filter(function (u) { return u.role === 'Teacher'; });
+      var tRows = teachers.map(function (u) {
+        return '<div class="ws-rev-row"><span>Teacher · ' + esc((u.sections || []).join(', ') || '—') + '</span><b class="mono">' + esc(u.email) + '</b></div>';
+      }).join('');
+      var claims = (s.claimSamples || window.TilliAPI.studentsForSchool(s.id).slice(0, 6).map(function (st) {
+        return { adm: st.student_id, name: st.name, grade: st.grade, section: st.section, claimCode: st.claimCode };
+      }));
+      var cRows = claims.map(function (c) {
+        return '<div class="ws-rev-row"><span>' + esc(c.name) + ' · ' + esc(c.grade + ' ' + c.section) + ' · adm ' + esc(c.adm) + '</span><b class="mono">' + esc(c.claimCode) + '</b></div>';
+      }).join('');
+      codesCard = '<div class="tl-card" style="margin-bottom:var(--tl-gap)"><div class="tl-mod-h"><div>' +
+          '<h3 class="tl-mod-title">Demo access & codes</h3>' +
+          '<p class="tl-mod-note">Everything you need to log in as each role for this school (all mock / localStorage). Claim method: <b>code</b>.</p></div></div>' +
+        '<div class="ws-review">' +
+          '<div class="ws-rev-row"><span><b>Coordinator login</b> (School dashboard)</span><b class="mono">' + esc(s.coordinator ? s.coordinator.email : '—') + '</b></div>' +
+          '<div class="ws-rev-row"><span><b>Teacher join code</b></span><b class="mono">' + esc(teacherJoin) + '</b></div>' +
+          tRows +
+          '<div class="ws-rev-row" style="border-top:1px solid var(--surface-200);margin-top:6px;padding-top:10px"><span><b>Parent claim codes</b> (school = this school, then the code)</span><b></b></div>' +
+          cRows +
+        '</div></div>';
+    }
+
+    el.innerHTML = codesCard + joinCode +
+      '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Staff at this school</h3></div><button class="btn btn-outline btn-sm" data-invite>+ Invite to this school</button></div>' +
         '<div class="tl-tablewrap"><table class="tl-table" style="min-width:640px"><thead><tr><th>User</th><th>Role</th><th>Sections</th><th></th></tr></thead><tbody>' + staffRows + '</tbody></table></div></div>' +
       '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><h3 class="tl-mod-title">Invitations</h3></div>' +
         '<div class="tl-tablewrap"><table class="tl-table" style="min-width:640px"><thead><tr><th>Recipient</th><th>Role</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody>' + invRows + '</tbody></table></div></div>';
     el.querySelector('[data-invite]').addEventListener('click', function () { openInvite(s.id); });
+    el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy, 'School code copied.'); }); });
     el.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation', s.id); toast('Invitation resent to ' + b.dataset.resend + '.'); }); });
     el.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation', schoolId: s.id }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
     el.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('school', { id: s.id, tab: 'staff' }); }); }); });
@@ -1221,6 +1323,18 @@
         });
       });
       byS[phase] = { start: '', end: '', sched: { school: '', home: '' }, deployed: false, byId: byId, order: order };
+      // Hydrate from the shared store so a created school's deployed phases
+      // survive a reload (the planner's own state is in-session only).
+      if (s.created && window.TilliAPI) {
+        var deps = window.TilliAPI.getDeployments(s.id).filter(function (x) { return x.phase === phase; });
+        if (deps.length) {
+          var rec = byS[phase];
+          rec.deployed = true;
+          if (deps[0].start) rec.start = deps[0].start;
+          if (deps[0].end) rec.end = deps[0].end;
+          deps.forEach(function (dep) { (dep.assessments || []).forEach(function (a) { if (rec.byId[a.id]) rec.byId[a.id].live = true; }); });
+        }
+      }
     }
     return byS[phase];
   }
@@ -1237,6 +1351,32 @@
     return true;
   }
 
+  // Persist a phase's running assessments into the shared TilliAPI store, per
+  // audience, so the teacher & parent apps surface exactly what's deployed here.
+  // Only created schools have a real roster in that store.
+  var TL_AUD_LABEL = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct Assessment' };
+  function tlPersistDeploy(s, phase) {
+    if (!(s.created && window.TilliAPI)) return;
+    var p = tlPlan(s, phase), running = p.order.school.concat(p.order.home), byAud = {};
+    running.forEach(function (id) { var it = p.byId[id]; (byAud[it.aud] = byAud[it.aud] || []).push({ id: it.id, name: it.name }); });
+    Object.keys(TL_AUD_LABEL).forEach(function (k) {
+      if (byAud[k] && byAud[k].length) window.TilliAPI.deployPhase(s.id, phase, TL_AUD_LABEL[k], { start: p.start, end: p.end, window: p.start + ' → ' + p.end, assessments: byAud[k] });
+      else window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]);
+    });
+  }
+  function tlPersistUndeploy(s, phase) {
+    if (!(s.created && window.TilliAPI)) return;
+    Object.keys(TL_AUD_LABEL).forEach(function (k) { window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]); });
+  }
+  // Aggregate real completion for a deployed phase across all audiences.
+  function tlPhaseCompletion(s, phase) {
+    if (!(s.created && window.TilliAPI)) return null;
+    var ids = window.TilliAPI.studentsForSchool(s.id).map(function (x) { return x.student_id; });
+    var done = 0, exp = 0;
+    Object.keys(TL_AUD_LABEL).forEach(function (k) { var c = window.TilliAPI.completionStats(s.id, phase, TL_AUD_LABEL[k], ids); done += c.done; exp += c.expected; });
+    return exp ? Math.round(done * 100 / exp) : 0;
+  }
+
   function planPhaseCard(s, phase) {
     var p = tlPlan(s, phase);
     var running = p.order.school.length + p.order.home.length, parked = p.order.off.length;
@@ -1248,10 +1388,12 @@
     var statusPill = p.deployed
       ? '<span class="dep-status is-deployed" title="This phase is live — its assessments have been deployed to the school">● Deployed</span>'
       : '<span class="dep-status is-draft" title="Not yet deployed — configure and hit Deploy phase to send it to the school">○ Not deployed</span>';
+    var comp = p.deployed ? tlPhaseCompletion(s, phase) : null;
+    var compPill = comp != null ? '<span class="dep-phase-sum" title="Live completion across teacher/parent/student assessments">' + comp + '% complete</span>' : '';
     var head = '<div class="dep-phase-head">' +
       '<span class="dep-phase-name">' + esc(phase) + '</span>' +
       statusPill +
-      '<span class="dep-phase-sum">' + running + ' running · ' + parked + ' off</span>' +
+      '<span class="dep-phase-sum">' + running + ' running · ' + parked + ' off</span>' + compPill +
       '<span class="dep-dates">' +
         '<input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '" aria-label="' + esc(phase) + ' start date">' +
         '<span class="dep-date-sep">→</span>' +
@@ -1346,6 +1488,7 @@
             p.deployed = true;
             p.order.school.concat(p.order.home).forEach(function (id) { p.byId[id].live = true; });
             (TL_OVERRIDE[s.id] || (TL_OVERRIDE[s.id] = {}))[phase] = 'inprogress';   // reflect in top timeline
+            tlPersistDeploy(s, phase);   // → teacher/parent apps now see these assessments
             refreshPlanner(d); toast(phase + ' deployed.');
           } });
       });
@@ -1355,6 +1498,7 @@
         var phase = b.dataset.undeploy, p = tlPlan(s, phase);
         p.deployed = false; Object.keys(p.byId).forEach(function (id) { p.byId[id].live = false; });
         var ov = TL_OVERRIDE[s.id]; if (ov) delete ov[phase];
+        tlPersistUndeploy(s, phase);
         refreshPlanner(d); toast(phase + ' returned to draft.');
       });
     });
@@ -1485,11 +1629,13 @@
       '<div class="tl-settings"><button class="btn btn-outline block" data-set="profile">Edit profile</button>' +
       '<button class="btn btn-outline block" data-set="grades">Manage grades / sections</button>' +
       '<button class="btn btn-outline block" data-set="group">Group assignment</button>' +
-      '<button class="btn btn-danger block" data-set="archive">' + (s.archived ? 'Un-archive school' : 'Archive school') + '</button></div>' +
+      '<button class="btn btn-danger block" data-set="archive">' + (s.archived ? 'Un-archive school' : 'Archive school') + '</button>' +
+      (s.archived ? '<button class="btn btn-danger block" data-set="delete">Delete school</button>' : '') + '</div>' +
       '<p class="tl-muted" style="margin-top:12px">As Super Admin you have full access — every action here runs and is written to the audit trail. A role layer can restrict these later.</p></div>';
     el.querySelectorAll('[data-set]').forEach(function (b) { b.addEventListener('click', function () {
       var k = b.dataset.set;
       if (k === 'archive') archiveSchool(s);
+      else if (k === 'delete') deleteSchool(s);
       else if (k === 'grades') openStructureEditor(s);
       else openSchoolEditor(s); // profile + group assignment both live in the school editor
     }); });
@@ -1815,10 +1961,12 @@
 
   function openInvite(schoolId) {
     var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
-    var roleOpts = ORG.roles.filter(function (r) { return r !== 'none'; }).map(function (r) { return '<option value="' + r + '">' + esc(r) + '</option>'; }).join('');
+    var invRoles = ORG.roles.filter(function (r) { return r !== 'none'; });
+    var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '">' + esc(r) + '</option>'; }).join('');
     openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <span class="tl-gated">gated</span></p><div class="tl-stack">' +
       '<label class="field">Recipient email<input class="input" id="iv-email" type="email" placeholder="name@school.edu"></label>' +
-      '<label class="field">Role<select class="select" id="iv-role">' + roleOpts + '</select></label>' +
+      '<label class="field">Role<select class="select" id="iv-role">' + roleOpts + '</select>' +
+        '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(invRoles[0])) + '</span></label>' +
       '<label class="field">School<select class="select" id="iv-school">' + schoolOpts + '</select></label>' +
       '</div>', function (close) {
         var em = (document.getElementById('iv-email').value || '').trim();
@@ -1826,6 +1974,10 @@
         ORG.server.logAudit(me.name, 'invitation.send', em, 'invitation', document.getElementById('iv-school').value || null);
         close(); toast('Invitation sent to ' + em + '.');
       }, 'Send invite');
+    // Reflect what the chosen role can do, live, so the provisioning
+    // hierarchy is visible before the invite goes out.
+    var ivRole = document.getElementById('iv-role'), ivCap = document.getElementById('iv-rolecap');
+    if (ivRole && ivCap) ivRole.addEventListener('change', function () { ivCap.textContent = roleCap(ivRole.value); });
   }
 
   // Issue Reports (spec §8.1) — auto-crash grouped
@@ -2003,7 +2155,7 @@
   function actionLabelG(a) {
     return ({ 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template',
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
-      'school.add': 'Added school', 'school.archive': 'Archived school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'role.change': 'Changed role',
+      'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',
       'observation.publish': 'Published observation phase', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
       'group.create': 'Created group', 'group.rename': 'Renamed group', 'group.delete': 'Deleted group',
@@ -2330,12 +2482,15 @@
   function openRoleEditor(u, after) {
     if (!u) { toast('User not found.'); return; }
     var roleOpts = ORG.roles.map(function (r) { return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + (r === 'none' ? 'No role' : r) + '</option>'; }).join('');
-    openModal('Change role · ' + u.name, '<p class="tl-muted">' + esc(u.email) + '</p><label class="field">Role<select class="select" id="rr-role">' + roleOpts + '</select></label>', function (close) {
+    openModal('Change role · ' + u.name, '<p class="tl-muted">' + esc(u.email) + '</p><label class="field">Role<select class="select" id="rr-role">' + roleOpts + '</select>' +
+      '<span class="tl-rolecap" id="rr-rolecap">' + esc(roleCap(u.role)) + '</span></label>', function (close) {
       var role = document.getElementById('rr-role').value;
       ORG.server.setUserRole(u.email, role);
       ORG.server.logAudit(me.name, 'role.change', u.name + ' → ' + (role === 'none' ? 'No role' : role), 'user', u.schoolId || null);
       close(); toast('Role updated.'); if (after) after();
     }, 'Save');
+    var rrRole = document.getElementById('rr-role'), rrCap = document.getElementById('rr-rolecap');
+    if (rrRole && rrCap) rrRole.addEventListener('change', function () { rrCap.textContent = roleCap(rrRole.value); });
   }
 
   function openStudentEditor(schoolId, adm, after) {
@@ -2439,7 +2594,7 @@
   }
 
   // ---------- clipboard ----------
-  function copy(text) { try { navigator.clipboard.writeText(text).then(function () { toast('Link copied.'); }, function () { toast('Copy failed.'); }); } catch (e) { toast('Copy not supported.'); } }
+  function copy(text, msg) { var ok = msg || 'Link copied.'; try { navigator.clipboard.writeText(text).then(function () { toast(ok); }, function () { toast('Copy failed.'); }); } catch (e) { toast('Copy not supported.'); } }
 
   // ---------- boot ----------
   window.addEventListener('hashchange', render);

@@ -46,6 +46,119 @@
   var toastTimer;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2200); }
 
+  // ========================================================
+  //  CREATED-SCHOOL COORDINATOR VIEW
+  //  A wizard-created school has a real roster in the shared
+  //  TilliAPI store but no SEL outcomes yet (it's fresh). The
+  //  full demo dashboard below assumes ADMIN_DATA/TILLI_SCHOOL,
+  //  so for created schools we render a focused, self-contained
+  //  coordinator surface instead: roster + live assessment
+  //  completion (WHO, not HOW — same governing rule). The whole
+  //  demo dashboard is left untouched for the demo school.
+  // ========================================================
+  var CREATED = (window.TilliAPI && window.TilliAPI.resolveSchool && qp.get('school'))
+    ? window.TilliAPI.resolveSchool(qp.get('school')) : null;
+  if (CREATED && CREATED.source === 'created') { renderCreatedCoordinator(CREATED); return; }
+
+  function renderCreatedCoordinator(school) {
+    var API = window.TilliAPI, id = school.school_id;
+    var AUDS = [{ k: 'Teacher', label: 'Teacher' }, { k: 'Parent', label: 'Parent' }, { k: 'Direct Assessment', label: 'Student' }];
+    var PHASES = ['Baseline', 'Midline', 'Endline'];
+    app.style.display = 'block';
+
+    function draw() {
+      var students = API.studentsForSchool(id);
+      var sections = API.sectionsForSchool(id);
+      var staff = API.staffFor(id);
+      var ids = students.map(function (s) { return s.student_id; });
+      var stats = API.schoolStats(id);
+
+      // per-phase overall + per-audience completion
+      function laneCell(phase, aud) {
+        var c = API.completionStats(id, phase, aud, ids);
+        if (c.status === 'Not deployed') return '<td class="cc-mut">—</td>';
+        var pc = c.pct;
+        return '<td><div class="cc-cell"><span class="cc-pct">' + pc + '%</span>' +
+          '<span class="cc-bar"><i style="width:' + pc + '%"></i></span>' +
+          '<small>' + c.done + '/' + c.expected + '</small></div></td>';
+      }
+      function phaseRow(phase) {
+        var lanes = AUDS.map(function (a) { return API.completionStats(id, phase, a.k, ids); });
+        var live = lanes.filter(function (c) { return c.status !== 'Not deployed'; });
+        var done = live.reduce(function (a, c) { return a + c.done; }, 0);
+        var exp = live.reduce(function (a, c) { return a + c.expected; }, 0);
+        var overall = exp ? Math.round(done * 100 / exp) : null;
+        var tag = !live.length ? '<span class="ad-chip">Not deployed</span>'
+          : live.some(function (c) { return c.status === 'Live'; }) ? '<span class="ad-chip cc-live">Live</span>'
+          : '<span class="ad-chip cc-done">Ended</span>';
+        return '<tr><td><b>' + esc(phase) + '</b> ' + tag + '</td>' +
+          AUDS.map(function (a) { return laneCell(phase, a.k); }).join('') +
+          '<td><b>' + (overall == null ? '—' : overall + '%') + '</b></td></tr>';
+      }
+
+      var rosterRows = students.length ? students.map(function (s) {
+        return '<tr><td class="name">' + esc(s.name) + '</td><td class="mono">' + esc(s.student_id) + '</td>' +
+          '<td>' + esc(s.grade + ' ' + s.section) + '</td><td class="mono">' + esc(s.claimCode) + '</td></tr>';
+      }).join('') : '<tr><td colspan="4"><div class="ad-empty">No students yet.</div></td></tr>';
+
+      var staffRows = staff.map(function (u) {
+        var secName = u.section_id ? (sections.find(function (x) { return x.section_id === u.section_id; }) || {}).name : '';
+        return '<tr><td class="name">' + esc(u.name) + '</td><td>' + (u.role === 'coordinator' ? 'Coordinator' : 'Teacher') + '</td>' +
+          '<td>' + esc(secName || '—') + '</td><td class="mono">' + esc(u.email) + '</td></tr>';
+      }).join('');
+
+      app.innerHTML =
+        '<div class="cc-wrap">' +
+          '<div class="cc-top">' +
+            '<div class="cc-brand"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="cc-div"></span><span class="cc-meas">Measures</span></div>' +
+            '<div class="cc-topr"><span class="ad-chip cc-role">Coordinator · full access</span>' +
+              '<button class="cc-btn" id="cc-refresh" title="Re-read live completion">↻ Refresh</button>' +
+              '<a class="cc-btn" href="index.html">Log out</a></div>' +
+          '</div>' +
+          '<h1 class="ad-screen-title" style="margin:18px 0 2px">' + esc(school.name) + '</h1>' +
+          '<p class="ad-screen-sub" style="margin:0 0 16px">' + esc((school.city || '') + (school.city ? ', ' : '') + (school.country || '')) +
+            ' · <span class="mono">' + esc(school.code || id) + '</span> · Join code <span class="mono">' + esc(school.joinCode || '—') + '</span></p>' +
+          '<div class="ad-grid" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">' +
+            statCard(stats.students, 'Students') + statCard(stats.sections, 'Sections') +
+            statCard(stats.teachers, 'Teachers') + statCard(overallPct(id, ids), 'Overall complete') +
+          '</div>' +
+          card('Assessment implementation', 'Completion by phase and audience — WHO has responded, updated live as teachers and parents finish. Deploy phases from the Platform Admin console.',
+            '<div class="ad-tablewrap"><table class="ad-table cc-table"><thead><tr><th>Phase</th><th>Teacher</th><th>Parent</th><th>Student</th><th>Overall</th></tr></thead><tbody>' +
+            PHASES.map(phaseRow).join('') + '</tbody></table></div>') +
+          card('Roster', stats.students + ' students · claim codes are what parents enter to link their child.',
+            '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Claim code</th></tr></thead><tbody>' + rosterRows + '</tbody></table></div>') +
+          card('Staff', staff.length + ' members', '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Role</th><th>Section</th><th>Email</th></tr></thead><tbody>' + staffRows + '</tbody></table></div>') +
+        '</div>';
+      var rb = document.getElementById('cc-refresh');
+      if (rb) rb.addEventListener('click', function () { draw(); toast('Refreshed.'); });
+    }
+    function statCard(n, lbl) { return '<div class="ad-card" style="padding:16px 18px"><div class="ad-stat"><div class="num">' + esc(String(n)) + '</div><div class="lbl">' + esc(lbl) + '</div></div></div>'; }
+    function overallPct(id, ids) {
+      var done = 0, exp = 0;
+      ['Baseline', 'Midline', 'Endline'].forEach(function (ph) {
+        AUDS.forEach(function (a) { var c = API.completionStats(id, ph, a.k, ids); done += c.done; exp += c.expected; });
+      });
+      return (exp ? Math.round(done * 100 / exp) : 0) + '%';
+    }
+    // minimal styles for this view (scoped by cc- prefix)
+    var st = document.createElement('style');
+    st.textContent = '.cc-wrap{max-width:1000px;margin:0 auto;padding:22px 26px}' +
+      '.cc-top{display:flex;align-items:center;justify-content:space-between;gap:12px}' +
+      '.cc-brand{display:flex;align-items:center;gap:10px}.cc-brand img{height:24px}' +
+      '.cc-div{width:1px;height:20px;background:var(--surface-300,#ddd)}.cc-meas{font-weight:700;color:var(--ink-600,#556)}' +
+      '.cc-topr{display:flex;align-items:center;gap:10px}' +
+      '.cc-btn{border:1px solid var(--surface-300,#ddd);background:#fff;border-radius:10px;padding:7px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;color:var(--ink-700,#334)}' +
+      '.cc-role{background:var(--wash-green,#eafbe3);color:var(--green-700,#3a7d1e)}' +
+      '.cc-live{background:#DDF3D2;color:#3a7d1e}.cc-done{background:#eee;color:#555}' +
+      '.cc-table td,.cc-table th{vertical-align:middle}.cc-mut{color:#aaa}' +
+      '.cc-cell{display:flex;align-items:center;gap:8px}.cc-pct{font-weight:700;min-width:34px}' +
+      '.cc-bar{flex:1;max-width:90px;height:7px;border-radius:5px;background:var(--surface-200,#eee);overflow:hidden}' +
+      '.cc-bar i{display:block;height:100%;background:var(--green-500,#56C02B)}' +
+      '.cc-cell small{color:#888;font-size:11px}';
+    document.head.appendChild(st);
+    draw();
+  }
+
   // ---------- hover info boxes (tooltips) ----------
   // The domain vocabulary this dashboard quietly assumes. Each string is
   // shown in a small dark bubble when its label is hovered/focused, so a

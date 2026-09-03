@@ -15,6 +15,19 @@
     'Riverside Primary', 'Banyan Tree School', 'Marigold Learning Centre',
     'Colombo Kids Academy', 'Kandy Hill School', "St. Mary's Convent",
   ];
+  // Schools created in the Platform Admin wizard live in the shared TilliAPI
+  // store; fold their names into the picker so teachers/parents/coordinators can
+  // select them at login. (De-duped against the demo list above by name.)
+  function schoolNames() {
+    let created = [];
+    if (window.TilliAPI && window.TilliAPI.listSchools) {
+      created = window.TilliAPI.listSchools()
+        .filter((s) => s.source === 'created').map((s) => s.name);
+    }
+    const seen = {}, out = [];
+    created.concat(SCHOOLS).forEach((n) => { const k = n.toLowerCase(); if (!seen[k]) { seen[k] = 1; out.push(n); } });
+    return out;
+  }
   const GRADES = ['Pre-K', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'];
   const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F'];
   // Minimum characters before the school dropdown reveals any matches —
@@ -194,6 +207,26 @@
       return;
     }
     if (state.role === 'teacher') {
+      // A created school (from the wizard) lives in the shared store. Route by
+      // the account's REAL role there: coordinator → admin dashboard, teacher →
+      // teacher dashboard, anyone else with the join code → teacher self-join.
+      const created = (window.TilliAPI && window.TilliAPI.resolveSchool)
+        ? window.TilliAPI.resolveSchool(state.school) : null;
+      if (created && created.source === 'created') {
+        const role = window.TilliAPI.roleOf(state.email, created.school_id);
+        if (role === 'admin') {
+          setSession('coordinator', state.email);
+          window.location.href = 'admin.html?school=' + encodeURIComponent(created.school_id)
+            + '&email=' + encodeURIComponent(state.email) + '&from=login';
+          return;
+        }
+        setSession('teacher', state.email);
+        let turl = 'teacher.html?school=' + encodeURIComponent(created.school_id)
+          + '&email=' + encodeURIComponent(state.email);
+        if (role !== 'teacher' || isNew) turl += '&new=1';   // unknown email → onboard/self-join
+        window.location.href = turl;
+        return;
+      }
       // Leadership email → admin dashboard (never the onboarding flow).
       const a = admin(state.email);
       if (a) {
@@ -380,8 +413,9 @@
     const q = (state.schoolQuery || '').trim().toLowerCase();
     // Only search once the user has typed enough — no full-list-on-focus.
     const enoughChars = q.length >= SCHOOL_MIN_CHARS;
-    const matches = enoughChars ? SCHOOLS.filter((x) => x.toLowerCase().includes(q)) : [];
-    const exactish = SCHOOLS.some((x) => x.toLowerCase() === q);
+    const ALL = schoolNames();
+    const matches = enoughChars ? ALL.filter((x) => x.toLowerCase().includes(q)) : [];
+    const exactish = ALL.some((x) => x.toLowerCase() === q);
     const canContinue = !!(state.school || state.schoolQuery.trim());
     const listItems = matches.map((name) => `
       <button role="option" class="focus school-opt" data-school="${esc(name)}" style="width:100%;text-align:left;border:none;border-radius:8px;padding:11px 13px;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-900);display:flex;align-items:center;gap:10px;background:${state.school === name ? '#F1FFEC' : 'transparent'}">

@@ -212,6 +212,39 @@
   var groupById = function (id) { return GROUPS.find(function (g) { return g.id === id; }) || GROUPS[0]; };
   var activeSchools = function () { return SCHOOLS.filter(function (s) { return !s.archived; }); };
 
+  // ---- Bridge: schools created via the Add-School wizard live in the shared
+  // TilliAPI store (localStorage), so they persist across reloads AND are
+  // visible to the teacher/parent/coordinator apps. Build a portfolio record
+  // from a materialised TilliAPI school so it renders on the hub like any other.
+  function buildOrgRecordFromApi(api) {
+    var st = window.TilliAPI.schoolStats(api.school_id);
+    var grades = st.grades.map(function (g) {
+      return { grade: g.grade, students: 0, sections: g.sections.map(function (sec) { return { name: sec.name, students: sec.students }; }) };
+    });
+    var coord = st.coordinator ? { name: st.coordinator.name, email: st.coordinator.email } : { name: '—', email: '' };
+    return {
+      id: api.school_id, live: true, created: true, code: api.code || api.school_id,
+      name: api.name, type: 'Independent school',
+      city: api.city || '', country: api.country || '', region: api.country || '',
+      board: api.board || 'Other', groupId: 'g-none', groupName: 'No group',
+      students: st.students, staff: st.staff, coordinator: coord,
+      joinCode: api.joinCode || '',
+      joined: 'Sep 2025', stage: 'baseline', status: 'active',
+      sessionsPerWeek: 0, completion: 0, sel: null, cog: null, archived: false,
+      structure: { grades: grades, sections: st.sections },
+      gradeCount: grades.length, sectionCount: st.sections,
+    };
+  }
+  // On load, pull any previously-created schools out of the shared store so the
+  // portfolio survives a reload (the org layer itself has no persistence).
+  function hydrateCreatedSchools() {
+    if (!window.TilliAPI || !window.TilliAPI.listSchools) return;
+    window.TilliAPI.listSchools().forEach(function (api) {
+      if (api.source !== 'created' || byId(api.school_id)) return;
+      SCHOOLS.unshift(buildOrgRecordFromApi(api));
+    });
+  }
+
   // ============================================================
   //  GLOBAL ENTITIES  (mock rows the queues + list screens read)
   // ============================================================
@@ -261,6 +294,17 @@
     return inv;
   }
   var INVITATIONS = buildInvitations();
+
+  // Now that USERS/INVITATIONS exist, fold in any schools created in a previous
+  // session (persisted in the shared TilliAPI store) and mirror their
+  // coordinators into the People roster + invitations list.
+  hydrateCreatedSchools();
+  SCHOOLS.forEach(function (s) {
+    if (!s.created || !s.coordinator || !s.coordinator.email) return;
+    if (!USERS.some(function (u) { return u.email === s.coordinator.email && u.schoolId === s.id; })) {
+      USERS.push({ id: 'u-admin-' + s.id, name: s.coordinator.name, email: s.coordinator.email, role: 'School Admin', schoolId: s.id, sections: [] });
+    }
+  });
 
   // ---- Issue reports (open / investigating / resolved + Auto-Crash burst) ----
   function buildIssues() {
@@ -521,7 +565,7 @@
       'template.publish': 'published template', 'template.create': 'created template',
       'template.duplicate': 'duplicated template', 'template.delete': 'deleted template', 'template.edit': 'edited template',
       'student.merge': 'merged students', 'student.delete': 'deleted students', 'student.add': 'imported students', 'student.edit': 'edited student',
-      'school.add': 'added school', 'school.archive': 'archived school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections',
+      'school.add': 'added school', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections',
       'role.change': 'changed role', 'deployment.create': 'created deployment', 'deployment.end': 'ended deployment',
       'observation.publish': 'published observation phase', 'observation.access': 'changed form access',
       'selfguided.publish': 'published self-guided game', 'selfguided.edit': 'edited self-guided game',
@@ -537,8 +581,44 @@
   }
 
   // Single-school summary (the §4.2 "GET /schools/:id/summary" object).
+  // Created schools compute EVERYTHING from the shared TilliAPI store (real
+  // roster + real deploy/completion), so the platform-admin hub agrees with
+  // what teachers/parents actually did.
+  function createdSchoolSummary(s) {
+    var API = window.TilliAPI, id = s.id;
+    var studentIds = API.studentsForSchool(id).map(function (x) { return x.student_id; });
+    var AUDS = ['Teacher', 'Parent', 'Direct Assessment'];
+    var phaseState = ['Baseline', 'Midline', 'Endline'].map(function (ph) {
+      var lanes = AUDS.map(function (a) { return API.completionStats(id, ph, a, studentIds); })
+                      .filter(function (c) { return c.status !== 'Not deployed'; });
+      if (!lanes.length) return { phase: ph, deployed: false, status: null, window: null, completion: null };
+      var done = lanes.reduce(function (a, c) { return a + c.done; }, 0);
+      var exp = lanes.reduce(function (a, c) { return a + c.expected; }, 0);
+      var anyLive = lanes.some(function (c) { return c.status === 'Live'; });
+      return { phase: ph, deployed: true, status: anyLive ? 'Live' : 'Ended',
+        window: null, completion: exp ? Math.round(done * 100 / exp) : 0 };
+    });
+    var staff = API.staffFor(id);
+    var secs = API.sectionsForSchool(id);
+    var secName = function (secId) { var x = secs.find(function (v) { return v.section_id === secId; }); return x ? x.name : null; };
+    var staff_users = staff.map(function (u) {
+      return { name: u.name, email: u.email, role: u.role === 'coordinator' ? 'School Admin' : 'Teacher',
+        schoolId: id, sections: u.section_id ? [secName(u.section_id)].filter(Boolean) : [] };
+    });
+    return {
+      school: s, structure: s.structure, assessment_progress: phaseState,
+      flags: schoolFlags(s),
+      counts: { students: s.students, staff: s.staff,
+        openIssues: 0, invitations: INVITATIONS.filter(function (i) { return i.schoolId === id; }).length,
+        deployments: API.getDeployments(id).length, deletions: 0 },
+      staff_users: staff_users,
+      invitations: INVITATIONS.filter(function (i) { return i.schoolId === id; }),
+      issues: [], deployments: [], deletions: [], duplicates: [],
+    };
+  }
   function schoolSummary(id) {
     var s = byId(id); if (!s) return null;
+    if (s.created && window.TilliAPI) return createdSchoolSummary(s);
     var deps = DEPLOYMENTS.filter(function (d) { return d.schoolId === id; });
     var phaseState = ['Baseline', 'Midline', 'Endline'].map(function (ph) {
       var d = deps.filter(function (x) { return x.phase === ph; }).sort(function (a, b) { return (b.status === 'Live') - (a.status === 'Live'); })[0];
@@ -599,6 +679,35 @@
   }
   function createSchool(input) {
     input = input || {};
+
+    // Preferred path: materialise a REAL school (roster + claim codes + a
+    // teacher per section + a coordinator + join code) in the shared TilliAPI
+    // store, so the teacher/parent/coordinator apps can all consume it. Falls
+    // back to the old in-memory-only record if TilliAPI isn't present.
+    if (window.TilliAPI && window.TilliAPI.createSchoolFull) {
+      var res = window.TilliAPI.createSchoolFull({
+        name: input.name, board: input.board, city: input.city, country: input.country,
+        grades: input.grades, admin: input.admin,
+      });
+      if (res && res.ok) {
+        var api = window.TilliAPI.resolveSchool(res.school_id);
+        var s = buildOrgRecordFromApi(api);
+        var group = GROUPS.find(function (g) { return g.id === input.groupId; }) || GROUPS[0];
+        s.groupId = group.id; s.groupName = group.name;
+        if (input.stage) s.stage = input.stage;
+        if (input.joined) s.joined = input.joined;
+        s.claimSamples = res.claimSamples;   // stashed for the runbook panel on the hub
+        SCHOOLS.unshift(s);
+        USERS.push({ id: 'u-admin-' + s.id, name: res.coordinator.name, email: res.coordinator.email,
+          role: 'School Admin', schoolId: s.id, sections: [] });
+        INVITATIONS.unshift({ id: 'inv-' + s.id, name: res.coordinator.name, email: res.coordinator.email,
+          role: 'School Admin', schoolId: s.id, status: 'Account Created',
+          delivery: 'Email sent', created: iso(TODAY), expires: iso(addDays(14)) });
+        return s;
+      }
+    }
+
+    // ---- fallback: original in-memory record (no shared store) ----
     var name = String(input.name || '').trim();
     var slugBase = normName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'school';
     var id = slugBase, n = 1;
@@ -689,6 +798,18 @@
     SCHOOLS.forEach(function (s) { if (s.groupId === id) { s.groupId = 'g-none'; s.groupName = 'No group'; } });
     var i = GROUPS.findIndex(function (g) { return g.id === id; }); if (i >= 0) GROUPS.splice(i, 1);
   }
+  // Permanently remove a school. Guarded: only an already-archived school can
+  // be deleted, so this can never fire on a live one. Also strips its users and
+  // invitations so no orphan roster rows linger.
+  function deleteSchool(id) {
+    var i = SCHOOLS.findIndex(function (s) { return s.id === id; });
+    if (i < 0) return false;
+    if (!SCHOOLS[i].archived) return false;   // must archive first
+    SCHOOLS.splice(i, 1);
+    for (var u = USERS.length - 1; u >= 0; u--) { if (USERS[u].schoolId === id) USERS.splice(u, 1); }
+    for (var v = INVITATIONS.length - 1; v >= 0; v--) { if (INVITATIONS[v].schoolId === id) INVITATIONS.splice(v, 1); }
+    return true;
+  }
   function updateSchool(id, patch) {
     var s = byId(id); if (!s) return null;
     ['name', 'type', 'city', 'country', 'region'].forEach(function (k) { if (patch[k] != null) s[k] = patch[k]; });
@@ -761,7 +882,7 @@
       setObsAccessAll: setObsAccessAll, obsAccessCount: obsAccessCount,
       // Super-Admin edits
       updateTemplate: updateTemplate, renameGroup: renameGroup, deleteGroup: deleteGroup,
-      updateSchool: updateSchool, setUserRole: setUserRole,
+      updateSchool: updateSchool, deleteSchool: deleteSchool, setUserRole: setUserRole,
       addSection: addSection, addGrade: addGrade, updateGame: updateGame,
     },
   };

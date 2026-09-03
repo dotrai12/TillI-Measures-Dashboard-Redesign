@@ -28,7 +28,7 @@
   'use strict';
 
   var STORE_KEY   = 'tilliMeasures.api.v1';
-  var SEED_VER    = 3;                 // bump to force a re-seed after data-shape changes
+  var SEED_VER    = 4;                 // bump to force a re-seed after data-shape changes
 
   // Claim-flow tuning (spec §5 B2: rate-limit + lock).
   var MAX_ATTEMPTS = 5;                // lock after this many wrong second-factors
@@ -83,6 +83,18 @@
       attempts: {},           // keyOf() -> { count, lockedUntil }
       reviewQueue: [],        // near-match flags awaiting Admin (spec A4 / §9.2)
       invites: [],            // { token, school_id, email, role, section_ids[], used }
+      // ---- NEW (cross-app assessment lifecycle) ----
+      // deployments[school_id]['<phase>|<audience>'] = { phase, audience,
+      //   deployed, status:'Live'|'Ended', window, assessments:[{id,name}],
+      //   deployedAt, endedAt }.  Written by Platform Admin's planner; READ by
+      //   the teacher + parent apps to know what to surface.
+      deployments: {},
+      // completions[school_id]['<phase>|<audience>|<studentId>|<assessId>'] =
+      //   { by, at }.  Written when a teacher/parent/student finishes one item;
+      //   the source of truth for every completion % across all four apps.
+      completions: {},
+      staff: {},              // school_id -> [{ name, email, role:'coordinator'|'teacher', section_id }]  (display names)
+      createdSchools: [],     // ids of schools made via createSchoolFull (portfolio hydration)
     };
   }
   function read(){
@@ -514,6 +526,205 @@
   function schoolSettings(schoolNameOrId){ var sc=resolveSchool(schoolNameOrId); return sc?{ claimMethod:sc.claimMethod, verified:sc.verified }:null; }
   function reviewQueue(actorEmail, schoolId){ var db=getDB(); if(roleOf(db,actorEmail,schoolId)!=='admin') return []; return db.reviewQueue.filter(function(f){return f.school_id===schoolId;}); }
 
+  /* ======================================================================
+     NEW — FULL SCHOOL MATERIALIZATION  (Platform Admin "Add school")
+     ----------------------------------------------------------------------
+     The Add-School wizard captures grade/section *counts* only. To let the
+     teacher & parent apps actually run assessments, a created school needs a
+     real roster: named students with admission numbers + claim codes, one
+     teacher per section, and a coordinator. We generate that deterministically
+     (stable across reloads via a per-school seeded RNG) and write it straight
+     into the shared DB so every other app can consume it.
+     ====================================================================== */
+  function slugify(s){ return low(s).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'school'; }
+  // Deterministic per-school RNG so the same wizard input always yields the
+  // same roster (names/adm numbers) — no surprises on reload.
+  function schoolRng(seedStr){ var s = hashStr(seedStr) || 1; return function(){ s = (Math.imul(s,1664525) + 1013904223) >>> 0; return s/4294967296; }; }
+  function makeJoinCode(schoolId){
+    var abc='ABCDEFGHJKMNPQRSTUVWXYZ23456789', h=seeded(schoolId,'join'), out='';
+    for(var i=0;i<6;i++){ out+=abc[h%abc.length]; h=Math.floor(h/abc.length) ^ (h<<3); h>>>=0; }
+    return out;
+  }
+
+  // input: { name, board, city, country, grades:[{grade, students, sections:[{name,students}]}],
+  //          admin:{name,email} }  (shape produced by the wizard's draft object)
+  // Returns a runbook-friendly summary (codes the user needs to click through).
+  function createSchoolFull(input){
+    input = input || {};
+    var db = getDB();
+    var name = norm(input.name) || 'New School';
+    var baseId = slugify(name), id = baseId, n = 1;
+    while (db.schools[id]) { id = baseId + '-' + (++n); }
+    var R = schoolRng(id);
+
+    var code = (up(name).replace(/[^A-Z]/g,'').slice(0,4) || 'SCHL');
+    while (code.length < 4) code += 'X';
+    code = code + '-' + (1000 + Math.floor(R()*9000));
+    var joinCode = makeJoinCode(id);
+
+    db.schools[id] = {
+      school_id:id, name:name, board:input.board||'CBSE',
+      city:input.city||'', country:input.country||'',
+      verified:true, status:'active', claimMethod:'code',
+      joinCode:joinCode, code:code, source:'created', createdAt:Date.now(),
+    };
+    db.staff[id] = [];
+
+    // Coordinator (school admin) — from the wizard, or generated.
+    var coordEmail = low(input.admin && input.admin.email) || ('coordinator@' + baseId + '.edu');
+    var coordName  = norm(input.admin && input.admin.name) || 'School Coordinator';
+    db.adminMemberships.push({ user_id:coordEmail, school_id:id, role:'admin', name:coordName, status:'active' });
+    db.staff[id].push({ name:coordName, email:coordEmail, role:'coordinator', section_id:null });
+
+    // Normalise grades: a grade with no explicit sections but a count becomes
+    // one section 'A' carrying that count.
+    var grades = (input.grades||[]).map(function(g){
+      var secs = (g.sections||[]).slice();
+      if (!secs.length && (parseInt(g.students,10)||0) > 0) secs = [{ name:'A', students:parseInt(g.students,10)||0 }];
+      return { grade:g.grade, sections:secs };
+    }).filter(function(g){ return g.grade && g.sections.length; });
+
+    var teachers = [];
+    grades.forEach(function(g){
+      g.sections.forEach(function(sec){
+        var secId = 'sec_' + id + '_' + slugify(g.grade + '_' + sec.name);
+        // Sections are created WITHOUT a teacher. Teachers don't exist until a
+        // Tilli/school admin invites one (inviteTeacher) or a teacher self-joins
+        // with the school code (resolveJoinCode → ensureTeacherScope). The old
+        // "one teacher per section" auto-seed was removed per product rule.
+        db.sections[secId] = { section_id:secId, school_id:id, grade:g.grade, section:sec.name,
+          name:(g.grade+' '+sec.name).trim(), teacherId:null };
+
+        // Students are NOT seeded here either — the section is created empty so
+        // the coordinator can add students via the roster / CSV flow and
+        // experience the real onboarding. The wizard's per-section count only
+        // sizes the section for planning; it doesn't fabricate placeholder rows.
+      });
+    });
+
+    db.deployments[id] = {};
+    db.completions[id] = {};
+    if (db.createdSchools.indexOf(id) < 0) db.createdSchools.push(id);
+    write(db);
+
+    // A few claim samples for the runbook (first student of each section).
+    var claimSamples = Object.keys(db.students).map(function(k){ return db.students[k]; })
+      .filter(function(s){ return s.school_id===id; }).slice(0,6)
+      .map(function(s){ return { adm:s.student_id, name:s.name, grade:s.grade, section:s.section, claimCode:s.claimCode }; });
+
+    return { ok:true, school_id:id, name:name, code:code, joinCode:joinCode,
+      claimMethod:'code',
+      coordinator:{ name:coordName, email:coordEmail },
+      teachers:teachers,
+      studentCount:Object.keys(db.students).filter(function(k){ return db.students[k].school_id===id; }).length,
+      claimSamples:claimSamples };
+  }
+
+  // Teacher self-join by the school join code (spec: teacher enters code, is
+  // added as staff). Returns the school so the app can route to it. Section
+  // scope is granted separately (ensureTeacherScope) when they pick a class.
+  function resolveJoinCode(codeStr){
+    var db = getDB(); var q = up(codeStr);
+    var ids = Object.keys(db.schools);
+    for (var i=0;i<ids.length;i++){ if (up(db.schools[ids[i]].joinCode||'')===q) return Object.assign({}, db.schools[ids[i]]); }
+    return null;
+  }
+  function listSchools(){ var db=getDB(); return Object.keys(db.schools).map(function(k){ return Object.assign({}, db.schools[k]); }); }
+  function staffFor(schoolId){ var db=getDB(); return (db.staff[schoolId]||[]).slice(); }
+  // Unscoped roster for portfolio / coordinator DISPLAY (not a security path —
+  // parent claim + teacher scope still go through the guarded functions above).
+  function studentsForSchool(schoolId, opts){ var db=getDB(); opts=opts||{};
+    return Object.keys(db.students).map(function(k){ return db.students[k]; })
+      .filter(function(s){ return s.school_id===schoolId && (opts.includeLeft || s.status!=='left'); })
+      .map(function(s){ return Object.assign({}, s); }); }
+  // Grade/section structure + counts, for the org portfolio hub.
+  function schoolStats(schoolId){
+    var secs = sectionsForSchool(schoolId);
+    var studs = studentsForSchool(schoolId);
+    var byGrade = {};
+    secs.forEach(function(sec){
+      (byGrade[sec.grade] = byGrade[sec.grade] || []).push({ name:sec.section, id:sec.section_id,
+        students: studs.filter(function(s){ return s.section_id===sec.section_id; }).length });
+    });
+    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, sections:byGrade[g] }; });
+    var staff = staffFor(schoolId);
+    return { students:studs.length, sections:secs.length, grades:grades,
+      staff:staff.length, teachers:staff.filter(function(x){return x.role==='teacher';}).length,
+      coordinator: (staff.find(function(x){return x.role==='coordinator';})||null) };
+  }
+  function sectionsForSchool(schoolId){ var db=getDB(); return Object.keys(db.sections).map(function(k){ return db.sections[k]; }).filter(function(s){ return s.school_id===schoolId; }).map(function(s){ return Object.assign({},s); }); }
+
+  /* ======================================================================
+     NEW — ASSESSMENT DEPLOYMENT + COMPLETION  (the end of the flow)
+     ====================================================================== */
+  function depKey(phase, audience){ return phase + '|' + audience; }
+  function compKey(phase, audience, studentId, assessId){ return phase + '|' + audience + '|' + up(studentId) + '|' + assessId; }
+
+  // Platform Admin deploys one phase/audience lane (Baseline|Teacher, etc.).
+  function deployPhase(schoolId, phase, audience, opts){
+    var db = getDB(); opts = opts||{};
+    if (!db.deployments[schoolId]) db.deployments[schoolId] = {};
+    var k = depKey(phase, audience);
+    db.deployments[schoolId][k] = {
+      phase:phase, audience:audience, deployed:true, status:'Live',
+      window:opts.window||'', start:opts.start||'', end:opts.end||'',
+      assessments:(opts.assessments||[]).slice(),
+      deployedAt:Date.now(), endedAt:null,
+    };
+    write(db);
+    return Object.assign({}, db.deployments[schoolId][k]);
+  }
+  function endPhase(schoolId, phase, audience){
+    var db = getDB(); var k = depKey(phase, audience);
+    var d = db.deployments[schoolId] && db.deployments[schoolId][k];
+    if (!d) return null;
+    d.status = 'Ended'; d.endedAt = Date.now(); write(db);
+    return Object.assign({}, d);
+  }
+  function undeployPhase(schoolId, phase, audience){
+    var db = getDB(); var k = depKey(phase, audience);
+    if (db.deployments[schoolId]) { delete db.deployments[schoolId][k]; write(db); }
+    return true;
+  }
+  function getDeployments(schoolId){
+    var db = getDB(); var m = db.deployments[schoolId]||{};
+    return Object.keys(m).map(function(k){ return Object.assign({}, m[k]); });
+  }
+  // What a teacher/parent should see: live (or ended) lanes for their audience.
+  function deploymentsFor(schoolId, audience, opts){
+    opts = opts||{};
+    return getDeployments(schoolId).filter(function(d){
+      return d.audience===audience && (opts.includeEnded ? true : d.status==='Live');
+    });
+  }
+
+  // A teacher/parent/student finishes one assessment item for one student.
+  function markComplete(schoolId, phase, audience, studentId, assessId, byEmail){
+    var db = getDB();
+    if (!db.completions[schoolId]) db.completions[schoolId] = {};
+    db.completions[schoolId][compKey(phase, audience, studentId, assessId)] = { by:low(byEmail||''), at:Date.now() };
+    write(db);
+    return true;
+  }
+  function isComplete(schoolId, phase, audience, studentId, assessId){
+    var db = getDB();
+    return !!(db.completions[schoolId] && db.completions[schoolId][compKey(phase, audience, studentId, assessId)]);
+  }
+  // Completion for a lane, over a given set of student ids (the scope that must
+  // respond). expected = students × assessments in the lane.
+  function completionStats(schoolId, phase, audience, studentIds){
+    var db = getDB();
+    var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    var assessments = (dep && dep.assessments) || [];
+    var ids = studentIds || [];
+    var expected = ids.length * assessments.length;
+    var done = 0;
+    ids.forEach(function(sid){ assessments.forEach(function(a){ if (isComplete(schoolId, phase, audience, sid, a.id)) done++; }); });
+    return { done:done, expected:expected, pct: expected ? Math.round(done*100/expected) : 0,
+      assessments:assessments.length, students:ids.length,
+      status: dep ? dep.status : 'Not deployed' };
+  }
+
   /* ---------- dev utilities ---------- */
   function reset(){ try{ localStorage.removeItem(STORE_KEY); }catch(e){} return seedFromSchool(); }
   function _dump(){ return getDB(); }
@@ -546,6 +757,23 @@
     schoolSettings: schoolSettings,
     resolveSchool: function(x){ var s=resolveSchool(x); return s?Object.assign({},s):null; },
     roleOf: function(email, schoolId){ return roleOf(getDB(), email, schoolId); },
+    // NEW — full school creation + directory (Platform Admin "Add school")
+    createSchoolFull: createSchoolFull,
+    resolveJoinCode: resolveJoinCode,
+    listSchools: listSchools,
+    staffFor: staffFor,
+    sectionsForSchool: sectionsForSchool,
+    studentsForSchool: studentsForSchool,
+    schoolStats: schoolStats,
+    // NEW — assessment lifecycle (deploy → complete → stats)
+    deployPhase: deployPhase,
+    endPhase: endPhase,
+    undeployPhase: undeployPhase,
+    getDeployments: getDeployments,
+    deploymentsFor: deploymentsFor,
+    markComplete: markComplete,
+    isComplete: isComplete,
+    completionStats: completionStats,
     // dev
     reset: reset,
     _dump: _dump,

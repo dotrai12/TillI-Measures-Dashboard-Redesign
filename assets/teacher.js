@@ -122,8 +122,121 @@
     catch (e) { return ''; }
   }
 
+  // ============================================================
+  //  CREATED-SCHOOL TEACHER VIEW
+  //  A wizard-created school already has this teacher's roster and
+  //  its assessments come from the shared store (deployed by the
+  //  Platform Admin), so we skip onboarding and render a focused
+  //  "complete your assessments" surface driven by TilliAPI. The
+  //  demo school keeps the full onboarding + dashboard below.
+  // ============================================================
+  const CREATED = (window.TilliAPI && window.TilliAPI.resolveSchool)
+    ? window.TilliAPI.resolveSchool(ctx.school) : null;
+
+  function renderCreatedTeacher(school) {
+    const API = window.TilliAPI, id = school.school_id, email = ctx.email;
+    const PHASES = ['Baseline', 'Midline', 'Endline'];
+    const onb = document.getElementById('onb'); if (onb) onb.style.display = 'none';
+    const host = document.getElementById('dash-root'); host.style.display = 'block';
+
+    let mySecs = API.sectionsForTeacher(email, id);      // scoped sections (pre-provisioned teacher)
+    const allSecs = API.sectionsForSchool(id);
+    const scopedAll = !mySecs.length;                     // unknown email / self-join → see all classes
+    if (scopedAll) mySecs = allSecs;
+    const secIds = mySecs.map((s) => s.section_id);
+    const me = (API.staffFor(id).find((u) => u.email === String(email).toLowerCase()) || {});
+
+    function myStudents() {
+      return API.studentsForSchool(id).filter((s) => secIds.indexOf(s.section_id) >= 0);
+    }
+
+    // The teacher completes their own observations (Teacher audience) AND
+    // administers the student-direct tasks (Direct Assessment audience) — the
+    // gamified tasks are teacher-proctored in class. Parent-audience stays with
+    // the parent app.
+    const TEACHER_AUDS = [
+      { k: 'Teacher', label: 'Your observations' },
+      { k: 'Direct Assessment', label: 'Student tasks (you run these in class)' },
+    ];
+    function draw() {
+      const students = myStudents();
+      const sids = students.map((s) => s.student_id);
+
+      function assessBlock(phase, aud, a) {
+        const doneCount = students.filter((s) => API.isComplete(id, phase, aud, s.student_id, a.id)).length;
+        const rows = students.map((s) => {
+          const done = API.isComplete(id, phase, aud, s.student_id, a.id);
+          return `<div class="tc-strow"><span>${esc(s.name)} <small>${esc(s.grade + ' ' + s.section)}</small></span>` +
+            (done ? '<span class="tc-done">✓ Done</span>'
+                  : `<button class="tc-mini" data-do="${esc(phase)}|${esc(aud)}|${esc(a.id)}|${esc(s.student_id)}">Mark done</button>`) +
+            `</div>`;
+        }).join('');
+        return `<details class="tc-assess"${doneCount < students.length ? ' open' : ''}><summary><span class="tc-aname">${esc(a.name)}</span>` +
+          `<span class="tc-acount">${doneCount}/${students.length}</span>` +
+          (doneCount < students.length ? `<button class="tc-mini tc-all" data-all="${esc(phase)}|${esc(aud)}|${esc(a.id)}">Mark all done</button>` : '<span class="tc-done">All done</span>') +
+          `</summary><div class="tc-stlist">${rows || '<div class="tc-note">No students in your classes.</div>'}</div></details>`;
+      }
+
+      const phaseCards = PHASES.map((phase) => {
+        const lanes = TEACHER_AUDS.map((au) => ({ au: au, dep: API.deploymentsFor(id, au.k, { includeEnded: true }).filter((d) => d.phase === phase)[0] }))
+          .filter((x) => x.dep);
+        if (!lanes.length) return `<div class="tc-card tc-mut"><div class="tc-ph"><b>${esc(phase)}</b><span class="tc-chip">Not deployed yet</span></div><p class="tc-note">Waiting for the Tilli team to deploy this phase.</p></div>`;
+        let done = 0, exp = 0;
+        lanes.forEach((l) => { const c = API.completionStats(id, phase, l.au.k, sids); done += c.done; exp += c.expected; });
+        const pct = exp ? Math.round(done * 100 / exp) : 0;
+        const anyLive = lanes.some((l) => l.dep.status === 'Live');
+        const groups = lanes.map((l) =>
+          `<div class="tc-aud"><div class="tc-audlbl">${esc(l.au.label)}</div>${l.dep.assessments.map((a) => assessBlock(phase, l.au.k, a)).join('')}</div>`).join('');
+        return `<div class="tc-card"><div class="tc-ph"><b>${esc(phase)}</b>` +
+          `<span class="tc-chip ${anyLive ? 'tc-live' : 'tc-end'}">${anyLive ? 'Live' : 'Ended'}</span>` +
+          `<span class="tc-prog"><i style="width:${pct}%"></i></span><span class="tc-pct">${pct}%</span></div>` +
+          groups + `</div>`;
+      }).join('');
+
+      host.innerHTML = `<div class="tc-wrap">
+        <div class="tc-top"><div class="tc-brand"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="tc-div"></span><span class="tc-meas">Measures</span></div>
+          <div class="tc-topr"><span class="tc-chip tc-role">Teacher</span><button class="tc-btn" id="tc-refresh">↻ Refresh</button><a class="tc-btn" href="index.html">Log out</a></div></div>
+        <h1 class="tc-title">Hi${me.name ? ', ' + esc(me.name.split(' ')[0]) : ''} 🌱</h1>
+        <p class="tc-sub">${esc(school.name)} · ${scopedAll ? 'all classes' : esc(mySecs.map((s) => s.name).join(', '))} · ${students.length} student${students.length === 1 ? '' : 's'}</p>
+        <p class="tc-sub2">Complete your teacher assessments for each student below. Progress saves automatically and is visible to your coordinator and the Tilli team.</p>
+        ${phaseCards}</div>`;
+
+      host.querySelectorAll('[data-do]').forEach((b) => b.addEventListener('click', () => {
+        const [phase, aud, aid, sid] = b.dataset.do.split('|');
+        API.markComplete(id, phase, aud, sid, aid, email); draw();
+      }));
+      host.querySelectorAll('[data-all]').forEach((b) => b.addEventListener('click', () => {
+        const [phase, aud, aid] = b.dataset.all.split('|');
+        myStudents().forEach((s) => API.markComplete(id, phase, aud, s.student_id, aid, email)); draw();
+      }));
+      const rb = document.getElementById('tc-refresh'); if (rb) rb.addEventListener('click', draw);
+    }
+
+    const st = document.createElement('style');
+    st.textContent = '#dash-root{background:#fff}.tc-wrap{max-width:820px;margin:0 auto;padding:22px 24px;font-family:Quicksand,sans-serif}' +
+      '.tc-top{display:flex;align-items:center;justify-content:space-between}.tc-brand{display:flex;align-items:center;gap:10px}.tc-brand img{height:24px}' +
+      '.tc-div{width:1px;height:20px;background:#ddd}.tc-meas{font-weight:700;color:#556}.tc-topr{display:flex;gap:10px;align-items:center}' +
+      '.tc-btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:7px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;color:#334}' +
+      '.tc-title{font-family:Montserrat,sans-serif;font-size:30px;margin:18px 0 2px;color:#243}.tc-sub{margin:0;color:#556;font-weight:600}.tc-sub2{margin:6px 0 18px;color:#889;font-size:13.5px}' +
+      '.tc-card{border:1px solid #eee;border-radius:16px;padding:16px 18px;margin-bottom:14px;background:#fff}.tc-card.tc-mut{background:#fafafa;color:#999}' +
+      '.tc-ph{display:flex;align-items:center;gap:10px;margin-bottom:8px}.tc-ph b{font-size:17px}' +
+      '.tc-chip{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:4px 9px;border-radius:20px;background:#eee;color:#666}' +
+      '.tc-live{background:#DDF3D2;color:#3a7d1e}.tc-end{background:#eee;color:#666}.tc-role{background:#eafbe3;color:#3a7d1e}' +
+      '.tc-prog{flex:1;max-width:180px;height:8px;border-radius:6px;background:#eee;overflow:hidden}.tc-prog i{display:block;height:100%;background:#56C02B}.tc-pct{font-weight:800;color:#3a7d1e;min-width:38px;text-align:right}' +
+      '.tc-note{color:#999;font-size:13px;margin:4px 0 0}' +
+      '.tc-assess{border-top:1px solid #f0f0f0;padding:8px 0}.tc-assess summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;font-weight:700}' +
+      '.tc-assess summary::-webkit-details-marker{display:none}.tc-aname{flex:1}.tc-acount{color:#889;font-weight:700;font-size:13px}' +
+      '.tc-mini{border:1px solid #56C02B;background:#fff;color:#3a7d1e;border-radius:8px;padding:5px 10px;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}.tc-all{margin-left:6px}' +
+      '.tc-stlist{padding:8px 0 2px}.tc-strow{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px dashed #f0f0f0}.tc-strow small{color:#aaa;font-weight:600}' +
+      '.tc-done{color:#3a7d1e;font-weight:800;font-size:13px}' +
+      '.tc-aud{margin-top:4px}.tc-audlbl{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8a9bb0;margin:10px 0 2px}';
+    document.head.appendChild(st);
+    draw();
+  }
+
   // ---------- boot: resume or start ----------
   (function boot() {
+    if (CREATED && CREATED.source === 'created') { renderCreatedTeacher(CREATED); return; }
     const saved = TeacherStore.load(ctx.email);
     // A completed onboarding wins on reload — even if the URL still carries the
     // one-shot ?new=1 sign-up flag. Without this, a refresh keeps forcing the

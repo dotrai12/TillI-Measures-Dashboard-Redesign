@@ -556,7 +556,10 @@
     children = links.map((lk, i) => {
       const full = (TS && TS.findByAdm) ? TS.findByAdm(lk.student_id) : null;
       return {
-        name: lk.first, grade: lk.grade, section: lk.section, adm: lk.student_id,
+        name: lk.first || lk.name || 'Your child', grade: lk.grade, section: lk.section, adm: lk.student_id,
+        // Carry the backbone ids so a created-school child can key its REAL
+        // deployments/completions (findByAdm misses these students — full===null).
+        student_id: lk.student_id, school_id: lk.school_id,
         pronoun: (full && full.pronoun) || (lk.gender === 'm' ? 'he' : 'she'),
         teacher: (full && full.teacherName) || 'your teacher', unlocked: i === 0,
       };
@@ -641,6 +644,26 @@
   const curWindow = () => winById(state.window);
   const status = () => STATUS[child().name][state.window];
   const set = (patch) => { Object.assign(state, patch); render(); };
+
+  // ============================================================
+  // CREATED-SCHOOL BRIDGE — real deployed Parent assessments.
+  // A wizard-created school (school.source === 'created') drives its own
+  // Baseline/Midline/Endline lanes via TilliAPI, so those children get a
+  // real, persisting checklist instead of the hardcoded demo STATUS above.
+  // Everything below is a no-op for demo/legacy children (returns null).
+  // ============================================================
+  const API = window.TilliAPI || null;
+  const PARENT_PHASES = ['Baseline', 'Midline', 'Endline'];
+  // Returns the resolved school IFF this child belongs to a created school
+  // (and is a genuinely linked child with a student_id). Otherwise null →
+  // caller falls back to the existing demo rendering.
+  function createdSchoolFor(c) {
+    if (!c || !c.student_id || !API || !API.resolveSchool) return null;
+    const id = c.school_id || p.get('school');
+    if (!id) return null;
+    const sc = API.resolveSchool(id);
+    return (sc && sc.source === 'created') ? sc : null;
+  }
 
   // ---- shared bits ----
   const lockup = `<a href="index.html" class="lockup" style="text-decoration:none">
@@ -885,6 +908,112 @@
         ${cta}
 
         <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+  }
+
+  // ============================================================
+  // CREATED-SCHOOL HOME — REAL deployments + completions (TilliAPI).
+  // One screen: every phase the Platform Admin has deployed for the Parent
+  // audience, each assessment tappable to mark done (persists via markComplete),
+  // undeployed phases shown muted so they appear as the admin rolls them out.
+  // ============================================================
+  function createdView() {
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}${switcher()}</div>
+      <div class="p-main">${createdMainInner()}</div>
+    </div>`;
+  }
+
+  // Inner content only — patched in place on a mark-done so the hero doesn't
+  // re-animate (mirrors patchHome for the demo path).
+  function createdMainInner() {
+    const c = child();
+    const sc = createdSchoolFor(c);
+    const schoolId = sc.school_id;
+    const faceColor = smileColor(state.selected);
+
+    const chips = [
+      `<span class="chip school"><span class="cd" style="background:var(--cyan-500)"></span>${esc(sc.name)}</span>`,
+      c.grade ? `<span class="chip grade"><span class="cd" style="background:var(--green-500)"></span>${esc(c.grade)}${c.section ? ' · Section ' + esc(c.section) : ''}</span>` : '',
+      c.adm ? `<span class="chip adm"><span class="cd" style="background:var(--yellow-500)"></span>Admission ${esc(c.adm)}</span>` : '',
+    ].filter(Boolean).join('');
+
+    // Live + ended Parent lanes, indexed by phase.
+    const lanes = (API.deploymentsFor(schoolId, 'Parent', { includeEnded: true }) || []);
+    const laneByPhase = {};
+    lanes.forEach((l) => { laneByPhase[l.phase] = l; });
+    const anyLive = PARENT_PHASES.some((ph) => laneByPhase[ph]);
+
+    const heroTop = `
+        <div class="p-hero" data-rise>
+          <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a">
+            <img src="${SMILEY}" alt="">
+          </div>
+          <div>
+            <p class="p-eyebrow">Parent home · ${esc(sc.name)}</p>
+            <h1 class="p-title">Watch <span>${esc(c.name)}</span> grow</h1>
+            <p class="p-sub">${anyLive
+              ? 'Complete each check-in your school has opened — your answers save right away.'
+              : 'No check-ins are open yet. They’ll appear here as your school deploys each window.'}</p>
+            <div class="chips">${chips}</div>
+          </div>
+        </div>`;
+
+    const sections = PARENT_PHASES.map((phase) => {
+      const lane = laneByPhase[phase];
+
+      // Not deployed yet → muted resting card (appears once the admin deploys it).
+      if (!lane) {
+        return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Not deployed yet</span></div>
+          <div class="win-rest">
+            <span class="ico">🌿</span>
+            <div class="rt"><b>Not deployed yet</b>
+              <span>${esc(c.name)}'s ${esc(phase)} check-ins will show up here once your school opens this window.</span></div>
+          </div>`;
+      }
+
+      const stats = API.completionStats(schoolId, phase, 'Parent', [c.student_id]);
+      const ended = lane.status === 'Ended';
+      const assessments = lane.assessments || [];
+
+      const rows = assessments.length ? assessments.map((a) => {
+        const done = API.isComplete(schoolId, phase, 'Parent', c.student_id, a.id);
+        if (done) {
+          return `<div class="t-row">
+            <span class="t-dot done"></span>
+            <span class="t-body"><b>${esc(a.name)}</b><span>Parent check-in</span></span>
+            <span class="t-badge done">Completed</span>
+          </div>`;
+        }
+        // Ended-but-unfinished stays visible but read-only; live is tappable.
+        return ended
+          ? `<div class="t-row">
+              <span class="t-dot pending"></span>
+              <span class="t-body"><b>${esc(a.name)}</b><span>Window ended · not completed</span></span>
+              <span class="t-badge pending">Missed</span>
+            </div>`
+          : `<button class="t-row focus" data-act="mark-done" data-phase="${esc(phase)}" data-assess="${esc(a.id)}">
+              <span class="t-dot pending"></span>
+              <span class="t-body"><b>${esc(a.name)}</b><span>Parent check-in · tap to mark done</span></span>
+              <span class="t-badge pending">Mark done</span>
+            </button>`;
+      }).join('') : `<div class="t-row"><span class="t-body"><b>No assessments in this window yet</b></span></div>`;
+
+      return `<div class="sec-head">
+          <h2>${esc(phase)}</h2>
+          <span class="muted due"><b>${stats.done}</b> of <b>${stats.expected}</b> done${ended ? ' · Ended' : ''}</span>
+        </div>
+        <div class="timeline">${rows}</div>`;
+    }).join('');
+
+    return heroTop + sections + `<p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+  }
+
+  // Targeted patch after a completion — rebuild just .p-main (no re-animate).
+  function patchCreated() {
+    const main = app.querySelector('.p-main');
+    if (!main) return;
+    main.innerHTML = createdMainInner();
+    wire(main);
   }
 
   // ============================================================
@@ -1227,7 +1356,12 @@
   let painted = false;
   function render() {
     const paint = () => {
-      app.innerHTML = state.view === 'report' ? reportView()
+      // Created-school children get the REAL deployment-driven screen in place
+      // of the demo phases/home views; profile/report/snapshot are unchanged.
+      const createdHome = createdSchoolFor(child()) && state.view !== 'profile'
+        && state.view !== 'report' && state.view !== 'snapshot';
+      app.innerHTML = createdHome ? createdView()
+        : state.view === 'report' ? reportView()
         : state.view === 'snapshot' ? snapshotView()
         : state.view === 'profile' ? profileView()
         : state.view === 'phases' ? phasesView()
@@ -1279,6 +1413,16 @@
       ev.stopPropagation();
       switch (b.dataset.act) {
         case 'toggle-switch': state.switcherOpen = !state.switcherOpen; patchSwitcher(); break;
+        case 'mark-done': {
+          // Created-school completion → persists in TilliAPI (localStorage),
+          // survives reload; re-read on patch so state is never cached stale.
+          const c = child(); const sc = createdSchoolFor(c);
+          if (sc) {
+            API.markComplete(sc.school_id, b.dataset.phase, 'Parent', c.student_id, b.dataset.assess, PARENT_EMAIL);
+            patchCreated();
+          }
+          break;
+        }
         case 'progress-tap': {
           const st = status();
           const open = ASSESSMENTS.find((a) => st[a.id] === 'progress');

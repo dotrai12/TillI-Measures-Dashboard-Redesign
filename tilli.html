@@ -74,6 +74,8 @@
   .tl-mod-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
   .tl-mod-title { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 16px; color: var(--ink-900); margin: 0; }
   .tl-mod-note { font-weight: 600; font-size: 12.5px; color: var(--ink-300); margin: 3px 0 0; }
+  /* Role capability hint shown under a role picker (invite / role editor). */
+  .tl-rolecap { display: block; font-weight: 600; font-size: 12px; color: var(--ink-450); margin-top: 6px; line-height: 1.4; }
 
   /* ---- Chips ---- */
   .tl-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-pill); padding: 4px 11px; font-weight: 800; font-size: 11px; letter-spacing: .02em; white-space: nowrap; }
@@ -666,6 +668,7 @@
 <div class="tl-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js"></script>
+<script src="assets/tilli-api.js"></script>
 <script src="assets/tilli-org-data.js"></script>
 <script src="assets/tilli-admin.js"></script>
 </body>
