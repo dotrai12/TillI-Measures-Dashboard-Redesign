@@ -2236,17 +2236,17 @@
           '</select>'
         : '<input class="input" id="m-sec" value="' + esc(addState.section) + '" placeholder="A">';
 
-      el.innerHTML = '<div class="tl-card"><div class="tl-mod-h"><h3 class="tl-mod-title">Add a student</h3></div>' +
+      el.innerHTML = '<div class="tl-stepcard"><div class="tl-stepnum">1</div><div class="tl-card"><div class="tl-mod-h"><h3 class="tl-mod-title">Add a student</h3></div>' +
         '<div class="tl-stack" style="max-width:520px">' +
           '<div style="display:flex;gap:10px"><label class="field" style="flex:1">Grade' + gradeControl + '</label>' +
             '<label class="field" style="width:130px">Section' + sectionControl + '</label></div>' +
           '<label class="field">Full name<input class="input" id="m-name" placeholder="e.g. Aarav Sharma"></label>' +
           '<label class="field">Admission #<input class="input" id="m-adm" placeholder="ADM-1234"></label>' +
           '<div><button class="btn btn-outline btn-sm" id="m-add">+ Add to batch</button></div>' +
-        '</div></div>' +
-        '<div class="tl-card" style="margin-top:var(--tl-gap)"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Staged for import</h3><p class="tl-mod-note">' + addState.batch.length + ' student(s) ready.</p></div>' +
+        '</div></div></div>' +
+        '<div class="tl-stepcard" style="margin-top:var(--tl-gap)"><div class="tl-stepnum">2</div><div class="tl-card"><div class="tl-mod-h"><div><h3 class="tl-mod-title">Staged for import</h3><p class="tl-mod-note">' + addState.batch.length + ' student(s) ready.</p></div>' +
           (addState.batch.length ? '<button class="btn btn-primary btn-sm" id="m-import">Import ' + addState.batch.length + ' student(s)</button>' : '') + '</div>' +
-          '<div class="tl-tablewrap"><table class="tl-table" style="min-width:520px"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th></th></tr></thead><tbody>' + batchRows + '</tbody></table></div></div>';
+          '<div class="tl-tablewrap"><table class="tl-table" style="min-width:520px"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th></th></tr></thead><tbody>' + batchRows + '</tbody></table></div></div></div>';
       // Sticky grade/section: update addState and re-render (grade change also
       // refreshes the section list for the newly selected grade).
       var gradeEl = el.querySelector('#m-grade');
