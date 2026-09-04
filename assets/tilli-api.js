@@ -572,6 +572,10 @@
       email: email, role: input.role || 'Super Admin', school_id: input.school_id || null,
       tempPassword: temp, password: null, mustReset: true, status: 'invited',
       invitedBy: low(input.invitedBy) || null, createdAt: Date.now(), activatedAt: null,
+      // Optional roster metadata carried by teacher invites (grade/section/board),
+      // so the school dashboard can render the full invite receipt + user table.
+      name: input.name || null, grade: input.grade || null,
+      section: input.section || null, board: input.board || null,
     };
     db.accounts[email] = acct;
 
@@ -584,7 +588,8 @@
       db.teacherMemberships.push({ user_id:email, school_id:acct.school_id, section_ids:[], status:'active' });
 
     write(db);
-    return { ok:true, email:email, tempPassword:temp, role:acct.role, school_id:acct.school_id };
+    return { ok:true, email:email, tempPassword:temp, role:acct.role, school_id:acct.school_id,
+      name:acct.name, grade:acct.grade, section:acct.section, board:acct.board, createdAt:acct.createdAt };
   }
   function getAccount(email){ var a = getDB().accounts[low(email)]; return a ? Object.assign({}, a) : null; }
   function listAccounts(){ var db = getDB(); return Object.keys(db.accounts).map(function(k){ return Object.assign({}, db.accounts[k]); }); }

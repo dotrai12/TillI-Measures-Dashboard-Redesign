@@ -164,6 +164,7 @@
     // B2 the second factor; nothing about the child is known until verify passes.
     claim: { challengeId: null, factor: 'code', code: '', reveal: null, token: null, retryAt: 0 },
     errs: {}, shake: false,
+    forgotSent: false,   // "Forgot password?" clicked on the login screen
   };
   const SESSION_KEY = 'tilliMeasures.session';
   // Records who is signed in for the downstream pages (parent.html reads this
@@ -206,7 +207,10 @@
   const admin = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.findAdmin) ? window.TILLI_SCHOOL.findAdmin : () => null;
 
   function go() {
-    const isNew = state.step === 'signup';
+    // "New" = the teacher is activating an account: a fresh signup (create
+    // password) OR a temp-password holder who just set their own (setpw). Both
+    // should land in onboarding; a returning "enter password" login should not.
+    const isNew = state.step === 'signup' || state.step === 'setpw';
     // Tilli Team → the internal managing platform (NOT a single school).
     // A cross-school portfolio, analytics and ops surface lives at tilli.html.
     if (state.role === 'tilli') {
@@ -492,6 +496,8 @@
           <button type="button" id="pw-toggle" class="focus" aria-label="Show password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:none;cursor:pointer;color:var(--ink-450);border-radius:8px">${eyeIcon(false)}</button>
         </div>
         ${state.errs.pw ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0">That password doesn't match this account. Please try again.</p>` : ''}
+        ${isSignup ? '' : `<button type="button" data-act="forgot" class="focus" style="align-self:flex-end;margin-top:-4px;border:none;background:none;padding:0;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:700;font-size:13px;color:var(--ink-450);text-decoration:underline;text-underline-offset:2px">Forgot password?</button>`}
+        ${!isSignup && state.forgotSent ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12.5px;color:var(--ink-600);margin:0;line-height:1.5">To reset your password, contact your school admin — they can re-send an invite that lets you set a new one.</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">${verb} via password &#8594;</button>
       </form>`;
   }
@@ -701,7 +707,7 @@
         ev.preventDefault();
         const email = (ei.value || '').trim();
         if (!email) return;
-        set({ email, step: 'checking', password: '' });
+        set({ email, step: 'checking', password: '', forgotSent: false });
         clearTimeout(checkTimer);
         checkTimer = setTimeout(() => {
           const exists = !!loadAccounts()[email.toLowerCase()] || !!invitedAccount(email);
@@ -867,6 +873,9 @@
       case 'google':
         if (state.step === 'signup') saveAccount(state.email);
         go();
+        break;
+      case 'forgot':
+        set({ forgotSent: true });
         break;
       case 'add-child':
         set({ step: 'childLoading', child: { first: '', last: '', adm: '', grade: '', section: '' }, match: null,

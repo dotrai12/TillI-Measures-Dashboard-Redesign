@@ -1007,11 +1007,21 @@
 
     // user management
     var users = seedUsers();
-    var userBody = '<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-cyan btn-sm" data-invite="1">+ Invite user</button></div>' +
-      '<div class="ad-tablewrap"><table class="ad-table" style="min-width:520px"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>' +
+    var multiBoard = schoolBoards().length > 1;
+    var boardHead = multiBoard ? '<th>Board</th>' : '';
+    var userBody = '<div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:12px"><button class="btn btn-cyan btn-sm" data-invite="1">+ Invite teachers</button></div>' +
+      '<div class="ad-tablewrap"><table class="ad-table" style="min-width:640px"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Grade</th><th>Section</th>' + boardHead + '<th>Status</th><th></th></tr></thead><tbody>' +
       users.map(function (u, i) {
-        return '<tr><td class="name">' + esc(u.name) + '</td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td><td>' + (u.status === 'Active' ? '<span class="ad-chip active"><span class="dot"></span>Active</span>' : '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap">' + (u.status === 'Invited' ? '<button class="link-btn" data-resend="' + i + '">Resend</button> · ' : '') + '<button class="link-btn" data-revoke="' + i + '" style="color:#B22447">Revoke</button></td></tr>';
+        var isTeacher = /teacher/i.test(u.role || '');
+        var dash = '<span style="color:var(--ink-300)">—</span>';
+        var boardCell = multiBoard ? '<td>' + (u.board ? esc(u.board) : dash) + '</td>' : '';
+        var showPw = u.status === 'Invited' && u.tempPassword
+          ? '<button class="link-btn" data-showpw="' + i + '">Show password</button> · ' : '';
+        return '<tr><td class="name"><button class="link-btn" data-userdetail="' + i + '" style="font:inherit;color:var(--ink-900);text-align:left" title="View details">' + esc(u.name) + '</button></td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td>' +
+          '<td>' + (isTeacher && u.grade ? esc(u.grade) : dash) + '</td>' +
+          '<td>' + (isTeacher && u.section ? esc(u.section) : dash) + '</td>' + boardCell +
+          '<td>' + (u.status === 'Active' ? '<span class="ad-chip active"><span class="dot"></span>Active</span>' : '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap">' + showPw + (u.status === 'Invited' ? '<button class="link-btn" data-resend="' + i + '">Resend</button> · ' : '') + '<button class="link-btn" data-revoke="' + i + '" style="color:#B22447">Revoke</button></td></tr>';
       }).join('') + '</tbody></table></div>';
 
     body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Operational identity data — plus a temporary developmental-stage column (see the note in Students).' : 'Operational identity data. No SEL results ever appear here.') +
@@ -1028,7 +1038,82 @@
     body.querySelector('[data-invite]').addEventListener('click', inviteUser);
     body.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { toast('Access revoked — session invalidated immediately.'); }); });
     body.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { toast('Invitation resent.'); }); });
+    body.querySelectorAll('[data-showpw]').forEach(function (b) { b.addEventListener('click', function () { showInvitePassword(users[+b.dataset.showpw]); }); });
+    body.querySelectorAll('[data-userdetail]').forEach(function (b) { b.addEventListener('click', function () { showUserDetail(users[+b.dataset.userdetail]); }); });
   };
+
+  // Re-reveal one invited teacher's still-valid temporary password (relayable
+  // until they set their own). Mirrors the platform-admin invitation receipt.
+  function showInvitePassword(u) {
+    if (!u || !u.tempPassword) { toast('No temporary password to show.'); return; }
+    openModal(modalHead('Temporary password') +
+      '<p class="ad-mod-note" style="margin-bottom:14px">Relay this one-time password to <b>' + esc(u.name) + '</b>. It stops working the moment they set their own — the row then reads <b>Active</b>.</p>' +
+      '<div style="display:flex;align-items:center;gap:10px;background:var(--surface-100);border-radius:10px;padding:12px 14px">' +
+        '<span style="font-family:ui-monospace,Menlo,monospace;font-size:20px;font-weight:800;letter-spacing:.08em">' + esc(u.tempPassword) + '</span>' +
+        '<button class="btn btn-outline btn-sm" data-copypw="' + esc(u.tempPassword) + '" style="margin-left:auto">Copy</button></div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div>');
+    var cp = document.querySelector('[data-copypw]');
+    if (cp) cp.addEventListener('click', function () { try { navigator.clipboard.writeText(cp.dataset.copypw); } catch (e) {} toast('Password copied.'); });
+  }
+
+  // Full detail for one row, opened by clicking the name. Reads the authoritative
+  // account from TilliAPI when one exists (real dates + invited-by), falling back
+  // to the row's own fields for bridged/demo staff.
+  function showUserDetail(u) {
+    if (!u) return;
+    var acct = (window.TilliAPI && TilliAPI.getAccount) ? TilliAPI.getAccount(u.email) : null;
+    var isTeacher = /teacher/i.test(u.role || '');
+    var invited = u.status === 'Invited';
+    var boards = schoolBoards();
+    var board = u.board || (acct && acct.board) || (isTeacher && boards.length === 1 ? boards[0] : '');
+    var invitedAt = u.invitedAt || (acct && acct.createdAt) || null;
+    var activatedAt = acct && acct.activatedAt;
+    // resolve the inviter's email to a friendlier name if we recognise it
+    var byEmail = acct && acct.invitedBy, byName = byEmail;
+    if (byEmail) { var m = seedUsers().filter(function (x) { return String(x.email || '').toLowerCase() === byEmail; })[0]; if (m) byName = m.name; }
+
+    function row(label, valueHTML) {
+      return '<div style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-200)">' +
+        '<span style="font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-450)">' + label + '</span>' +
+        '<span style="font-weight:700;font-size:13.5px;color:var(--ink-900);text-align:right">' + valueHTML + '</span></div>';
+    }
+    var statusChip = u.status === 'Active'
+      ? '<span class="ad-chip active"><span class="dot"></span>Active</span>'
+      : '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>';
+
+    var pwRow = '';
+    if (invited && u.tempPassword)
+      pwRow = row('Temporary password',
+        '<span style="font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em">' + esc(u.tempPassword) + '</span>' +
+        ' <button class="link-btn" data-copypw="' + esc(u.tempPassword) + '">Copy</button>');
+    else if (!invited && acct)
+      pwRow = row('Temporary password', '<span style="color:var(--ink-300);font-weight:600">Used — set their own</span>');
+
+    var rows = row('Email', esc(u.email)) + row('Role', esc(u.role));
+    if (isTeacher) { rows += row('Grade', u.grade ? esc(u.grade) : '—') + row('Section', u.section ? esc(u.section) : '—'); }
+    if (board) rows += row('Board', esc(board));
+    rows += row('Status', statusChip);
+    if (invitedAt) rows += row('Date of invite', esc(fmtInvDate(invitedAt)));
+    if (activatedAt) rows += row('Activated', esc(fmtInvDate(activatedAt)));
+    if (byName) rows += row('Invited by', esc(byName));
+    rows += pwRow;
+
+    var actions = '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">' +
+      (invited ? '<button class="btn btn-outline btn-sm" data-udresend="1">Resend</button>' : '') +
+      '<button class="btn btn-outline btn-sm" data-udrevoke="1" style="color:#B22447;border-color:#F2C9D5">Revoke</button>' +
+      '<button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div>';
+
+    openModal(modalHead(esc(u.name)) +
+      (invited ? '<p class="ad-mod-note" style="margin-bottom:12px">Invited — relay the temporary password below. The status turns <b>Active</b> once they sign in and set their own.</p>' : '') +
+      '<div>' + rows + '</div>' + actions);
+
+    var cp = document.querySelector('[data-copypw]');
+    if (cp) cp.addEventListener('click', function () { try { navigator.clipboard.writeText(cp.dataset.copypw); } catch (e) {} toast('Password copied.'); });
+    var rs = document.querySelector('[data-udresend]');
+    if (rs) rs.addEventListener('click', function () { toast('Invitation resent.'); });
+    var rv = document.querySelector('[data-udrevoke]');
+    if (rv) rv.addEventListener('click', function () { closeModal(); toast('Access revoked — session invalidated immediately.'); });
+  }
   // ---- Grade roster popup (grade-select-first) — students + teacher per section ----
   function openGradeRoster(grade) {
     var secs = AD.sections.filter(function (s) { return s.grade === grade; });
@@ -1093,10 +1178,54 @@
     });
   }
 
+  // This school's id (created schools resolve to a TilliAPI school_id; the demo
+  // school uses its fixed id). Used to scope invites + read invited accounts.
+  function currentSchoolId() { return (AD && AD.school && AD.school.id) || (TS && TS.school && TS.school.id) || null; }
+
+  // Board(s) this school runs. A per-teacher board is only *asked for* when the
+  // school runs more than one; with a single board it is applied automatically.
+  // Reads an explicit `boards` array first (forward-compatible with multi-board
+  // schools), then falls back to the school's single `board`.
+  function schoolBoards() {
+    var s = (AD && AD.school) || {}, arr = null;
+    if (Array.isArray(s.boards)) arr = s.boards;
+    else if (window.TilliAPI && TilliAPI.resolveSchool && currentSchoolId()) {
+      var sc = TilliAPI.resolveSchool(currentSchoolId());
+      if (sc) arr = Array.isArray(sc.boards) ? sc.boards : (sc.board ? [sc.board] : null);
+    }
+    if (!arr && s.board) arr = [s.board];
+    return (arr || []).filter(Boolean);
+  }
+
+  // Reconcile a base staff list with the accounts TilliAPI has actually minted
+  // for this school. An invited teacher shows as Invited until they set their own
+  // password (mustReset clears → Active), and carries its grade/section/board +
+  // the one-time temp password so the receipt can be re-shown.
+  function mergeAccounts(list) {
+    var sid = currentSchoolId(), byEmail = {};
+    list.forEach(function (u) { byEmail[String(u.email || '').toLowerCase()] = u; });
+    var accts = (window.TilliAPI && TilliAPI.listAccounts) ? TilliAPI.listAccounts() : [];
+    accts.forEach(function (a) {
+      if (!a.email) return;
+      if (sid && a.school_id && a.school_id !== sid) return;   // other schools' invites
+      var e = a.email.toLowerCase();
+      var status = a.mustReset ? 'Invited' : 'Active';
+      var meta = { status: status, grade: a.grade || '', section: a.section || '', board: a.board || '',
+        invitedAt: a.createdAt || null, tempPassword: a.mustReset ? a.tempPassword : null };
+      if (byEmail[e]) Object.assign(byEmail[e], meta);   // update known staff with live status
+      else {                                             // brand-new invited teacher
+        var role = a.role || 'Teacher';
+        list.push(Object.assign({ name: a.name || a.email.split('@')[0], email: a.email, role: role }, meta));
+        byEmail[e] = list[list.length - 1];
+      }
+    });
+    return list;
+  }
+
   function seedUsers() {
     // Created schools: show THIS school's real staff (coordinator + teachers),
-    // bridged from TilliAPI into window.TILLI_SCHOOL. All local memberships are
-    // active, so everyone reads as Active until real invitation status is wired.
+    // bridged from TilliAPI into window.TILLI_SCHOOL. Pre-existing staff read as
+    // Active; freshly invited teachers get their live status via mergeAccounts.
     if (window.TILLI_CREATED) {
       var TS = window.TILLI_SCHOOL || {}, seen = {}, out = [];
       (TS.admins || []).forEach(function (a) {
@@ -1108,19 +1237,20 @@
       (TS.teachers || []).forEach(function (t) {
         var e = String(t.email || '').toLowerCase();
         if (!e || seen[e]) return; seen[e] = 1;
-        out.push({ name: t.name, email: t.email, role: 'Teacher', status: 'Active' });
+        out.push({ name: t.name, email: t.email, role: 'Teacher', status: 'Active',
+          grade: t.grade || '', section: t.section || '' });
       });
-      return out;
+      return mergeAccounts(out);
     }
-    // Demo school keeps its illustrative fixed roster.
-    return [
+    // Demo school keeps its illustrative fixed roster, plus any invites minted here.
+    return mergeAccounts([
       { name: 'Meera Krishnan', email: 'meera.krishnan@littlesprouts.edu', role: 'Coordinator', status: 'Active' },
-      { name: 'Kavya Rao', email: 'kavya.rao@littlesprouts.edu', role: 'Teacher', status: 'Active' },
-      { name: 'Rohan Iyer', email: 'rohan.iyer@littlesprouts.edu', role: 'Teacher', status: 'Active' },
-      { name: 'Dilani Perera', email: 'dilani.perera@littlesprouts.edu', role: 'Teacher', status: 'Active' },
-      { name: 'Nadia Fernando', email: 'nadia.fernando@littlesprouts.edu', role: 'Teacher', status: 'Invited' },
+      { name: 'Kavya Rao', email: 'kavya.rao@littlesprouts.edu', role: 'Teacher', status: 'Active', grade: 'Kindergarten', section: 'A' },
+      { name: 'Rohan Iyer', email: 'rohan.iyer@littlesprouts.edu', role: 'Teacher', status: 'Active', grade: 'Grade 1', section: 'A' },
+      { name: 'Dilani Perera', email: 'dilani.perera@littlesprouts.edu', role: 'Teacher', status: 'Active', grade: 'Grade 1', section: 'B' },
+      { name: 'Nadia Fernando', email: 'nadia.fernando@littlesprouts.edu', role: 'Teacher', status: 'Invited', grade: 'Kindergarten', section: 'B' },
       { name: 'A. Wanigasuriya', email: 'principal@littlesprouts.edu', role: 'Principal', status: 'Invited' },
-    ];
+    ]);
   }
 
   // ========================================================
@@ -1479,13 +1609,186 @@
   }
 
   // ---- User invite ----
+  // ---- Invite teachers (single + bulk text/CSV) ----------------------------
+  // Coordinators add teachers one at a time or in bulk by pasting rows / uploading
+  // a CSV. Each row is grade, section, teacher name, email (+ board when the school
+  // runs several). Sending mints a real TilliAPI invite per row, and the receipt
+  // shows the date + one-time temporary password to relay. Rows stay Invited until
+  // the teacher sets their own password, at which point the roster reads Active.
+  var inv;   // { step:'form'|'result', rows:[...], results:[...] }
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  function fmtInvDate(ms) { if (!ms) return '—'; try { return new Date(ms).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return '—'; } }
+  function blankInvRow() { return { grade: '', section: '', name: '', email: '', board: '' }; }
+
   function inviteUser() {
-    openModal(modalHead('Invite a user') +
-      '<div style="display:flex;flex-direction:column;gap:12px">' +
-      '<label class="field">Email<input class="input" id="inv-email" placeholder="name@littlesprouts.edu"></label>' +
-      '<label class="field">Role' + selectWrap('inv-role', [{ v: 'Teacher', t: 'Teacher' }, { v: 'Coordinator', t: 'Coordinator' }, { v: 'Principal', t: 'Principal (view-only)' }], 'Teacher') + '</label></div>' +
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-primary btn-sm" id="inv-send">Send invite</button></div>');
-    document.getElementById('inv-send').addEventListener('click', function () { var e = document.getElementById('inv-email').value.trim(); if (!e) { toast('Enter an email.'); return; } closeModal(); toast('Invitation sent to ' + e + '.'); });
+    inv = { step: 'form', rows: [blankInvRow(), blankInvRow(), blankInvRow()], results: [] };
+    renderInvite();
+  }
+
+  function inviteInputCell(val, key, i, ph) {
+    return '<td style="padding:3px 5px"><input class="input" data-invk="' + key + '" data-invi="' + i + '" value="' + esc(val || '') + '" placeholder="' + esc(ph) + '"' +
+      (key === 'grade' ? ' list="inv-grades"' : key === 'section' ? ' list="inv-secs"' : key === 'email' ? ' type="email"' : '') +
+      ' style="padding:8px 10px;font-size:13px;width:100%"></td>';
+  }
+  function inviteRowHTML(r, i, boards) {
+    var boardCell = '';
+    if (boards.length > 1) {
+      boardCell = '<td style="padding:3px 5px"><label class="select-wrap"><select class="select" data-invk="board" data-invi="' + i + '" style="padding:8px 28px 8px 10px;font-size:13px">' +
+        '<option value="">Board…</option>' + boards.map(function (b) { return '<option value="' + esc(b) + '"' + (r.board === b ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') +
+        '</select></label></td>';
+    }
+    return '<tr>' + inviteInputCell(r.grade, 'grade', i, 'e.g. Grade 1') + inviteInputCell(r.section, 'section', i, 'A') +
+      inviteInputCell(r.name, 'name', i, 'Full name') + inviteInputCell(r.email, 'email', i, 'name@school.edu') + boardCell +
+      '<td style="padding:3px 2px;text-align:center"><button type="button" class="link-btn" data-invrm="' + i + '" title="Remove row" style="color:var(--ink-300);font-size:16px">×</button></td></tr>';
+  }
+
+  function collectInviteRows() {
+    document.querySelectorAll('[data-invk]').forEach(function (el) {
+      var r = inv.rows[+el.dataset.invi]; if (r) r[el.dataset.invk] = el.value.trim();
+    });
+  }
+
+  // Parse pasted/CSV text → rows. Columns are positional:
+  // grade, section, name, email[, board]. A header line is detected and skipped.
+  function parseInvitePaste(text) {
+    var out = [];
+    String(text || '').split(/\r?\n/).forEach(function (line, idx) {
+      if (!line.trim()) return;
+      var cols = line.split(/\t|,/).map(function (c) { return c.trim(); });
+      var joined = line.toLowerCase();
+      if (idx === 0 && /email/.test(joined) && /(grade|name|section)/.test(joined)) return;  // header
+      if (!cols.some(function (c) { return c; })) return;
+      out.push({ grade: cols[0] || '', section: cols[1] || '', name: cols[2] || '', email: cols[3] || '', board: cols[4] || '' });
+    });
+    return out;
+  }
+
+  function renderInvite() {
+    var boards = schoolBoards();
+    if (inv.step === 'result') return renderInviteResult(boards);
+
+    var gradeList = (AD.grades || []);
+    var secList = []; (AD.sections || []).forEach(function (s) { if (secList.indexOf(s.section) < 0) secList.push(s.section); });
+    var boardHead = boards.length > 1 ? '<th style="text-align:left;padding:0 6px 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450)">Board</th>' : '';
+    function th(t) { return '<th style="text-align:left;padding:0 6px 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450)">' + t + '</th>'; }
+
+    var boardNote = boards.length === 1
+      ? '<div class="ad-privacy" style="margin-top:0;margin-bottom:14px"><span aria-hidden="true">🏷️</span><span>All invites use this school\'s board <b>' + esc(boards[0]) + '</b>.</span></div>'
+      : boards.length > 1
+        ? '<div class="ad-privacy" style="margin-top:0;margin-bottom:14px"><span aria-hidden="true">🏷️</span><span>This school runs multiple boards — pick each teacher\'s board.</span></div>' : '';
+
+    openModal(modalHead('Invite teachers') +
+      '<p class="ad-mod-note" style="margin-bottom:14px">Add teachers one row at a time, or paste rows / upload a CSV. Each becomes an invite with a one-time temporary password.</p>' +
+      boardNote +
+      '<datalist id="inv-grades">' + gradeList.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="inv-secs">' + secList.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
+      '<div class="ad-tablewrap"><table style="width:100%;border-collapse:collapse;min-width:520px"><thead><tr>' +
+        th('Grade') + th('Section') + th('Teacher name') + th('Email') + boardHead + '<th></th>' +
+      '</tr></thead><tbody id="inv-rows">' + inv.rows.map(function (r, i) { return inviteRowHTML(r, i, boards); }).join('') + '</tbody></table></div>' +
+      '<button type="button" class="btn btn-outline btn-sm" id="inv-addrow" style="margin-top:10px">+ Add teacher</button>' +
+      // Bulk paste / CSV
+      '<details style="margin-top:16px"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--cyan-700)">Paste rows or upload a CSV</summary>' +
+        '<p class="ad-mod-note" style="margin:8px 0">One teacher per line — <b>grade, section, name, email' + (boards.length > 1 ? ', board' : '') + '</b> (comma or tab separated). A header row is ignored.</p>' +
+        '<textarea class="input" id="inv-paste" rows="4" placeholder="Grade 1, A, Priya Sharma, priya@school.edu' + (boards.length > 1 ? ', CBSE' : '') + '" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12.5px"></textarea>' +
+        '<div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-outline btn-sm" id="inv-loadpaste">Load into table</button>' +
+          '<label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">Upload CSV<input type="file" id="inv-file" accept=".csv,text/csv,text/plain" hidden></label>' +
+          '<span class="ad-mod-note" id="inv-parsehint"></span>' +
+        '</div></details>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;align-items:center">' +
+        '<span class="ad-mod-note" id="inv-count" style="margin-right:auto"></span>' +
+        '<button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button>' +
+        '<button class="btn btn-primary btn-sm" id="inv-send">Send invites</button></div>',
+      { wide: true });
+
+    // live-collect on typing so state survives add/remove/import
+    document.getElementById('inv-rows').addEventListener('input', function (e) {
+      var el = e.target; if (el.dataset && el.dataset.invk) { var r = inv.rows[+el.dataset.invi]; if (r) r[el.dataset.invk] = el.value.trim(); }
+    });
+    document.querySelectorAll('[data-invrm]').forEach(function (b) {
+      b.addEventListener('click', function () { collectInviteRows(); inv.rows.splice(+b.dataset.invrm, 1); if (!inv.rows.length) inv.rows.push(blankInvRow()); renderInvite(); });
+    });
+    document.getElementById('inv-addrow').addEventListener('click', function () { collectInviteRows(); inv.rows.push(blankInvRow()); renderInvite(); });
+
+    function importText(text) {
+      var parsed = parseInvitePaste(text);
+      if (!parsed.length) { toast('No rows found to import.'); return; }
+      collectInviteRows();
+      // drop the empty starter rows, then append the imported ones
+      inv.rows = inv.rows.filter(function (r) { return r.grade || r.section || r.name || r.email; }).concat(parsed);
+      renderInvite();
+      toast(parsed.length + (parsed.length === 1 ? ' row' : ' rows') + ' loaded.');
+    }
+    document.getElementById('inv-loadpaste').addEventListener('click', function () { importText(document.getElementById('inv-paste').value); });
+    document.getElementById('inv-file').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var rd = new FileReader(); rd.onload = function () { importText(rd.result); }; rd.readAsText(f);
+    });
+    document.getElementById('inv-send').addEventListener('click', sendInvites);
+  }
+
+  function sendInvites() {
+    collectInviteRows();
+    var boards = schoolBoards();
+    // keep only rows with any content
+    var filled = inv.rows.filter(function (r) { return r.grade || r.section || r.name || r.email; });
+    if (!filled.length) { toast('Add at least one teacher.'); return; }
+    // validate
+    var bad = filled.filter(function (r) {
+      return !r.name || !EMAIL_RE.test(r.email) || !r.grade || !r.section || (boards.length > 1 && !r.board);
+    });
+    if (bad.length) { toast(bad.length + (bad.length === 1 ? ' row is' : ' rows are') + ' incomplete — check name, email, grade, section' + (boards.length > 1 ? ', board' : '') + '.'); return; }
+    // duplicate emails within the batch
+    var seen = {}, dupe = null;
+    filled.forEach(function (r) { var e = r.email.toLowerCase(); if (seen[e]) dupe = r.email; seen[e] = 1; });
+    if (dupe) { toast('Duplicate email in this batch: ' + dupe); return; }
+    // Don't re-invite someone who is already active — it would reset their login.
+    var active = {}; seedUsers().forEach(function (u) { if (u.status === 'Active') active[String(u.email || '').toLowerCase()] = 1; });
+    var already = filled.filter(function (r) { return active[r.email.toLowerCase()]; });
+    if (already.length) { toast(already.length === 1 ? (already[0].email + ' is already an active user.') : (already.length + ' of these are already active users.')); return; }
+
+    var sid = currentSchoolId();
+    inv.results = filled.map(function (r) {
+      var board = boards.length > 1 ? r.board : (boards[0] || '');
+      var res = (window.TilliAPI && TilliAPI.createInvite) ? TilliAPI.createInvite({
+        email: r.email, role: 'Teacher', school_id: sid, invitedBy: (me && me.email) || null,
+        name: r.name, grade: r.grade, section: r.section, board: board,
+      }) : { ok: true, email: r.email, tempPassword: '—', createdAt: Date.now() };
+      return { name: r.name, email: r.email, grade: r.grade, section: r.section, board: board,
+        tempPassword: res && res.ok ? res.tempPassword : 'error', createdAt: (res && res.createdAt) || Date.now(),
+        ok: !!(res && res.ok) };
+    });
+    inv.step = 'result';
+    renderInvite();
+  }
+
+  function renderInviteResult(boards) {
+    // The receipt always carries board when the school's board is known.
+    var multi = boards.length >= 1, rows = inv.results;
+    function th(t) { return '<th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450);border-bottom:1px solid var(--line-200)">' + t + '</th>'; }
+    function td(t, mono) { return '<td style="padding:8px 10px;border-bottom:1px solid var(--line-200);font-size:13px' + (mono ? ';font-family:ui-monospace,Menlo,monospace;font-weight:700;letter-spacing:.04em' : '') + '">' + t + '</td>'; }
+    var head = '<tr>' + th('Grade') + th('Section') + th('Teacher') + th('Email') + (multi ? th('Board') : '') + th('Invited') + th('Temp password') + '</tr>';
+    var bodyRows = rows.map(function (r) {
+      return '<tr>' + td(esc(r.grade)) + td(esc(r.section)) + td(esc(r.name)) + td(esc(r.email)) +
+        (multi ? td(esc(r.board || '—')) : '') + td(fmtInvDate(r.createdAt)) +
+        td(r.ok ? esc(r.tempPassword) : '<span style="color:#B22447">failed</span>', r.ok) + '</tr>';
+    }).join('');
+    var okCount = rows.filter(function (r) { return r.ok; }).length;
+
+    openModal(modalHead('Invites sent · ' + okCount) +
+      '<p class="ad-mod-note" style="margin-bottom:12px">Relay each temporary password to the teacher. Each stays <b>Invited</b> until they sign in and set their own password — then the roster shows <b>Active</b>.</p>' +
+      '<div class="ad-tablewrap"><table style="width:100%;border-collapse:collapse;min-width:640px"><thead>' + head + '</thead><tbody>' + bodyRows + '</tbody></table></div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn btn-outline btn-sm" id="inv-copyall">Copy all</button><button class="btn btn-primary btn-sm" id="inv-done">Done</button></div>',
+      { wide: true });
+
+    document.getElementById('inv-copyall').addEventListener('click', function () {
+      var header = ['Grade', 'Section', 'Teacher', 'Email'].concat(multi ? ['Board'] : []).concat(['Invited', 'Temp password']);
+      var lines = [header.join('\t')].concat(inv.results.map(function (r) {
+        return [r.grade, r.section, r.name, r.email].concat(multi ? [r.board] : []).concat([fmtInvDate(r.createdAt), r.tempPassword]).join('\t');
+      }));
+      try { navigator.clipboard.writeText(lines.join('\n')); toast('Copied ' + inv.results.length + ' rows.'); } catch (e) { toast('Copy failed.'); }
+    });
+    document.getElementById('inv-done').addEventListener('click', function () { closeModal(); render(); });
   }
 
   // ---- Grade migration (spec §6.2) — full multi-step flow ----

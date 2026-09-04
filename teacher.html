@@ -172,6 +172,29 @@
   .onb-sel-opt.on { color: var(--green-700); font-weight: 700; }
   .onb-sel-tick { flex: none; color: var(--green-600); font-weight: 800; }
 
+  /* Student roster sheet (manual "type them in") — one aligned grid drives
+     the column headers AND every row, so labels and fields share edges. */
+  .roster-sheet { --roster-cols: 1.5fr 1fr 1fr 1fr 40px; min-width: 460px; }
+  .roster-head, .roster-row {
+    display: grid; grid-template-columns: var(--roster-cols);
+    gap: 10px; align-items: center;
+  }
+  .roster-head {
+    margin-bottom: 8px; padding: 0 6px;
+    font-weight: 800; font-size: 10.5px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-300);
+  }
+  .roster-row { padding: 7px 6px; border-radius: 12px; transition: background .15s; }
+  .roster-row + .roster-row { border-top: 1px solid var(--line-200); }
+  .roster-row:hover { background: var(--surface-100); }
+  .roster-del {
+    width: 32px; height: 32px; border: none; background: none; border-radius: var(--radius-pill);
+    cursor: pointer; color: var(--ink-300); font-size: 20px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    justify-self: center; transition: background .15s, color .15s;
+  }
+  .roster-del:hover { background: #FEF1E1; color: var(--orange-500); }
+
   /* Footer buttons */
   .onb-actions { display: flex; gap: 12px; margin-top: 24px; }
   .onb-actions .btn { flex: 1; }

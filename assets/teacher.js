@@ -91,7 +91,10 @@
   // `students` holds structured records { first, last, adm, grade, section, claimCode }
   // (not display strings) so each add can run through the dedupe guard. `note`
   // carries the result of the last add (created / merged / flagged for review).
-  const blankRoster = () => ({ method: null, grade: '', first: '', last: '', adm: '', students: [], note: null, csvMsg: '', picMsg: '' });
+  // `rows` is the editable sheet (one object per student the teacher is entering);
+  // `students` is the committed set the garden reads. Legacy one-by-one fields
+  // (first/last/adm/method) are kept so the dashboard's add-more path still works.
+  const blankRoster = () => ({ method: null, grade: '', first: '', last: '', adm: '', rows: [], students: [], note: null, csvMsg: '', picMsg: '' });
 
   const state = {
     phase: 'intro',   // intro | demo | greet | assess | done | roster | complete
@@ -122,132 +125,127 @@
     catch (e) { return ''; }
   }
 
-  // ============================================================
-  //  CREATED-SCHOOL TEACHER VIEW
-  //  A wizard-created school already has this teacher's roster and
-  //  its assessments come from the shared store (deployed by the
-  //  Platform Admin), so we skip onboarding and render a focused
-  //  "complete your assessments" surface driven by TilliAPI. The
-  //  demo school keeps the full onboarding + dashboard below.
-  // ============================================================
-  const CREATED = (window.TilliAPI && window.TilliAPI.resolveSchool)
-    ? window.TilliAPI.resolveSchool(ctx.school) : null;
+  // ---------- invite / platform context ----------
+  // When a teacher was invited into a created school, the Tilli platform already
+  // knows their name, their school (with city/country) and the grades/sections
+  // they were provisioned for. We pull that here to pre-fill onboarding so they
+  // only confirm/adjust, and to seed their garden with students already on file.
+  const INVITE = (function () {
+    if (!window.TilliAPI) return null;
+    const school = window.TilliAPI.resolveSchool ? window.TilliAPI.resolveSchool(ctx.school) : null;
+    const acct = (window.TilliAPI.getAccount && ctx.email) ? window.TilliAPI.getAccount(ctx.email) : null;
+    if (!school && !acct) return null;
+    let sections = [];
+    try { if (window.TilliAPI.sectionsForTeacher && school) sections = window.TilliAPI.sectionsForTeacher(ctx.email, school.school_id) || []; } catch (e) {}
+    return { school: school || null, acct: acct || null, sections: sections };
+  })();
 
-  function renderCreatedTeacher(school) {
-    const API = window.TilliAPI, id = school.school_id, email = ctx.email;
-    const PHASES = ['Baseline', 'Midline', 'Endline'];
-    const onb = document.getElementById('onb'); if (onb) onb.style.display = 'none';
-    const host = document.getElementById('dash-root'); host.style.display = 'block';
+  // ---------- school structure (Platform Admin provisioning) ----------
+  // The grades/sections a school was set up with on the platform. The demographic
+  // step must only offer THESE — a teacher cannot claim to teach a grade/section
+  // the school doesn't have. Derived from the school's provisioned sections and
+  // expressed as indices into DEMO_GRADES so every existing key (`gi`, `gi-<sec>`)
+  // stays consistent. Null when we have no school on file (standalone demo), in
+  // which case we fall back to the full DEMO_GRADES / DEMO_SECTIONS universe.
+  const SCHOOL_STRUCT = (function () {
+    if (!INVITE || !INVITE.school || !window.TilliAPI || !window.TilliAPI.sectionsForSchool) return null;
+    let secs = [];
+    try { secs = window.TilliAPI.sectionsForSchool(INVITE.school.school_id) || []; } catch (e) { return null; }
+    if (!secs.length) return null;
+    const gradeIdx = [], secsByGi = {};
+    secs.forEach(function (s) {
+      const gi = DEMO_GRADES.findIndex((x) => x.toLowerCase() === String(s.grade || '').toLowerCase());
+      if (gi < 0) return; // grade outside the demo ladder — skip
+      if (gradeIdx.indexOf(gi) < 0) gradeIdx.push(gi);
+      const sx = String(s.section || '').toUpperCase();
+      if (!sx) return;
+      (secsByGi[gi] = secsByGi[gi] || []);
+      if (secsByGi[gi].indexOf(sx) < 0) secsByGi[gi].push(sx);
+    });
+    if (!gradeIdx.length) return null;
+    gradeIdx.sort((a, b) => a - b);
+    Object.keys(secsByGi).forEach((gi) => secsByGi[gi].sort((a, b) => DEMO_SECTIONS.indexOf(a) - DEMO_SECTIONS.indexOf(b)));
+    return { gradeIdx: gradeIdx, secsByGi: secsByGi };
+  })();
 
-    let mySecs = API.sectionsForTeacher(email, id);      // scoped sections (pre-provisioned teacher)
-    const allSecs = API.sectionsForSchool(id);
-    const scopedAll = !mySecs.length;                     // unknown email / self-join → see all classes
-    if (scopedAll) mySecs = allSecs;
-    const secIds = mySecs.map((s) => s.section_id);
-    const me = (API.staffFor(id).find((u) => u.email === String(email).toLowerCase()) || {});
+  // Grade indices (into DEMO_GRADES) the teacher may pick from, and the sections
+  // allowed under a given grade. Fall back to the full universe when the school
+  // has no structure on file.
+  function allowedGradeIdx() { return SCHOOL_STRUCT ? SCHOOL_STRUCT.gradeIdx : DEMO_GRADES.map((_, i) => i); }
+  function allowedSecs(gi) { return SCHOOL_STRUCT ? (SCHOOL_STRUCT.secsByGi[gi] || []) : DEMO_SECTIONS; }
 
-    function myStudents() {
-      return API.studentsForSchool(id).filter((s) => secIds.indexOf(s.section_id) >= 0);
+  // Pre-fill the demographic step from what the platform already knows. Every
+  // field stays editable — the teacher just checks and changes anything wrong.
+  function prefillDemo(d) {
+    if (!INVITE) return d;
+    if (INVITE.acct && INVITE.acct.name) d.name = INVITE.acct.name;
+    if (INVITE.school) {
+      d.school = INVITE.school.name || d.school;
+      if (INVITE.school.country) d.country = INVITE.school.country;
+      if (INVITE.school.city) d.city = INVITE.school.city;
     }
+    // Grades + sections: prefer the teacher's provisioned sections, else the
+    // single grade/section carried on their invite. Map grade names → the demo
+    // grade ladder; unrecognised grades are simply left for the teacher to pick.
+    const pairs = (INVITE.sections || []).map((s) => [s.grade, s.section]);
+    if (!pairs.length && INVITE.acct && INVITE.acct.grade) pairs.push([INVITE.acct.grade, INVITE.acct.section]);
+    pairs.forEach(function (p) {
+      const gi = DEMO_GRADES.findIndex((x) => x.toLowerCase() === String(p[0] || '').toLowerCase());
+      if (gi < 0) return;
+      d.gradesSel[gi] = true;
+      if (p[1]) d.secs[gi + '-' + String(p[1]).toUpperCase()] = true;
+    });
+    return d;
+  }
 
-    // The teacher completes their own observations (Teacher audience) AND
-    // administers the student-direct tasks (Direct Assessment audience) — the
-    // gamified tasks are teacher-proctored in class. Parent-audience stays with
-    // the parent app.
-    const TEACHER_AUDS = [
-      { k: 'Teacher', label: 'Your observations' },
-      { k: 'Direct Assessment', label: 'Student tasks (you run these in class)' },
-    ];
-    function draw() {
-      const students = myStudents();
-      const sids = students.map((s) => s.student_id);
-
-      function assessBlock(phase, aud, a) {
-        const doneCount = students.filter((s) => API.isComplete(id, phase, aud, s.student_id, a.id)).length;
-        const rows = students.map((s) => {
-          const done = API.isComplete(id, phase, aud, s.student_id, a.id);
-          return `<div class="tc-strow"><span>${esc(s.name)} <small>${esc(s.grade + ' ' + s.section)}</small></span>` +
-            (done ? '<span class="tc-done">✓ Done</span>'
-                  : `<button class="tc-mini" data-do="${esc(phase)}|${esc(aud)}|${esc(a.id)}|${esc(s.student_id)}">Mark done</button>`) +
-            `</div>`;
-        }).join('');
-        return `<details class="tc-assess"${doneCount < students.length ? ' open' : ''}><summary><span class="tc-aname">${esc(a.name)}</span>` +
-          `<span class="tc-acount">${doneCount}/${students.length}</span>` +
-          (doneCount < students.length ? `<button class="tc-mini tc-all" data-all="${esc(phase)}|${esc(aud)}|${esc(a.id)}">Mark all done</button>` : '<span class="tc-done">All done</span>') +
-          `</summary><div class="tc-stlist">${rows || '<div class="tc-note">No students in your classes.</div>'}</div></details>`;
-      }
-
-      const phaseCards = PHASES.map((phase) => {
-        const lanes = TEACHER_AUDS.map((au) => ({ au: au, dep: API.deploymentsFor(id, au.k, { includeEnded: true }).filter((d) => d.phase === phase)[0] }))
-          .filter((x) => x.dep);
-        if (!lanes.length) return `<div class="tc-card tc-mut"><div class="tc-ph"><b>${esc(phase)}</b><span class="tc-chip">Not deployed yet</span></div><p class="tc-note">Waiting for the Tilli team to deploy this phase.</p></div>`;
-        let done = 0, exp = 0;
-        lanes.forEach((l) => { const c = API.completionStats(id, phase, l.au.k, sids); done += c.done; exp += c.expected; });
-        const pct = exp ? Math.round(done * 100 / exp) : 0;
-        const anyLive = lanes.some((l) => l.dep.status === 'Live');
-        const groups = lanes.map((l) =>
-          `<div class="tc-aud"><div class="tc-audlbl">${esc(l.au.label)}</div>${l.dep.assessments.map((a) => assessBlock(phase, l.au.k, a)).join('')}</div>`).join('');
-        return `<div class="tc-card"><div class="tc-ph"><b>${esc(phase)}</b>` +
-          `<span class="tc-chip ${anyLive ? 'tc-live' : 'tc-end'}">${anyLive ? 'Live' : 'Ended'}</span>` +
-          `<span class="tc-prog"><i style="width:${pct}%"></i></span><span class="tc-pct">${pct}%</span></div>` +
-          groups + `</div>`;
-      }).join('');
-
-      host.innerHTML = `<div class="tc-wrap">
-        <div class="tc-top"><div class="tc-brand"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="tc-div"></span><span class="tc-meas">Measures</span></div>
-          <div class="tc-topr"><span class="tc-chip tc-role">Teacher</span><button class="tc-btn" id="tc-refresh">↻ Refresh</button><a class="tc-btn" href="index.html">Log out</a></div></div>
-        <h1 class="tc-title">Hi${me.name ? ', ' + esc(me.name.split(' ')[0]) : ''} 🌱</h1>
-        <p class="tc-sub">${esc(school.name)} · ${scopedAll ? 'all classes' : esc(mySecs.map((s) => s.name).join(', '))} · ${students.length} student${students.length === 1 ? '' : 's'}</p>
-        <p class="tc-sub2">Complete your teacher assessments for each student below. Progress saves automatically and is visible to your coordinator and the Tilli team.</p>
-        ${phaseCards}</div>`;
-
-      host.querySelectorAll('[data-do]').forEach((b) => b.addEventListener('click', () => {
-        const [phase, aud, aid, sid] = b.dataset.do.split('|');
-        API.markComplete(id, phase, aud, sid, aid, email); draw();
-      }));
-      host.querySelectorAll('[data-all]').forEach((b) => b.addEventListener('click', () => {
-        const [phase, aud, aid] = b.dataset.all.split('|');
-        myStudents().forEach((s) => API.markComplete(id, phase, aud, s.student_id, aid, email)); draw();
-      }));
-      const rb = document.getElementById('tc-refresh'); if (rb) rb.addEventListener('click', draw);
-    }
-
-    const st = document.createElement('style');
-    st.textContent = '#dash-root{background:#fff}.tc-wrap{max-width:820px;margin:0 auto;padding:22px 24px;font-family:Quicksand,sans-serif}' +
-      '.tc-top{display:flex;align-items:center;justify-content:space-between}.tc-brand{display:flex;align-items:center;gap:10px}.tc-brand img{height:24px}' +
-      '.tc-div{width:1px;height:20px;background:#ddd}.tc-meas{font-weight:700;color:#556}.tc-topr{display:flex;gap:10px;align-items:center}' +
-      '.tc-btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:7px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;color:#334}' +
-      '.tc-title{font-family:Montserrat,sans-serif;font-size:30px;margin:18px 0 2px;color:#243}.tc-sub{margin:0;color:#556;font-weight:600}.tc-sub2{margin:6px 0 18px;color:#889;font-size:13.5px}' +
-      '.tc-card{border:1px solid #eee;border-radius:16px;padding:16px 18px;margin-bottom:14px;background:#fff}.tc-card.tc-mut{background:#fafafa;color:#999}' +
-      '.tc-ph{display:flex;align-items:center;gap:10px;margin-bottom:8px}.tc-ph b{font-size:17px}' +
-      '.tc-chip{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:4px 9px;border-radius:20px;background:#eee;color:#666}' +
-      '.tc-live{background:#DDF3D2;color:#3a7d1e}.tc-end{background:#eee;color:#666}.tc-role{background:#eafbe3;color:#3a7d1e}' +
-      '.tc-prog{flex:1;max-width:180px;height:8px;border-radius:6px;background:#eee;overflow:hidden}.tc-prog i{display:block;height:100%;background:#56C02B}.tc-pct{font-weight:800;color:#3a7d1e;min-width:38px;text-align:right}' +
-      '.tc-note{color:#999;font-size:13px;margin:4px 0 0}' +
-      '.tc-assess{border-top:1px solid #f0f0f0;padding:8px 0}.tc-assess summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;font-weight:700}' +
-      '.tc-assess summary::-webkit-details-marker{display:none}.tc-aname{flex:1}.tc-acount{color:#889;font-weight:700;font-size:13px}' +
-      '.tc-mini{border:1px solid #56C02B;background:#fff;color:#3a7d1e;border-radius:8px;padding:5px 10px;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer}.tc-all{margin-left:6px}' +
-      '.tc-stlist{padding:8px 0 2px}.tc-strow{display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px dashed #f0f0f0}.tc-strow small{color:#aaa;font-weight:600}' +
-      '.tc-done{color:#3a7d1e;font-weight:800;font-size:13px}' +
-      '.tc-aud{margin-top:4px}.tc-audlbl{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8a9bb0;margin:10px 0 2px}';
-    document.head.appendChild(st);
-    draw();
+  // Students the platform already has for this teacher (their sections), mapped
+  // into the onboarding roster shape so the garden is populated on day one.
+  function platformRoster() {
+    try {
+      if (!INVITE || !INVITE.school || !window.TilliAPI.studentsForSchool) return {};
+      const secIds = (INVITE.sections || []).map((s) => s.section_id);
+      let studs = window.TilliAPI.studentsForSchool(INVITE.school.school_id) || [];
+      if (secIds.length) studs = studs.filter((s) => secIds.indexOf(s.section_id) >= 0);
+      const rows = studs.map(function (s) {
+        const parts = String(s.name || '').trim().split(' ');
+        return {
+          gs: (s.grade || '') + (s.section ? ' · Section ' + s.section : ''),
+          first: s.first || parts[0] || '', last: s.last || parts.slice(1).join(' ') || '',
+          adm: s.adm || s.student_id || '',
+        };
+      });
+      return rows.length ? { rows: rows } : {};
+    } catch (e) { return {}; }
   }
 
   // ---------- boot: resume or start ----------
   (function boot() {
-    if (CREATED && CREATED.source === 'created') { renderCreatedTeacher(CREATED); return; }
     const saved = TeacherStore.load(ctx.email);
     // A completed onboarding wins on reload — even if the URL still carries the
-    // one-shot ?new=1 sign-up flag. Without this, a refresh keeps forcing the
-    // reflection intro forever because new=1 never leaves the address bar.
+    // one-shot ?new=1 flag. Without this, a refresh keeps forcing the reflection
+    // intro forever because new=1 never leaves the address bar.
     if (saved && saved.onboarded) {
       consumeNewFlag();
       Object.assign(state, { phase: 'complete' });
       if (saved.demo) state.demo = Object.assign(blankDemo(), saved.demo);
       if (saved.selfAnswers) state.selfAnswers = saved.selfAnswers;
       if (saved.roster) state.roster = Object.assign(blankRoster(), saved.roster);
+      render();
+      return;
     }
+    // Returning "enter password" login (not activating an account): skip the
+    // whole onboarding and go straight to the dashboard, seeded from the platform.
+    if (!ctx.isNew) {
+      consumeNewFlag();
+      state.roster = Object.assign(blankRoster(), platformRoster());
+      Object.assign(state, { phase: 'complete' });
+      render();
+      return;
+    }
+    // New teacher (create-password or set-password-after-temp): run the full
+    // onboarding, pre-filled from the invite, with their students ready to add.
+    state.demo = prefillDemo(blankDemo());
+    state.roster = Object.assign(blankRoster(), platformRoster());
     render();
   })();
 
@@ -455,13 +453,15 @@
 
   function demoStep3() {
     const d = state.demo;
-    const gradePills = DEMO_GRADES.map((name, gi) =>
-      `<button class="onb-pill focus${d.gradesSel[gi] ? ' on' : ''}" data-grade="${gi}">${esc(name)}</button>`).join('');
+    const gradePills = allowedGradeIdx().map((gi) =>
+      `<button class="onb-pill focus${d.gradesSel[gi] ? ' on' : ''}" data-grade="${gi}">${esc(DEMO_GRADES[gi])}</button>`).join('');
     const hasGrades = Object.keys(d.gradesSel).length > 0;
-    const secCards = !hasGrades ? '' : DEMO_GRADES.map((name, gi) => {
+    const secCards = !hasGrades ? '' : allowedGradeIdx().map((gi) => {
+      const name = DEMO_GRADES[gi];
       if (!d.gradesSel[gi]) return '';
-      const count = DEMO_SECTIONS.filter((sx) => d.secs[gi + '-' + sx]).length;
-      const secs = DEMO_SECTIONS.map((sx) => {
+      const gradeSecs = allowedSecs(gi);
+      const count = gradeSecs.filter((sx) => d.secs[gi + '-' + sx]).length;
+      const secs = gradeSecs.map((sx) => {
         const on = !!d.secs[gi + '-' + sx];
         return `<button class="onb-check focus" data-sec="${gi}-${sx}"><span class="onb-box${on ? ' on' : ''}">${on ? '✓' : ''}</span>${sx}</button>`;
       }).join('');
@@ -508,7 +508,7 @@
     if (d.step === 2) return !!(d.school && d.country.trim() && d.city.trim());
     if (d.step === 3) {
       const sel = Object.keys(d.gradesSel);
-      return sel.length > 0 && sel.every((gi) => DEMO_SECTIONS.some((sx) => d.secs[gi + '-' + sx]));
+      return sel.length > 0 && sel.every((gi) => allowedSecs(gi).some((sx) => d.secs[gi + '-' + sx]));
     }
     return Object.keys(d.subjects).length > 0 && !!d.resSuff && Object.keys(d.resources).length > 0;
   }
@@ -519,9 +519,8 @@
     return `<div style="text-align:center;padding:16px 0">
       ${petals('sm')}
       <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Hi ${esc(first)}, it&rsquo;s nice to meet you!</h1>
-      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">A short reflection helps Tilli understand you — about 3 minutes, 10 quick questions. You can do it now, or head straight to your class and come back to it later.</p>
+      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">A short reflection helps Tilli understand you — about 3 minutes, 10 quick questions.</p>
       <button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button>
-      <button class="btn btn-ghost focus" data-act="greet-skip" style="display:block;margin:12px auto 0">I&rsquo;ll do this later &#8594;</button>
     </div>`;
   }
 
@@ -594,68 +593,78 @@
   }
 
   // ---- add students ----
+  // The grade · section pairs the teacher selected in step 3 — the options for
+  // each sheet row's grade column.
+  function gradeSectionOpts() {
+    const d = state.demo, out = [];
+    Object.keys(d.gradesSel).sort((a, b) => a - b).forEach((gi) => {
+      DEMO_SECTIONS.forEach((sx) => { if (d.secs[gi + '-' + sx]) out.push(DEMO_GRADES[gi] + ' · Section ' + sx); });
+    });
+    return out;
+  }
+  const blankRow = (gs) => ({ gs: gs || '', first: '', last: '', adm: '' });
+  function sheetValid() { return (state.roster.rows || []).some((r) => r.first.trim() && r.last.trim() && r.adm.trim() && r.gs); }
+  function splitGS(gs) { const p = String(gs || '').split(' · Section '); return [(p[0] || '').trim(), (p[1] || '').trim()]; }
+
+  // Grade·section picker for a roster row. Uses the same custom .onb-sel
+  // dropdown as the rest of onboarding (native <select> mis-renders when the
+  // page is scaled and can't match the text-input styling). Open state is
+  // tracked per row via state.openSelect === 'rowgs-<i>'.
+  function gsSelect(i, current, opts) {
+    const id = 'rowgs-' + i;
+    const open = state.openSelect === id;
+    const all = opts.slice();
+    if (current && all.indexOf(current) < 0) all.unshift(current);   // keep an off-list value visible
+    const menu = all.map((o) =>
+      `<button type="button" class="onb-sel-opt focus${o === current ? ' on' : ''}" data-rowgs-opt="${i}" data-rowgs-val="${esc(o)}"><span>${esc(o)}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
+    return `<div class="onb-sel${open ? ' open' : ''}">
+      <button type="button" class="onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-rowgs-toggle="${i}" aria-label="Grade and section for student ${i + 1}"><span class="onb-sel-val">${esc(current || 'Grade · section')}</span></button>
+      ${open ? `<div class="onb-sel-menu">${menu}</div>` : ''}
+    </div>`;
+  }
+
+  // "Add your students" — a method chooser (manual sheet / CSV / picture), then
+  // the chosen entry surface. Manual is an editable sheet (one row per child),
+  // pre-filled from the platform for invited teachers. Committed on "Enter my
+  // garden". `r.method` null = chooser; onbBack resets it to null to go back.
   function rosterView() {
     const r = state.roster;
+    const head = (sub) => `
+      <div style="text-align:center;margin-bottom:${sub ? 18 : 20}px">
+        <div style="font-style:italic;font-weight:700;font-size:13px;color:var(--ink-300);margin-bottom:6px">Let&rsquo;s create your garden</div>
+        <h2 class="onb-title">Add your students</h2>
+        ${sub ? `<p class="onb-help" style="margin-top:6px">${sub}</p>` : ''}
+      </div>`;
+
+    // --- entry: choose how to add students ---
     if (!r.method) {
-      return `
-        <div style="text-align:center;margin-bottom:20px">
-          <div style="font-style:italic;font-weight:700;font-size:13px;color:var(--ink-300);margin-bottom:6px">Let&rsquo;s create your garden</div>
-          <h2 class="onb-title">Add your students</h2>
-        </div>
+      const preN = (r.rows || []).filter((x) => x.first || x.adm).length;
+      return head(preN ? `${preN} student${preN === 1 ? '' : 's'} on file — pick &ldquo;Type them in&rdquo; to review &amp; edit them.` : '') + `
         <div class="onb-methods">
-          <button class="onb-method focus" data-method="one"><span class="ic">🌱</span><span class="lb">Add one by one</span></button>
+          <button class="onb-method focus" data-method="sheet"><span class="ic">🌱</span><span class="lb">Type them in</span></button>
           <button class="onb-method focus" data-method="csv"><span class="ic">📄</span><span class="lb">Upload a CSV</span></button>
           <button class="onb-method focus" data-method="pic"><span class="ic">📷</span><span class="lb">Upload a picture</span></button>
         </div>`;
     }
 
-    // grade selector needed for one-by-one and picture methods
-    const needsGrade = r.method === 'one' || r.method === 'pic';
-    const gradeOpts = [];
-    const d = state.demo;
-    Object.keys(d.gradesSel).sort((a, b) => a - b).forEach((gi) => {
-      DEMO_SECTIONS.forEach((sx) => { if (d.secs[gi + '-' + sx]) gradeOpts.push(DEMO_GRADES[gi] + ' · Section ' + sx); });
-    });
-    const gradeSel = needsGrade
-      ? `<div style="margin-bottom:16px">${selectField('Grade & section *', 'grade', r.grade, gradeOpts, 'Select the grade', 'roster')}</div>`
-      : '';
-    const showBody = !needsGrade || !!r.grade;
-
-    let body = '';
-    if (showBody && r.method === 'one') {
-      // Each chip shows the child + the stable verification code the parent needs
-      // to claim them (spec §5 second factor). Teacher hands this to the parent.
-      const chips = r.students.map((c) => {
-        const nm = (c.first + ' ' + c.last).trim() + (c.adm ? ' · #' + c.adm : '');
-        const code = c.claimCode ? `<span class="onb-chip-code" style="margin-left:6px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:11px;color:var(--green-700);background:#EAF7E3;border-radius:999px;padding:2px 8px">${esc(c.claimCode)}</span>` : '';
-        return `<span class="onb-chip">🌱 ${esc(nm)}${code}</span>`;
-      }).join('');
-      const note = rosterNoteHTML(r.note);
-      body = `
-        <div class="onb-grid2" style="margin-bottom:12px">
-          <input class="input focus" data-roster="first" value="${esc(r.first)}" placeholder="First name *">
-          <input class="input focus" data-roster="last" value="${esc(r.last)}" placeholder="Last name *">
-        </div>
-        <input class="input focus" data-roster="adm" value="${esc(r.adm)}" placeholder="Admission number *" style="margin-bottom:12px">
-        <button class="btn btn-primary block focus" data-act="roster-add"${rosterAddValid() ? '' : ' disabled'}>+ Add student</button>
-        ${note}
-        ${r.students.length ? `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 0 8px">
-            <span style="font-weight:800;font-size:13px;color:var(--ink-700)">Your students</span>
-            <span class="onb-badge">${r.students.length} ${r.students.length === 1 ? 'student' : 'students'}</span>
-          </div>
-          <div class="onb-chips">${chips}</div>` : ''}`;
-    } else if (showBody && r.method === 'csv') {
-      body = `
+    // --- CSV upload ---
+    if (r.method === 'csv') {
+      return head('') + `
         <label class="onb-drop">
           <input type="file" accept=".csv" data-roster-csv style="display:none">
           <div style="font-size:24px;margin-bottom:6px">📄</div>
           <div style="font-weight:800;font-size:14px;color:var(--ink-700)">Upload a CSV</div>
           <div style="font-size:12.5px;color:var(--ink-300);margin-top:4px">Columns: first name, last name, grade, section</div>
         </label>
-        ${r.csvMsg ? `<div class="onb-note">${esc(r.csvMsg)}</div>` : ''}`;
-    } else if (showBody && r.method === 'pic') {
-      body = `
+        ${r.csvMsg ? `<div class="onb-note" style="margin-top:12px">${esc(r.csvMsg)}</div>` : ''}
+        <div class="onb-actions" style="margin-top:18px">
+          <button class="btn btn-primary grow focus" data-act="roster-finish"${r.csvMsg ? '' : ' disabled'}>Enter my garden &#8594;</button>
+        </div>`;
+    }
+
+    // --- picture upload ---
+    if (r.method === 'pic') {
+      return head('') + `
         <div class="onb-grid2">
           <label class="onb-drop" style="padding:22px 12px">
             <input type="file" accept="image/*" data-roster-pic style="display:none">
@@ -669,20 +678,59 @@
           </label>
         </div>
         <div style="font-size:12.5px;color:var(--ink-300);margin-top:10px;text-align:center">Snap your class register — we&rsquo;ll read the names for you.</div>
-        ${r.picMsg ? `<div class="onb-note">${esc(r.picMsg)}</div>` : ''}`;
+        ${r.picMsg ? `<div class="onb-note" style="margin-top:12px">${esc(r.picMsg)}</div>` : ''}
+        <div class="onb-actions" style="margin-top:18px">
+          <button class="btn btn-primary grow focus" data-act="roster-finish"${r.picMsg ? '' : ' disabled'}>Enter my garden &#8594;</button>
+        </div>`;
     }
 
-    const canFinish = r.method === 'one' ? r.students.length > 0 : r.method === 'csv' ? !!r.csvMsg : !!r.picMsg;
-    return `
-      <div style="text-align:center;margin-bottom:20px">
-        <div style="font-style:italic;font-weight:700;font-size:13px;color:var(--ink-300);margin-bottom:6px">Let&rsquo;s create your garden</div>
-        <h2 class="onb-title">Add your students</h2>
-      </div>
-      ${gradeSel}
-      ${body}
-      <div class="onb-actions">
-        <button class="btn btn-primary grow focus" data-act="roster-finish"${canFinish ? '' : ' disabled'}>Enter my garden &#8594;</button>
+    // --- manual: editable sheet (r.method === 'sheet') ---
+    const opts = gradeSectionOpts();
+    if (!r.rows || !r.rows.length) r.rows = [blankRow(opts[0] || '')];   // always show one empty row
+    const prefilled = r.rows.some((x) => x.first || x.adm);
+
+    const header = `<div class="roster-head">` +
+      `<span>Grade · section</span><span>First name</span><span>Last name</span><span>Admission #</span><span></span></div>`;
+    const rowsHTML = r.rows.map((row, i) => `
+      <div class="roster-row">
+        ${gsSelect(i, row.gs, opts)}
+        <input class="input focus" data-rowk="first" data-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
+        <input class="input focus" data-rowk="last" data-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
+        <input class="input focus" data-rowk="adm" data-rowi="${i}" value="${esc(row.adm)}" placeholder="Admission #" aria-label="Admission number, student ${i + 1}">
+        <button class="roster-del focus" data-rowdel="${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
+      </div>`).join('');
+
+    return head(prefilled ? 'We&rsquo;ve pre-filled the students on file — check, edit, or add more below.' : 'One row per student. Add as many as you need.') + `
+      ${opts.length ? '' : '<div class="onb-note" style="margin-bottom:12px">Tip: pick the grades &amp; sections you teach in the previous step and they&rsquo;ll appear in the grade column.</div>'}
+      <div style="overflow-x:auto"><div class="roster-sheet">${header}${rowsHTML}</div></div>
+      <button class="btn btn-ghost focus" data-rowadd style="margin-top:2px">+ Add student</button>
+      <div class="onb-actions" style="margin-top:18px">
+        <button class="btn btn-primary grow focus" data-act="roster-finish"${sheetValid() ? '' : ' disabled'}>Enter my garden &#8594;</button>
       </div>`;
+  }
+
+  // Commit the sheet: funnel every complete row through the dedupe guard (best
+  // effort), then hand the committed students to the garden.
+  function commitSheet() {
+    const rows = (state.roster.rows || []).filter((r) => r.first.trim() && r.last.trim() && r.adm.trim() && r.gs);
+    const students = rows.map((row) => {
+      const gs = splitGS(row.gs), grade = gs[0], section = gs[1];
+      const first = row.first.trim(), last = row.last.trim(), adm = row.adm.trim();
+      let claimCode;
+      try {
+        if (window.TilliAPI && window.TilliAPI.addStudent) {
+          const scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
+          const res = window.TilliAPI.addStudent({
+            actorEmail: ctx.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
+            student_id: adm, first, last, grade, section, source: 'manual',
+          });
+          claimCode = res && res.student && res.student.claimCode;
+        }
+      } catch (e) {}
+      return { first, last, adm, grade, section, claimCode };
+    });
+    state.roster = Object.assign({}, state.roster, { students });
+    finishOnboard();
   }
 
   // Renders the feedback note under the add-student button. For the two
@@ -876,6 +924,38 @@
       });
     });
     root.querySelectorAll('[data-method]').forEach((b) => b.addEventListener('click', () => setRoster({ method: b.dataset.method })));
+
+    // student sheet — patched in place so carets survive typing; add/remove rerender
+    function syncFinish() { const f = root.querySelector('[data-act="roster-finish"]'); if (f) f.disabled = !sheetValid(); }
+    root.querySelectorAll('[data-rowk]').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const i = +el.dataset.rowi, k = el.dataset.rowk;
+        if (state.roster.rows[i]) state.roster.rows[i][k] = e.target.value;
+        syncFinish();
+      });
+    });
+    // custom grade·section dropdown per row (open one at a time via openSelect)
+    root.querySelectorAll('[data-rowgs-toggle]').forEach((b) =>
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = 'rowgs-' + b.dataset.rowgsToggle;
+        set({ openSelect: state.openSelect === id ? null : id });
+      }));
+    root.querySelectorAll('[data-rowgs-opt]').forEach((b) =>
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const i = +b.dataset.rowgsOpt;
+        if (state.roster.rows[i]) state.roster.rows[i].gs = b.dataset.rowgsVal;
+        set({ openSelect: null });   // rerenders → new value + closed menu
+      }));
+    const rowAdd = root.querySelector('[data-rowadd]');
+    if (rowAdd) rowAdd.addEventListener('click', () => { const o = gradeSectionOpts(); state.roster.rows.push(blankRow(o[0] || '')); render(); });
+    root.querySelectorAll('[data-rowdel]').forEach((b) => b.addEventListener('click', () => {
+      state.roster.rows.splice(+b.dataset.rowdel, 1);
+      if (!state.roster.rows.length) state.roster.rows.push(blankRow(gradeSectionOpts()[0] || ''));
+      render();
+    }));
+
     const csv = root.querySelector('[data-roster-csv]');
     if (csv) csv.addEventListener('change', (e) => {
       const f = e.target.files && e.target.files[0]; if (!f) return;
@@ -962,7 +1042,14 @@
         break;
       }
       case 'roster-dismiss-note': setRoster({ note: null }); break;
-      case 'roster-finish': finishOnboard(); break;
+      case 'roster-finish': {
+        const m = state.roster.method;
+        // CSV / picture are demo stubs (no real parse yet) — just enter the garden.
+        // Manual sheet funnels its rows through the dedupe guard before finishing.
+        if (m === 'csv' || m === 'pic') finishOnboard();
+        else commitSheet();
+        break;
+      }
       case 'replay': replayOnboarding(); break;
       case 'onb-back': onbBack(); break;
     }
