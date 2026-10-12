@@ -86,9 +86,9 @@
   const PALETTE = ['#FFFFFF', '#F0A84A', '#EFA9B8', '#5AA9E6', '#A99BD6', '#E4756B'];
   const TO_BLOOM = { blossoming: 'expert', growing: 'learner', tending: 'beginner', waiting: 'beginner' };
   const BAND_CHIP = {
-    Beginner: { bg: '#F3E1D2', fg: '#a06a44' },
-    Learner: { bg: '#DCE8D4', fg: '#4e6b43' },
-    Expert: { bg: '#F6D5D9', fg: '#b0546b' },
+    Beginner: { bg: '#D9F5FF', fg: '#0E7A99' },
+    Learner: { bg: '#FCF0C8', fg: '#8A6400' },
+    Expert: { bg: '#DDF3E3', fg: '#1E7A3C' },
   };
   const STATE_DOT = { blossoming: '#EFA9B8', growing: '#56C02B', tending: '#E8C4A8', waiting: '#A7CDE2' };
 
@@ -270,7 +270,8 @@
     root = mountEl;
     S = {
       data: ctx.data, baseData: ctx.data, teacher: ctx.teacher || {},
-      nav: 'garden', sectionId: (ctx.data.sections[0] || {}).id,
+      nav: (ctx.teacher && ctx.teacher.startNav) || 'garden', sectionId: (ctx.data.sections[0] || {}).id,
+      mirrorIdx: null,   // Teaching Mirror timeline: selected snapshot (null = latest)
       gardenLevel: 'landing', classModal: null, studentId: null,
       // A first-time class (built from onboarding) opens on Baseline — no prior
       // data to show; the demo dataset opens mid-year ('between'). Dev GUI switch overrides.
@@ -279,7 +280,8 @@
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
-      ovBand: null, ovSkill: null,   // Insights → Class Skill Overview: box filter + expanded skill
+      ovBand: null, ovSkill: null,
+      growthFilter: 'overview', growthTable: false,   // Insights → Growth over time line chart   // Insights → Class Skill Overview: box filter + expanded skill
       add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
       vw: window.innerWidth,
       select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
@@ -901,9 +903,9 @@
       </div>`).join('');
 
     const legend = [
-      { title: 'Expert', desc: 'thriving overall', dot: '#EFA9B8' },
-      { title: 'Learner', desc: 'on track', dot: '#56C02B' },
-      { title: 'Beginner', desc: 'start with one focus skill', dot: '#E8C4A8' },
+      { title: 'Expert', desc: 'thriving overall', dot: '#7FCB95' },
+      { title: 'Learner', desc: 'on track', dot: '#F2CF6B' },
+      { title: 'Beginner', desc: 'start with one focus skill', dot: '#7FD6EE' },
       { title: 'Need more data', desc: 'complete assessment', dot: '#A7CDE2' },
     ].map((l) => `<div class="pg-legend-item"><span class="dot" style="background:${l.dot}"></span><span><b>${l.title}</b> · ${l.desc}</span></div>`).join('');
 
@@ -1258,7 +1260,7 @@
   }
 
   function stuSkills(stu) {
-    const wcol = { Beginner: '#E8C4A8', Learner: '#B7CFA9', Expert: '#EFA9B8' };
+    const wcol = { Beginner: '#7FD6EE', Learner: '#F2CF6B', Expert: '#7FCB95' };
     const bandName = (v) => (v < 34 ? 'Beginner' : v < 67 ? 'Learner' : 'Expert');
     const card = (sk) => {
       const c = BAND_CHIP[sk.band];
@@ -1403,9 +1405,18 @@
       m36: { title: '36-week check-in', done: 'Completed · Week 36', due: 'Due · Week 36', body: 'A quick check-in before the year closes' },
       end: { title: 'End-of-year report', done: 'Completed · ' + (win('post').date || 'Sep 24'), due: 'Due ' + (win('post').date || 'Sep 24') },
     };
+    // Surveys follow the teacher's real reflections: the first Mirror is the
+    // pre-training survey; the post-training survey is done only once they've
+    // actually re-taken the reflection (it's never assumed done by the preview).
+    const snaps = mirrorSnapshots();
+    const postSnap = snaps.find((r) => r.kind === 'post' && !r.sample);
+    const shortDate = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); };
+    if (snaps[0] && snaps[0].at) DEF.pre.done = 'Completed · ' + shortDate(snaps[0].at);
+    if (postSnap) DEF.post.done = 'Completed · ' + shortDate(postSnap.at);
     const journey = ORDER.map((key, i) => {
       const d = DEF[key];
       let st = i < cur ? 'done' : i === cur ? 'active' : 'locked';
+      if (key === 'post') st = postSnap ? 'done' : i <= cur ? 'active' : 'locked';
       let body = d.body || '';
       const wk = OBS_WIN[key];
       if (wk && st !== 'locked') {
@@ -1414,6 +1425,7 @@
         body = st === 'done' && done === nStu ? 'All ' + countNoun(nStu, 'student', 'students') + ' observed'
           : done + ' of ' + countNoun(nStu, 'student', 'students') + ' observed';
       }
+      if (key === 'post' && st === 'done') body = 'Your Teaching Mirror now shows how you’ve changed';
       return { key, title: d.title, meta: st === 'done' ? d.done : st === 'active' ? d.due : 'Locked', body: st === 'locked' ? '' : body, st, obs: !!wk };
     });
     const flower = '<svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="12" r="6.4" fill="#EFA9B8"/><circle cx="31.5" cy="19" r="6.4" fill="#EFA9B8"/><circle cx="27.8" cy="30" r="6.4" fill="#EFA9B8"/><circle cx="16.2" cy="30" r="6.4" fill="#EFA9B8"/><circle cx="12.5" cy="19" r="6.4" fill="#EFA9B8"/><circle cx="22" cy="22" r="6.6" fill="#F2CE7B"/></svg>';
@@ -1422,12 +1434,15 @@
     const nodes = journey.map((j) => {
       const dn = j.st === 'done', active = j.st === 'active';
       const clickable = active || dn;
-      const dataAttr = active ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
+      const dataAttr = (j.key === 'post' && active) ? 'data-take-reflection="post"'
+        : (j.key === 'pre' || j.key === 'post') && dn ? 'data-nav="profile"'
+        : active ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
       const marker = dn ? flower : active ? `<div class="obs-marker active">${sprout}</div>` : `<div class="obs-marker lock">${lock}</div>`;
       const badge = dn ? 'Complete' : active ? 'Active' : 'Locked';
       const what = j.title.replace(/ (observations|report)$/, '').toLowerCase();
       const cta = active ? (j.obs ? 'Continue ' + what + ' observations →' : j.key.charAt(0) === 'm' ? 'Start check-in →' : 'Start survey →')
-        : (dn && j.obs) ? 'See who&rsquo;s complete →' : '';
+        : (dn && j.obs) ? 'See who&rsquo;s complete →'
+        : (dn && (j.key === 'pre' || j.key === 'post')) ? 'See my Teaching Mirror →' : '';
       return `<div class="obs-row">
         <div class="obs-node">${marker}</div>
         <button class="obs-card ${j.st}" ${dataAttr} ${clickable ? '' : 'disabled'}>
@@ -1838,7 +1853,7 @@
   // Beginner / Learner / Expert. The 3 boxes count SKILLS by their largest
   // group; tap a box to filter, tap a skill row for the student breakdown.
   const OV_BANDS = [
-    { band: 'Beginner', label: 'Needs attention', tone: 'red' },
+    { band: 'Beginner', label: 'Needs attention', tone: 'blue' },
     { band: 'Learner', label: 'Developing', tone: 'amber' },
     { band: 'Expert', label: 'Strong', tone: 'green' },
   ];
@@ -1865,7 +1880,7 @@
         return `<div class="ov-row${open ? ' open' : ''}">
           <button class="ov-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}">
             <span class="ov-name">${esc(s.name)}</span>
-            <span class="ov-bar">${seg('Beginner', 'red')}${seg('Learner', 'amber')}${seg('Expert', 'green')}</span>
+            <span class="ov-bar">${seg('Beginner', 'blue')}${seg('Learner', 'amber')}${seg('Expert', 'green')}</span>
             <span class="ov-status ov-st-${m.tone}"><i></i>${m.label}</span>
             <span class="ov-chev" aria-hidden="true">›</span>
           </button>
@@ -1884,7 +1899,7 @@
       <div class="ov-boxes">${boxes}</div>
       ${notAssessed ? `<div class="ov-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet</div>` : ''}
       <div class="ov-hint">👆 <b>Tap a box</b> to see just those skills · <b>tap a skill</b> for the student breakdown</div>
-      <div class="ov-legend"><span><i class="ov-red"></i>Beginner</span><span><i class="ov-amber"></i>Learner</span><span><i class="ov-green"></i>Expert</span></div>
+      <div class="ov-legend"><span><i class="ov-blue"></i>Beginner</span><span><i class="ov-amber"></i>Learner</span><span><i class="ov-green"></i>Expert</span></div>
       <div class="ov-list">${rows}</div>
     </div>`;
   }
@@ -1908,27 +1923,151 @@
     </div>`;
   }
 
-  // b) Progress over time — Baseline / Mid / End grouped columns per skill.
-  function progressCard(stats, meas) {
+  // b) Growth over time — ONE line chart, filtered: Overview (SEL vs EF
+  // averages), a whole group (its 6 skills), or a single skill against the
+  // class average. Windows not measured yet have no point (the line stops).
+  // Colours: validated categorical slots, fixed per entity (never by rank).
+  const GROWTH_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
+  const GROWTH_REF = '#9AA3AF';   // class-average reference line (dashed)
+  function growthSeries(stats, meas) {
     const phases = phaseMeta();
-    const rows = stats.map((s) => {
-      const cells = phases.map((p) => {
-        if (!meas[p.win]) return `<div class="pot-cell pot-empty" title="${esc(p.meta.label)} not measured yet"><div class="pot-barwrap pot-hollow"></div><span class="pot-val">–</span><span class="pot-lab">${esc(shortWin(p.meta.label))}</span></div>`;
-        const v = s[p.field];
-        return `<div class="pot-cell"><div class="pot-barwrap"><div class="pot-bar bs-fill-${toneOf(v)}" style="height:${Math.max(6, v)}%"></div></div><span class="pot-val">${v}%</span><span class="pot-lab">${esc(shortWin(p.meta.label))}</span></div>`;
-      }).join('');
-      return `<div class="pot-skill"><div class="pot-name">${esc(s.name)}</div><div class="pot-cells">${cells}</div></div>`;
+    const f = S.growthFilter || 'overview';
+    const avg = (list, field) => Math.round(list.reduce((a, x) => a + (x[field] || 0), 0) / (list.length || 1));
+    const vals = (fn) => phases.map((p) => (meas[p.win] ? fn(p.field) : null));
+    const group = (g) => stats.filter((x) => x.group === g);
+    if (f === 'sel' || f === 'cog') {
+      return group(f).map((x, i) => ({ name: x.name, color: GROWTH_COLORS[i % GROWTH_COLORS.length], vals: vals((fl) => x[fl]) }));
+    }
+    const one = stats.find((x) => x.key === f);
+    if (one) {
+      return [
+        { name: one.name, color: GROWTH_COLORS[0], vals: vals((fl) => one[fl]) },
+        { name: 'Class average (all skills)', color: GROWTH_REF, dashed: true, vals: vals((fl) => avg(stats, fl)) },
+      ];
+    }
+    return [
+      { name: 'Social-Emotional', color: GROWTH_COLORS[0], vals: vals((fl) => avg(group('sel'), fl)) },
+      { name: 'Executive Function', color: GROWTH_COLORS[1], vals: vals((fl) => avg(group('cog'), fl)) },
+    ];
+  }
+  const GROWTH_GEO = { W: 680, H: 300, L: 46, R: 150, T: 18, B: 46 };
+  function growthX(i) { const g = GROWTH_GEO; return g.L + 30 + i * ((g.W - g.L - g.R - 60) / 2); }
+  function growthY(v) { const g = GROWTH_GEO; return g.T + (1 - v / 100) * (g.H - g.T - g.B); }
+  function growthSVG(series, phases, meas, partial) {
+    const g = GROWTH_GEO, x = growthX, y = growthY;
+    let grid = '';
+    [0, 33, 67, 100].forEach((v) => {
+      grid += `<line x1="${g.L}" x2="${g.W - g.R + 20}" y1="${y(v)}" y2="${y(v)}" stroke="#ECEEF2" stroke-width="1"${v === 33 || v === 67 ? ' stroke-dasharray="4 5"' : ''}/>`;
+      grid += `<text x="${g.L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#9AA3AF" font-family="Montserrat" font-weight="600">${v}%</text>`;
+    });
+    // band names sit in the left gutter of each zone (recessive)
+    [['Beginner', 16], ['Learner', 50], ['Expert', 84]].forEach(([lb, v]) => {
+      grid += `<text x="${g.L + 6}" y="${y(v) + 4}" font-size="10" fill="#C3C8D0" font-family="Montserrat" font-weight="700" letter-spacing=".04em">${lb.toUpperCase()}</text>`;
+    });
+    const axis = phases.map((p, i) => {
+      const on = meas[p.win];
+      return `${on ? '' : `<line x1="${x(i)}" x2="${x(i)}" y1="${g.T}" y2="${g.H - g.B}" stroke="#E2DCCB" stroke-width="1.5" stroke-dasharray="3 5"/>`}
+        <text x="${x(i)}" y="${g.H - g.B + 20}" text-anchor="middle" font-size="12" font-weight="700" fill="${on ? '#545454' : '#B5BBC4'}" font-family="Montserrat">${esc(p.meta.label)}</text>
+        ${on && !(partial && partial[p.win]) ? '' : `<text x="${x(i)}" y="${g.H - g.B + 35}" text-anchor="middle" font-size="10.5" font-weight="600" fill="${on ? '#a98424' : '#B5BBC4'}" font-family="Montserrat">${on ? 'in progress' : 'not yet'}</text>`}`;
     }).join('');
+    const lines = series.map((sr) => {
+      const pts = sr.vals.map((v, i) => (v == null ? null : [x(i), y(v)])).filter(Boolean);
+      const d = pts.map((pt, k) => (k ? 'L' : 'M') + pt[0].toFixed(1) + ' ' + pt[1].toFixed(1)).join(' ');
+      const dots = pts.map((pt) => `<circle cx="${pt[0]}" cy="${pt[1]}" r="5" fill="${sr.color}" stroke="#fff" stroke-width="2"/>`).join('');
+      return `<g>${pts.length > 1 ? `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${sr.dashed ? ' stroke-dasharray="5 5"' : ''}/>` : ''}${dots}</g>`;
+    }).join('');
+    // Direct labels at each line's last point (≤ 4 series), nudged apart.
+    let labels = '';
+    if (series.length <= 4) {
+      const ends = series.map((sr) => {
+        let li = -1; sr.vals.forEach((v, i) => { if (v != null) li = i; });
+        return li < 0 ? null : { sr, i: li, yy: y(sr.vals[li]) };
+      }).filter(Boolean).sort((a, b) => a.yy - b.yy);
+      for (let k = 1; k < ends.length; k++) if (ends[k].yy - ends[k - 1].yy < 15) ends[k].yy = ends[k - 1].yy + 15;
+      labels = ends.map((e) => `<text x="${x(e.i) + 12}" y="${e.yy + 4}" font-size="11.5" font-weight="700" fill="#474747" font-family="Montserrat">${esc(e.sr.name)} · ${e.sr.vals[e.i]}%</text>`).join('');
+    }
+    return `<svg class="gr-svg" viewBox="0 0 ${g.W} ${g.H}" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Growth over time line chart">
+      ${grid}${axis}
+      <line class="gr-cross" x1="0" x2="0" y1="${g.T}" y2="${g.H - g.B}" stroke="#9AA3AF" stroke-width="1" visibility="hidden"/>
+      ${lines}${labels}
+      <rect class="gr-hit" x="${g.L}" y="0" width="${g.W - g.L - g.R + 40}" height="${g.H - g.B + 10}" fill="transparent"/>
+    </svg>`;
+  }
+  function progressCard(stats, measured) {
+    const phases = phaseMeta();
+    const f = S.growthFilter || 'overview';
+    // Plot a window once it's measured, or while it's the open window (in progress).
+    const live = activeWindowKey();
+    const meas = {}, partial = {};
+    phases.forEach((p) => { meas[p.win] = !!measured[p.win] || live === p.win; partial[p.win] = !measured[p.win] && live === p.win; });
+    const series = growthSeries(stats, meas);
+    S._growth = { series, phases: phases.map((p) => p.meta.label) };   // read by the hover layer (wire)
+    const pill = (k, l) => `<button class="pill-tab${f === k ? ' on' : ''}" data-growth="${k}">${l}</button>`;
+    const isSkill = !['overview', 'sel', 'cog'].includes(f);
+    const skillSel = `<select class="gr-select focus" data-growth-skill aria-label="Show one skill">
+        <option value=""${isSkill ? '' : ' selected'}>One skill…</option>
+        ${stats.map((x) => `<option value="${esc(x.key)}"${f === x.key ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}
+      </select>`;
+    const legend = series.length >= 2 ? `<div class="gr-legend">${series.map((sr) =>
+      `<span><i style="border-top:2px ${sr.dashed ? 'dashed' : 'solid'} ${sr.color}"></i>${esc(sr.name)}</span>`).join('')}</div>` : '';
+    const table = `<table class="gr-table"><thead><tr><th>${isSkill || f === 'overview' ? 'Series' : 'Skill'}</th>${phases.map((p) => `<th>${esc(p.meta.label)}</th>`).join('')}</tr></thead>
+      <tbody>${series.map((sr) => `<tr><td><i style="background:${sr.color}"></i>${esc(sr.name)}</td>${sr.vals.map((v) => `<td>${v == null ? '—' : v + '%'}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     const pending = phases.filter((p) => !meas[p.win]);
     const note = pending.length
       ? `<div class="pot-note">🕒 ${pending.map((p) => `${esc(p.meta.label)}${p.meta.date ? ' opens ' + esc(p.meta.date) : ' hasn\'t opened yet'}`).join(' · ')}</div>` : '';
     return `<div class="dash-card ins-card" style="margin-top:16px">
       <div class="ins-h">Growth over time</div>
-      <div class="ins-sub">Baseline → Mid-year → End of year, side by side, so movement is visible.</div>
-      <div class="pot-list">${rows}</div>
+      <div class="ins-sub">Class average per skill at Baseline → Mid-year → End of year. Filter to compare groups or follow one skill.</div>
+      <div class="gr-filters">
+        ${pill('overview', 'Overview')}${pill('sel', 'Social-Emotional')}${pill('cog', 'Executive Function')}${skillSel}
+        <button class="gr-view focus" data-growth-table title="Switch between the chart and a table of the same numbers">${S.growthTable ? '📈 Chart view' : '▦ Table view'}</button>
+      </div>
+      ${S.growthTable ? table : `${legend}<div class="gr-wrap" tabindex="0" aria-label="Growth chart — use left and right arrows to read each window">${growthSVG(series, phases, meas, partial)}<div class="gr-tip" hidden></div></div>`}
       ${note}
       <div class="ins-foot"><button class="sc-ask focus" data-ask-ins="grow" style="width:auto;padding:10px 16px">Ask Tilli what to do with this →</button></div>
     </div>`;
+  }
+  // Hover / keyboard readout: crosshair snaps to the nearest window, one tooltip
+  // lists every series there (values lead). Built with textContent.
+  function wireGrowth() {
+    const wrap = root.querySelector('.gr-wrap');
+    const G = S._growth;
+    if (!wrap || !G) return;
+    const svg = wrap.querySelector('svg'), cross = svg.querySelector('.gr-cross'), tip = wrap.querySelector('.gr-tip');
+    const show = (i) => {
+      const xs = growthX(i);
+      cross.setAttribute('x1', xs); cross.setAttribute('x2', xs); cross.setAttribute('visibility', 'visible');
+      tip.textContent = '';
+      const h = document.createElement('div'); h.className = 'gr-tip-h'; h.textContent = G.phases[i]; tip.appendChild(h);
+      G.series.map((sr) => ({ sr, v: sr.vals[i] })).sort((a, b) => (b.v == null ? -1 : b.v) - (a.v == null ? -1 : a.v)).forEach(({ sr, v }) => {
+        const row = document.createElement('div'); row.className = 'gr-tip-r';
+        const key = document.createElement('i'); key.style.borderTop = '2px ' + (sr.dashed ? 'dashed ' : 'solid ') + sr.color;
+        const val = document.createElement('b'); val.textContent = v == null ? 'not yet' : v + '%';
+        const nm = document.createElement('span'); nm.textContent = sr.name;
+        row.appendChild(key); row.appendChild(val); row.appendChild(nm); tip.appendChild(row);
+      });
+      tip.hidden = false;
+      const box = svg.getBoundingClientRect(), scale = box.width / GROWTH_GEO.W;
+      const left = xs * scale + 14;
+      tip.style.left = (left + tip.offsetWidth > box.width ? xs * scale - tip.offsetWidth - 14 : left) + 'px';
+      tip.style.top = '8px';
+      wrap.dataset.i = i;
+    };
+    const hide = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+    const nearest = (clientX) => {
+      const box = svg.getBoundingClientRect(), sx = (clientX - box.left) * (GROWTH_GEO.W / box.width);
+      let best = 0; [0, 1, 2].forEach((i) => { if (Math.abs(growthX(i) - sx) < Math.abs(growthX(best) - sx)) best = i; });
+      return best;
+    };
+    svg.querySelector('.gr-hit').addEventListener('pointermove', (e) => show(nearest(e.clientX)));
+    svg.addEventListener('pointerleave', hide);
+    wrap.addEventListener('focus', () => show(+(wrap.dataset.i || 0)));
+    wrap.addEventListener('blur', hide);
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      show(Math.max(0, Math.min(2, +(wrap.dataset.i || 0) + (e.key === 'ArrowRight' ? 1 : -1))));
+    });
   }
   function shortWin(label) { return label === 'Mid-year' ? 'Mid' : label === 'End of year' ? 'End' : 'Base'; }
 
@@ -1943,20 +2082,15 @@
       const prog = phases.map((p) => meas[p.win]
         ? `<div class="scph"><span class="scph-l">${esc(shortWin(p.meta.label))}</span><span class="scph-v">${s[p.field]}%</span></div>`
         : `<div class="scph scph-empty"><span class="scph-l">${esc(shortWin(p.meta.label))}</span><span class="scph-v">—</span></div>`).join('');
-      const persp = `<div class="scpv">
-        <span title="How you rate the class">👩‍🏫 <b>${s.teacher}%</b> <em>Teacher</em></span>
-        <span title="How parents rate at home">🏠 <b>${s.parent}%</b> <em>Parent</em></span>
-        <span title="The children's own view">🧒 <b>${s.student}%</b> <em>Student</em></span></div>`;
       return `<button class="sb-card focus" data-ask="build" data-skill="${esc(s.name)}" data-band="${s.plurality}" aria-label="Ask Tilli how to build ${esc(s.name)}">
         <div class="sb-top"><span class="sb-name">${esc(s.name)}</span><span class="sb-tag sb-tag-${g}">${groupLabel(g)}</span></div>
         <div class="scprog">${prog}</div>
-        ${persp}
         <span class="sb-ask">Ask Tilli how to build this →</span>
       </button>`;
     }).join('');
     return `<div class="dash-card ins-card" style="margin-top:16px">
       <div class="ins-h">Every skill, up close</div>
-      <div class="ins-sub">Tap a skill for a Tilli idea to build it. Perspectives show how teacher, parent and child each see it.</div>
+      <div class="ins-sub">Tap a skill for a Tilli idea to build it.</div>
       ${toggle}
       <div class="sb-grid">${cards}</div>
     </div>`;
@@ -2319,27 +2453,102 @@
   // Teaching Mirror — the teacher's own reflection answers played back: average
   // 1–5 per category (reverse-worded items flipped so higher = more of that
   // strength), plus their written reflections.
-  function mirrorCard() {
+  // Snapshots on the Mirror timeline (oldest first). Older saves only have
+  // selfAnswers — treat that as the single first mirror.
+  function mirrorSnapshots() {
+    let list = (S.teacher.reflections || []).filter((r) => r && r.answers);
+    if (!list.length) {
+      const A = S.teacher.selfAnswers || {};
+      list = Object.keys(A).length ? [{ id: 'only', kind: 'pre', label: 'Pre-training', at: S.teacher.joinedAt, answers: A }] : [];
+    }
+    // Preview states past Baseline: until the real post-training survey is done,
+    // add a clearly-labelled sample "After training" mirror built from the first.
+    if (list.length && S.windowState !== 'baseline' && !list.some((r) => r.kind === 'post')) {
+      list = list.concat([samplePostMirror(list[0])]);
+    }
+    return list;
+  }
+  // Sample after-training answers: each 1–5 item moves 0–2 steps toward the
+  // healthy end (deterministic per question), choices step up one option,
+  // written answers get example text. Dated three weeks after the first mirror.
+  const SAMPLE_WORDS = {
+    q04: 'A parent meeting got tense. I paused, took three slow breaths and named what I was feeling before I answered — it changed the whole conversation.',
+    q09: 'We start every morning with a feelings check-in circle, and mistakes get a "great try!" from the whole class.',
+  };
+  function samplePostMirror(first) {
+    const R = S.teacher.reflection || { questions: [] };
+    const A = first.answers || {}, out = {};
+    (R.questions || []).forEach((q) => {
+      const v = A[q.id];
+      if (q.type === 'scale' && typeof v === 'number') {
+        let h = 0; for (let i = 0; i < q.id.length; i++) h = (h * 31 + q.id.charCodeAt(i)) >>> 0;
+        const step = [1, 2, 1, 0, 1][h % 5];
+        out[q.id] = q.reverse ? Math.max(1, v - step) : Math.min(5, v + step);
+      } else if (q.type === 'choice' && q.options && q.options.length) {
+        const i = q.options.indexOf(v);
+        out[q.id] = q.options[Math.min(q.options.length - 1, Math.max(0, i) + 1)];
+      } else if (q.type === 'text') {
+        out[q.id] = SAMPLE_WORDS[q.id] || 'I notice how my students are feeling much sooner now, and I respond more calmly.';
+      }
+    });
+    const base = first.at ? new Date(first.at) : new Date();
+    const at = new Date((isNaN(base) ? Date.now() : base.getTime()) + 21 * 24 * 60 * 60 * 1000);
+    at.setHours(15, 10, 0, 0);
+    return { id: 'sample-post', kind: 'post', label: 'Post-training', sample: true, at: at.toISOString(), answers: out };
+  }
+  function mirrorName(snap, i) {
+    if (i === 0) return 'My first Teaching Mirror';
+    return snap.kind === 'post' ? 'After training' : snap.kind === 'retake' ? 'Retaken reflection' : 'Teaching Mirror ' + (i + 1);
+  }
+  function fmtDateTime(iso) {
+    const t = iso ? new Date(iso) : null;
+    return t && !isNaN(t) ? t.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Date not recorded';
+  }
+  function mirrorAverages(answers) {
     const R = S.teacher.reflection || { cats: [], questions: [] };
-    const A = S.teacher.selfAnswers || {};
-    const cats = (R.cats || []).map((c, ci) => {
-      const vals = (R.questions || []).filter((q) => q.cat === ci && q.type === 'scale' && typeof A[q.id] === 'number')
-        .map((q) => (q.reverse ? 6 - A[q.id] : A[q.id]));
+    return (R.cats || []).map((c, ci) => {
+      const vals = (R.questions || []).filter((q) => q.cat === ci && q.type === 'scale' && typeof answers[q.id] === 'number')
+        .map((q) => (q.reverse ? 6 - answers[q.id] : answers[q.id]));
       return { c, avg: vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : null };
     });
-    const head = `<div class="mir-head"><div><div class="mir-t">🪞 Your Teaching Mirror</div><div class="mir-s">How you described yourself in your one-time reflection.</div></div></div>`;
-    if (!cats.some((x) => x.avg != null)) {
+  }
+  function mirrorCard() {
+    const R = S.teacher.reflection || { cats: [], questions: [] };
+    const snaps = mirrorSnapshots();
+    const head = `<div class="mir-head"><div><div class="mir-t">🪞 Your Teaching Mirror</div><div class="mir-s">How you described yourself in each reflection — switch between them to see how you&rsquo;ve changed.</div></div></div>`;
+    if (!snaps.length) {
       return `<div class="dash-card mir">${head}<p class="mir-empty">Finish your reflection to see your Teaching Mirror.</p></div>`;
     }
-    const bars = cats.map(({ c, avg }) => `<div class="mir-row" title="${esc(c.name)} — average of your 1–5 answers">
+    const idx = S.mirrorIdx == null || S.mirrorIdx >= snaps.length ? snaps.length - 1 : S.mirrorIdx;
+    const snap = snaps[idx], A = snap.answers || {};
+    const cats = mirrorAverages(A);
+    const prev = idx > 0 ? mirrorAverages(snaps[idx - 1].answers || {}) : null;
+    // Timeline switcher: one stop per snapshot, each with its local date + time.
+    const stops = snaps.map((r, i) => `<button class="mir-stop${i === idx ? ' on' : ''} focus" data-mirror-idx="${i}" aria-pressed="${i === idx}">
+        <span class="mir-dot"></span><span class="mir-sn">${esc(mirrorName(r, i))}${r.sample ? ' <em class="mir-sample">Sample</em>' : ''}</span><span class="mir-sd">${esc(fmtDateTime(r.at))}</span></button>`).join('');
+    const timeline = `<div class="mir-tl">
+        <button class="mir-nav focus" data-mirror-step="-1"${idx === 0 ? ' disabled' : ''} aria-label="Previous mirror">‹</button>
+        <div class="mir-stops">${stops}</div>
+        <button class="mir-nav focus" data-mirror-step="1"${idx === snaps.length - 1 ? ' disabled' : ''} aria-label="Next mirror">›</button>
+      </div>`;
+    const bars = cats.map(({ c, avg }, ci) => {
+      const p = prev && prev[ci] ? prev[ci].avg : null;
+      const d = avg != null && p != null ? Math.round((avg - p) * 10) / 10 : null;
+      const delta = d == null ? '' : `<span class="mir-d ${d > 0 ? 'up' : d < 0 ? 'down' : ''}" title="Change since ${esc(mirrorName(snaps[idx - 1], idx - 1))}">${d > 0 ? '▲ +' + d.toFixed(1) : d < 0 ? '▼ ' + d.toFixed(1) : '='}</span>`;
+      return `<div class="mir-row" title="${esc(c.name)} — average of your 1–5 answers">
         <span class="mir-lb">${esc(c.name)}</span>
         <span class="mir-track"><span class="mir-fill" style="width:${avg == null ? 0 : Math.round((avg / 5) * 100)}%;background:${esc(c.color || '#9DBE8D')}"></span></span>
-        <span class="mir-v">${avg == null ? '—' : avg.toFixed(1)}</span></div>`).join('');
+        <span class="mir-v">${avg == null ? '—' : avg.toFixed(1)}${delta}</span></div>`;
+    }).join('');
     const facts = (R.questions || []).filter((q) => q.type === 'choice' && A[q.id]).map((q) =>
       `<div class="mir-fact"><span>${esc(q.q)}</span><b>${esc(A[q.id])}</b></div>`).join('');
     const words = (R.questions || []).filter((q) => q.type === 'text' && String(A[q.id] || '').trim()).map((q) =>
       `<blockquote class="mir-q"><div class="mir-qq">${esc(q.q)}</div>“${esc(String(A[q.id]).trim())}”</blockquote>`).join('');
+    const sampleNote = snap.sample ? `<div class="mir-samplenote">This is a <b>sample</b> of what your Mirror could look like after training. Take the post-training survey to see your real one.
+        <button class="ra-btn primary focus" data-take-reflection="post">Take the post-training survey →</button></div>` : '';
     return `<div class="dash-card mir">${head}
+      ${timeline}
+      ${sampleNote}
       <div class="mir-bars">${bars}</div>
       <div class="mir-scale">Out of 5 · higher = more of that strength</div>
       ${facts}${words ? `<div class="mir-words">${words}</div>` : ''}
@@ -2536,6 +2745,12 @@
 
     // insights
     root.querySelectorAll('[data-inview]').forEach((b) => b.addEventListener('click', () => { S.insightsView = b.dataset.inview; render(); }));
+    root.querySelectorAll('[data-growth]').forEach((b) => b.addEventListener('click', () => { S.growthFilter = b.dataset.growth; render(); }));
+    const grSel = root.querySelector('[data-growth-skill]');
+    if (grSel) grSel.addEventListener('change', () => { S.growthFilter = grSel.value || 'overview'; render(); });
+    const grTbl = root.querySelector('[data-growth-table]');
+    if (grTbl) grTbl.addEventListener('click', () => { S.growthTable = !S.growthTable; render(); });
+    wireGrowth();
     root.querySelectorAll('[data-ov-band]').forEach((b) => b.addEventListener('click', () => { S.ovBand = S.ovBand === b.dataset.ovBand ? null : b.dataset.ovBand; S.ovSkill = null; render(); }));
     root.querySelectorAll('[data-ov-skill]').forEach((b) => b.addEventListener('click', () => { S.ovSkill = S.ovSkill === b.dataset.ovSkill ? null : b.dataset.ovSkill; render(); }));
     root.querySelectorAll('[data-skillgroup]').forEach((b) => b.addEventListener('click', () => { S.skillGroup = b.dataset.skillgroup; render(); }));
@@ -2580,6 +2795,17 @@
       else openAsk(`${sec.name} · ${skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Beginner level in it.`);
     }));
 
+    // profile: Teaching Mirror timeline
+    root.querySelectorAll('[data-mirror-idx]').forEach((b) => b.addEventListener('click', () => { S.mirrorIdx = +b.dataset.mirrorIdx; render(); }));
+    root.querySelectorAll('[data-mirror-step]').forEach((b) => b.addEventListener('click', () => {
+      const n = mirrorSnapshots().length, cur = S.mirrorIdx == null ? n - 1 : S.mirrorIdx;
+      S.mirrorIdx = Math.max(0, Math.min(n - 1, cur + +b.dataset.mirrorStep)); render();
+    }));
+    // Assess → Post-training survey: re-take the reflection (adds a Mirror snapshot)
+    root.querySelectorAll('[data-take-reflection]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.TilliOnboarding && window.TilliOnboarding.takeReflection) window.TilliOnboarding.takeReflection(b.dataset.takeReflection, 'Post-training');
+    }));
     // profile: edit details
     const pfEdit = root.querySelector('[data-pf-edit]');
     if (pfEdit) pfEdit.addEventListener('click', () => {
@@ -2979,18 +3205,18 @@
 
   /* ===== Insights — teacher planning view ===== */
   /* Growth-tone fills (design-system band tones, never traffic-light red). */
-  .bs-fill-focus { background: #E8C4A8; } .bs-fill-devel { background: #A9CE8C; } .bs-fill-strong { background: #EFA9B8; }
+  .bs-fill-focus { background: #7FD6EE; } .bs-fill-devel { background: #F2CF6B; } .bs-fill-strong { background: #7FCB95; }
 
   /* a) Skill-band summary — the 3 headline boxes */
   .bs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 4px; }
   .bs-box { border-radius: 18px; padding: 16px 16px 18px; border: 1px solid transparent; }
   .bs-box.bs-wide { grid-column: span 2; }
-  .bs-focus  { background: #FBF1E8; border-color: #EED8C2; }
-  .bs-devel  { background: #F1F8EC; border-color: #D8E8CB; }
-  .bs-strong { background: #FCEEF1; border-color: #F3D6DD; }
+  .bs-focus  { background: #EEFAFE; border-color: #BCE9F6; }
+  .bs-devel  { background: #FFF8E1; border-color: #F3E2A6; }
+  .bs-strong { background: #EEF9F1; border-color: #C8EBD2; }
   .bs-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
   .bs-count { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 26px; line-height: 1; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #fff; }
-  .bs-focus .bs-count { color: #a06a44; } .bs-devel .bs-count { color: #4e6b43; } .bs-strong .bs-count { color: #b0546b; }
+  .bs-focus .bs-count { color: #0E7A99; } .bs-devel .bs-count { color: #8A6400; } .bs-strong .bs-count { color: #1E7A3C; }
   .bs-title { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 15px; color: var(--ink-900); }
   .bs-sub { font-size: 11.5px; font-weight: 600; color: var(--ink-450); }
   .bs-skills { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -3000,19 +3226,7 @@
   .bs-skills li::before { content: '•'; position: absolute; left: 0; color: var(--ink-300); }
   .bs-none { font-size: 12.5px; color: var(--ink-300); font-weight: 600; font-style: italic; }
 
-  /* b) Progress over time — grouped columns per skill */
-  .pot-list { display: flex; flex-direction: column; }
-  .pot-skill { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line-200); }
-  .pot-skill:first-child { border-top: none; }
-  .pot-name { font-size: 13px; font-weight: 700; color: #4e463a; }
-  .pot-cells { display: flex; gap: 16px; align-items: flex-end; }
-  .pot-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 40px; }
-  .pot-barwrap { height: 56px; width: 22px; background: var(--surface-100); border-radius: 6px; display: flex; align-items: flex-end; overflow: hidden; }
-  .pot-hollow { border: 1px dashed #D9CFC0; background: transparent; }
-  .pot-bar { width: 100%; border-radius: 6px 6px 0 0; transition: height .45s var(--ease); }
-  .pot-val { font-size: 11px; font-weight: 800; color: var(--ink-450); }
-  .pot-empty .pot-val { color: var(--ink-300); }
-  .pot-lab { font-size: 10px; font-weight: 700; color: var(--ink-300); text-transform: uppercase; letter-spacing: .02em; }
+  /* b) Growth over time — note under the line chart */
   .pot-note { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-450); background: var(--surface-100); border-radius: 10px; padding: 9px 13px; }
 
   /* c) Detailed skill breakdown */
@@ -3030,8 +3244,6 @@
   .scph-l { display: block; font-size: 9.5px; font-weight: 700; color: var(--ink-300); text-transform: uppercase; }
   .scph-v { display: block; font-size: 13px; font-weight: 800; color: #4e463a; }
   .scph-empty .scph-v { color: var(--ink-300); }
-  .scpv { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--ink-450); font-weight: 600; }
-  .scpv b { color: var(--ink-900); } .scpv em { font-style: normal; color: var(--ink-300); font-size: 10.5px; }
   .sb-ask { display: inline-block; margin-top: 11px; font-size: 12px; font-weight: 800; color: var(--green-700); }
 
   /* Perspectives */
@@ -3280,8 +3492,31 @@
   .cr-cell b { font-size: 14px; font-weight: 800; color: var(--ink-900); }
   .cr-cell.done b { color: var(--green-700); }
 
+  /* Insights → Growth over time (line chart) */
+  .gr-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .gr-select { border: 1px solid var(--line-200); border-radius: 11px; padding: 8px 12px; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-450); background: #fff; cursor: pointer; }
+  .gr-select:has(option:checked:not([value=""])) { background: var(--ink-900); color: #fff; border-color: var(--ink-900); }
+  .gr-view { margin-left: auto; border: none; background: none; cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink-450); padding: 6px 8px; border-radius: 8px; }
+  .gr-view:hover { background: var(--surface-100); color: var(--ink-900); }
+  .gr-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-450); }
+  .gr-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .gr-legend i { width: 16px; height: 0; }
+  .gr-wrap { position: relative; outline: none; border-radius: 12px; }
+  .gr-wrap:focus-visible { box-shadow: 0 0 0 2px var(--green-500); }
+  .gr-svg { display: block; overflow: visible; }
+  .gr-tip { position: absolute; z-index: 3; min-width: 170px; max-width: 260px; background: #fff; border: 1px solid var(--line-200); border-radius: 12px; padding: 9px 12px; box-shadow: 0 8px 22px rgba(30,40,30,.14); pointer-events: none; }
+  .gr-tip-h { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-300); margin-bottom: 5px; }
+  .gr-tip-r { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 2px 0; }
+  .gr-tip-r i { flex: none; width: 14px; height: 0; }
+  .gr-tip-r b { font-weight: 800; color: var(--ink-900); min-width: 46px; }
+  .gr-tip-r span { color: var(--ink-450); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .gr-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-300); font-weight: 800; padding: 8px 10px; border-bottom: 1px solid var(--line-200); }
+  .gr-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-200); font-weight: 600; color: var(--ink-900); }
+  .gr-table td i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
+
   /* Insights → Class Skill Overview */
-  .ov { --ov-red: #D9302C; --ov-amber: #E3A40E; --ov-green: #22B455; }
+  .ov { --ov-blue: #26BDE2; --ov-amber: #E3A40E; --ov-green: #22B455; }
   .ov-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .ov-h { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 22px; color: var(--ink-900); }
   .ov-lead { font-size: 13.5px; font-weight: 700; color: var(--ink-450); margin-top: 4px; }
@@ -3293,7 +3528,7 @@
   .ov-box:hover { box-shadow: 0 6px 16px rgba(60,60,60,.1); }
   .ov-box.on { box-shadow: 0 0 0 3px rgba(20,20,20,.12); }
   .ov-box.dim { opacity: .5; }
-  .ov-red { background: #F6E1E1; border-color: var(--ov-red); }   .ov-red .ov-count { color: var(--ov-red); }
+  .ov-blue { background: #E3F7FD; border-color: var(--ov-blue); }   .ov-blue .ov-count { color: #0E7A99; }
   .ov-amber { background: #F8EDD5; border-color: var(--ov-amber); } .ov-amber .ov-count { color: var(--ov-amber); }
   .ov-green { background: #E1F4E7; border-color: var(--ov-green); } .ov-green .ov-count { color: var(--ov-green); }
   .ov-count { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 34px; line-height: 1.1; }
@@ -3304,17 +3539,17 @@
   .ov-legend { display: flex; gap: 18px; margin: 12px 0 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-450); }
   .ov-legend span { display: inline-flex; align-items: center; gap: 7px; }
   .ov-legend i, .ov-bh i { width: 12px; height: 12px; border-radius: 3px; border: none; }
-  .ov-legend i.ov-red, .ov-bh i.ov-red { background: var(--ov-red); } .ov-legend i.ov-amber, .ov-bh i.ov-amber { background: var(--ov-amber); } .ov-legend i.ov-green, .ov-bh i.ov-green { background: var(--ov-green); }
+  .ov-legend i.ov-blue, .ov-bh i.ov-blue { background: var(--ov-blue); } .ov-legend i.ov-amber, .ov-bh i.ov-amber { background: var(--ov-amber); } .ov-legend i.ov-green, .ov-bh i.ov-green { background: var(--ov-green); }
   .ov-list { border: 1px solid var(--line-200); border-radius: 16px; padding: 4px 10px; }
   .ov-row + .ov-row { border-top: 1px solid var(--line-200); }
   .ov-rowbtn { width: 100%; display: grid; grid-template-columns: minmax(150px, 220px) 1fr 130px 16px; gap: 16px; align-items: center; background: none; border: none; cursor: pointer; padding: 13px 8px; font-family: 'Montserrat',sans-serif; text-align: left; border-radius: 10px; }
   .ov-rowbtn:hover { background: var(--surface-100); }
   .ov-name { font-weight: 700; font-size: 14px; color: var(--ink-900); }
   .ov-bar { display: flex; height: 24px; border-radius: 7px; overflow: hidden; background: var(--surface-100); }
-  .ov-seg { height: 100%; } .ov-seg-red { background: var(--ov-red); } .ov-seg-amber { background: var(--ov-amber); } .ov-seg-green { background: var(--ov-green); }
+  .ov-seg { height: 100%; } .ov-seg-blue { background: var(--ov-blue); } .ov-seg-amber { background: var(--ov-amber); } .ov-seg-green { background: var(--ov-green); }
   .ov-status { justify-self: end; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; }
   .ov-status i { width: 9px; height: 9px; border-radius: 50%; }
-  .ov-st-red { color: var(--ov-red); } .ov-st-red i { background: var(--ov-red); }
+  .ov-st-blue { color: #0E7A99; } .ov-st-blue i { background: var(--ov-blue); }
   .ov-st-amber { color: #B98205; } .ov-st-amber i { background: var(--ov-amber); }
   .ov-st-green { color: #17913F; } .ov-st-green i { background: var(--ov-green); }
   .ov-chev { color: var(--ink-300); font-size: 20px; line-height: 1; transition: transform .15s; }
@@ -3343,18 +3578,34 @@
   .mir-s { font-size: 12.5px; color: var(--ink-300); font-weight: 600; margin-top: 2px; }
   .mir-empty { color: var(--ink-450); font-size: 14px; margin: 12px 0 2px; }
   .mir-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
-  .mir-row { display: grid; grid-template-columns: 140px 1fr 34px; gap: 12px; align-items: center; }
+  .mir-row { display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: center; }
   .mir-lb { font-size: 13px; font-weight: 700; color: var(--ink-700); }
   .mir-track { height: 12px; border-radius: 999px; background: var(--surface-100); overflow: hidden; }
   .mir-fill { display: block; height: 100%; border-radius: 999px; }
-  .mir-v { font-size: 13px; font-weight: 800; color: var(--ink-700); text-align: right; }
+  .mir-v { font-size: 13px; font-weight: 800; color: var(--ink-700); text-align: right; white-space: nowrap; }
+  .mir-d { margin-left: 8px; font-size: 11px; font-weight: 800; color: var(--ink-300); }
+  .mir-d.up { color: var(--green-700); } .mir-d.down { color: #c0435c; }
+  .mir-tl { display: flex; align-items: stretch; gap: 8px; margin-top: 16px; }
+  .mir-nav { flex: none; width: 34px; border: 1px solid var(--line-200); background: #fff; border-radius: 10px; cursor: pointer; font-size: 20px; color: var(--ink-450); }
+  .mir-nav:disabled { opacity: .35; cursor: default; }
+  .mir-stops { flex: 1; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+  .mir-stops::-webkit-scrollbar { display: none; }
+  .mir-stop { flex: 0 0 auto; min-width: 150px; display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; align-items: center; text-align: left;
+    background: var(--surface-100); border: 1.5px solid transparent; border-radius: 12px; padding: 9px 12px; cursor: pointer; font-family: 'Montserrat',sans-serif; }
+  .mir-stop.on { background: var(--wash-green); border-color: var(--green-500); }
+  .mir-dot { grid-row: 1 / 3; width: 10px; height: 10px; border-radius: 50%; background: var(--line-200); }
+  .mir-stop.on .mir-dot { background: var(--green-500); }
+  .mir-sn { font-size: 12.5px; font-weight: 800; color: var(--ink-900); }
+  .mir-sd { font-size: 11.5px; font-weight: 600; color: var(--ink-300); }
+  .mir-sample { font-style: normal; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #8A6400; background: #FCF0C8; border-radius: 999px; padding: 1px 7px; margin-left: 4px; vertical-align: 1px; }
+  .mir-samplenote { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; background: #FFF8E1; border: 1px solid #F3E2A6; border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 600; color: #6b5300; }
   .mir-scale { font-size: 11.5px; color: var(--ink-300); font-weight: 600; margin-top: 8px; text-align: right; }
   .mir-fact { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; color: var(--ink-450); border-top: 1px solid var(--line-200); padding-top: 10px; margin-top: 12px; }
   .mir-fact b { color: var(--ink-900); white-space: nowrap; }
   .mir-words { display: grid; gap: 10px; margin-top: 12px; }
   .mir-q { margin: 0; background: #FBF7EE; border-radius: 14px; padding: 12px 14px; font-size: 14px; color: #5a5040; line-height: 1.5; font-style: italic; }
   .mir-qq { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--ink-300); margin-bottom: 4px; }
-  @media (max-width: 640px) { .mir-row { grid-template-columns: 1fr 34px; } .mir-lb { grid-column: 1 / -1; } }
+  @media (max-width: 640px) { .mir-row { grid-template-columns: 1fr auto; } .mir-lb { grid-column: 1 / -1; } }
 
   /* parent report PDF (rendered off-screen by html2pdf, A4 portrait) */
   .pr { width: 190mm; font-family: 'Montserrat',sans-serif; color: #1f2a1f; background: #fff; font-size: 11px; }
@@ -3376,7 +3627,7 @@
   .pr-table td { border-bottom: 1px solid #f1f1ee; padding: 5px 6px; }
   .pr-table td.sk { font-weight: 700; }
   .pr-band { border-radius: 999px; padding: 1px 8px; font-weight: 700; font-size: 9.5px; }
-  .pr-beginner { background: #F3E1D2; color: #a06a44; } .pr-learner { background: #DCE8D4; color: #4e6b43; } .pr-expert { background: #F6D5D9; color: #b0546b; }
+  .pr-beginner { background: #D9F5FF; color: #0E7A99; } .pr-learner { background: #FCF0C8; color: #8A6400; } .pr-expert { background: #DDF3E3; color: #1E7A3C; }
   .pr-foot { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 8px; font-size: 9.5px; color: #6b7280; line-height: 1.5; }
 
   @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
@@ -3391,7 +3642,7 @@
     .bs-box.bs-wide { grid-column: auto; }
     .bs-skills.two-col { columns: 1; }
     .sb-grid, .pv-grid { grid-template-columns: 1fr; }
-    .pot-skill, .cmp2-row { grid-template-columns: 96px 1fr; gap: 10px; }
+    .cmp2-row { grid-template-columns: 96px 1fr; gap: 10px; }
     .pv-card { flex-direction: column; align-items: flex-start; gap: 8px; }
   }`;
 

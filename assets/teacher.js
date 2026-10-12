@@ -106,6 +106,12 @@
     onboarded: false, // true once the one-time setup has been completed
     joinedAt: null,   // first completion (ISO) — "Joined Tilli Measures" on the profile
     observations: {}, // { [windowKey]: { [adm]: { ratings, at } } } — teacher observations
+    // Every completed reflection, oldest first — the Teaching Mirror timeline.
+    // { id, kind: 'pre' | 'post' | 'retake', label, at (ISO), answers }
+    reflections: [],
+    reflectOnly: null, // { kind, label, prevAnswers } while re-taking just the reflection
+    replaying: false,  // "Redo reflection" (full setup replay) in progress
+    startNav: null,    // dashboard page to open on the next mount (e.g. 'profile')
     selfQ: 0,
     selfAnswers: {},
     demo: blankDemo(),
@@ -254,6 +260,11 @@
         joinedAt: saved.joinedAt || saved.completedAt || null, observations: saved.observations || {} });
       if (saved.demo) state.demo = Object.assign(blankDemo(), saved.demo);
       state.selfAnswers = migrateAnswers(saved.selfAnswers);
+      // Saves from before the timeline hold one answer set — that's the first mirror.
+      state.reflections = (saved.reflections || []).map((r) => Object.assign({}, r, { answers: migrateAnswers(r.answers) }));
+      if (!state.reflections.length && Object.keys(state.selfAnswers).length) {
+        state.reflections = [snapshot('pre', state.selfAnswers, state.joinedAt || saved.completedAt)];
+      }
       state.roster = loadRoster(saved.roster);
       render();
       return;
@@ -268,6 +279,7 @@
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
       onboarded: state.onboarded, joinedAt: state.joinedAt, observations: state.observations,
+      reflections: state.reflections,
     }, extra || {});
     TeacherStore.save(ctx.email, payload);
   }
@@ -308,8 +320,10 @@
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
       reflection: { cats: CATS, questions: SELF }, joinedAt: state.joinedAt,
-      observations: state.observations,
+      observations: state.observations, reflections: state.reflections,
+      startNav: state.startNav,
     };
+    state.startNav = null;
     // dashboard-data.js is loaded as a classic <script> in teacher.html, so it
     // works under file:// too (no ES-module fetch). It exposes window.buildAllData.
     // Pass this teacher's own roster so the dashboard shows THEIR students.
@@ -533,6 +547,15 @@
   // ---- greeting ----
   function greetView() {
     const first = (state.demo.name || '').trim().split(/\s+/)[0] || 'there';
+    if (state.reflectOnly) {
+      return `<div style="text-align:center;padding:16px 0">
+        ${petals('sm')}
+        <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Time for your ${esc(state.reflectOnly.label.toLowerCase())} reflection, ${esc(first)}</h1>
+        <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">The same ${SELF.length} questions as before. Your Teaching Mirror will keep both, so you can see how you&rsquo;ve changed.</p>
+        <button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button>
+        <div style="margin-top:14px"><button class="roster-skip focus" data-act="reflect-cancel">Not now — back to my dashboard</button></div>
+      </div>`;
+    }
     return `<div style="text-align:center;padding:16px 0">
       ${petals('sm')}
       <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Hi ${esc(first)}, it&rsquo;s nice to meet you!</h1>
@@ -1104,8 +1127,10 @@
       case 'greet-next': set(SELF.length ? { phase: 'assess', selfQ: 0 } : { phase: 'done' }); break;
       case 'self-next': {
         if (!selfAnswered(state.selfQ)) return;
-        if (state.selfQ >= SELF.length - 1) set({ phase: 'done' });
-        else set({ selfQ: state.selfQ + 1 });
+        if (state.selfQ >= SELF.length - 1) {
+          if (state.reflectOnly) finishReflectionOnly();
+          else set({ phase: 'done' });
+        } else set({ selfQ: state.selfQ + 1 });
         break;
       }
       case 'to-roster': set({ phase: 'roster' }); break;
@@ -1135,6 +1160,13 @@
         break;
       }
       case 'replay': replayOnboarding(); break;
+      case 'reflect-cancel': {
+        // Leave without saving: put the previous answers back.
+        state.selfAnswers = (state.reflectOnly && state.reflectOnly.prevAnswers) || state.selfAnswers;
+        state.reflectOnly = null; state.startNav = 'profile';
+        set({ phase: 'complete' });
+        break;
+      }
       case 'onb-back': onbBack(); break;
     }
   }
@@ -1155,10 +1187,32 @@
     }
   }
 
+  // One dated answer set on the Teaching Mirror timeline.
+  function snapshot(kind, answers, at) {
+    const LABEL = { pre: 'Pre-training', post: 'Post-training', retake: 'Retaken reflection' };
+    return { id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind, label: LABEL[kind] || 'Reflection',
+      at: at || new Date().toISOString(), answers: Object.assign({}, answers) };
+  }
+  // Reflection-only run (e.g. the post-training survey): save a new snapshot
+  // and go back to the profile, where the Mirror shows it.
+  function finishReflectionOnly() {
+    const ro = state.reflectOnly;
+    state.reflections = state.reflections.concat([snapshot(ro.kind, state.selfAnswers)]);
+    state.reflectOnly = null;
+    state.startNav = 'profile';
+    persist();
+    set({ phase: 'complete' });
+  }
   function finishOnboard() {
     const now = new Date().toISOString();
     state.onboarded = true;
     if (!state.joinedAt) state.joinedAt = now;   // first completion only — redo keeps it
+    // The first finished setup is the first mirror; a full "Redo reflection" adds one.
+    if (Object.keys(state.selfAnswers).length && (state.replaying || !state.reflections.length)) {
+      state.reflections = state.reflections.concat([snapshot(state.reflections.length ? 'retake' : 'pre', state.selfAnswers, now)]);
+    }
+    if (state.replaying) state.startNav = 'profile';
+    state.replaying = false;
     persist({ completedAt: now });
     // `new=1` is a one-shot sign-up flag. Consume it here so a page reload no
     // longer forces the reflection intro — a returning/reloading teacher whose
@@ -1187,7 +1241,20 @@
     if (dashRoot) dashRoot.style.display = 'none';
     if (onb) onb.style.display = '';
     dashboardMounted = false;   // re-mount on finish so the profile shows the new answers
+    state.replaying = true;
     set({ phase: 'intro', selfQ: 0 });
+  }
+  // Re-take ONLY the reflection questions (no demographics / roster) — used by
+  // the post-training survey. Starts blank; finishing adds a mirror snapshot.
+  function takeReflection(kind, label) {
+    const onb = document.getElementById('onb');
+    const dashRoot = document.getElementById('dash-root');
+    if (dashRoot) dashRoot.style.display = 'none';
+    if (onb) onb.style.display = '';
+    dashboardMounted = false;   // re-mount after so the Mirror shows the new snapshot
+    state.reflectOnly = { kind: kind || 'post', label: label || 'Post-training', prevAnswers: state.selfAnswers };
+    state.selfAnswers = {};
+    set({ phase: 'greet', selfQ: 0 });
   }
   // Jump straight to the "add students" step (used by the dashboard empty state
   // when a teacher landed with no students). Finishing re-mounts the dashboard
@@ -1250,7 +1317,7 @@
   }
   window.TilliOnboarding = {
     replay: replayOnboarding, addStudents: goToAddStudents,
-    appendStudents, updateDemo, saveObservation, updateStudent,
+    appendStudents, updateDemo, saveObservation, updateStudent, takeReflection,
     options: { genders: GENDERS, education: EDU_LEVELS },
   };
 
