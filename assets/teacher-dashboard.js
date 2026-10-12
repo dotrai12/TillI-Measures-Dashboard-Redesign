@@ -1086,11 +1086,11 @@
         el.className = 'pr';
         el.innerHTML = reportHTML(list[i]);
         await h2p().set({
-          margin: [10, 10, 12, 10], filename: reportFileName(list[i]),
+          margin: [12, 0, 12, 0], filename: reportFileName(list[i]),
           image: { type: 'jpeg', quality: 0.96 },
           html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'] },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['.pr-card', '.pr-tip', '.pr-summary', '.pr-note', 'tr', '.pr-sec', '.pr-foot'] },
         }).from(el).save();
       }
       S.select = { on: false, ids: {}, busy: '', err: '' };
@@ -1100,35 +1100,160 @@
     }
     render();
   }
-  // One child's parent report (placeholder format).
+  // ---------------- parent report content (matches Tilli_Parent Report_Example.pdf) ----------------
+  const REPORT_CONTACT = 'sonali@tillikids.com';   // footer contact on every parent report
+  const REPORT_SITE = 'www.tillikids.com';
+  const SKILL_WHY = {
+    emotion_awareness: 'Helps children understand what they and others feel — the foundation of all social connection.',
+    emotion_regulation: 'Builds the ability to stay calm under pressure and recover from frustration or disappointment.',
+    empathy: 'Enables children to consider other perspectives, essential for kindness and conflict resolution.',
+    relationship_skills: 'Supports healthy friendships and teamwork through communication and cooperation.',
+    metacognition: 'Teaches children to think about their own thinking — a key driver of learning and growth.',
+    critical_thinking: 'Develops the ability to reason, question, and evaluate information independently.',
+    attention: 'The ability to focus and filter distractions — foundational for learning in any setting.',
+    working_memory: 'Holding and using information in mind while completing tasks — crucial for problem solving.',
+    cognitive_flexibility: 'Adapting thinking when situations change — supports resilience and creative problem solving.',
+    planning: 'Setting goals and breaking them into steps — key for academic and personal success.',
+    inhibition_distraction: 'Resisting distractions to stay on task, supporting self-directed focus.',
+    inhibition_response: 'Pausing before acting impulsively — builds thoughtful, careful decision making.',
+  };
+  // Snapshot-summary phrasing: what the strength looks like / what growing it means.
+  const SKILL_STRENGTH = {
+    emotion_awareness: 'picks up on feelings in themselves and others with real confidence',
+    emotion_regulation: 'stays steady when things get hard and bounces back from frustration',
+    empathy: 'notices how others feel and responds with kindness',
+    relationship_skills: 'joins in, shares and works well with other children',
+    metacognition: 'talks about how they solved a problem and what was tricky',
+    critical_thinking: 'asks "why" and gives reasons for their thinking',
+    attention: 'stays focused and filters out distractions well',
+    working_memory: 'holds instructions in mind and follows them through',
+    cognitive_flexibility: 'switches between ideas and activities with ease',
+    planning: 'thinks ahead and organises the steps of a task',
+    inhibition_distraction: 'keeps going with a task even when there is noise around',
+    inhibition_response: 'pauses before reacting and makes careful choices',
+  };
+  const SKILL_GROW = {
+    emotion_awareness: 'helping {name} put a name to feelings as they happen',
+    emotion_regulation: 'helping {name} find a calm-down routine for big feelings',
+    empathy: 'helping {name} notice how other people might be feeling',
+    relationship_skills: 'helping {name} practise taking turns and joining in',
+    metacognition: 'helping {name} pause and reflect on how they think and learn',
+    critical_thinking: 'helping {name} explain the "why" behind their ideas',
+    attention: 'helping {name} stay with one thing a little longer',
+    working_memory: 'helping {name} hold a few steps in mind at once',
+    cognitive_flexibility: 'helping {name} adjust when plans change',
+    planning: 'helping {name} break tasks into small first steps',
+    inhibition_distraction: 'helping {name} keep focus when there are distractions',
+    inhibition_response: 'helping {name} stop and think before acting',
+  };
+  // "What you can do at home" — one tip per skill; the report picks the tips
+  // for the child's lowest skills.
+  const SKILL_TIPS = {
+    emotion_awareness: ['Name emotions out loud', '💛', 'When you notice a feeling at home, say it aloud — "I’m feeling a bit frustrated right now." This makes emotions normal and visible, which helps {name} do the same.'],
+    emotion_regulation: ['Make a calm-down plan', '🌊', 'Together, pick two things that help when feelings get big — three slow breaths, a hug, a quiet corner. Practise them when {name} is calm so they’re ready when needed.'],
+    empathy: ['Wonder about others', '🤝', 'While reading or watching something together, pause and ask: "How do you think they feel right now? Why?" It builds the habit of seeing through someone else’s eyes.'],
+    relationship_skills: ['Play turn-taking games', '🎲', 'Board games, cards or building together give {name} easy practice in waiting, sharing and handling winning and losing kindly.'],
+    metacognition: ['Ask "what were you thinking?"', '🌸', 'After a decision or problem, ask: "What was going through your mind?" or "Would you do anything differently next time?" This is the simplest way to build metacognition.'],
+    critical_thinking: ['Ask "how do you know?"', '🔍', 'When {name} shares an idea, gently ask "How do you know?" or "What makes you think that?" and listen to the reasoning — no right answers needed.'],
+    attention: ['One thing at a time', '🎯', 'Set up short, screen-free moments for one activity — a puzzle, a drawing, a story. Gradually stretch the time, and notice out loud when {name} stays with it.'],
+    working_memory: ['Two-step jobs', '🧺', 'Give simple two-step requests — "Put your shoes away, then bring your book." As {name} gets them right, add a third step.'],
+    cognitive_flexibility: ['Play "what else could it be?"', '🔄', 'Pick an everyday object and take turns thinking of new uses for it. Silly ideas count — it trains {name}’s thinking to bend when things change.'],
+    planning: ['Plan together before big tasks', '💜', 'Before homework or a project, ask: "What’s the first step? What comes after?" Planning out loud, with you, is exactly how organisation skills grow.'],
+    inhibition_distraction: ['Create a focus spot', '📚', 'Choose one quiet spot for homework or reading, away from the TV and toys. A predictable space makes it easier for {name} to tune out distractions.'],
+    inhibition_response: ['Celebrate the pause', '🌿', 'When {name} stops before reacting — even for a second — notice it. "I saw you take a breath there. That was really thoughtful." Small moments build big habits.'],
+  };
+  const REPORT_TIP_BG = ['#FBEFE6', '#E6F4EC', '#FDF9E8', '#F9E8EF'];
+
+  function reportTerm() {
+    const sc = window.TILLI_SCHOOL && window.TILLI_SCHOOL.school;
+    const yr = new Date().getFullYear();
+    return (sc && sc.term ? sc.term : 'Term') + ', ' + yr;
+  }
+  // One child's parent report — content + structure follow the Tilli parent
+  // report example: header, hello, 01 lenses + levels, 02 the 12 skills,
+  // 03 skill levels, 04 snapshot summary, 05 what you can do at home, footer.
   function reportHTML(stu) {
     const d = S.teacher.demo || {};
     const school = d.school || S.teacher.school || '';
-    const today = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
-    const winDone = {}; (stu.assessLog || []).forEach((w) => { winDone[w.key] = w.status !== 'pending'; });
-    const v = (wk, val) => (winDone[wk] ? val + '%' : '—');
+    const teacher = d.name || 'your class teacher';
+    const name = stu.first || stu.name;
+    const nm = (t) => esc(String(t).replace(/\{name\}/g, name));
     const waiting = stu.state === 'waiting';
-    const skillRows = (grp) => stu.skills.filter((sk) => sk.group === grp).map((sk) => `<tr>
-        <td class="sk">${esc(sk.name)}</td><td>${v('baseline', sk.pre)}</td><td>${v('mid', sk.mid)}</td><td>${v('post', sk.post)}</td>
-        <td><span class="pr-band pr-${(sk.band || '').toLowerCase()}">${waiting ? '—' : esc(sk.band)}</span></td></tr>`).join('');
-    const perspRows = stu.skills.map((sk) => `<tr><td class="sk">${esc(sk.name)}</td><td>${waiting ? '—' : sk.teacher + '%'}</td><td>${waiting ? '—' : sk.parent + '%'}</td><td>${waiting ? '—' : sk.student + '%'}</td></tr>`).join('');
-    const head = (cols) => `<tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr>`;
-    return `<div class="pr-top"><div class="pr-brand">🌱 Tilli <span>Measures</span></div><div class="pr-date">Progress report · ${esc(today)}</div></div>
-      <h1 class="pr-name">${esc(stu.name)}</h1>
-      <div class="pr-meta">${esc(stu.section || '')}${school ? ' · ' + esc(school) : ''}${uidOf(stu) ? ' · UID ' + esc(uidOf(stu)) : ''}</div>
+    const uid = uidOf(stu);
+    const sec = (n, title, tone) => `<div class="pr-sec pr-sec-${tone}"><span class="pr-num">${n}</span><span class="pr-sect">${title}</span></div>`;
+    const groupHead = (g) => g === 'sel' ? '<div class="pr-gh">💜 Social-Emotional Learning</div>' : '<div class="pr-gh">🧠 Cognitive Skills</div>';
+    const SKILLS = S.data.skills;
+    const whyTable = (g) => `${groupHead(g)}<table class="pr-tbl"><thead><tr><th>Skill</th><th>Why it matters</th></tr></thead><tbody>${
+      SKILLS.filter((k) => k.group === g).map((k, i) => `<tr${i % 2 ? ' class="alt"' : ''}><td class="pr-sk">${esc(k.name)}</td><td>${esc(SKILL_WHY[k.key] || '')}</td></tr>`).join('')}</tbody></table>`;
+    const lvlClass = (b) => 'pr-lv pr-lv-' + String(b || '').toLowerCase();
+    const levelTable = (g) => `${groupHead(g)}<table class="pr-tbl pr-lvtbl"><thead><tr><th>Skill</th><th>Level</th></tr></thead><tbody>${
+      stu.skills.filter((k) => k.group === g).map((k) => `<tr><td>${esc(k.name)}</td><td class="${lvlClass(k.band)}">${esc(k.band)}</td></tr>`).join('')}</tbody></table>`;
+    // Snapshot summary: biggest strength, two developing well, one to grow.
+    let summary = '';
+    if (!waiting) {
+      const sorted = [...stu.skills].sort((a, b) => b.pct - a.pct);
+      const top = sorted[0], low = sorted[sorted.length - 1];
+      const mid = sorted.filter((k) => k !== top && k !== low && k.band !== 'Beginner').slice(0, 2);
+      summary = `✨ ${esc(name)}&rsquo;s biggest strength is <b>${esc(top.name)}</b> — ${esc(name)} ${esc(SKILL_STRENGTH[top.key] || 'shows real confidence here')}.`
+        + (mid.length ? ` ${esc(name)}&rsquo;s ${mid.map((k) => '<b>' + esc(k.name) + '</b>').join(' and ')} ${mid.length > 1 ? 'are' : 'is'} developing well.` : '')
+        + ` The area where ${esc(name)} will grow the most with extra support right now is <b>${esc(low.name)}</b> — ${nm(SKILL_GROW[low.key] || 'with gentle, regular practice')}.`;
+    }
+    // Home tips for the 4 lowest skills (or a balanced default before baseline).
+    const tipKeys = waiting ? ['emotion_awareness', 'metacognition', 'inhibition_response', 'planning']
+      : [...stu.skills].sort((a, b) => a.pct - b.pct).slice(0, 4).map((k) => k.key);
+    const tips = tipKeys.map((k, i) => { const t = SKILL_TIPS[k]; return t ? `<div class="pr-tip" style="background:${REPORT_TIP_BG[i % REPORT_TIP_BG.length]}">
+        <div class="pr-tipt">${nm(t[0])} ${t[1]}</div><div class="pr-tipb">${nm(t[2])}</div></div>` : ''; }).join('');
+    return `<div class="pr-head">
+        <div class="pr-logo">tilli <span>PARENT REPORT</span></div>
+        <div class="pr-headr">${esc(school)}<br>${esc(reportTerm())} · ${REPORT_SITE}</div>
+      </div>
+      <div class="pr-hero">
+        <h1>Hello, <span>${esc(name)}&rsquo;s family</span> 👋</h1>
+        <div class="pr-meta">${esc(stu.section || '')}${uid ? ' · ' + esc(uid) : ''} · Teacher: ${esc(teacher)}${school ? ' · ' + esc(school) : ''}</div>
+        <p>This report brings together what we&rsquo;ve seen across three different lenses — your survey as a parent, ${esc(name)}&rsquo;s direct assessment, and their teacher&rsquo;s observations — to give you a full picture of how ${esc(name)} is growing.</p>
+      </div>
+
+      ${sec('01', 'How we look at your child&rsquo;s development 🌸', 'peach')}
+      <p class="pr-p">We look at your child through three different lenses. Each one tells us something the others can&rsquo;t — and together they give us the fullest picture.</p>
+      <div class="pr-3">
+        <div class="pr-card" style="background:#FBEFE6"><div class="pr-ct">🏠 Parent Survey</div>What you observe at home — your child&rsquo;s behaviour, emotions, and relationships in everyday life.</div>
+        <div class="pr-card" style="background:#E6F4EC"><div class="pr-ct">📝 Student Assessment</div>Direct tasks completed by your child that measure skills like attention, memory, and reasoning.</div>
+        <div class="pr-card" style="background:#EEEAFD"><div class="pr-ct">🍎 Teacher Survey</div>What the teacher observes in the classroom — focus, self-regulation, and social behaviour.</div>
+      </div>
+      <p class="pr-p">These three perspectives are combined to give each skill a level. Here&rsquo;s what each level means:</p>
+      <div class="pr-3">
+        <div class="pr-card pr-lvcard pr-lvb"><div class="pr-ct">Beginner</div>This skill is emerging. Consistent practice and support will help it grow.</div>
+        <div class="pr-card pr-lvcard pr-lvl"><div class="pr-ct">Learner</div>Developing well. Showing this skill in many situations — keep building!</div>
+        <div class="pr-card pr-lvcard pr-lve"><div class="pr-ct">Expert</div>Strong and consistent — really shining in this area!</div>
+      </div>
+      <hr class="pr-hr">
+
+      ${sec('02', 'The 12 skills we look at 🌿', 'mint')}
+      <p class="pr-p">These skills shape how children learn, relate to others, and navigate the world. Research shows they matter just as much as academic ability for long-term wellbeing and happiness.</p>
+      ${whyTable('sel')}
+      ${whyTable('cog')}
+      <hr class="pr-hr">
+
+      ${sec('03', esc(name) + '&rsquo;s skill levels 💜', 'lav')}
       ${waiting
-        ? `<div class="pr-callout">${esc(stu.first)}&rsquo;s first assessment is still in progress. This report fills in once Baseline is complete.</div>`
-        : `<div class="pr-summary">
-            <div class="pr-overall"><div class="k">Overall</div><div class="v">${esc(stu.band)}</div><div class="s">${stu.overallPct}% · ${stu.growth >= 0 ? '+' : ''}${stu.growth} since baseline</div></div>
-            <div class="pr-lines"><div><b>🌸 Something that grew</b><br>${esc(stu.celebrateLine)}</div><div><b>🪴 A place to focus</b><br>${esc(stu.tendReason)}.</div></div>
-          </div>`}
-      <h2 class="pr-h">Social-emotional skills</h2>
-      <table class="pr-table">${head(['Skill', 'Baseline', 'Mid-year', 'End of year', 'Band'])}${skillRows('sel')}</table>
-      <h2 class="pr-h">Executive function</h2>
-      <table class="pr-table">${head(['Skill', 'Baseline', 'Mid-year', 'End of year', 'Band'])}${skillRows('cog')}</table>
-      <h2 class="pr-h">Three perspectives</h2>
-      <table class="pr-table">${head(['Skill', '👩‍🏫 Teacher', '🏠 Home', '🧒 Child'])}${perspRows}</table>
-      <div class="pr-foot">Prepared by ${esc(d.name || 'your class teacher')}${school ? ', ' + esc(school) : ''}. Differences between views are normal — they&rsquo;re a conversation worth having, not a problem.</div>`;
+        ? `<div class="pr-note">${esc(name)}&rsquo;s first assessment is still in progress. Their skill levels will appear here once Baseline is complete.</div>`
+        : `<p class="pr-p">Here&rsquo;s where ${esc(name)} is right now across all 12 skills, based on the combined view from you, their teacher, and their own assessment.</p>
+           ${levelTable('sel')}${levelTable('cog')}`}
+      <hr class="pr-hr">
+
+      ${sec('04', 'Snapshot summary ✨', 'yellow')}
+      <div class="pr-summary">${waiting ? `✨ Once ${esc(name)}&rsquo;s Baseline is complete, this summary will highlight their biggest strength and where they&rsquo;ll grow the most with a little extra support.` : summary}</div>
+      <hr class="pr-hr">
+
+      ${sec('05', 'What you can do at home 🏠', 'pink')}
+      <p class="pr-p">Small, consistent moments at home make a real difference. Here are a few things to try this term:</p>
+      ${tips}
+
+      <div class="pr-foot">
+        <div><b>tilli</b> · ${esc(school)} · ${esc(reportTerm())}</div>
+        <div>${REPORT_SITE} · ${REPORT_CONTACT}</div>
+        <div class="pr-conf">Confidential — for family use only</div>
+      </div>`;
   }
 
   // ---------------- Students: detail ----------------
@@ -1578,7 +1703,7 @@
       <span style="color:var(--ink-300)">· 👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
     const body = view === 'class' ? logsByClass() : view === 'student' ? logsByStudent() : logsList();
     return `<div class="log-tabs-row"><div class="log-tabs">${tabs}</div>
-      <button class="csv-btn focus" data-csv title="Download the whole assessment log (every student × window × informant) as a CSV">⬇ Download CSV</button></div>${legend}${body}`;
+      <button class="csv-btn focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div>${legend}${body}`;
   }
 
   // Only one window open (baseline / midline / endline) → show just that window,
@@ -1655,17 +1780,57 @@
       <div class="strip-grid">${strip}</div>`;
   }
 
-  // Whole assessment log → CSV (every student × window × informant, all sections).
-  // Placeholder columns until the sample CSV arrives.
+  // Whole assessment log → CSV, in the platform's "assessment-logs" export
+  // format: one row per student, one column per instrument × window
+  // ("Memory Game (PRE)"), values Completed / In Progress / Not Started.
+  // Each informant's parts (INFORMANT_PARTS) map, in order, onto the
+  // instruments below — keep the list lengths in step with INFORMANT_PARTS.
+  const CSV_INSTRUMENTS = {
+    student: ['Student IDELA Direct Assessment', 'Emotion Matching Task', 'Memory Game', 'Hearts & Flowers', 'Emotion Matching Task 2'],
+    parent: ['Parent Assessment Demographic + Foundational Skills (IND)', 'Parent Behavioral Survey'],
+    teacher: ['Behavioral Report'],
+  };
+  const CSV_PHASE = { baseline: 'PRE', mid: 'MID', post: 'POST' };
   function downloadCSV() {
-    const head = ['student_uid', 'first_name', 'last_name', 'admission_no', 'grade', 'section', 'window', 'window_date', 'informant', 'parts_done', 'parts_total', 'informant_complete', 'window_status'];
-    const q = (v) => { const t = String(v == null ? '' : v); return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-    const lines = [head.join(',')];
-    S.data.sections.forEach((sec) => sec.students.forEach((st) => (st.assessLog || []).forEach((w) => w.persp.forEach((p) => {
-      lines.push([uidOf(st), st.first, st.last, st.adm || '', sec.grade, sec.section || '', w.label, w.date, p.label,
-        p.doneParts != null ? p.doneParts : (p.done ? 1 : 0), p.totalParts || 1, p.done ? 'yes' : 'no', (STATUS_META[w.status] || {}).label || w.status].map(q).join(','));
-    }))));
-    saveBlob(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'tilli-assessment-log-' + new Date().toISOString().slice(0, 10) + '.csv');
+    const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const wins = S.data.windows || [];
+    const order = ['student', 'parent', 'teacher'];
+    const instruments = (key, n) => {
+      const list = CSV_INSTRUMENTS[key] || [];
+      return Array.from({ length: n }, (_, i) => list[i] || (key.charAt(0).toUpperCase() + key.slice(1) + ' Assessment ' + (i + 1)));
+    };
+    // Column plan from the first student's log (every student shares the shape).
+    const any = S.data.sections.flatMap((x) => x.students).find((st) => st.assessLog);
+    const cols = [];
+    wins.forEach((w) => {
+      const lw = any && any.assessLog.find((x) => x.key === w.key);
+      order.forEach((k) => {
+        const pe = lw && lw.persp.find((x) => x.key === k);
+        const n = (pe && pe.totalParts) || (CSV_INSTRUMENTS[k] || []).length || 1;
+        instruments(k, n).forEach((name, i) => cols.push({ win: w.key, key: k, i, label: name + ' (' + (CSV_PHASE[w.key] || w.label) + ')' }));
+      });
+    });
+    const sc = window.TilliAPI && window.TilliAPI.resolveSchool ? window.TilliAPI.resolveSchool(S.teacher.school || '') : null;
+    const board = (sc && sc.board) || '';
+    const cell = (st, c) => {
+      const lw = (st.assessLog || []).find((x) => x.key === c.win);
+      const pe = lw && lw.persp.find((x) => x.key === c.key);
+      const done = pe ? (pe.doneParts != null ? pe.doneParts : (pe.done ? (pe.totalParts || 1) : 0)) : 0;
+      const total = (pe && pe.totalParts) || 1;
+      if (c.i < done) return 'Completed';
+      if (c.i === done && done > 0 && done < total) return 'In Progress';
+      return 'Not Started';
+    };
+    const rows = [];
+    S.data.sections.forEach((sec) => {
+      const gs = (sec.grade || '') + (sec.section ? ' - ' + sec.section : '');
+      [...sec.students].sort((a, b) => (a.last || '').localeCompare(b.last || '') || (a.first || '').localeCompare(b.first || ''))
+        .forEach((st) => rows.push([gs, board, st.adm || '', st.name].concat(cols.map((c) => cell(st, c)))));
+    });
+    const head = ['Grade + Section', 'Board', 'Admission Number', 'Student Name'].concat(cols.map((c) => c.label));
+    const csv = [head].concat(rows).map((r) => r.map(q).join(',')).join('\n') + '\n';
+    const file = String((sc && sc.name) || S.teacher.school || 'Tilli').trim().replace(/[^A-Za-z0-9]+/g, '_') + '-assessment-logs.csv';
+    saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), file);
   }
   function saveBlob(blob, name) {
     const a = document.createElement('a');
@@ -3607,28 +3772,53 @@
   .mir-qq { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--ink-300); margin-bottom: 4px; }
   @media (max-width: 640px) { .mir-row { grid-template-columns: 1fr auto; } .mir-lb { grid-column: 1 / -1; } }
 
-  /* parent report PDF (rendered off-screen by html2pdf, A4 portrait) */
-  .pr { width: 190mm; font-family: 'Montserrat',sans-serif; color: #1f2a1f; background: #fff; font-size: 11px; }
-  .pr-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #56C02B; padding-bottom: 8px; }
-  .pr-brand { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 16px; } .pr-brand span { color: #56C02B; }
-  .pr-date { font-size: 10px; color: #6b7280; font-weight: 600; }
-  .pr-name { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 24px; margin: 14px 0 2px; }
-  .pr-meta { font-size: 11px; color: #6b7280; font-weight: 600; }
-  .pr-callout { margin: 14px 0; background: #F1FFEC; border-radius: 10px; padding: 10px 12px; font-size: 11.5px; }
-  .pr-summary { display: flex; gap: 12px; margin: 14px 0 6px; }
-  .pr-overall { flex: 0 0 38mm; background: #F1FFEC; border-radius: 10px; padding: 10px 12px; }
-  .pr-overall .k { font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #6b7280; }
-  .pr-overall .v { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 20px; color: #348C11; }
-  .pr-overall .s { font-size: 10px; color: #4b5563; font-weight: 600; }
-  .pr-lines { flex: 1; display: grid; gap: 6px; font-size: 11px; line-height: 1.45; }
-  .pr-h { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 13.5px; margin: 14px 0 6px; }
-  .pr-table { width: 100%; border-collapse: collapse; font-size: 10.5px; page-break-inside: avoid; }
-  .pr-table th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding: 5px 6px; }
-  .pr-table td { border-bottom: 1px solid #f1f1ee; padding: 5px 6px; }
-  .pr-table td.sk { font-weight: 700; }
-  .pr-band { border-radius: 999px; padding: 1px 8px; font-weight: 700; font-size: 9.5px; }
-  .pr-beginner { background: #D9F5FF; color: #0E7A99; } .pr-learner { background: #FCF0C8; color: #8A6400; } .pr-expert { background: #DDF3E3; color: #1E7A3C; }
-  .pr-foot { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 8px; font-size: 9.5px; color: #6b7280; line-height: 1.5; }
+  /* parent report PDF (rendered off-screen by html2pdf, A4 portrait) — follows
+     Tilli_Parent Report_Example.pdf; band colours use the dashboard scheme */
+  .pr { width: 214mm; font-family: 'Montserrat',sans-serif; color: #2c2a3a; background: #fff; font-size: 11px; line-height: 1.6; }
+  .pr-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 14mm 14px; }
+  .pr-logo { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 24px; color: #3b3170; letter-spacing: -.5px; }
+  .pr-logo span { font-family: 'Montserrat',sans-serif; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; color: #3b3170; margin-left: 10px; vertical-align: 4px; }
+  .pr-headr { text-align: right; font-size: 10.5px; color: #3b3170; line-height: 1.6; }
+  .pr-hero { background: #EEEAFD; padding: 18px 14mm 20px; margin-bottom: 18px; }
+  .pr-hero h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 25px; color: #3b3170; margin: 0 0 6px; }
+  .pr-hero h1 span { color: #5B4BC4; }
+  .pr-meta { font-size: 10.5px; color: #8c8aa0; margin-bottom: 10px; }
+  .pr-hero p { margin: 0; font-size: 12px; color: #3a3850; line-height: 1.7; }
+  .pr > :not(.pr-head):not(.pr-hero) { margin-left: 14mm; margin-right: 14mm; }
+  .pr-sec { display: flex; align-items: stretch; border-radius: 10px; overflow: hidden; margin: 18px 14mm 12px; page-break-inside: avoid; page-break-after: avoid; }
+  .pr-num { flex: none; width: 34px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+  .pr-sect { flex: 1; padding: 10px 14px; font-weight: 700; font-size: 14px; color: #4a3fb0; }
+  .pr-sec-peach { background: #FBEFE6; } .pr-sec-peach .pr-num { background: #F6D5BE; color: #7a4a2a; }
+  .pr-sec-mint { background: #E6F4EC; } .pr-sec-mint .pr-num { background: #C3E5D1; color: #2b6b47; }
+  .pr-sec-lav { background: #EEEAFD; } .pr-sec-lav .pr-num { background: #C8BFF1; color: #fff; }
+  .pr-sec-yellow { background: #FDF9E8; } .pr-sec-yellow .pr-num { background: #FBEAB0; color: #7a5d00; }
+  .pr-sec-pink { background: #F9E8EF; } .pr-sec-pink .pr-num { background: #F2BFD3; color: #8a2a52; }
+  .pr-p { margin: 0 0 12px; font-size: 11.5px; }
+  .pr-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; page-break-inside: avoid; }
+  .pr-card { border-radius: 10px; padding: 12px 12px 14px; font-size: 10.5px; color: #3a3850; line-height: 1.55; }
+  .pr-ct { font-weight: 700; font-size: 12px; color: #5B4BC4; margin-bottom: 6px; }
+  .pr-lvcard { border-top: 3px solid; }
+  .pr-lvb { background: #D9F5FF; border-color: #26BDE2; } .pr-lvb .pr-ct { color: #0E7A99; }
+  .pr-lvl { background: #FCF0C8; border-color: #F2CF6B; } .pr-lvl .pr-ct { color: #8A6400; }
+  .pr-lve { background: #DDF3E3; border-color: #7FCB95; } .pr-lve .pr-ct { color: #1E7A3C; }
+  .pr-hr { border: none; border-top: 1px solid #ECEAF3; margin: 18px 0 0 !important; }
+  .pr-gh { font-weight: 700; font-size: 12.5px; color: #4a3fb0; margin: 14px 0 6px; page-break-after: avoid; }
+  .pr-tbl { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 6px; }
+  .pr-tbl th { text-align: left; font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #3b3170; padding: 7px 10px; border-bottom: 1px solid #ECEAF3; }
+  .pr-tbl td { padding: 8px 10px; border-bottom: 1px solid #F1F0F6; vertical-align: top; }
+  .pr-tbl tr { page-break-inside: avoid; }
+  .pr-tbl tr.alt td { background: #F4F1FE; }
+  .pr-sk { width: 34%; color: #6b5cd6; font-weight: 600; }
+  .pr-lvtbl th:last-child, .pr-lvtbl td:last-child { text-align: center; width: 30%; }
+  .pr-lv { font-weight: 700; font-size: 10.5px; }
+  .pr-lv-beginner { color: #0E7A99; } .pr-lv-learner { color: #8A6400; } .pr-lv-expert { color: #1E7A3C; }
+  .pr-summary, .pr-note { background: #FDF9E8; border-left: 3px solid #F2CF6B; border-radius: 0 10px 10px 0; padding: 12px 16px; font-size: 12px; line-height: 1.75; page-break-inside: avoid; }
+  .pr-tip { border-left: 3px solid #C8BFF1; border-radius: 0 10px 10px 0; padding: 11px 16px 12px; margin-bottom: 9px; page-break-inside: avoid; }
+  .pr-tipt { font-weight: 700; font-size: 12.5px; color: #6b5cd6; margin-bottom: 4px; }
+  .pr-tipb { font-size: 11.5px; color: #3a3850; line-height: 1.65; }
+  .pr-foot { margin-top: 22px !important; border-top: 1px solid #D9D5EE; padding-top: 12px; text-align: center; font-size: 10.5px; color: #3a3850; line-height: 1.8; page-break-inside: avoid; }
+  .pr-foot b { color: #3b3170; }
+  .pr-conf { font-size: 9.5px; color: #6b6880; }
 
   @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
   @media (max-width: 640px) {
