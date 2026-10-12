@@ -1130,7 +1130,7 @@
     var tableHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Student ID</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '</tr></thead><tbody id="gr-tbody">' +
       rows.map(function (r) {
         var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ui-badge lvl-' + r.stage.lvl + '"><span class="d"></span>' + esc(r.stage.label) + '</span>' : '<span class="text-muted">not yet measured</span>') + '</td>' : '';
-        return '<tr data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
+        return '<tr class="clickable" data-stuhist="' + esc(r.adm) + '" title="See ' + esc(r.first || r.name) + '\'s class history" data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
       }).join('') + '</tbody></table></div>';
 
     openModal(modalHead(grade + ' · roster') +
@@ -1174,6 +1174,45 @@
         toast('Teacher reassigned. Section history is unchanged.');
       });
     });
+    modalRoot.querySelectorAll('[data-stuhist]').forEach(function (tr) {
+      tr.addEventListener('click', function () { openStudentHistory(tr.dataset.stuhist, grade); });
+    });
+  }
+
+  // ---- Student class history (leadership) ----
+  // Who taught the child, in which class, each year, plus completion and the
+  // teacher's handover note. Deliberately NO skill levels or scores: leadership
+  // never sees an individual child's SEL results (spec §2); the class teacher
+  // sees the full per-skill history in the teacher dashboard.
+  function openStudentHistory(adm, grade) {
+    var r = AD.rosterRows().find(function (x) { return x.adm === adm; });
+    if (!r) return;
+    var sec = AD.sections.find(function (x) { return x.grade === r.grade && x.section === r.section; });
+    var teacher = sec && AD.teachers.find(function (t) { return t.id === sec.teacherId; });
+    var past = (TS && TS.pastClassesFor) ? TS.pastClassesFor(adm) : [];
+
+    var row = function (o) {
+      return '<div class="ad-hist-row">' +
+        '<span class="ui-dot' + (o.now ? '' : ' text-muted') + '" style="' + (o.now ? 'color:var(--green-500)' : '') + '"></span>' +
+        '<div class="flex-1">' +
+          '<div class="row wrap" style="gap:8px"><b class="ad-hist-t">' + esc(o.cls) + '</b><span class="text-muted ad-hist-y">' + esc(o.year) + '</span>' + (o.now ? '<span class="ui-chip ok">Current class</span>' : '') + '</div>' +
+          '<div class="ad-hist-sub">Teacher: ' + esc(o.teacher) + ' · ' + esc(o.done) + '</div>' +
+          (o.note ? '<div class="ad-hist-note"><span class="ui-eyebrow mb-1">Handover note from ' + esc(o.teacher) + '</span><p>' + esc(o.note) + '</p></div>' : '') +
+        '</div></div>';
+    };
+    var rows = [row({ now: true, cls: r.grade + ' ' + r.section, year: AD.academicYears[0], teacher: teacher ? teacher.name : '—', done: 'in progress' })]
+      .concat(past.slice().reverse().map(function (y) {
+        return row({ cls: y.grade + ' ' + y.section, year: y.year, teacher: y.teacher, done: y.windowsDone + ' of 3 assessments completed', note: y.note });
+      })).join('');
+
+    openModal(modalHead(r.name) +
+      '<p class="ui-mod-note mb-3">' + esc(r.adm) + ' · ' + esc(r.grade + ' ' + r.section) + ' · ' + plural(past.length + 1, 'year') + ' at ' + esc(AD.school.name) + '</p>' +
+      '<button type="button" class="btn-link mb-3" id="hist-back">← Back to ' + esc(grade) + ' roster</button>' +
+      '<div class="ui-eyebrow dark mb-2">Class history</div>' +
+      '<div class="ui-card sm">' + rows + '</div>' +
+      (past.length ? '' : '<p class="ui-mod-note mt-3">No earlier classes on Tilli for this child.</p>') +
+      '<div class="ui-note mt-3"><span aria-hidden="true">🔒</span><span>Skill levels and scores are visible to the class teacher only. Leadership sees class history and completion, never an individual child\'s results.</span></div>');
+    document.getElementById('hist-back').addEventListener('click', function () { openGradeRoster(grade); });
   }
 
   // This school's id (created schools resolve to a TilliAPI school_id; the demo

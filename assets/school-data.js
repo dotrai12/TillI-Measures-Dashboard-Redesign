@@ -242,12 +242,44 @@
     return ADMINS.find((a) => a.email.toLowerCase() === e) || null;
   };
 
+  // ---- past classes (multi-year history) ----
+  // Earlier school years a student spent at this school, oldest first. Each year
+  // carries the class, the teacher, how many of its 3 assessment windows were
+  // completed, every skill's [start-of-year, end-of-year] score (0–100), and the
+  // teacher's end-of-year handover note. Only Anaya Menon (KG-A) has history in
+  // the demo; every other student simply has none yet.
+  const PAST_CLASSES = {
+    'ADM-5001': [
+      {
+        year: '2024–25', grade: 'Nursery', section: 'A', teacher: 'Shalini Das', windowsDone: 3,
+        skills: {
+          emotion_awareness: [3, 8],    emotion_regulation: [6, 12],  empathy: [13, 20],
+          relationship_skills: [15, 24], metacognition: [11, 18],     critical_thinking: [22, 30],
+          working_memory: [12, 19],     planning: [24, 33],           cognitive_flexibility: [5, 10],
+          inhibition_distraction: [19, 28], inhibition_response: [14, 22], attention: [13, 21],
+        },
+        note: 'Anaya took a few weeks to settle but now joins circle time happily. She loves puzzles and block play, and stays with a task much longer than at the start of the year. Naming her own feelings is still hard; she tends to go quiet when upset. Picture cards for feelings helped a lot.',
+      },
+      {
+        year: '2025–26', grade: 'Pre-K', section: 'B', teacher: 'Farah Qureshi', windowsDone: 3,
+        skills: {
+          emotion_awareness: [10, 19],  emotion_regulation: [15, 24], empathy: [22, 33],
+          relationship_skills: [27, 39], metacognition: [21, 31],     critical_thinking: [33, 46],
+          working_memory: [22, 32],     planning: [36, 51],           cognitive_flexibility: [12, 20],
+          inhibition_distraction: [31, 48], inhibition_response: [27, 41], attention: [24, 36],
+        },
+        note: 'A big year for friendships: Anaya now invites others into her games and takes turns well. Planning and focus are real strengths. Big feelings still come out as tears at transitions; a two-minute warning before changing activity works well. Keep building her feelings vocabulary.',
+      },
+    ],
+  };
+  const pastClassesFor = (adm) => (PAST_CLASSES[String(adm || '').toUpperCase()] || []).slice();
+
   window.TILLI_SCHOOL = {
     school: SCHOOL,
     skills: SKILLS, windows: WINDOWS, perspectives: PERSPECTIVES,
     teachers: TEACHERS, sections: SECTION_DEFS, students: STUDENTS,
     activeTeacherId: ACTIVE_TEACHER_ID,
     parents: PARENTS, admins: ADMINS, credentials, passwords,
-    childrenForParent, findByAdm, findAdmin,
+    childrenForParent, findByAdm, findAdmin, pastClassesFor,
   };
 })();

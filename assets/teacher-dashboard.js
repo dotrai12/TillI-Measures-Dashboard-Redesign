@@ -1365,12 +1365,13 @@
     if (stu.state === 'waiting') {
       return `<div class="dash-wrap" style="max-width:960px">
         <button class="btn-link mb-3 focus" data-back-roster>← All students</button>
-        ${stuHead(stu, 'waiting')}
+        ${stuHead(stu, 'waiting', pastHeaderChips(stu, false))}
         <div class="ui-card ui-empty empty-card mt-4">
           <div class="ui-empty-t">No assessment data yet</div>
           <p class="ui-empty-b">Once you complete ${esc(stu.dispFirst)}'s baseline, their skills, growth and perspectives will grow in here.</p>
           <div class="actions"><button class="btn btn-primary md focus" data-continue-assess="${esc(stu.id)}">Start baseline for ${esc(stu.dispFirst)} →</button></div>
         </div>
+        ${stuPastHistory(stu, false)}
       </div>`;
     }
 
@@ -1386,7 +1387,7 @@
 
     return `<div class="dash-wrap" style="max-width:960px">
       <button class="btn-link mb-3 focus" data-back-roster>← All students</button>
-      ${stuHead(stu, stu.state, `<div class="stu-chips">${chipHTML(stu.chips)}</div>`)}
+      ${stuHead(stu, stu.state, `<div class="stu-chips">${chipHTML(stu.chips)}</div>${pastHeaderChips(stu, true)}`)}
       <div class="stu-tabs">${tabBtn}</div>
       ${panel}
     </div>`;
@@ -1461,15 +1462,99 @@
       { title: 'Baseline (Pre)', meta: 'Teacher · Parent · Student-direct', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
       { title: 'Enrolled', meta: 'Added to ' + stu.section, status: '—', dot: STATE_DOT.waiting, color: 'var(--ink-300)' },
     ].map((h) => `<div class="hist-row"><span class="dot" style="background:${h.dot}"></span><div class="hm"><div class="nm">${esc(h.title)}</div><div class="sub">${esc(h.meta)}</div></div><div class="st" style="color:${h.color}">${esc(h.status)}</div></div>`).join('');
-    return `<div class="ui-card td-rows">${rows}</div>`;
+    const past = stuPastHistory(stu, true);
+    return past + (past ? `<h3 class="ui-title hist-sec-h">This year · ${esc(stu.section)}</h3>` : '') + `<div class="ui-card td-rows">${rows}</div>`;
+  }
+
+  // ---------------- Students: previous classes (multi-year history) ----------------
+  // Earlier school years come from TILLI_SCHOOL.pastClassesFor(adm): per year the
+  // class, teacher, windows completed, each skill's [start, end] score and the
+  // teacher's handover note. Levels use the same thresholds as this year.
+  const levelName = (v) => (v < 34 ? 'Beginner' : v < 67 ? 'Learner' : 'Expert');
+  function pastClasses(stu) {
+    const TS = window.TILLI_SCHOOL;
+    return TS && TS.pastClassesFor && stu.adm ? TS.pastClassesFor(stu.adm) : [];
+  }
+  // Overall score for a past year: mean of every skill's start (i=0) or end (i=1) score.
+  function pastYearAvg(y, i) {
+    const v = Object.keys(y.skills).map((k) => y.skills[k][i]);
+    return Math.round(v.reduce((a, b) => a + b, 0) / v.length);
+  }
+  const levelBadge = (band) => `<span class="ui-badge lvl-${TP.levelOf(band).n}">${band}</span>`;
+
+  // Student header: one overall level per earlier class, newest first. When
+  // `linked`, each chip opens the History tab (reuses the [data-stab] wiring).
+  function pastHeaderChips(stu, linked) {
+    const past = pastClasses(stu);
+    if (!past.length) return '';
+    const chip = (y) => {
+      const inner = `<span class="pc-cls">${esc(y.grade)} ${esc(y.section)} · ${esc(y.year)}</span>${levelBadge(levelName(pastYearAvg(y, 1)))}`;
+      return linked
+        ? `<button class="stu-past-chip focus" data-stab="history" title="See ${esc(stu.dispFirst || stu.first)}'s full history">${inner}</button>`
+        : `<span class="stu-past-chip">${inner}</span>`;
+    };
+    return `<div class="stu-past"><span class="ui-eyebrow">Previous classes</span>${past.slice().reverse().map(chip).join('')}</div>`;
+  }
+
+  // Tiny per-skill trend line for the history table.
+  function sparkSVG(vals) {
+    const W = 84, H = 26, pad = 4;
+    // Scale to this skill's own range (min 20 pts) so small year-on-year moves stay visible.
+    const mid = (Math.min(...vals) + Math.max(...vals)) / 2, span = Math.max(20, Math.max(...vals) - Math.min(...vals));
+    const pts = vals.map((v, i) => [pad + (i * (W - pad * 2)) / Math.max(1, vals.length - 1), H / 2 - ((v - mid) / span) * (H - pad * 2)]);
+    const last = pts[pts.length - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><polyline points="${pts.map((p) => p.join(',')).join(' ')}" fill="none" style="stroke:var(--green-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${last[0]}" cy="${last[1]}" r="3" style="fill:var(--green-600)"/></svg>`;
+  }
+
+  // Full multi-year history: overall trend, skill-by-skill table, one card per
+  // earlier class with its handover note. `withNow` adds this year's column
+  // (off when the child has no data yet this year).
+  function stuPastHistory(stu, withNow) {
+    const past = pastClasses(stu);
+    if (!past.length) return '';
+    const cols = past.map((y) => ({ label: y.grade, sub: y.year, val: (k) => (y.skills[k] ? y.skills[k][1] : 0) }));
+    if (withNow) cols.push({ label: stu.grade, sub: 'This year', now: true, val: (k) => { const sk = stu.skills.find((x) => x.key === k); return sk ? sk.pct : 0; } });
+    const overall = cols.map((c) => Math.round(stu.skills.reduce((a, sk) => a + c.val(sk.key), 0) / stu.skills.length));
+
+    const head = `<tr><th>Skill</th>${cols.map((c) => `<th${c.now ? ' class="now"' : ''}>${esc(c.label)}<small>${esc(c.sub)}</small></th>`).join('')}<th>Trend</th></tr>`;
+    const rows = stu.skills.map((sk) => {
+      const vals = cols.map((c) => c.val(sk.key));
+      return `<tr><td class="name">${esc(sk.name)}</td>${vals.map((v, i) => `<td${cols[i].now ? ' class="now"' : ''}><span class="hs-cell">${levelBadge(levelName(v))}<b>${v}</b></span></td>`).join('')}<td>${sparkSVG(vals)}</td></tr>`;
+    }).join('');
+
+    const cards = past.slice().reverse().map((y) => {
+      const start = pastYearAvg(y, 0), end = pastYearAvg(y, 1);
+      return `<div class="ui-card sm past-year">
+        <div class="py-head">
+          <div><div class="py-t">${esc(y.grade)} ${esc(y.section)} · ${esc(y.year)}</div>
+          <div class="py-sub">Teacher: ${esc(y.teacher)} · ${y.windowsDone} of 3 assessments completed</div></div>
+          ${levelBadge(levelName(end))}
+        </div>
+        <div class="py-grow">Overall <b>${start}%</b> → <b>${end}%</b> across the year</div>
+        <div class="py-note"><span class="ui-eyebrow mb-1">Handover note from ${esc(y.teacher)}</span><p>${esc(y.note)}</p></div>
+      </div>`;
+    }).join('');
+
+    return `
+      <h3 class="ui-title hist-sec-h">Across the years</h3>
+      <div class="ui-card">
+        <div class="ui-mod-note mb-3">Overall score at the end of each class${withNow ? ', and where ' + esc(stu.dispFirst || stu.first) + ' is this year' : ''}</div>
+        ${trendSVG(overall, cols.map((c) => c.label))}
+      </div>
+      <h3 class="ui-title hist-sec-h">Skill by skill</h3>
+      <div class="ui-card pad0"><div class="ui-tablewrap"><table class="ui-table hist-table mw-640"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>
+      <h3 class="ui-title hist-sec-h">Class by class</h3>
+      <div class="past-years">${cards}</div>`;
   }
 
   // ---------------- charts ----------------
-  function trendSVG(vals) {
+  function trendSVG(vals, labels) {
     const W = 520, H = 120, pad = 30;
-    const xs = [pad, W / 2, W - pad];
+    labels = labels || ['Pre', 'Mid', 'Post'];
+    // Keep the end labels inside the viewBox when they are long (e.g. "Kindergarten").
+    const padX = Math.max(pad, Math.max(...labels.map((l) => String(l).length)) * 4.2);
+    const xs = vals.map((_, i) => padX + (i * (W - padX * 2)) / Math.max(1, vals.length - 1));
     const y = (v) => H - pad - (v / 100) * (H - pad * 2);
-    const labels = ['Pre', 'Mid', 'Post'];
     let dots = '', txt = '', band = '';
     vals.forEach((v, i) => {
       dots += `<circle cx="${xs[i]}" cy="${y(v)}" r="5.5" style="fill:var(--green-600)"/>`;
@@ -3257,6 +3342,26 @@
   .hist-row .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex: none; }
   .hist-row .hm { flex: 1; } .hist-row .hm .nm { font-weight: 700; font-size: var(--fs-md); } .hist-row .hm .sub { font-size: var(--fs-sm); color: var(--ink-300); }
   .hist-row .st { font-size: var(--fs-sm); font-weight: 700; }
+  /* Previous classes — header chips + multi-year History tab */
+  .stu-past { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .stu-past-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 4px 6px 4px 12px; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-xs); color: var(--ink-600); }
+  .stu-past-chip .pc-cls { white-space: nowrap; }
+  button.stu-past-chip { cursor: pointer; transition: border-color .15s; }
+  button.stu-past-chip:hover { border-color: var(--green-500); }
+  .hist-sec-h { margin: 22px 0 10px; }
+  .hist-sec-h:first-child { margin-top: 0; }
+  .hist-table th small { font-weight: 600; }
+  .hist-table th.now, .hist-table td.now { background: var(--wash-green); }
+  .hs-cell { display: inline-flex; align-items: center; gap: 8px; }
+  .hs-cell b { font-size: var(--fs-sm); color: var(--ink-900); font-variant-numeric: tabular-nums; }
+  .past-years { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .py-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .py-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
+  .py-sub { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-300); margin-top: 2px; }
+  .py-grow { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); margin: 10px 0; }
+  .py-grow b { color: var(--green-700); }
+  .py-note { background: var(--surface-100); border-radius: var(--radius-md); padding: 10px 12px; }
+  .py-note p { margin: 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.55; }
 
   /* profile */
   .pf-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--line-200); }

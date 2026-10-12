@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261012m">
+<link rel="stylesheet" href="assets/tilli.css?v=20261012p">
 <style>
   /* ============================================================
      Tilli Measures — INTERNAL managing platform chrome.
@@ -242,7 +242,8 @@
   .tl-inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
   /* ---- Add-School wizard ---- */
-  .ws-board-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+  .ws-board-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+  @media (max-width: 560px) { .ws-board-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .ws-board-opt { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line-200); border-radius: var(--radius-sm); font-weight: 600; font-size: var(--fs-md); color: var(--ink-700); cursor: pointer; }
   .ws-board-opt:has(input:checked) { border-color: var(--green-500); background: color-mix(in srgb, var(--green-500) 8%, var(--white)); color: var(--ink-900); }
   .ws-board-opt input { accent-color: var(--green-500); width: 16px; height: 16px; cursor: pointer; }
@@ -487,9 +488,9 @@
 <div id="tl-modal-root"></div>
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261012m"></script>
-<script src="assets/tilli-api.js?v=20261012m"></script>
-<script src="assets/tilli-org-data.js?v=20261012m"></script>
-<script src="assets/tilli-admin.js?v=20261012m"></script>
+<script src="assets/school-data.js?v=20261012p"></script>
+<script src="assets/tilli-api.js?v=20261012p"></script>
+<script src="assets/tilli-org-data.js?v=20261012p"></script>
+<script src="assets/tilli-admin.js?v=20261012p"></script>
 </body>
 </html>
