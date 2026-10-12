@@ -19,6 +19,7 @@
 
   var AD = window.ADMIN_DATA;
   var TS = window.TILLI_SCHOOL;
+  var PAL = window.TilliPalette;   // colour tokens (var() strings + css() resolver for SVG attributes)
   if (!AD || !TS) { document.getElementById('ad-app').innerHTML = '<div class="ad-err">Dashboard data failed to load.</div>'; return; }
 
   // ---------- identity / role ----------
@@ -80,10 +81,10 @@
       // per-phase overall + per-audience completion
       function laneCell(phase, aud) {
         var c = API.completionStats(id, phase, aud, ids);
-        if (c.status === 'Not deployed') return '<td class="cc-mut">—</td>';
+        if (c.status === 'Not deployed') return '<td class="text-muted">—</td>';
         var pc = c.pct;
         return '<td><div class="cc-cell"><span class="cc-pct">' + pc + '%</span>' +
-          '<span class="cc-bar"><i style="width:' + pc + '%"></i></span>' +
+          '<span class="ui-meter"><span style="width:' + pc + '%"></span></span>' +
           '<small>' + c.done + '/' + c.expected + '</small></div></td>';
       }
       function phaseRow(phase) {
@@ -92,9 +93,9 @@
         var done = live.reduce(function (a, c) { return a + c.done; }, 0);
         var exp = live.reduce(function (a, c) { return a + c.expected; }, 0);
         var overall = exp ? Math.round(done * 100 / exp) : null;
-        var tag = !live.length ? '<span class="ad-chip">Not deployed</span>'
-          : live.some(function (c) { return c.status === 'Live'; }) ? '<span class="ad-chip cc-live">Live</span>'
-          : '<span class="ad-chip cc-done">Ended</span>';
+        var tag = !live.length ? '<span class="ui-chip">Not deployed</span>'
+          : live.some(function (c) { return c.status === 'Live'; }) ? '<span class="ui-chip ok">Live</span>'
+          : '<span class="ui-chip muted">Ended</span>';
         return '<tr><td><b>' + esc(phase) + '</b> ' + tag + '</td>' +
           AUDS.map(function (a) { return laneCell(phase, a.k); }).join('') +
           '<td><b>' + (overall == null ? '—' : overall + '%') + '</b></td></tr>';
@@ -103,7 +104,7 @@
       var rosterRows = students.length ? students.map(function (s) {
         return '<tr><td class="name">' + esc(s.name) + '</td><td class="mono">' + esc(s.student_id) + '</td>' +
           '<td>' + esc(s.grade + ' ' + s.section) + '</td><td class="mono">' + esc(s.claimCode) + '</td></tr>';
-      }).join('') : '<tr><td colspan="4"><div class="ad-empty">No students yet.</div></td></tr>';
+      }).join('') : '<tr><td colspan="4"><div class="ui-empty">No students yet.</div></td></tr>';
 
       var staffRows = staff.map(function (u) {
         var secName = u.section_id ? (sections.find(function (x) { return x.section_id === u.section_id; }) || {}).name : '';
@@ -115,28 +116,28 @@
         '<div class="cc-wrap">' +
           '<div class="cc-top">' +
             '<div class="cc-brand"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="cc-div"></span><span class="cc-meas">Measures</span></div>' +
-            '<div class="cc-topr"><span class="ad-chip cc-role">Coordinator · full access</span>' +
-              '<button class="cc-btn" id="cc-refresh" title="Re-read live completion">↻ Refresh</button>' +
-              '<a class="cc-btn" href="index.html">Log out</a></div>' +
+            '<div class="cc-topr"><span class="ui-chip ok">Coordinator · full access</span>' +
+              '<button class="btn-line" id="cc-refresh" title="Re-read live completion">↻ Refresh</button>' +
+              '<a class="btn-line" href="index.html" style="text-decoration:none">Log out</a></div>' +
           '</div>' +
-          '<h1 class="ad-screen-title" style="margin:18px 0 2px">' + esc(school.name) + '</h1>' +
-          '<p class="ad-screen-sub" style="margin:0 0 16px">' + esc((school.city || '') + (school.city ? ', ' : '') + (school.country || '')) +
+          '<h1 class="ui-screen-title" style="margin:18px 0 2px">' + esc(school.name) + '</h1>' +
+          '<p class="ui-screen-sub" style="margin:0 0 16px">' + esc((school.city || '') + (school.city ? ', ' : '') + (school.country || '')) +
             ' · <span class="mono">' + esc(school.code || id) + '</span> · Join code <span class="mono">' + esc(school.joinCode || '—') + '</span></p>' +
           '<div class="ad-grid" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">' +
             statCard(stats.students, 'Students') + statCard(stats.sections, 'Sections') +
             statCard(stats.teachers, 'Teachers') + statCard(overallPct(id, ids), 'Overall complete') +
           '</div>' +
           card('Assessment implementation', 'Completion by phase and audience — WHO has responded, updated live as teachers and parents finish. Deploy phases from the Platform Admin console.',
-            '<div class="ad-tablewrap"><table class="ad-table cc-table"><thead><tr><th>Phase</th><th>Teacher</th><th>Parent</th><th>Student</th><th>Overall</th></tr></thead><tbody>' +
+            '<div class="ui-tablewrap"><table class="ui-table mw-640 cc-table"><thead><tr><th>Phase</th><th>Teacher</th><th>Parent</th><th>Student</th><th>Overall</th></tr></thead><tbody>' +
             PHASES.map(phaseRow).join('') + '</tbody></table></div>') +
           card('Roster', stats.students + ' students · claim codes are what parents enter to link their child.',
-            '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Claim code</th></tr></thead><tbody>' + rosterRows + '</tbody></table></div>') +
-          card('Staff', staff.length + ' members', '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Role</th><th>Section</th><th>Email</th></tr></thead><tbody>' + staffRows + '</tbody></table></div>') +
+            '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Claim code</th></tr></thead><tbody>' + rosterRows + '</tbody></table></div>') +
+          card('Staff', staff.length + ' members', '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Role</th><th>Section</th><th>Email</th></tr></thead><tbody>' + staffRows + '</tbody></table></div>') +
         '</div>';
       var rb = document.getElementById('cc-refresh');
       if (rb) rb.addEventListener('click', function () { draw(); toast('Refreshed.'); });
     }
-    function statCard(n, lbl) { return '<div class="ad-card" style="padding:16px 18px"><div class="ad-stat"><div class="num">' + esc(String(n)) + '</div><div class="lbl">' + esc(lbl) + '</div></div></div>'; }
+    function statCard(n, lbl) { return '<div class="ui-card tight"><div class="ui-kpi"><div class="num">' + esc(String(n)) + '</div><div class="lbl">' + esc(lbl) + '</div></div></div>'; }
     function overallPct(id, ids) {
       var done = 0, exp = 0;
       ['Baseline', 'Midline', 'Endline'].forEach(function (ph) {
@@ -146,19 +147,16 @@
     }
     // minimal styles for this view (scoped by cc- prefix)
     var st = document.createElement('style');
+    // (buttons = .btn-line, Live/Ended = .ui-chip ok/muted, bar = .ui-meter — all shared)
     st.textContent = '.cc-wrap{max-width:1000px;margin:0 auto;padding:22px 26px}' +
       '.cc-top{display:flex;align-items:center;justify-content:space-between;gap:12px}' +
       '.cc-brand{display:flex;align-items:center;gap:10px}.cc-brand img{height:24px}' +
-      '.cc-div{width:1px;height:20px;background:var(--surface-300,#ddd)}.cc-meas{font-weight:700;color:var(--ink-600,#556)}' +
+      '.cc-div{width:1px;height:20px;background:var(--line-200)}.cc-meas{font-weight:700;color:var(--ink-600)}' +
       '.cc-topr{display:flex;align-items:center;gap:10px}' +
-      '.cc-btn{border:1px solid var(--surface-300,#ddd);background:#fff;border-radius:10px;padding:7px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;color:var(--ink-700,#334)}' +
-      '.cc-role{background:var(--wash-green,#eafbe3);color:var(--green-700,#3a7d1e)}' +
-      '.cc-live{background:#DDF3D2;color:#3a7d1e}.cc-done{background:#eee;color:#555}' +
-      '.cc-table td,.cc-table th{vertical-align:middle}.cc-mut{color:#aaa}' +
+      '.cc-table td,.cc-table th{vertical-align:middle}' +
       '.cc-cell{display:flex;align-items:center;gap:8px}.cc-pct{font-weight:700;min-width:34px}' +
-      '.cc-bar{flex:1;max-width:90px;height:7px;border-radius:5px;background:var(--surface-200,#eee);overflow:hidden}' +
-      '.cc-bar i{display:block;height:100%;background:var(--green-500,#56C02B)}' +
-      '.cc-cell small{color:#888;font-size:11px}';
+      '.cc-cell .ui-meter{flex:1;max-width:90px;height:7px}' +
+      '.cc-cell small{color:var(--ink-300);font-size:var(--fs-xs)}';
     document.head.appendChild(st);
     draw();
   }
@@ -219,8 +217,8 @@
       (gap <= 0 ? 'met' : gap + (gap === 1 ? ' pt to go' : ' pts to go')) + '</span>';
   }
   function bandLegend() {
-    return '<div class="ad-legend">' + AD.bands.map(function (b) {
-      return '<span class="ad-bandchip ad-tip" data-tip="' + esc(TIP[b.key] || '') + '" tabindex="0"><i style="background:' + b.color + '"></i>' + b.label + '</span>';
+    return '<div class="ui-legend">' + AD.bands.map(function (b) {
+      return '<span class="ad-tip" data-tip="' + esc(TIP[b.key] || '') + '" tabindex="0"><i style="background:' + b.color + '"></i>' + b.label + '</span>';
     }).join('') + '</div>';
   }
   // Cadence label — every periodic module carries one (spec §3).
@@ -298,20 +296,22 @@
     [0, 25, 50, 75, 100].forEach(function (v) {
       var y = yAt(v);
       grid += '<line x1="' + x0 + '" y1="' + y + '" x2="' + x1 + '" y2="' + y + '" stroke="var(--line-200)" stroke-width="1"' + (v === 0 ? '' : ' stroke-dasharray="3 6"') + '/>';
-      grid += '<text x="' + (x0 - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--ink-300)" font-family="Montserrat">' + v + '</text>';
+      grid += '<text x="' + (x0 - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" font-size="11" font-weight="700" fill="var(--ink-300)">' + v + '</text>';
     });
     // Three INDEPENDENT series (not stacked) — each band plots its own % 0–100
     // across the points, free to rise, fall and cross. Soft area under a bold line.
-    var SERIES = ['secure', 'developing', 'emerging'].map(function (k) { return { key: k, meta: AD.bandMeta(k) }; });
+    // SVG presentation attributes can't read var(), so resolve each band's level token to hex.
+    var SERIES = ['secure', 'developing', 'emerging'].map(function (k) { var m = AD.bandMeta(k); return { key: k, meta: m, hex: PAL.css(m.token) }; });
+    var WHITE = PAL.css('--white');
     var areas = '', lines = '', dots = '';
     SERIES.forEach(function (s) {
       var top = rows.map(function (r, i) { return { x: xAt(i), y: yAt(r.pct[s.key]) }; });
       if (nPts >= 2) {
         // area: smooth line, then straight down to the baseline and back — translucent so overlaps read
-        areas += '<path d="' + smoothD(top) + ' L' + top[top.length - 1].x.toFixed(1) + ' ' + y1 + ' L' + top[0].x.toFixed(1) + ' ' + y1 + ' Z" fill="' + s.meta.color + '" fill-opacity="0.14"/>';
-        lines += '<path d="' + smoothD(top) + '" fill="none" stroke="' + s.meta.color + '" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round"/>';
+        areas += '<path d="' + smoothD(top) + ' L' + top[top.length - 1].x.toFixed(1) + ' ' + y1 + ' L' + top[0].x.toFixed(1) + ' ' + y1 + ' Z" fill="' + s.hex + '" fill-opacity="0.14"/>';
+        lines += '<path d="' + smoothD(top) + '" fill="none" stroke="' + s.hex + '" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round"/>';
       }
-      top.forEach(function (p) { dots += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4.5" fill="#fff" stroke="' + s.meta.color + '" stroke-width="2.75"/>'; });
+      top.forEach(function (p) { dots += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4.5" fill="' + WHITE + '" stroke="' + s.hex + '" stroke-width="2.75"/>'; });
     });
     // value labels — haloed so they stay legible wherever areas overlap.
     // Suppressed when there are many x-points (skills view) or they'd collide.
@@ -320,14 +320,14 @@
       var x = xAt(i);
       if (showVals) SERIES.forEach(function (s) {
         var v = r.pct[s.key], y = yAt(v);
-        overlay += '<text x="' + x + '" y="' + (y - 9) + '" text-anchor="middle" font-size="12" font-weight="800" font-family="Montserrat" paint-order="stroke" stroke="#fff" stroke-width="3.5" stroke-linejoin="round" fill="' + s.meta.color + '">' + v + '%</text>';
+        overlay += '<text x="' + x + '" y="' + (y - 9) + '" text-anchor="middle" font-size="13" font-weight="800" paint-order="stroke" stroke="' + WHITE + '" stroke-width="3.5" stroke-linejoin="round" fill="' + s.hex + '">' + v + '%</text>';
       });
       if (rotate) {
         var short = r.label.length > 15 ? r.label.slice(0, 14).replace(/\s+$/, '') + '…' : r.label;
-        overlay += '<text x="' + x + '" y="' + (y1 + 14) + '" text-anchor="end" transform="rotate(-32 ' + x + ' ' + (y1 + 14) + ')" font-size="10" font-weight="700" fill="var(--ink-450)" font-family="Montserrat"><title>' + esc(r.label) + '</title>' + esc(short) + '</text>';
+        overlay += '<text x="' + x + '" y="' + (y1 + 14) + '" text-anchor="end" transform="rotate(-32 ' + x + ' ' + (y1 + 14) + ')" font-size="11" font-weight="700" fill="var(--ink-450)"><title>' + esc(r.label) + '</title>' + esc(short) + '</text>';
       } else {
-        overlay += '<text x="' + x + '" y="' + (y1 + 20) + '" text-anchor="middle" font-size="12" font-weight="800" fill="var(--ink-700)" font-family="Montserrat">' + esc(r.label) + '</text>';
-        if (r.sub) overlay += '<text x="' + x + '" y="' + (y1 + 36) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink-300)" font-family="Montserrat">' + esc(r.sub) + '</text>';
+        overlay += '<text x="' + x + '" y="' + (y1 + 20) + '" text-anchor="middle" font-size="13" font-weight="800" fill="var(--ink-700)">' + esc(r.label) + '</text>';
+        if (r.sub) overlay += '<text x="' + x + '" y="' + (y1 + 36) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink-300)">' + esc(r.sub) + '</text>';
       }
     });
     // faded ticks for points that aren't measured yet (time view only)
@@ -381,22 +381,20 @@
   }
 
   // ---------- multi-perspective radar (mock; spec-new) ----------
-  var PERSP_COLORS = { teacher: '#4A90D9', parent: '#56C02B', studentDirect: '#F0A84A' };
+  // Perspective colours come from TilliPalette: `color` (var()) for HTML, `hex` for SVG attributes.
   function perspSeries(students, pointKey) {
     var rows = AD.perspectiveRadar(students, pointKey);
+    function ser(label, k) { return { label: label, color: PAL.PERSPECTIVE[k], hex: PAL.perspHex(k), values: rows.map(function (r) { return r[k]; }) }; }
     return {
       axes: rows.map(function (r) { return r.name; }),
-      series: [
-        { label: 'Teacher', color: PERSP_COLORS.teacher, values: rows.map(function (r) { return r.teacher; }) },
-        { label: 'Parent', color: PERSP_COLORS.parent, values: rows.map(function (r) { return r.parent; }) },
-        { label: 'Student Direct', color: PERSP_COLORS.studentDirect, values: rows.map(function (r) { return r.studentDirect; }) },
-      ],
+      series: [ser('Teacher', 'teacher'), ser('Parent', 'parent'), ser('Student Direct', 'studentDirect')],
     };
   }
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
   function shortAxis(name) { return name.length > 15 ? name.replace(/\s*\(.*\)\s*/, ' ').trim().slice(0, 15) : name; }
   function radarSVG(series, axes) {
-    var N = axes.length, cx = 190, cy = 165, R = 108, W = 380, H = 320, top = -Math.PI / 2;
+    // W/cx widened (380→440) so the 11-unit axis labels fit; CSS caps the svg at 380px wide.
+    var N = axes.length, cx = 220, cy = 165, R = 108, W = 440, H = 320, top = -Math.PI / 2;
     function pt(i, r) { var a = top + (i / N) * Math.PI * 2; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }
     var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Multi-perspective radar across skills">';
     [0.25, 0.5, 0.75, 1].forEach(function (f) {
@@ -406,29 +404,29 @@
     for (var i = 0; i < N; i++) {
       var e = pt(i, R); s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + e[0].toFixed(1) + '" y2="' + e[1].toFixed(1) + '" stroke="var(--line-200)" stroke-width="1"/>';
       var l = pt(i, R + 13); var anchor = Math.abs(l[0] - cx) < 8 ? 'middle' : (l[0] < cx ? 'end' : 'start');
-      s += '<text x="' + l[0].toFixed(1) + '" y="' + l[1].toFixed(1) + '" text-anchor="' + anchor + '" dominant-baseline="middle" font-size="8" font-weight="700" fill="var(--ink-450)" font-family="Montserrat,sans-serif">' + esc(shortAxis(axes[i])) + '</text>';
+      s += '<text x="' + l[0].toFixed(1) + '" y="' + l[1].toFixed(1) + '" text-anchor="' + anchor + '" dominant-baseline="middle" font-size="11" font-weight="700" fill="var(--ink-450)">' + esc(shortAxis(axes[i])) + '</text>';
     }
     series.forEach(function (ser) {
       var p = []; for (var i = 0; i < N; i++) { var r = R * clamp01(ser.values[i] / 100); var q = pt(i, r); p.push(q[0].toFixed(1) + ',' + q[1].toFixed(1)); }
-      s += '<polygon points="' + p.join(' ') + '" fill="' + ser.color + '" fill-opacity="0.13" stroke="' + ser.color + '" stroke-width="2" stroke-linejoin="round"/>';
+      s += '<polygon points="' + p.join(' ') + '" fill="' + ser.hex + '" fill-opacity="0.13" stroke="' + ser.hex + '" stroke-width="2" stroke-linejoin="round"/>';
     });
     return s + '</svg>';
   }
   function radarBlock(students, pointKey) {
     var ps = perspSeries(students, pointKey);
     return '<div class="ad-radar-wrap">' + radarSVG(ps.series, ps.axes) +
-      '<div class="ad-radar-legend">' + ps.series.map(function (s) { return '<span class="ad-tip" data-tip="' + esc(PERSP_TIP[s.label] || '') + '" tabindex="0"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span>'; }).join('') + '</div></div>';
+      '<div class="ui-legend">' + ps.series.map(function (s) { return '<span class="ad-tip" data-tip="' + esc(PERSP_TIP[s.label] || '') + '" tabindex="0"><i style="background:' + s.color + '"></i>' + esc(s.label) + '</span>'; }).join('') + '</div></div>';
   }
 
   // ---------- state components ----------
   function stEmpty(bigLine, sub, ok) {
-    return '<div class="ad-empty' + (ok ? ' ok' : '') + '"><span class="big">' + esc(bigLine) + '</span>' + (sub ? esc(sub) : '') + '</div>';
+    return '<div class="ui-empty' + (ok ? ' ok' : '') + '"><span class="big">' + esc(bigLine) + '</span>' + (sub ? esc(sub) : '') + '</div>';
   }
   function stError(what) {
     return '<div class="ad-err">' + esc(what) + '<br><button class="btn btn-outline btn-sm" data-retry="1">Retry</button></div>';
   }
   function skelLines(n) { var s = ''; for (var i = 0; i < (n || 3); i++) s += '<div class="skeleton ad-skel" style="width:' + (90 - i * 12) + '%"></div>'; return s; }
-  function skelCard(title) { return '<div class="ad-card"><div class="ad-skel skeleton" style="width:40%;height:16px;margin-bottom:14px"></div>' + skelLines(4) + '</div>'; }
+  function skelCard(title) { return '<div class="ui-card"><div class="ad-skel skeleton" style="width:40%;height:16px;margin-bottom:14px"></div>' + skelLines(4) + '</div>'; }
   function screenSkeleton() { return '<div class="ad-skel skeleton" style="width:38%;height:26px;margin:6px 0 18px"></div><div class="ad-grid two">' + skelCard() + skelCard() + skelCard() + skelCard() + '</div>'; }
 
   // ========================================================
@@ -487,21 +485,21 @@
     var yearCtrl = yr.length > 1
       ? '<span class="ad-year">' + esc(yr[yr.length - 1]) + ' ▾</span>'   // selector only when >1 year (spec §10.3)
       : '<span class="ad-year">' + esc(yr[0]) + '</span>';
-    var side = '<aside class="ad-side dash-side">' +
+    var side = '<aside class="ui-side dash-side">' +
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
-      '<nav class="ad-nav">' + navItems().map(function (n) {
-        if (n.disabled) return '<button class="ad-nav-item disabled" data-navsoon="1" title="Coming soon to the leadership view"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '<span class="ad-soon">Soon</span></button>';
-        return '<button class="ad-nav-item' + (n.key === r.screen ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
+      '<nav class="ui-nav">' + navItems().map(function (n) {
+        if (n.disabled) return '<button class="ui-nav-item disabled" data-navsoon="1" title="Coming soon to the leadership view"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '<span class="ui-tag ml-auto">Soon</span></button>';
+        return '<button class="ui-nav-item' + (n.key === r.screen ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
       }).join('') + '</nav>' +
-      '<div class="ad-side-foot">Leadership view · data updates 3× a year for outcomes, daily for activity.</div></aside>';
+      '<div class="ui-side-foot">Leadership view · data updates 3× a year for outcomes, daily for activity.</div></aside>';
 
-    var header = '<header class="ad-header dash-header">' +
-      '<div><div class="ad-school">' + esc(AD.school.name) + '</div><div class="ad-sub desk-only">' + esc(AD.school.city + ', ' + AD.school.country) + '</div></div>' +
+    var header = '<header class="ui-header dash-header">' +
+      '<div><div class="ui-h-title">' + esc(AD.school.name) + '</div><div class="ui-h-sub desk-only">' + esc(AD.school.city + ', ' + AD.school.country) + '</div></div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' + yearCtrl +
-      '<span class="ad-rolebadge">' + esc(roleLabel) + '</span>' +
-      '<button class="ad-acct" id="ad-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
+      '<span class="ui-rolebadge">' + esc(roleLabel) + '</span>' +
+      '<button class="ui-avatar" id="ad-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
-    var bottom = '<nav class="ad-bottomnav dash-bottomnav">' + navItems().filter(function (n) { return !n.disabled && n.key !== 'asktilli'; }).map(function (n) {
+    var bottom = '<nav class="ui-bottomnav dash-bottomnav">' + navItems().filter(function (n) { return !n.disabled && n.key !== 'asktilli'; }).map(function (n) {
       return '<button class="' + (n.key === r.screen ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.key] + '<span>' + esc(n.label) + '</span></button>';
     }).join('') + '</nav>';
 
@@ -518,14 +516,14 @@
   function openAcctMenu() {
     closeAcctMenu();
     var m = document.createElement('div');
-    m.className = 'ad-acct-menu'; m.id = 'ad-acct-menu';
+    m.className = 'ui-menu ad-acct-menu'; m.id = 'ad-acct-menu';
     // Tilli Team drilled in from the internal platform — offer a way back to it.
     var fromTilli = qp.get('from') === 'tilli' || role === 'tilli';
     m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span></div>' +
-      (fromTilli ? '<button data-am="tilli">← Tilli platform</button>' : '') +
-      '<button data-am="switch">Switch school year</button>' +
-      '<button data-am="signout">Sign out</button>';
-    document.querySelector('.ad-header').parentNode.appendChild(m);
+      (fromTilli ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
+      '<button class="ui-menu-item" data-am="switch">Switch school year</button>' +
+      '<button class="ui-menu-item" data-am="signout">Sign out</button>';
+    document.querySelector('.ui-header').parentNode.appendChild(m);
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
     m.querySelector('[data-am="switch"]').addEventListener('click', function () { toast('Only one academic year of data exists yet.'); closeAcctMenu(); });
@@ -559,11 +557,11 @@
   // small helpers for building modules
   function card(title, note, bodyHTML, extraClass, headRight, tipText) {
     var titleHTML = tipText ? withInfo(esc(title), tipText) : esc(title);
-    return '<div class="ad-card ' + (extraClass || '') + '">' +
-      (title ? '<div class="ad-mod-h"><div><h3 class="ad-mod-title">' + titleHTML + '</h3>' + (note ? '<p class="ad-mod-note">' + note + '</p>' : '') + '</div>' + (headRight || '') + '</div>' : '') +
+    return '<div class="ui-card ' + (extraClass || '') + '">' +
+      (title ? '<div class="ui-mod-h"><div><h3 class="ui-mod-title">' + titleHTML + '</h3>' + (note ? '<p class="ui-mod-note">' + note + '</p>' : '') + '</div>' + (headRight || '') + '</div>' : '') +
       bodyHTML + '</div>';
   }
-  function screenHead(title, sub) { return '<h1 class="ad-screen-title">' + esc(title) + '</h1><p class="ad-screen-sub">' + esc(sub) + '</p>'; }
+  function screenHead(title, sub) { return '<h1 class="ui-screen-title">' + esc(title) + '</h1><p class="ui-screen-sub">' + esc(sub) + '</p>'; }
   function selectWrap(id, options, current, label) {
     return '<label class="select-wrap"' + (label ? ' aria-label="' + esc(label) + '"' : '') + '><select class="select" id="' + id + '">' +
       options.map(function (o) { return '<option value="' + esc(o.v) + '"' + (String(o.v) === String(current) ? ' selected' : '') + '>' + esc(o.t) + '</option>'; }).join('') +
@@ -597,7 +595,7 @@
         '<span class="ad-bucket-count">' + list.length + ' skills</span></summary>' +
         '<div class="ad-bucket-body">' + list.map(distSkillRow).join('') + '</div></details>';
     }
-    return '<div style="margin-bottom:14px">' + bandLegend() + '</div>' +
+    return '<div class="mb-3">' + bandLegend() + '</div>' +
       distBucket('Social-Emotional', 'sel') +
       distBucket('Executive Function', 'cog');
   }
@@ -658,28 +656,28 @@
       var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
       var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4>' + gsList(gs.growth) + '</div>';
       var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4>' + gsList(gs.strength) + '</div>';
-      gsSection = '<div style="margin-top:var(--ad-gap)">' +
+      gsSection = '<div class="mt-gap">' +
         '<div class="ad-gs-head"><span class="ad-scopepill">All classes</span>' +
-        '<button class="link-btn" data-tobreakdown="1">See class breakdown →</button></div>' +
-        '<div class="ad-grid two" style="margin-top:12px">' + gGrowth + gStrength + '</div></div>';
+        '<button class="btn-link" data-tobreakdown="1">See class breakdown →</button></div>' +
+        '<div class="ad-grid two mt-3">' + gGrowth + gStrength + '</div></div>';
     }
 
     // Skill band distribution — whole-school only, at the latest complete point.
     var distCard = '';
     if (AD.completedPoints.length) {
       var distBody = skillBandDistBody(AD.students, AD.latestComplete.key, 'school');
-      distCard = '<div style="margin-top:var(--ad-gap)">' +
+      distCard = '<div class="mt-gap">' +
         card('Skill band distribution', 'Where children across the whole school sit across bands for each skill.', distBody, 'span2', '<div>' + cadence(AD.latestComplete.key) + '</div>') +
       '</div>';
     }
 
     body.innerHTML = screenHead('Overview', 'A calm read on whether the programme is running, working, and where to step in.') +
       verdictHTML() +
-      '<div style="margin-top:var(--ad-gap)"></div>' +
+      '<div class="mt-gap"></div>' +
       chips +
-      (AD.openPoint ? '<div style="margin-top:var(--ad-gap)">' + sectionActivityUI(params) + '</div>' : '') +   // hidden when no window is open
+      (AD.openPoint ? '<div class="mt-gap">' + sectionActivityUI(params) + '</div>' : '') +   // hidden when no window is open
       gsSection +
-      '<div style="margin-top:var(--ad-gap)">' +
+      '<div class="mt-gap">' +
         card('Last outcome snapshot', null, snap, '', AD.latestComplete ? '<div>' + cadence(AD.latestComplete.key) + '</div>' : '') +
       '</div>' +
       distCard;
@@ -689,7 +687,7 @@
     body.querySelectorAll('[data-tooutcomes]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
     body.querySelectorAll('[data-tobreakdown]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
   };
-  function metachip(n, label) { return '<span class="ad-metachip"><b>' + n + '</b> ' + esc(label) + '</span>'; }
+  function metachip(n, label) { return '<span class="ui-metachip"><b>' + n + '</b> ' + esc(label) + '</span>'; }
 
   function outcomeSnapshot() {
     if (!AD.completedPoints.length) return stEmpty('Not yet measured.', 'Skill bands appear after Baseline · ' + AD.points[0].month + '.');
@@ -700,7 +698,7 @@
     var pctSecure = Math.round((secure / tot) * 100);
     var tgt = AD.targetsSet ? AD.pooledSecureTarget() : null;
     return '<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">' +
-      '<div class="ad-stat"><div class="num">' + pctSecure + '%</div><div class="lbl">of skill readings are Secure at ' + esc(pt.label) + '</div>' +
+      '<div class="ui-kpi"><div class="num">' + pctSecure + '%</div><div class="lbl">of skill readings are Secure at ' + esc(pt.label) + '</div>' +
         (tgt != null ? targetDelta(pctSecure, tgt) : '') + '</div>' +
       '<div style="flex:1;min-width:200px">' + bandBar(schoolDistAllSkills(pt.key), false, tgt) + '<div style="margin-top:10px">' + bandLegend() + '</div></div>' +
       '<button class="btn btn-cyan btn-sm" data-tooutcomes="1">See Outcomes →</button></div>';
@@ -750,13 +748,13 @@
       '<button class="btn btn-outline btn-sm ad-refresh" id="f-refresh" title="Data changes rarely — refresh to re-pull activity">↻ Refresh</button></div>';
     var rows = sectionActivityRows(grade, section);
     var tableBody = !rows.length ? stEmpty('No sections match these filters.', 'Try widening the grade or section filter.') :
-      '<div class="ad-tablewrap"><table class="ad-table"><thead><tr>' +
+      '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr>' +
         sortableTh('name', 'Section') + sortableTh('teacher', 'Teacher') + sortableTh('lastActivityDays', 'Last activity', false, TIP.lastActivity) +
         sortableTh('completion', 'Assessment completion', false, TIP.completion) + sortableTh('status', 'Status', false, TIP.statusCol, 'down end') +
       '</tr></thead><tbody>' + rows.map(function (a) {
         return '<tr class="clickable" data-secdetail="' + a.id + '"><td class="name">' + esc(a.name) + '</td><td>' + esc(a.teacher) + '</td>' +
           '<td class="ad-num">' + relDays(a.lastActivityDays) + '</td>' +
-          '<td class="ad-num">' + (AD.openPoint ? a.completion.done + ' / ' + countNoun(a.completion.total, 'student', 'students') : '<span style="color:var(--ink-300)">— no open window</span>') + '</td>' +
+          '<td class="ad-num">' + (AD.openPoint ? a.completion.done + ' / ' + countNoun(a.completion.total, 'student', 'students') : '<span class="text-muted">— no open window</span>') + '</td>' +
           '<td>' + statusChip(a.status) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     return filters + card('Section activity', 'Sorted with the sections that need attention first. Click a row for completion detail.', tableBody, 'span2');
@@ -777,7 +775,7 @@
     body.innerHTML = screenHead('Implementation', 'Is it happening? Live activity across every section.') +
       stEmpty('Section activity moved to Overview.', 'Live activity across every section now sits at the top of the Overview screen.');
   };
-  function statusChip(s) { var lbl = { active: 'Active', slowing: 'Slowing', quiet: 'Quiet' }[s]; return '<span class="ad-chip ' + s + '" title="' + esc(TIP[s] || '') + '"><span class="dot"></span>' + lbl + '</span>'; }
+  function statusChip(s) { var lbl = { active: 'Active', slowing: 'Slowing', quiet: 'Quiet' }[s]; return '<span class="ui-chip ' + s + '" title="' + esc(TIP[s] || '') + '"><span class="dot"></span>' + lbl + '</span>'; }
 
   // ========================================================
   //  3) OUTCOMES  (spec §5.3) — periodic data only
@@ -800,7 +798,7 @@
     var students = AD.scopeStudents(scope);
 
     // breadcrumb (terminates at section — no student level exists)
-    var crumbs = '<div class="ad-crumbs"><button data-scope="school">School</button>';
+    var crumbs = '<div class="ui-crumbs"><button data-scope="school">School</button>';
     if (grade) crumbs += '<span class="sep">›</span>' + (section ? '<button data-scope="grade">' + esc(grade) + '</button>' : '<span class="cur">' + esc(grade) + '</span>');
     if (section) { var sd = AD.sections.find(function (s) { return s.id === section; }); crumbs += '<span class="sep">›</span><span class="cur">' + esc(sd ? sd.name : '') + '</span>'; }
     crumbs += '</div>';
@@ -822,7 +820,7 @@
     // Grade/section navigator — the mockup's "See your school as grades"
     // → "Look deeper into [grade]" drill. Sits above the skill detail.
     var navCards = '';
-    if (level === 'school') navCards = '<div style="margin-bottom:var(--ad-gap)">' + card('See your school as grades', 'Open a grade to look deeper.', gradeNavHTML(point), 'span2') + '</div>';
+    if (level === 'school') navCards = '<div class="mb-gap">' + card('See your school as grades', 'Open a grade to look deeper.', gradeNavHTML(point), 'span2') + '</div>';
     else if (level === 'grade') {
       // Headline snapshot from the grade card (school view): % Secure + band bar,
       // sitting above the section navigator so the drill opens on the same summary.
@@ -830,11 +828,11 @@
       var gd = distAllSkills(gStuds, point), seMeta = AD.bandMeta('secure');
       var gPt = AD.points.find(function (p) { return p.key === point; }) || AD.latestComplete;
       var snap = '<div class="ad-gradesnap">' +
-        '<div class="ad-stat"><div class="num">' + gd.pct.secure + '%</div>' +
+        '<div class="ui-kpi"><div class="num">' + gd.pct.secure + '%</div>' +
           '<div class="lbl">' + esc(seMeta.label) + ' at ' + esc(gPt ? gPt.label : '') + '</div></div>' +
         '<div class="gs-bar">' + bandBar(gd) + '<div style="margin-top:10px">' + bandLegend() + '</div></div></div>';
       var gNote = plural(gStuds.length, 'student') + ' · ' + plural(gSecs.length, 'section') + ' · Open a section for its full skill view.';
-      navCards = '<div style="margin-bottom:var(--ad-gap)">' + card('Look deeper into ' + esc(grade), gNote, snap + sectionNavHTML(grade, point), 'span2') + '</div>';
+      navCards = '<div class="mb-gap">' + card('Look deeper into ' + esc(grade), gNote, snap + sectionNavHTML(grade, point), 'span2') + '</div>';
     }
 
     // Areas of growth / strength (grade + section scope).
@@ -844,7 +842,7 @@
       var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
       var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4><ul>' + gs.growth.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul></div>';
       var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4><ul>' + gs.strength.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul></div>';
-      gsCard = '<div class="ad-grid two" style="margin-bottom:var(--ad-gap)">' + gGrowth + gStrength + '</div>';
+      gsCard = '<div class="ad-grid two mb-gap">' + gGrowth + gStrength + '</div>';
     }
 
     // Multi-perspective radar — section scope only.
@@ -898,7 +896,7 @@
         }).join('') + '</div>';
         inner = gsBlock + '<div class="cmp-legend">' + bandLegend() + '</div>' + skillList + '<div class="cmp-radar">' + radarBlock(studs, point) + '</div>';
       }
-      return '<div class="cmp-col">' + picker + '<div class="ad-card cmp-body">' + inner + '</div></div>';
+      return '<div class="cmp-col">' + picker + '<div class="ui-card cmp-body">' + inner + '</div></div>';
     }
     function cmp2HTML() {
       return '<div class="cmp-head"><div class="cmp-head-kicker">You can compare two classes here</div>' +
@@ -917,13 +915,13 @@
     // neither — it's just the section navigator + growth/strength.
     var progCard = card('Progress over time', 'How the skill-band mix shifts across the assessment points.', progBody, '', '<div>' + cadence(point) + '</div>');
     var midRow = '';
-    if (level === 'section') midRow = '<div class="ad-grid two" style="margin-top:var(--ad-gap)">' + progCard + radarCard + '</div>';
-    else if (level === 'school') midRow = '<div style="margin-top:var(--ad-gap)">' + progCard + '</div>';
+    if (level === 'section') midRow = '<div class="ad-grid two mt-gap">' + progCard + radarCard + '</div>';
+    else if (level === 'school') midRow = '<div class="mt-gap">' + progCard + '</div>';
 
     body.innerHTML = screenHead('Outcomes', 'Is it working? Skill bands and movement — never individual results.') +
       crumbs + navCards + gsCard +
       midRow +
-      (level === 'school' ? '<div id="o-cmp2" style="margin-top:var(--ad-gap)">' + cmp2HTML() + '</div>' : '');
+      (level === 'school' ? '<div id="o-cmp2" class="mt-gap">' + cmp2HTML() + '</div>' : '');
 
     // wiring
     body.querySelectorAll('[data-gradenav]').forEach(function (b) { b.addEventListener('click', function () { setParams({ grade: b.dataset.gradenav, section: '', point: point }); }); });
@@ -960,7 +958,7 @@
     var ptLabel = ptObj ? ptObj.label : '';
     var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
     var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
-    return '<div style="margin-bottom:14px">' + bandLegend() + '</div>' +
+    return '<div class="mb-3">' + bandLegend() + '</div>' +
       '<div class="ad-gradebreaks">' + AD.grades.map(function (g) {
         var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; });
         var d = distAllSkills(studs, point), gs = AD.growthStrength(studs, point, 2);
@@ -969,8 +967,8 @@
         return '<div class="ad-gradebreak">' +
           '<div class="gb-head"><div><div class="gb-name">' + esc(g) + '</div>' +
             '<div class="gb-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div></div>' +
-            '<button class="link-btn" data-gradenav="' + esc(g) + '">Look deeper →</button></div>' +
-          '<div class="gb-snap"><div class="ad-stat"><div class="num">' + d.pct.secure + '%</div>' +
+            '<button class="btn-link" data-gradenav="' + esc(g) + '">Look deeper →</button></div>' +
+          '<div class="gb-snap"><div class="ui-kpi"><div class="num">' + d.pct.secure + '%</div>' +
             '<div class="lbl">' + esc(se.label) + ' at ' + esc(ptLabel) + '</div></div>' +
             '<div class="gb-bar">' + bandBar(d) + '</div></div>' +
           '<div class="ad-grid two gb-gs">' + gGrowth + gStrength + '</div></div>';
@@ -979,7 +977,7 @@
   function sectionNavHTML(grade, point) {
     return '<div class="ad-navcards">' + AD.sections.filter(function (s) { return s.grade === grade; }).map(function (s) {
       var studs = AD.studentsInSection(s), d = distAllSkills(studs, point);
-      return '<button class="ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="nc-name">' + esc(s.name) + '</span><span style="color:var(--ink-300)">›</span></div>' +
+      return '<button class="ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="nc-name">' + esc(s.name) + '</span><span class="text-muted">›</span></div>' +
         '<div class="nc-meta">' + plural(studs.length, 'student') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
     }).join('') + '</div>';
   }
@@ -999,7 +997,7 @@
           return '<span>' + esc(s.section) + ' · ' + esc(AD.teacherFor(s)) + '</span>';
         }).join('') + '</div>';
         return '<button class="ad-navcard" data-graderoster="' + esc(g) + '">' +
-          '<div class="nc-top"><span class="nc-name">' + esc(g) + '</span><span style="color:var(--ink-300)">›</span></div>' +
+          '<div class="nc-top"><span class="nc-name">' + esc(g) + '</span><span class="text-muted">›</span></div>' +
           '<div class="nc-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div>' +
           teacherLine + '</button>';
       }).join('') + '</div>';
@@ -1009,24 +1007,24 @@
     var users = seedUsers();
     var multiBoard = schoolBoards().length > 1;
     var boardHead = multiBoard ? '<th>Board</th>' : '';
-    var userBody = '<div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:12px"><button class="btn btn-cyan btn-sm" data-invite="1">+ Invite teachers</button></div>' +
-      '<div class="ad-tablewrap"><table class="ad-table" style="min-width:640px"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Grade</th><th>Section</th>' + boardHead + '<th>Status</th><th></th></tr></thead><tbody>' +
+    var userBody = '<div class="row end mb-3"><button class="btn btn-cyan btn-sm" data-invite="1">+ Invite teachers</button></div>' +
+      '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Grade</th><th>Section</th>' + boardHead + '<th>Status</th><th></th></tr></thead><tbody>' +
       users.map(function (u, i) {
         var isTeacher = /teacher/i.test(u.role || '');
-        var dash = '<span style="color:var(--ink-300)">—</span>';
+        var dash = '<span class="text-muted">—</span>';
         var boardCell = multiBoard ? '<td>' + (u.board ? esc(u.board) : dash) + '</td>' : '';
         var showPw = u.status === 'Invited' && u.tempPassword
-          ? '<button class="link-btn" data-showpw="' + i + '">Show password</button> · ' : '';
-        return '<tr><td class="name"><button class="link-btn" data-userdetail="' + i + '" style="font:inherit;color:var(--ink-900);text-align:left" title="View details">' + esc(u.name) + '</button></td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td>' +
+          ? '<button class="btn-link" data-showpw="' + i + '">Show password</button> · ' : '';
+        return '<tr><td class="name"><button class="btn-link text-strong" data-userdetail="' + i + '" style="font:inherit;text-align:left" title="View details">' + esc(u.name) + '</button></td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td>' +
           '<td>' + (isTeacher && u.grade ? esc(u.grade) : dash) + '</td>' +
           '<td>' + (isTeacher && u.section ? esc(u.section) : dash) + '</td>' + boardCell +
-          '<td>' + (u.status === 'Active' ? '<span class="ad-chip active"><span class="dot"></span>Active</span>' : '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap">' + showPw + (u.status === 'Invited' ? '<button class="link-btn" data-resend="' + i + '">Resend</button> · ' : '') + '<button class="link-btn" data-revoke="' + i + '" style="color:#B22447">Revoke</button></td></tr>';
+          '<td>' + (u.status === 'Active' ? '<span class="ui-chip active"><span class="dot"></span>Active</span>' : '<span class="ui-chip slowing"><span class="dot"></span>Invited</span>') + '</td>' +
+          '<td class="text-right" style="white-space:nowrap">' + showPw + (u.status === 'Invited' ? '<button class="btn-link" data-resend="' + i + '">Resend</button> · ' : '') + '<button class="btn-link danger" data-revoke="' + i + '">Revoke</button></td></tr>';
       }).join('') + '</tbody></table></div>';
 
     body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Operational identity data — plus a temporary developmental-stage column (see the note in Students).' : 'Operational identity data. No SEL results ever appear here.') +
       card('Students', AD.students.length + ' enrolled · pick a grade to see its students and assigned teachers.', listBody, 'span2', '<button class="btn btn-primary btn-sm" data-migrate="1" title="Promote, retain, remove and add students at year boundary. Reviewable per student, with a preview and a 24-hour undo.">Start grade migration</button>') +
-      '<div style="margin-top:var(--ad-gap)">' +
+      '<div class="mt-gap">' +
         card('User management', 'Invite, resend, revoke. Revoke is immediate.', userBody) +
       '</div>';
     // NOTE: Duplicate review queue (spec §5.4.5) sits behind the near-match config
@@ -1047,11 +1045,11 @@
   function showInvitePassword(u) {
     if (!u || !u.tempPassword) { toast('No temporary password to show.'); return; }
     openModal(modalHead('Temporary password') +
-      '<p class="ad-mod-note" style="margin-bottom:14px">Relay this one-time password to <b>' + esc(u.name) + '</b>. It stops working the moment they set their own — the row then reads <b>Active</b>.</p>' +
-      '<div style="display:flex;align-items:center;gap:10px;background:var(--surface-100);border-radius:10px;padding:12px 14px">' +
-        '<span style="font-family:ui-monospace,Menlo,monospace;font-size:20px;font-weight:800;letter-spacing:.08em">' + esc(u.tempPassword) + '</span>' +
-        '<button class="btn btn-outline btn-sm" data-copypw="' + esc(u.tempPassword) + '" style="margin-left:auto">Copy</button></div>' +
-      '<div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div>');
+      '<p class="ui-mod-note mb-3">Relay this one-time password to <b>' + esc(u.name) + '</b>. It stops working the moment they set their own — the row then reads <b>Active</b>.</p>' +
+      '<div class="row" style="background:var(--surface-100);border-radius:var(--radius-sm);padding:12px 14px">' +
+        '<span class="mono" style="font-size:var(--fs-lg);font-weight:800;letter-spacing:.08em">' + esc(u.tempPassword) + '</span>' +
+        '<button class="btn btn-outline btn-sm ml-auto" data-copypw="' + esc(u.tempPassword) + '">Copy</button></div>' +
+      '<div class="ui-modal-foot"><button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div>');
     var cp = document.querySelector('[data-copypw]');
     if (cp) cp.addEventListener('click', function () { try { navigator.clipboard.writeText(cp.dataset.copypw); } catch (e) {} toast('Password copied.'); });
   }
@@ -1074,20 +1072,20 @@
 
     function row(label, valueHTML) {
       return '<div style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line-200)">' +
-        '<span style="font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-450)">' + label + '</span>' +
-        '<span style="font-weight:700;font-size:13.5px;color:var(--ink-900);text-align:right">' + valueHTML + '</span></div>';
+        '<span class="ui-eyebrow dark">' + label + '</span>' +
+        '<span class="text-strong text-right" style="font-weight:700;font-size:var(--fs-sm)">' + valueHTML + '</span></div>';
     }
     var statusChip = u.status === 'Active'
-      ? '<span class="ad-chip active"><span class="dot"></span>Active</span>'
-      : '<span class="ad-chip slowing"><span class="dot"></span>Invited</span>';
+      ? '<span class="ui-chip active"><span class="dot"></span>Active</span>'
+      : '<span class="ui-chip slowing"><span class="dot"></span>Invited</span>';
 
     var pwRow = '';
     if (invited && u.tempPassword)
       pwRow = row('Temporary password',
-        '<span style="font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em">' + esc(u.tempPassword) + '</span>' +
-        ' <button class="link-btn" data-copypw="' + esc(u.tempPassword) + '">Copy</button>');
+        '<span class="mono" style="letter-spacing:.06em">' + esc(u.tempPassword) + '</span>' +
+        ' <button class="btn-link" data-copypw="' + esc(u.tempPassword) + '">Copy</button>');
     else if (!invited && acct)
-      pwRow = row('Temporary password', '<span style="color:var(--ink-300);font-weight:600">Used — set their own</span>');
+      pwRow = row('Temporary password', '<span class="text-muted" style="font-weight:600">Used — set their own</span>');
 
     var rows = row('Email', esc(u.email)) + row('Role', esc(u.role));
     if (isTeacher) { rows += row('Grade', u.grade ? esc(u.grade) : '—') + row('Section', u.section ? esc(u.section) : '—'); }
@@ -1098,13 +1096,13 @@
     if (byName) rows += row('Invited by', esc(byName));
     rows += pwRow;
 
-    var actions = '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">' +
+    var actions = '<div class="ui-modal-foot">' +
       (invited ? '<button class="btn btn-outline btn-sm" data-udresend="1">Resend</button>' : '') +
-      '<button class="btn btn-outline btn-sm" data-udrevoke="1" style="color:#B22447;border-color:#F2C9D5">Revoke</button>' +
+      '<button class="btn btn-danger-outline btn-sm" data-udrevoke="1">Revoke</button>' +
       '<button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div>';
 
     openModal(modalHead(esc(u.name)) +
-      (invited ? '<p class="ad-mod-note" style="margin-bottom:12px">Invited — relay the temporary password below. The status turns <b>Active</b> once they sign in and set their own.</p>' : '') +
+      (invited ? '<p class="ui-mod-note mb-3">Invited — relay the temporary password below. The status turns <b>Active</b> once they sign in and set their own.</p>' : '') +
       '<div>' + rows + '</div>' + actions);
 
     var cp = document.querySelector('[data-copypw]');
@@ -1121,29 +1119,29 @@
 
     // Teacher-per-section: editable inline. Writes back to the shared AD.sections
     // object, so the roster screen's Teacher–section assignment card stays in sync.
-    var teacherBlock = '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-bottom:16px">' +
+    var teacherBlock = '<div class="row wrap mb-4" style="gap:10px 16px">' +
       secs.map(function (s) {
         var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
-        return '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span class="ad-metachip" style="padding:7px 13px"><b>' + esc(s.section) + '</b></span>' +
-          '<label class="select-wrap" style="min-width:180px"><select class="select" style="padding:9px 32px 9px 13px;font-size:13px" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label></div>';
+        return '<div class="row" style="gap:8px">' +
+          '<span class="ui-metachip" style="padding:7px 13px"><b>' + esc(s.section) + '</b></span>' +
+          '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label></div>';
       }).join('') + '</div>';
 
-    var tableHTML = '<div class="ad-tablewrap"><table class="ad-table"><thead><tr><th>Name</th><th>Student ID</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '</tr></thead><tbody id="gr-tbody">' +
+    var tableHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Student ID</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '</tr></thead><tbody id="gr-tbody">' +
       rows.map(function (r) {
-        var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ad-bandchip"><i style="background:' + r.stage.color + '"></i>' + esc(r.stage.label) + '</span>' : '<span style="color:var(--ink-300)">not yet measured</span>') + '</td>' : '';
+        var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ui-badge lvl-' + r.stage.lvl + '"><span class="d"></span>' + esc(r.stage.label) + '</span>' : '<span class="text-muted">not yet measured</span>') + '</td>' : '';
         return '<tr data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
       }).join('') + '</tbody></table></div>';
 
     openModal(modalHead(grade + ' · roster') +
-      '<p class="ad-mod-note" style="margin-bottom:14px">' + plural(rows.length, 'student') + ' · ' + plural(secs.length, 'section') + '. ' + (SHOW_STUDENT_STAGE ? 'Identity, enrolment and a temporary stage column.' : 'Identity and enrolment only — no SEL results.') + '</p>' +
-      (SHOW_STUDENT_STAGE ? '<div class="ad-privacy"><span aria-hidden="true">⚠️</span><span><b>Temporary:</b> the developmental-stage column shows an individual child\'s SEL result, which leadership is not normally shown (spec §2). It is behind a flag and will be removed.</span></div>' : '') +
-      '<div style="font-weight:800;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450);margin-bottom:8px">Teachers</div>' + teacherBlock +
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">' +
-        '<button type="button" class="ad-filterchip on" data-secfilter="" aria-pressed="true">All sections</button>' +
-        secs.map(function (s) { return '<button type="button" class="ad-filterchip" data-secfilter="' + esc(s.section) + '" aria-pressed="false">Section ' + esc(s.section) + '</button>'; }).join('') +
+      '<p class="ui-mod-note mb-3">' + plural(rows.length, 'student') + ' · ' + plural(secs.length, 'section') + '. ' + (SHOW_STUDENT_STAGE ? 'Identity, enrolment and a temporary stage column.' : 'Identity and enrolment only — no SEL results.') + '</p>' +
+      (SHOW_STUDENT_STAGE ? '<div class="ui-note mt-3"><span aria-hidden="true">⚠️</span><span><b>Temporary:</b> the developmental-stage column shows an individual child\'s SEL result, which leadership is not normally shown (spec §2). It is behind a flag and will be removed.</span></div>' : '') +
+      '<div class="ui-eyebrow dark mb-2">Teachers</div>' + teacherBlock +
+      '<div class="row wrap mb-3" style="gap:8px">' +
+        '<button type="button" class="ui-filterchip on" data-secfilter="" aria-pressed="true">All sections</button>' +
+        secs.map(function (s) { return '<button type="button" class="ui-filterchip" data-secfilter="' + esc(s.section) + '" aria-pressed="false">Section ' + esc(s.section) + '</button>'; }).join('') +
       '</div>' +
-      '<input class="input" id="gr-q" placeholder="Search name or student ID…" style="max-width:280px;margin-bottom:14px" aria-label="Search students in ' + esc(grade) + '">' +
+      '<input class="input mb-3" id="gr-q" placeholder="Search name or student ID…" style="max-width:280px" aria-label="Search students in ' + esc(grade) + '">' +
       tableHTML, { wide: true });
 
     var q = document.getElementById('gr-q');
@@ -1268,25 +1266,25 @@
     var scopeOpts = [{ v: 'school', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
     var pointOpts = AD.completedPoints.map(function (p) { return { v: p.key, t: p.label + ' · ' + p.month }; });
 
-    var summaryBody = '<p class="ad-mod-note" style="margin-bottom:14px">One page, board-ready. Sections running, students assessed, band distribution, movement, targets and interpretation lines. No individual students; no teacher attribution.</p>' +
+    var summaryBody = '<p class="ui-mod-note mb-3">One page, board-ready. Sections running, students assessed, band distribution, movement, targets and interpretation lines. No individual students; no teacher attribution.</p>' +
       '<div class="ad-filters">' + selectWrap('rp-scope', scopeOpts, scope, 'Scope') + selectWrap('rp-point', pointOpts, point, 'Assessment point') + '</div>' +
       '<button class="btn btn-primary btn-sm" data-genpdf="1">Generate leadership summary</button>';
 
     var newsletter = newsletterText(scope, point);
-    var newsBody = '<p class="ad-mod-note" style="margin-bottom:12px">Plain, parent-facing language — no band names, no scores, no jargon. Edit before copying.</p>' +
+    var newsBody = '<p class="ui-mod-note mb-3">Plain, parent-facing language — no band names, no scores, no jargon. Edit before copying.</p>' +
       '<textarea class="ad-copyblock" id="rp-news">' + esc(newsletter) + '</textarea>' +
-      '<div style="display:flex;gap:10px;margin-top:12px"><button class="btn btn-cyan btn-sm" data-copynews="1">Copy to clipboard</button><button class="btn btn-outline btn-sm" data-regennews="1">Regenerate</button></div>';
+      '<div class="row mt-3"><button class="btn btn-cyan btn-sm" data-copynews="1">Copy to clipboard</button><button class="btn btn-outline btn-sm" data-regennews="1">Regenerate</button></div>';
 
-    var csvBody = '<p class="ad-mod-note" style="margin-bottom:14px">Every export carries the assessment point and generation date. No student-level outcome export exists — the data simply is not there to export.</p>' +
+    var csvBody = '<p class="ui-mod-note mb-3">Every export carries the assessment point and generation date. No student-level outcome export exists — the data simply is not there to export.</p>' +
       '<div style="display:flex;flex-direction:column;gap:10px;max-width:420px">' +
-      (isCoordinator ? '<button class="btn btn-outline btn-sm" data-csv="roster" style="justify-content:space-between">Roster + completion CSV <span style="color:var(--ink-300)">identity only, no scores</span></button>' : '') +
-      '<button class="btn btn-outline btn-sm" data-csv="outcomes" style="justify-content:space-between">Aggregate outcomes CSV <span style="color:var(--ink-300)">section level and above</span></button>' +
+      (isCoordinator ? '<button class="btn btn-outline btn-sm" data-csv="roster" style="justify-content:space-between">Roster + completion CSV <span class="text-muted">identity only, no scores</span></button>' : '') +
+      '<button class="btn btn-outline btn-sm" data-csv="outcomes" style="justify-content:space-between">Aggregate outcomes CSV <span class="text-muted">section level and above</span></button>' +
       '</div>';
 
     body.innerHTML = screenHead('Reports', 'The screen you came for. Everything here is safe to share.') +
       card('Leadership summary (PDF)', null, summaryBody, 'span2') +
-      '<div style="margin-top:var(--ad-gap)">' + card('Newsletter paragraph', null, newsBody) + '</div>' +
-      '<div style="margin-top:var(--ad-gap)">' + card('Data export (CSV)', null, csvBody) + '</div>';
+      '<div class="mt-gap">' + card('Newsletter paragraph', null, newsBody) + '</div>' +
+      '<div class="mt-gap">' + card('Data export (CSV)', null, csvBody) + '</div>';
 
     body.querySelector('#rp-scope').addEventListener('change', function (e) { setParams({ rscope: e.target.value, rpoint: point }); });
     body.querySelector('#rp-point').addEventListener('change', function (e) { setParams({ rscope: scope, rpoint: e.target.value }); });
@@ -1313,7 +1311,7 @@
   function generateSummary(scope, point) {
     // "Server-side, non-blocking" — simulate a short generation, then open a
     // print-ready one-pager the user can save as PDF (WeasyPrint stand-in).
-    var ov = openModal('<div style="text-align:center;padding:30px 10px"><div class="spinner" style="margin:0 auto 16px"></div><p style="font-weight:700;color:var(--ink-600)">Generating leadership summary…</p><p class="ad-mod-note">You can keep working — it will open when ready.</p></div>');
+    var ov = openModal('<div style="text-align:center;padding:30px 10px"><div class="spinner" style="margin:0 auto 16px"></div><p style="font-weight:700;color:var(--ink-600)">Generating leadership summary…</p><p class="ui-mod-note">You can keep working — it will open when ready.</p></div>');
     setTimeout(function () { closeModal(); openSummaryDoc(scope, point); }, 1200);
   }
   function openSummaryDoc(scope, point) {
@@ -1326,25 +1324,35 @@
       var m = AD.completedPoints.length >= 2 ? AD.movement(students, sk.key) : null;
       return '<tr><td>' + esc(sk.name) + '</td><td>' + miniBar(d) + '</td><td style="white-space:nowrap">' + (m ? '▲' + m.up + ' / ▼' + m.down : '—') + '</td></tr>';
     }).join('');
+    // The popup is a separate window WITHOUT tilli.css, so its CSS stays self-contained:
+    // sizes use the type-scale values (11/13/15/24) and colours are the tokens resolved to hex here.
+    var C = PRINT_COLOURS();
     var html = '<!doctype html><html><head><meta charset="utf-8"><title>Tilli Measures — Leadership summary</title>' +
-      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#141414;margin:0;padding:32px;max-width:820px}h1{font-size:22px;margin:0 0 2px}.sub{color:#5B6170;font-size:13px;margin:0 0 18px}.meta{font-size:12px;color:#9AA3AF;margin-bottom:18px}' +
-      'table{width:100%;border-collapse:collapse;font-size:12.5px}td,th{padding:7px 8px;border-bottom:1px solid #ECEEF2;text-align:left}th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#5B6170}' +
-      '.tiles{display:flex;gap:24px;margin:16px 0 22px}.tile b{display:block;font-size:24px}.tile span{font-size:12px;color:#5B6170}.leg{font-size:11px;color:#5B6170;margin-top:10px}.print{margin:20px 0;text-align:center}@media print{.print{display:none}}</style></head><body>' +
+      '<style>body{font-family:Arial,Helvetica,sans-serif;color:' + C.ink + ';margin:0;padding:32px;max-width:820px}h1{font-size:24px;margin:0 0 2px}.sub{color:' + C.soft + ';font-size:13px;margin:0 0 18px}.meta{font-size:13px;color:' + C.muted + ';margin-bottom:18px}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 8px;border-bottom:1px solid ' + C.line + ';text-align:left}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:' + C.soft + '}' +
+      '.tiles{display:flex;gap:24px;margin:16px 0 22px}.tile b{display:block;font-size:24px}.tile span{font-size:13px;color:' + C.soft + '}.leg{font-size:11px;color:' + C.soft + ';margin-top:10px}.print{margin:20px 0;text-align:center}' +
+      '.mini{display:inline-flex;width:200px;height:14px;border-radius:4px;overflow:hidden;vertical-align:middle}.mini i{display:block;height:100%}.mini-l{font-size:11px;color:' + C.soft + '}' +
+      '.print button{padding:10px 22px;font-size:15px;border:none;border-radius:999px;background:' + C.green + ';color:' + C.white + ';font-weight:700;cursor:pointer}@media print{.print{display:none}}</style></head><body>' +
       '<h1>' + esc(scopeName) + ' — Leadership summary</h1><p class="sub">Social-emotional & cognitive skills · Tilli Measures</p>' +
       '<p class="meta">Assessment point: <b>' + esc(pt.label) + ' · ' + esc(pt.month) + '</b> · Generated ' + genStamp() + '</p>' +
       '<div class="tiles"><div class="tile"><b>' + secs.length + '</b><span>sections running</span></div><div class="tile"><b>' + students.length + '</b><span>students assessed</span></div><div class="tile"><b>' + AD.completedPoints.length + '</b><span>assessment points complete</span></div></div>' +
       '<table><thead><tr><th>Skill</th><th>Band distribution (Emerging / Developing / Secure)</th><th>Movement</th></tr></thead><tbody>' + skillRows + '</tbody></table>' +
-      '<p class="leg">Bands: Emerging (orange) · Developing (blue) · Secure (green). Figures are group distributions — no individual results are shown. No section-level teacher attribution.</p>' +
-      '<div class="print"><button onclick="window.print()" style="padding:10px 22px;font-size:14px;border:none;border-radius:999px;background:#56C02B;color:#fff;font-weight:700;cursor:pointer">Print / Save as PDF</button></div></body></html>';
+      '<p class="leg">Bands: Emerging (blue) · Developing (amber) · Secure (green). Figures are group distributions — no individual results are shown. No section-level teacher attribution.</p>' +
+      '<div class="print"><button onclick="window.print()">Print / Save as PDF</button></div></body></html>';
     var w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
     else toast('Allow pop-ups to open the summary.');
   }
+  // Token hex for the print popup (resolved here because the popup has no tilli.css).
+  function PRINT_COLOURS() {
+    return { ink: PAL.css('--ink-900'), soft: PAL.css('--ink-450'), muted: PAL.css('--ink-300'), line: PAL.css('--line-200'),
+      green: PAL.css('--green-500'), white: PAL.css('--white') };
+  }
   function miniBar(d) {
     var p = d.pct;
-    return '<span style="display:inline-flex;width:200px;height:14px;border-radius:4px;overflow:hidden;vertical-align:middle">' +
-      '<i style="width:' + p.emerging + '%;background:#F0A84A"></i><i style="width:' + p.developing + '%;background:#26BDE2"></i><i style="width:' + p.secure + '%;background:#56C02B"></i></span> ' +
-      '<span style="font-size:11px;color:#5B6170">' + p.secure + '% secure</span>';
+    return '<span class="mini">' + AD.bands.map(function (b) {
+      return '<i style="width:' + p[b.key] + '%;background:' + PAL.css(b.token) + '"></i>';
+    }).join('') + '</span> <span class="mini-l">' + p.secure + '% secure</span>';
   }
   function exportCSV(kind, scope, point) {
     var pt = AD.points.find(function (p) { return p.key === point; });
@@ -1386,7 +1394,7 @@
   }
   function askEnsure() { if (!askState.messages) askState.messages = askGreeting(); }
   function askLink(screen, label, params) {
-    return '<button class="ask-link" data-askgo="' + esc(screen) + '"' +
+    return '<button class="btn-link mt-2" data-askgo="' + esc(screen) + '"' +
       (params ? ' data-askparams="' + esc(JSON.stringify(params)) + '"' : '') + '>' + esc(label) + ' →</button>';
   }
   // Keyword responder over the real data reads. Returns { html, sugs }.
@@ -1442,7 +1450,7 @@
   function askMsgHTML(m) {
     if (m.role === 'me') return '<div class="ask-msg me">' + esc(m.text) + '</div>';
     var s = '<div class="ask-msg tilli">' + m.html + '</div>';
-    if (m.sugs) s += '<div class="ask-sugs">' + ASK_SUGS.map(function (x) { return '<button class="ask-sug" data-asksug="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>';
+    if (m.sugs) s += '<div class="ask-sugs">' + ASK_SUGS.map(function (x) { return '<button class="ui-filterchip" data-asksug="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>';
     return s;
   }
   function askThreadHTML() { askEnsure(); return askState.messages.map(askMsgHTML).join(''); }
@@ -1475,8 +1483,8 @@
     var p = document.createElement('div'); p.className = 'ask-panel'; p.id = 'ask-panel';
     p.innerHTML =
       '<div class="ask-head"><span class="ask-ava">' + ICONS.asktilli + '</span>' +
-      '<div><b>Ask Tilli<span class="ask-beta">Beta</span></b><span class="ask-sub">Answers from your school\'s data</span></div>' +
-      '<button class="ask-x" data-askclose="1" aria-label="Close Ask Tilli">×</button></div>' +
+      '<div><b>Ask Tilli<span class="ui-tag cyan">Beta</span></b><span class="ask-sub">Answers from your school\'s data</span></div>' +
+      '<button class="btn-icon bare ml-auto" data-askclose="1" aria-label="Close Ask Tilli">×</button></div>' +
       '<div class="ask-body" id="ask-panel-body"></div>' + askFootHTML('ask-panel');
     document.body.appendChild(p);
     askState.open = true; syncFab();
@@ -1518,7 +1526,7 @@
   function openModal(html, opts) {
     closeModal();
     var ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'ad-overlay';
-    ov.innerHTML = '<div class="ad-modal-card' + (opts && opts.wide ? ' wide' : '') + '" role="dialog" aria-modal="true"><button class="dialog-close focus" data-mclose="1" aria-label="Close">×</button>' + html + '</div>';
+    ov.innerHTML = '<div class="ui-modal-card ' + (opts && opts.wide ? 'xwide' : 'wide') + '" role="dialog" aria-modal="true"><button class="dialog-close focus" data-mclose="1" aria-label="Close">×</button>' + html + '</div>';
     modalRoot.appendChild(ov);
     ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(); });
     ov.querySelectorAll('[data-mclose]').forEach(function (b) { b.addEventListener('click', closeModal); });
@@ -1527,14 +1535,14 @@
   }
   function escClose(e) { if (e.key === 'Escape') closeModal(); }
   function closeModal() { var ov = document.getElementById('ad-overlay'); if (ov) ov.remove(); document.removeEventListener('keydown', escClose); }
-  function modalHead(title) { return '<div class="ad-modal-h"><h3>' + esc(title) + '</h3></div>'; }
+  function modalHead(title) { return '<div class="ui-modal-h"><h3>' + esc(title) + '</h3></div>'; }
 
   // ---- Message teacher (spec §5.1.2 + §6 compose) ----
   function composeMessage(sec) {
     openModal(modalHead('Message ' + sec.teacher) +
-      '<p class="ad-mod-note" style="margin-bottom:14px">' + esc(sec.name) + ' · last activity ' + relDays(sec.lastActivityDays).toLowerCase() + '. A gentle nudge, not an alert.</p>' +
-      '<textarea class="ad-copyblock" id="msg-body" style="min-height:120px">Hi ' + esc(sec.teacher.split(' ')[0]) + ', just checking in on ' + esc(sec.name) + ' — I noticed it has been quiet on Tilli lately. Anything I can help with?</textarea>' +
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-primary btn-sm" id="msg-send">Send message</button></div>');
+      '<p class="ui-mod-note mb-3">' + esc(sec.name) + ' · last activity ' + relDays(sec.lastActivityDays).toLowerCase() + '. A gentle nudge, not an alert.</p>' +
+      '<textarea class="ad-copyblock sm" id="msg-body">Hi ' + esc(sec.teacher.split(' ')[0]) + ', just checking in on ' + esc(sec.name) + ' — I noticed it has been quiet on Tilli lately. Anything I can help with?</textarea>' +
+      '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-primary btn-sm" id="msg-send">Send message</button></div>');
     document.getElementById('msg-send').addEventListener('click', function () { closeModal(); toast('Message sent to ' + sec.teacher + '.'); });
   }
 
@@ -1548,7 +1556,7 @@
     var list = AD.concerns.filter(function (c) { return !filterStatus || filterStatus === 'All' || c.status === filterStatus; });
     var body = list.map(function (c) {
       var st = c.status.toLowerCase();
-      return '<div class="ad-concern"><div class="top"><div><div class="who">' + esc(c.student) + '</div><div class="meta">' + esc(c.section) + ' · ' + esc(c.teacher) + ' · ' + esc(c.date) + '</div></div><span class="ad-chip status-' + st + '">' + esc(c.status) + (c.routed_to ? ' → ' + esc(c.routed_to) : '') + '</span></div>' +
+      return '<div class="ad-concern"><div class="top"><div><div class="who">' + esc(c.student) + '</div><div class="meta">' + esc(c.section) + ' · ' + esc(c.teacher) + ' · ' + esc(c.date) + '</div></div><span class="ui-chip ' + ({ new: 'info', routed: 'warn', closed: 'muted' }[st] || '') + '">' + esc(c.status) + (c.routed_to ? ' → ' + esc(c.routed_to) : '') + '</span></div>' +
         '<p class="note">' + esc(c.note) + '</p>' +
         (c.outcome ? '<div class="outcome"><b>Outcome:</b> ' + esc(c.outcome) + '</div>' : '') +
         (c.status === 'New' ? '<div class="actions"><button class="btn btn-cyan btn-sm" data-route="' + c.id + '">Route to counsellor</button><button class="btn btn-outline btn-sm" data-handle="' + c.id + '">Handle internally</button></div>' :
@@ -1557,8 +1565,8 @@
     }).join('') || stEmpty('No concerns in this view.', 'Nothing to route right now.', true);
 
     openModal(modalHead('Concern queue') +
-      '<p class="ad-mod-note" style="margin-bottom:14px">A routing queue, never an alarm. Names are visible to you as coordinator.</p>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">' + chips + '</div>' + body, { wide: true });
+      '<p class="ui-mod-note mb-3">A routing queue, never an alarm. Names are visible to you as coordinator.</p>' +
+      '<div class="row wrap mb-4" style="gap:8px">' + chips + '</div>' + body, { wide: true });
 
     modalRoot.querySelectorAll('[data-cfilter]').forEach(function (b) { b.addEventListener('click', function () { openConcernQueue(b.dataset.cfilter); }); });
     modalRoot.querySelectorAll('[data-route]').forEach(function (b) { b.addEventListener('click', function () { routeConcern(b.dataset.route, 'Counsellor'); }); });
@@ -1568,9 +1576,9 @@
   function routeConcern(id, to) {
     var c = AD.concerns.find(function (x) { return x.id === id; }); if (!c) return;
     openModal(modalHead('Route: ' + c.student) +
-      '<p class="ad-mod-note" style="margin-bottom:12px">Routing to <b>' + esc(to) + '</b> requires a note.</p>' +
-      '<textarea class="ad-copyblock" id="route-note" placeholder="Add a short note for whoever picks this up…" style="min-height:110px"></textarea>' +
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-outline btn-sm" data-back="1">Back</button><button class="btn btn-primary btn-sm" id="route-go">Confirm routing</button></div>');
+      '<p class="ui-mod-note mb-3">Routing to <b>' + esc(to) + '</b> requires a note.</p>' +
+      '<textarea class="ad-copyblock sm" id="route-note" placeholder="Add a short note for whoever picks this up…"></textarea>' +
+      '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-back="1">Back</button><button class="btn btn-primary btn-sm" id="route-go">Confirm routing</button></div>');
     modalRoot.querySelector('[data-back]').addEventListener('click', function () { openConcernQueue(); });
     document.getElementById('route-go').addEventListener('click', function () {
       if (!document.getElementById('route-note').value.trim()) { toast('A note is required to route.'); return; }
@@ -1582,9 +1590,9 @@
   function closeConcern(id) {
     var c = AD.concerns.find(function (x) { return x.id === id; }); if (!c) return;
     openModal(modalHead('Close: ' + c.student) +
-      '<p class="ad-mod-note" style="margin-bottom:12px">Closed concerns stay in the queue, filterable.</p>' +
-      '<textarea class="ad-copyblock" id="close-note" placeholder="Outcome note…" style="min-height:110px"></textarea>' +
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-outline btn-sm" data-back="1">Back</button><button class="btn btn-primary btn-sm" id="close-go">Close concern</button></div>');
+      '<p class="ui-mod-note mb-3">Closed concerns stay in the queue, filterable.</p>' +
+      '<textarea class="ad-copyblock sm" id="close-note" placeholder="Outcome note…"></textarea>' +
+      '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-back="1">Back</button><button class="btn btn-primary btn-sm" id="close-go">Close concern</button></div>');
     modalRoot.querySelector('[data-back]').addEventListener('click', function () { openConcernQueue(); });
     document.getElementById('close-go').addEventListener('click', function () {
       var v = document.getElementById('close-note').value.trim(); if (!v) { toast('Add an outcome note to close.'); return; }
@@ -1602,8 +1610,8 @@
     var outstanding = students.slice(students.length - outstandingN);
     var winLabel = AD.openPoint ? AD.openPoint.label : 'Assessment';
     openModal(modalHead(a.name + ' — ' + winLabel + ' completion') +
-      '<p class="ad-mod-note" style="margin-bottom:14px">' + a.completion.done + ' of ' + countNoun(a.completion.total, 'student', 'students') + ' complete. This is completion only — no scores, bands or skill data.</p>' +
-      (outstanding.length ? '<div style="font-weight:800;font-size:12px;color:var(--ink-450);margin-bottom:8px">STILL TO COMPLETE</div><div class="ad-tablewrap"><table class="ad-table" style="min-width:360px"><thead><tr><th>Student</th><th>Student ID</th></tr></thead><tbody>' +
+      '<p class="ui-mod-note mb-3">' + a.completion.done + ' of ' + countNoun(a.completion.total, 'student', 'students') + ' complete. This is completion only — no scores, bands or skill data.</p>' +
+      (outstanding.length ? '<div class="ui-eyebrow dark mb-2">Still to complete</div><div class="ui-tablewrap"><table class="ui-table mw-360"><thead><tr><th>Student</th><th>Student ID</th></tr></thead><tbody>' +
         outstanding.map(function (s) { return '<tr><td class="name">' + esc(s.name) + '</td><td class="ad-num">' + esc(s.adm) + '</td></tr>'; }).join('') + '</tbody></table></div>'
         : stEmpty('All students complete.', 'Nothing outstanding for this window.', true)));
   }
@@ -1626,20 +1634,20 @@
   }
 
   function inviteInputCell(val, key, i, ph) {
-    return '<td style="padding:3px 5px"><input class="input" data-invk="' + key + '" data-invi="' + i + '" value="' + esc(val || '') + '" placeholder="' + esc(ph) + '"' +
+    return '<td style="padding:3px 5px"><input class="input sm" data-invk="' + key + '" data-invi="' + i + '" value="' + esc(val || '') + '" placeholder="' + esc(ph) + '"' +
       (key === 'grade' ? ' list="inv-grades"' : key === 'section' ? ' list="inv-secs"' : key === 'email' ? ' type="email"' : '') +
-      ' style="padding:8px 10px;font-size:13px;width:100%"></td>';
+      '></td>';
   }
   function inviteRowHTML(r, i, boards) {
     var boardCell = '';
     if (boards.length > 1) {
-      boardCell = '<td style="padding:3px 5px"><label class="select-wrap"><select class="select" data-invk="board" data-invi="' + i + '" style="padding:8px 28px 8px 10px;font-size:13px">' +
+      boardCell = '<td style="padding:3px 5px"><label class="select-wrap"><select class="select sm" data-invk="board" data-invi="' + i + '">' +
         '<option value="">Board…</option>' + boards.map(function (b) { return '<option value="' + esc(b) + '"' + (r.board === b ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') +
         '</select></label></td>';
     }
     return '<tr>' + inviteInputCell(r.grade, 'grade', i, 'e.g. Grade 1') + inviteInputCell(r.section, 'section', i, 'A') +
       inviteInputCell(r.name, 'name', i, 'Full name') + inviteInputCell(r.email, 'email', i, 'name@school.edu') + boardCell +
-      '<td style="padding:3px 2px;text-align:center"><button type="button" class="link-btn" data-invrm="' + i + '" title="Remove row" style="color:var(--ink-300);font-size:16px">×</button></td></tr>';
+      '<td style="padding:3px 2px;text-align:center"><button type="button" class="btn-link text-muted" data-invrm="' + i + '" title="Remove row" style="font-size:var(--fs-md)">×</button></td></tr>';
   }
 
   function collectInviteRows() {
@@ -1669,34 +1677,34 @@
 
     var gradeList = (AD.grades || []);
     var secList = []; (AD.sections || []).forEach(function (s) { if (secList.indexOf(s.section) < 0) secList.push(s.section); });
-    var boardHead = boards.length > 1 ? '<th style="text-align:left;padding:0 6px 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450)">Board</th>' : '';
-    function th(t) { return '<th style="text-align:left;padding:0 6px 6px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450)">' + t + '</th>'; }
+    function th(t) { return '<th>' + t + '</th>'; }
+    var boardHead = boards.length > 1 ? th('Board') : '';
 
     var boardNote = boards.length === 1
-      ? '<div class="ad-privacy" style="margin-top:0;margin-bottom:14px"><span aria-hidden="true">🏷️</span><span>All invites use this school\'s board <b>' + esc(boards[0]) + '</b>.</span></div>'
+      ? '<div class="ui-note mb-3"><span aria-hidden="true">🏷️</span><span>All invites use this school\'s board <b>' + esc(boards[0]) + '</b>.</span></div>'
       : boards.length > 1
-        ? '<div class="ad-privacy" style="margin-top:0;margin-bottom:14px"><span aria-hidden="true">🏷️</span><span>This school runs multiple boards — pick each teacher\'s board.</span></div>' : '';
+        ? '<div class="ui-note mb-3"><span aria-hidden="true">🏷️</span><span>This school runs multiple boards — pick each teacher\'s board.</span></div>' : '';
 
     openModal(modalHead('Invite teachers') +
-      '<p class="ad-mod-note" style="margin-bottom:14px">Add teachers one row at a time, or paste rows / upload a CSV. Each becomes an invite with a one-time temporary password.</p>' +
+      '<p class="ui-mod-note mb-3">Add teachers one row at a time, or paste rows / upload a CSV. Each becomes an invite with a one-time temporary password.</p>' +
       boardNote +
       '<datalist id="inv-grades">' + gradeList.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist>' +
       '<datalist id="inv-secs">' + secList.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
-      '<div class="ad-tablewrap"><table style="width:100%;border-collapse:collapse;min-width:520px"><thead><tr>' +
+      '<div class="ui-tablewrap"><table class="ui-table compact mw-520"><thead><tr>' +
         th('Grade') + th('Section') + th('Teacher name') + th('Email') + boardHead + '<th></th>' +
       '</tr></thead><tbody id="inv-rows">' + inv.rows.map(function (r, i) { return inviteRowHTML(r, i, boards); }).join('') + '</tbody></table></div>' +
-      '<button type="button" class="btn btn-outline btn-sm" id="inv-addrow" style="margin-top:10px">+ Add teacher</button>' +
+      '<button type="button" class="btn btn-outline btn-sm mt-3" id="inv-addrow">+ Add teacher</button>' +
       // Bulk paste / CSV
-      '<details style="margin-top:16px"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--cyan-700)">Paste rows or upload a CSV</summary>' +
-        '<p class="ad-mod-note" style="margin:8px 0">One teacher per line — <b>grade, section, name, email' + (boards.length > 1 ? ', board' : '') + '</b> (comma or tab separated). A header row is ignored.</p>' +
-        '<textarea class="input" id="inv-paste" rows="4" placeholder="Grade 1, A, Priya Sharma, priya@school.edu' + (boards.length > 1 ? ', CBSE' : '') + '" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12.5px"></textarea>' +
-        '<div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap">' +
+      '<details class="mt-4"><summary style="cursor:pointer;font-weight:700;font-size:var(--fs-sm);color:var(--accent-ink)">Paste rows or upload a CSV</summary>' +
+        '<p class="ui-mod-note" style="margin:8px 0">One teacher per line — <b>grade, section, name, email' + (boards.length > 1 ? ', board' : '') + '</b> (comma or tab separated). A header row is ignored.</p>' +
+        '<textarea class="input sm mono" id="inv-paste" rows="4" placeholder="Grade 1, A, Priya Sharma, priya@school.edu' + (boards.length > 1 ? ', CBSE' : '') + '"></textarea>' +
+        '<div class="row wrap mt-2">' +
           '<button type="button" class="btn btn-outline btn-sm" id="inv-loadpaste">Load into table</button>' +
           '<label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">Upload CSV<input type="file" id="inv-file" accept=".csv,text/csv,text/plain" hidden></label>' +
-          '<span class="ad-mod-note" id="inv-parsehint"></span>' +
+          '<span class="ui-mod-note" id="inv-parsehint"></span>' +
         '</div></details>' +
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;align-items:center">' +
-        '<span class="ad-mod-note" id="inv-count" style="margin-right:auto"></span>' +
+      '<div class="ui-modal-foot row">' +
+        '<span class="ui-mod-note" id="inv-count" style="margin-right:auto"></span>' +
         '<button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button>' +
         '<button class="btn btn-primary btn-sm" id="inv-send">Send invites</button></div>',
       { wide: true });
@@ -1765,20 +1773,20 @@
   function renderInviteResult(boards) {
     // The receipt always carries board when the school's board is known.
     var multi = boards.length >= 1, rows = inv.results;
-    function th(t) { return '<th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-450);border-bottom:1px solid var(--line-200)">' + t + '</th>'; }
-    function td(t, mono) { return '<td style="padding:8px 10px;border-bottom:1px solid var(--line-200);font-size:13px' + (mono ? ';font-family:ui-monospace,Menlo,monospace;font-weight:700;letter-spacing:.04em' : '') + '">' + t + '</td>'; }
+    function th(t) { return '<th>' + t + '</th>'; }
+    function td(t, mono) { return '<td' + (mono ? ' class="mono" style="font-weight:700;letter-spacing:.04em"' : '') + '>' + t + '</td>'; }
     var head = '<tr>' + th('Grade') + th('Section') + th('Teacher') + th('Email') + (multi ? th('Board') : '') + th('Invited') + th('Temp password') + '</tr>';
     var bodyRows = rows.map(function (r) {
       return '<tr>' + td(esc(r.grade)) + td(esc(r.section)) + td(esc(r.name)) + td(esc(r.email)) +
         (multi ? td(esc(r.board || '—')) : '') + td(fmtInvDate(r.createdAt)) +
-        td(r.ok ? esc(r.tempPassword) : '<span style="color:#B22447">failed</span>', r.ok) + '</tr>';
+        td(r.ok ? esc(r.tempPassword) : '<span class="text-danger">failed</span>', r.ok) + '</tr>';
     }).join('');
     var okCount = rows.filter(function (r) { return r.ok; }).length;
 
     openModal(modalHead('Invites sent · ' + okCount) +
-      '<p class="ad-mod-note" style="margin-bottom:12px">Relay each temporary password to the teacher. Each stays <b>Invited</b> until they sign in and set their own password — then the roster shows <b>Active</b>.</p>' +
-      '<div class="ad-tablewrap"><table style="width:100%;border-collapse:collapse;min-width:640px"><thead>' + head + '</thead><tbody>' + bodyRows + '</tbody></table></div>' +
-      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn btn-outline btn-sm" id="inv-copyall">Copy all</button><button class="btn btn-primary btn-sm" id="inv-done">Done</button></div>',
+      '<p class="ui-mod-note mb-3">Relay each temporary password to the teacher. Each stays <b>Invited</b> until they sign in and set their own password — then the roster shows <b>Active</b>.</p>' +
+      '<div class="ui-tablewrap"><table class="ui-table compact mw-640"><thead>' + head + '</thead><tbody>' + bodyRows + '</tbody></table></div>' +
+      '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" id="inv-copyall">Copy all</button><button class="btn btn-primary btn-sm" id="inv-done">Done</button></div>',
       { wide: true });
 
     document.getElementById('inv-copyall').addEventListener('click', function () {
@@ -1807,41 +1815,41 @@
   function renderMigration() {
     var html = modalHead('Grade migration · ' + AD.academicYears[0]);
     if (mig.step === 'entry') {
-      html += '<p class="ad-mod-note" style="margin-bottom:16px">This starts the year-end migration. Every enrolled student gets a proposed promotion you can adjust. Nothing is committed until the final step, and it can be undone for 24 hours.</p>' +
-        '<div class="ad-privacy"><span aria-hidden="true">🔒</span><span>Historical assessment data stays attached to each child and to their prior section-year. Migration never moves or orphans results.</span></div>' +
-        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn btn-outline btn-sm" data-mclose="1">Not now</button><button class="btn btn-primary btn-sm" data-mig="review">Begin review →</button></div>';
+      html += '<p class="ui-mod-note mb-4">This starts the year-end migration. Every enrolled student gets a proposed promotion you can adjust. Nothing is committed until the final step, and it can be undone for 24 hours.</p>' +
+        '<div class="ui-note mt-3"><span aria-hidden="true">🔒</span><span>Historical assessment data stays attached to each child and to their prior section-year. Migration never moves or orphans results.</span></div>' +
+        '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mclose="1">Not now</button><button class="btn btn-primary btn-sm" data-mig="review">Begin review →</button></div>';
     } else if (mig.step === 'review') {
-      html += '<p class="ad-mod-note" style="margin-bottom:14px">Adjust any student. Bulk-set a whole grade with the header control.</p>';
+      html += '<p class="ui-mod-note mb-3">Adjust any student. Bulk-set a whole grade with the header control.</p>';
       AD.grades.forEach(function (g) {
         var gr = mig.rows.filter(function (r) { return r.grade === g; });
-        html += '<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-family:Quicksand,sans-serif;font-size:15px">' + esc(g) + ' → ' + esc(nextGrade(g)) + '</b>' +
+        html += '<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-family:var(--font-heading);font-size:var(--fs-md)">' + esc(g) + ' → ' + esc(nextGrade(g)) + '</b>' +
           '<label class="select-wrap" style="max-width:190px"><select class="select" data-bulk="' + esc(g) + '"><option value="">Bulk action…</option><option value="promote">Promote all</option><option value="retain">Retain all</option><option value="graduate">Mark all graduating</option></select></label></div>' +
-          '<div class="ad-tablewrap"><table class="ad-table" style="min-width:520px"><tbody>' +
+          '<div class="ui-tablewrap"><table class="ui-table mw-520"><tbody>' +
           gr.map(function (r) {
-            return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num" style="color:var(--ink-300)">' + esc(r.adm) + '</td><td><label class="select-wrap"><select class="select" data-act="' + r.adm + '">' +
+            return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num text-muted">' + esc(r.adm) + '</td><td><label class="select-wrap"><select class="select" data-act="' + r.adm + '">' +
               [['promote', 'Promote → ' + nextGrade(r.grade)], ['retain', 'Retain in ' + r.grade], ['graduate', 'Graduating'], ['remove', 'Remove (left school)']].map(function (o) { return '<option value="' + o[0] + '"' + (r.action === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
               '</select></label></td></tr>';
           }).join('') + '</tbody></table></div></div>';
       });
-      html += '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px"><button class="btn btn-outline btn-sm" data-mig="entry">Back</button><button class="btn btn-primary btn-sm" data-mig="add">Next: new intake →</button></div>';
+      html += '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="entry">Back</button><button class="btn btn-primary btn-sm" data-mig="add">Next: new intake →</button></div>';
     } else if (mig.step === 'add') {
-      html += '<p class="ad-mod-note" style="margin-bottom:14px">Add new intake students. (CSV upload is desktop-only in the full product; add individually here.)</p>' +
+      html += '<p class="ui-mod-note mb-3">Add new intake students. (CSV upload is desktop-only in the full product; add individually here.)</p>' +
         '<div id="mig-adds">' + mig.adds.map(addRowHTML).join('') + '</div>' +
         '<button class="btn btn-outline btn-sm" data-addrow="1" style="margin-top:6px">+ Add a student</button>' +
-        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn btn-outline btn-sm" data-mig="review">Back</button><button class="btn btn-primary btn-sm" data-mig="preview">Preview →</button></div>';
+        '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="review">Back</button><button class="btn btn-primary btn-sm" data-mig="preview">Preview →</button></div>';
     } else if (mig.step === 'preview') {
       var sum = migSummary();
-      html += '<p class="ad-mod-note" style="margin-bottom:14px">Review before committing.</p>' +
+      html += '<p class="ui-mod-note mb-3">Review before committing.</p>' +
         '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:18px">' +
-        [['Promoted', sum.promote], ['Retained', sum.retain], ['Graduating', sum.graduate], ['Removed', sum.remove], ['Added', sum.add]].map(function (p) { return '<div class="ad-stat"><div class="num">' + p[1] + '</div><div class="lbl">' + p[0] + '</div></div>'; }).join('') + '</div>' +
-        '<div style="font-weight:800;font-size:12px;color:var(--ink-450);margin-bottom:8px">RESULTING SECTION HEADCOUNTS</div><div class="ad-tablewrap"><table class="ad-table" style="min-width:360px"><tbody>' +
-        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(k) + '</td><td class="ad-num">' + countNoun(n, 'student', 'students') + (n > SECTION_LIMIT ? ' <span class="ad-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
-        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn btn-outline btn-sm" data-mig="add">Back</button><button class="btn btn-primary btn-sm" data-mig="commit">Commit migration</button></div>';
+        [['Promoted', sum.promote], ['Retained', sum.retain], ['Graduating', sum.graduate], ['Removed', sum.remove], ['Added', sum.add]].map(function (p) { return '<div class="ui-kpi"><div class="num">' + p[1] + '</div><div class="lbl">' + p[0] + '</div></div>'; }).join('') + '</div>' +
+        '<div class="ui-eyebrow dark mb-2">Resulting section headcounts</div><div class="ui-tablewrap"><table class="ui-table mw-360"><tbody>' +
+        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(k) + '</td><td class="ad-num">' + countNoun(n, 'student', 'students') + (n > SECTION_LIMIT ? ' <span class="ui-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+        '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="add">Back</button><button class="btn btn-primary btn-sm" data-mig="commit">Commit migration</button></div>';
     } else if (mig.step === 'commit') {
       var s2 = migSummary();
-      html += '<div style="text-align:center;padding:14px 0"><div style="font-size:34px;margin-bottom:8px">✓</div><h3 style="font-family:Quicksand,sans-serif;margin:0 0 6px">Migration committed</h3>' +
-        '<p class="ad-mod-note" style="max-width:44ch;margin:0 auto 14px">' + s2.promote + ' promoted, ' + s2.retain + ' retained, ' + s2.graduate + ' graduating, ' + s2.remove + ' removed, ' + s2.add + ' added. Historical assessment data remains attached to each child and their prior section.</p>' +
-        '<div class="ad-privacy" style="justify-content:center;max-width:420px;margin:0 auto"><span aria-hidden="true">↩</span><span>You can undo this entire migration as one transaction for the next 24 hours.</span></div>' +
+      html += '<div style="text-align:center;padding:14px 0"><div style="font-size:var(--fs-2xl);margin-bottom:8px">✓</div><h3 style="margin:0 0 6px">Migration committed</h3>' +
+        '<p class="ui-mod-note" style="max-width:44ch;margin:0 auto 14px">' + s2.promote + ' promoted, ' + s2.retain + ' retained, ' + s2.graduate + ' graduating, ' + s2.remove + ' removed, ' + s2.add + ' added. Historical assessment data remains attached to each child and their prior section.</p>' +
+        '<div class="ui-note" style="justify-content:center;max-width:420px;margin:0 auto"><span aria-hidden="true">↩</span><span>You can undo this entire migration as one transaction for the next 24 hours.</span></div>' +
         '<div style="margin-top:18px"><button class="btn btn-outline btn-sm" data-mig="undo">Undo migration</button> <button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div></div>';
     }
     var ov = openModal(html, { wide: mig.step === 'review' || mig.step === 'preview' });

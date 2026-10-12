@@ -8,27 +8,23 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css">
+<link rel="stylesheet" href="assets/tilli.css?v=20261012m">
 <style>
   /* ============================================================
      Teacher onboarding — screen chrome (live design system).
-     Palette/typography reuse tilli.css tokens; only the layout
-     scaffolding for the reflection flow lives here.
+     Palette, type, cards, chips, menus, notes etc. come from the shared
+     tilli.css tokens + ui-* components; only the layout scaffolding and
+     controls unique to the reflection flow live here.
      ============================================================ */
   .onb {
     /* --- tunable visual parameters (see table in the chat message) --- */
     --onb-card-max: 560px;      /* max width of the white flow card */
     --onb-band-h: clamp(120px, 20vh, 210px); /* flower-band height */
     position: fixed; inset: 0; overflow: hidden;
-    background: #fff;           /* plain white sky (sun + flower band still overlaid) */
+    background: var(--white);   /* plain white sky (sun + flower band still overlaid) */
   }
-  /* Decorative sun, top-right — echoes the landing scenery */
-  .onb-sun {
-    position: absolute; top: -60px; right: -60px; width: 260px; height: 260px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 50% 50%, #FCE39A 0%, #FCD661 40%, #FBCB3E 62%, rgba(252,203,62,0) 70%);
-    pointer-events: none; z-index: 0;
-  }
+  /* Decorative sun, top-right — gradient from the shared .sun; size/position here */
+  .onb-sun { top: -60px; right: -60px; width: 260px; height: 260px; z-index: 0; }
   .onb-band {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: var(--onb-band-h); z-index: 0; pointer-events: none;
@@ -48,10 +44,10 @@
     position: relative;
     width: 100%; max-width: var(--onb-card-max);
     margin: auto;               /* centre when it fits; scroll from top when tall */
-    background: #fff;
+    background: var(--white);
     border: 1px solid var(--line-200);
     border-radius: var(--radius-card);
-    box-shadow: 0 24px 60px rgba(40, 70, 40, .14);
+    box-shadow: var(--shadow-modal);
     padding: clamp(28px, 4vw, 44px) clamp(24px, 4vw, 40px);
     /* No entrance animation: the card is re-rendered on every state change
        (e.g. selecting a dropdown), so an entrance animation here would
@@ -64,112 +60,85 @@
      (eyebrow pill, title, chips) ever sits underneath it. */
   .onb-card.has-back { padding-top: 64px; }
 
-  /* Eyebrow pill (e.g. "DEMOGRAPHIC QUESTIONS") */
-  .onb-eyebrow {
-    display: inline-flex; align-items: center;
-    background: var(--wash-green); color: var(--green-700);
-    font-weight: 800; font-size: 11.5px; letter-spacing: .06em;
-    text-transform: uppercase; padding: 6px 13px;
-    border-radius: var(--radius-pill); margin-bottom: 14px;
-  }
+  /* Centred hero blocks (intro / greeting / done) — on top of .ui-empty */
+  .onb-hero { padding: 12px 0; }
+  .onb-hero .ui-empty-t { font-size: var(--fs-xl); line-height: 1.35; margin-bottom: 10px; }
+  .onb-hero .actions { margin-top: 26px; }
+  .onb-hero .ui-empty-t + .actions { margin-top: 18px; }
+  /* Italic pre-title ("You can not pour from an empty cup") */
+  .onb-kicker { font-style: italic; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-300); }
 
   /* Step progress */
   .onb-steprow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .onb-title { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: clamp(20px, 2.4vw, 24px); color: var(--ink-900); margin: 0; }
-  .onb-step { font-size: 12.5px; color: var(--ink-300); font-weight: 700; white-space: nowrap; }
-  .onb-progress { height: 8px; background: var(--line-200); border-radius: 4px; overflow: hidden; margin: 12px 0; }
-  .onb-progress > span { display: block; height: 100%; background: var(--green-500); border-radius: 4px; transition: width .3s var(--ease); }
-  .onb-help { margin: 0 0 20px; font-size: 13.5px; color: var(--ink-300); line-height: 1.5; }
+  .onb-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); margin: 0; }
+  .onb-step { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; white-space: nowrap; }
+  .onb-help { margin: 0 0 20px; font-size: var(--fs-sm); color: var(--ink-300); line-height: 1.5; }
 
   .onb-fields { display: flex; flex-direction: column; gap: 15px; }
-  .onb-label { display: block; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--ink-700); }
+  .onb-fields.loose { gap: 18px; }
+  .onb-label { display: block; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); margin-bottom: 6px; color: var(--ink-700); }
+  .onb-label.spaced { margin-bottom: var(--space-2); }   /* label above a chip / card group */
   .onb-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .onb-locked {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    border: 1px solid var(--line-200); border-radius: 8px; padding: 13px 15px;
-    font-size: 15px; background: var(--surface-100); color: var(--ink-450); font-weight: 600;
+    border: 1px solid var(--line-200); border-radius: var(--radius-sm); padding: 13px 15px;
+    font-size: var(--fs-md); background: var(--surface-100); color: var(--ink-450); font-weight: 600;
   }
+  .onb-locked > span { overflow: hidden; text-overflow: ellipsis; }
+  .onb-locked svg { flex: none; color: var(--ink-300); }
 
-  /* Selectable pills (grades) */
+  /* Selectable grade pills → .ui-filterchip.solid */
   .onb-pills { display: flex; flex-wrap: wrap; gap: 8px; }
-  .onb-pill {
-    background: #fff; color: var(--ink-600);
-    border: 1.5px solid var(--line-200); border-radius: var(--radius-pill);
-    padding: 9px 16px; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 13px;
-    cursor: pointer; transition: all .15s;
-  }
-  .onb-pill:hover { border-color: var(--green-500); }
-  .onb-pill.on { background: var(--green-500); color: #fff; border-color: var(--green-600); }
 
   /* Checkbox rows (sections, subjects, resources) */
   .onb-checkgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
   .onb-check {
     display: flex; align-items: center; gap: 10px; background: none; border: none; cursor: pointer;
-    padding: 6px 0; font-family: 'Montserrat', sans-serif; font-size: 14px; color: var(--ink-700);
+    padding: 6px 0; font-family: var(--font-body); font-size: var(--fs-md); color: var(--ink-700);
     font-weight: 600; text-align: left;
   }
   .onb-box {
-    width: 20px; height: 20px; border-radius: 6px; flex: none;
+    width: 20px; height: 20px; border-radius: var(--radius-xs); flex: none;
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 800; color: #fff;
-    background: #fff; border: 1.5px solid var(--line-200); transition: all .15s;
+    font-size: var(--fs-sm); font-weight: 800; color: var(--white);
+    background: var(--white); border: 1.5px solid var(--line-200); transition: all .15s;
   }
   .onb-box.on { background: var(--green-500); border-color: var(--green-600); }
 
-  /* Section-per-grade cards (step 3) */
-  .onb-seccard { border: 1px solid var(--line-200); border-radius: 14px; background: var(--surface-100); padding: 13px 15px; }
+  /* Section-per-grade cards (step 3) → .ui-card.sm.subtle */
   .onb-seccard + .onb-seccard { margin-top: 8px; }
   .onb-sechead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-  .onb-badge { background: var(--wash-green); color: var(--green-700); font-size: 11.5px; font-weight: 800; padding: 4px 10px; border-radius: var(--radius-pill); }
   .onb-secgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 10px; }
 
-  /* Country/city autocomplete */
-  .onb-ac { position: relative; }
-  .onb-ac-menu {
+  /* Country/city autocomplete + custom dropdown menus → .ui-menu / .ui-menu-item
+     (positioning only here) */
+  .onb-ac, .onb-sel { position: relative; }
+  .onb-ac-menu, .onb-sel-menu {
     position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20;
-    background: #fff; border: 1px solid var(--line-200); border-radius: 14px;
-    box-shadow: 0 12px 30px rgba(40, 70, 40, .16); max-height: 200px; overflow-y: auto; padding: 5px;
+    min-width: 0; overflow-y: auto;
   }
-  .onb-ac-opt {
-    width: 100%; display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer;
-    padding: 9px 10px; border-radius: 9px; font-family: 'Montserrat', sans-serif; font-size: 14px;
-    font-weight: 600; color: var(--ink-700); text-align: left;
-  }
-  .onb-ac-opt:hover { background: var(--wash-green); }
-  .onb-ac-empty { padding: 10px; font-size: 12.5px; color: var(--ink-300); font-weight: 600; }
-  .onb-ac-flag { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; pointer-events: none; }
+  .onb-ac-menu { max-height: 200px; }
+  .onb-sel-menu { max-height: 240px; }
+  .onb-sel-menu.up { top: auto; bottom: calc(100% + 6px); }
+  .onb-ac-empty { padding: 10px; font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .onb-ac-flag { position: absolute; right: 12px; top: 38px; transform: translateY(-50%); font-size: var(--fs-md); pointer-events: none; }
 
-  /* Custom dropdown (replaces native <select> — see selectField in teacher.js) */
-  .onb-sel { position: relative; }
+  /* Custom dropdown (replaces native <select> — see selectField in teacher.js).
+     The trigger is an .input; .onb-sel-trigger adds the button layout + caret. */
   .onb-sel-trigger {
-    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    border: 1px solid var(--line-200); background: #fff; cursor: pointer; text-align: left;
-    font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px;
-    color: var(--ink-900); padding: 13px 15px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    cursor: pointer; text-align: left;
   }
   .onb-sel-trigger::after {
-    content: '\25BE'; flex: none; color: var(--ink-300); font-size: 12px;
+    content: '\25BE'; flex: none; color: var(--ink-300); font-size: var(--fs-sm);
     transition: transform .18s var(--ease);
   }
   .onb-sel-trigger.is-placeholder { color: var(--ink-300); }
   .onb-sel-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .onb-sel.open .onb-sel-trigger { border-color: var(--cyan-500); }
+  .onb-sel.open .onb-sel-trigger { border-color: var(--focus); }
   .onb-sel.open .onb-sel-trigger::after { transform: rotate(180deg); }
-  .onb-sel-menu {
-    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20;
-    background: #fff; border: 1px solid var(--line-200); border-radius: 14px;
-    box-shadow: 0 12px 30px rgba(40, 70, 40, .16);
-    max-height: 240px; overflow-y: auto; padding: 5px;
-  }
-  .onb-sel-menu.up { top: auto; bottom: calc(100% + 6px); }
-  .onb-sel-opt {
-    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 9px;
-    background: none; border: none; cursor: pointer; padding: 10px 12px; border-radius: 9px;
-    font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 600;
-    color: var(--ink-700); text-align: left;
-  }
-  .onb-sel-opt:hover { background: var(--wash-green); }
-  .onb-sel-opt.on { color: var(--green-700); font-weight: 700; }
+  .onb-sel-opt { justify-content: space-between; }
+  .onb-sel-opt.on { color: var(--green-700); }
   .onb-sel-tick { flex: none; color: var(--green-600); font-weight: 800; }
 
   /* Student roster sheet (manual "type them in") — one aligned grid drives
@@ -178,104 +147,92 @@
      text columns get the full width and names are never truncated. */
   .roster-sheet { --roster-cols: 1.15fr 1.15fr 1fr 36px; }
   .roster-group {
-    border: 1px solid var(--line-200); border-radius: 16px;
-    padding: 12px 12px 10px; margin-bottom: 14px; background: #fff;
+    border: 1px solid var(--line-200); border-radius: var(--radius-lg);
+    padding: 12px 12px 10px; margin-bottom: 14px; background: var(--white);
   }
   .roster-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .roster-group-gs { flex: 1; min-width: 0; max-width: 300px; }
-  .roster-group-n { font-size: 12px; font-weight: 700; color: var(--ink-300); white-space: nowrap; }
-  .roster-group-del {
-    margin-left: auto; background: none; border: none; cursor: pointer;
-    font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 12px;
-    color: var(--ink-300); padding: 6px 8px; border-radius: var(--radius-pill);
+  .roster-group-n { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-300); white-space: nowrap; }
+  /* Quiet text button — "Remove" (section) and "Not now" (reflection) */
+  .onb-quiet {
+    background: none; border: none; cursor: pointer;
+    font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm);
+    color: var(--ink-300); padding: 6px 10px; border-radius: var(--radius-pill);
+    transition: color .15s, background .15s;
   }
-  .roster-group-del:hover { color: var(--orange-500); background: #FEF1E1; }
-  .roster-addrow {
-    margin-top: 6px; background: none; border: 1.5px dashed var(--line-200); width: 100%;
-    border-radius: 12px; padding: 9px; cursor: pointer;
-    font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 13px; color: var(--green-600);
-  }
-  .roster-addrow:hover { background: var(--wash-green); border-color: var(--green-500); }
-  .roster-row.has-issue { background: #FFF8EC; }
+  .onb-quiet:hover:not(:disabled) { color: var(--green-600); }
+  .onb-quiet:disabled { opacity: .5; cursor: not-allowed; }
+  .onb-quiet.del { margin-left: auto; }
+  .onb-quiet.del:hover:not(:disabled) { color: var(--orange-500); background: var(--warn-wash); }
+  .roster-sheet-row.has-issue { background: var(--warn-wash); }
   .roster-issue {
-    font-size: 12px; font-weight: 600; color: #8a5a14; padding: 2px 8px 8px;
+    font-size: var(--fs-sm); font-weight: 600; color: var(--warn-700); padding: 2px 8px 8px;
   }
   .roster-issue-btn {
-    background: #fff; border: 1px solid #F6D9A8; border-radius: 999px; cursor: pointer;
-    font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 11.5px; color: #8a5a14;
+    background: var(--white); border: 1px solid var(--warn-line);
+    border-radius: var(--radius-pill); cursor: pointer;
+    font-family: var(--font-body); font-weight: 700; font-size: var(--fs-xs); color: var(--warn-700);
     padding: 3px 10px; margin-left: 4px;
   }
   @media (max-width: 480px) {
     .roster-sheet { --roster-cols: 1fr 1fr 32px; }
     .roster-head span:nth-child(3) { display: none; }
-    .roster-row input[data-rowk="adm"] { grid-column: 1 / 3; grid-row: 2; }
+    .roster-sheet-row input[data-rowk="adm"] { grid-column: 1 / 3; grid-row: 2; }
   }
-  .roster-head, .roster-row {
+  .roster-head, .roster-sheet-row {
     display: grid; grid-template-columns: var(--roster-cols);
     gap: 10px; align-items: center;
   }
   .roster-head {
     margin-bottom: 8px; padding: 0 6px;
-    font-weight: 800; font-size: 10.5px; letter-spacing: .04em;
+    font-weight: 800; font-size: var(--fs-xs); letter-spacing: .04em;
     text-transform: uppercase; color: var(--ink-300);
   }
-  .roster-row { padding: 7px 6px; border-radius: 12px; transition: background .15s; }
-  .roster-row + .roster-row { border-top: 1px solid var(--line-200); }
-  .roster-row:hover { background: var(--surface-100); }
-  .roster-del {
-    width: 32px; height: 32px; border: none; background: none; border-radius: var(--radius-pill);
-    cursor: pointer; color: var(--ink-300); font-size: 20px; line-height: 1;
-    display: inline-flex; align-items: center; justify-content: center;
-    justify-self: center; transition: background .15s, color .15s;
-  }
-  .roster-del:hover { background: #FEF1E1; color: var(--orange-500); }
-  /* Quiet "skip / I'm done" link — secondary to the primary "+ Add student" */
-  .roster-skip {
-    background: none; border: none; cursor: pointer;
-    font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 13px;
-    color: var(--ink-300); padding: 6px 10px; border-radius: var(--radius-pill);
-    transition: color .15s;
-  }
-  .roster-skip:hover:not(:disabled) { color: var(--green-600); }
-  .roster-skip:disabled { opacity: .5; cursor: not-allowed; }
+  .roster-sheet-row { padding: 7px 6px; border-radius: var(--radius-md); transition: background .15s; }
+  .roster-sheet-row + .roster-sheet-row { border-top: 1px solid var(--line-200); }
+  .roster-sheet-row:hover { background: var(--surface-100); }
+  /* Row delete → .btn-icon.bare, sized to the 32–36px grid column */
+  .roster-del { width: 32px; height: 32px; justify-self: center; font-size: var(--fs-lg); transition: background .15s, color .15s; }
+  .roster-del:hover { background: var(--warn-wash); color: var(--orange-500); }
 
   /* Footer buttons */
   .onb-actions { display: flex; gap: 12px; margin-top: 24px; }
+  .onb-actions.tight { margin-top: 18px; }
   .onb-actions .btn { flex: 1; }
   .onb-actions .btn.grow { flex: 2; }
 
-  /* Self-assessment */
+  /* Self-assessment (category chips are .ui-chip; colour inline from the reflection bank) */
   .onb-catrow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 18px; }
-  .onb-cat { font-size: 11.5px; font-weight: 800; padding: 5px 11px; border-radius: var(--radius-pill); transition: all .2s; }
-  .onb-qnum { font-size: 12.5px; color: var(--ink-300); font-weight: 700; margin-bottom: 6px; }
-  .onb-question { font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 20px; line-height: 1.35; margin: 0 0 8px; color: var(--ink-900); }
-  .onb-qhint { margin: 0 0 14px; font-size: 13px; color: var(--ink-300); line-height: 1.5; }
+  .onb-qnum { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; margin-bottom: 6px; }
+  .onb-question { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.35; margin: 0 0 8px; color: var(--ink-900); }
+  .onb-qhint { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--ink-300); line-height: 1.5; }
   .onb-scale { display: flex; gap: 10px; justify-content: center; margin: 16px 0 10px; }
   .onb-scale-btn {
-    width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid var(--line-200); background: #fff;
-    font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 17px; color: var(--ink-450); cursor: pointer;
+    width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid var(--line-200); background: var(--white);
+    font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-450); cursor: pointer;
     transition: all .15s;
   }
   .onb-scale-btn:hover { border-color: var(--green-500); }
-  .onb-scale-btn.on { background: var(--green-500); border-color: var(--green-600); color: #fff; transform: scale(1.06); }
-  .onb-scale-ends { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-300); font-weight: 700; padding: 0 4px; }
+  .onb-scale-btn.on { background: var(--green-500); border-color: var(--green-600); color: var(--white); transform: scale(1.06); }
+  .onb-scale-ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--ink-300); font-weight: 700; padding: 0 4px; }
   .onb-choices { display: flex; flex-direction: column; gap: 9px; margin-top: 8px; }
   .onb-choice {
-    width: 100%; text-align: left; border: 1.5px solid var(--line-200); background: #fff; cursor: pointer;
-    padding: 14px 16px; border-radius: 14px; font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 14.5px;
+    width: 100%; text-align: left; border: 1.5px solid var(--line-200); background: var(--white); cursor: pointer;
+    padding: 14px 16px; border-radius: var(--radius-md); font-family: var(--font-body); font-weight: 600; font-size: var(--fs-md);
     color: var(--ink-700); transition: all .15s;
   }
   .onb-choice:hover { border-color: var(--green-500); }
   .onb-choice.on { border-color: var(--green-600); background: var(--wash-green); color: var(--green-700); font-weight: 700; }
   .onb-textarea {
-    width: 100%; border: 1px solid var(--line-200); border-radius: 14px; padding: 14px;
-    font-size: 14.5px; font-family: 'Montserrat', sans-serif; color: var(--ink-900); resize: none; outline: none;
-    background: #fff; line-height: 1.5; margin-top: 6px;
+    width: 100%; border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 14px;
+    font-size: var(--fs-md); font-family: var(--font-body); color: var(--ink-900); resize: none; outline: none;
+    background: var(--white); line-height: 1.5; margin-top: 6px;
   }
-  .onb-textarea:focus { border-color: var(--cyan-500); }
+  .onb-textarea:focus { border-color: var(--focus); }
 
-  /* Progress dots ring (self-assessment sections) */
+  /* Progress dots ring (self-assessment sections); position/size/colour inline */
   .onb-dots { position: relative; width: 56px; height: 56px; margin: 0 auto 12px; }
+  .onb-dots span { position: absolute; box-sizing: border-box; border-radius: 50%; border: 2px solid; transition: all .2s; }
 
   /* Petal cluster (greeting / done celebrations) */
   .onb-petals { position: relative; margin: 0 auto 20px; }
@@ -285,27 +242,34 @@
   /* Roster method cards */
   .onb-methods { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .onb-method {
-    display: flex; flex-direction: column; align-items: center; gap: 10px; background: #fff;
-    border: 1.5px solid var(--line-200); border-radius: 18px; padding: 20px 12px; cursor: pointer;
-    font-family: 'Montserrat', sans-serif; transition: all .15s;
+    display: flex; flex-direction: column; align-items: center; gap: 10px; background: var(--white);
+    border: 1.5px solid var(--line-200); border-radius: var(--radius-lg); padding: 20px 12px; cursor: pointer;
+    font-family: var(--font-body); transition: all .15s;
   }
   .onb-method:hover { border-color: var(--green-500); background: var(--wash-green); }
-  .onb-method .ic { font-size: 26px; }
-  .onb-method .lb { font-weight: 800; font-size: 13.5px; color: var(--ink-700); line-height: 1.3; text-align: center; }
+  .onb-method .ic { font-size: var(--fs-xl); }
+  .onb-method .lb { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-700); line-height: 1.3; text-align: center; }
+  /* File drop zones (CSV / picture) */
   .onb-drop {
-    display: block; border: 1.5px dashed var(--line-200); border-radius: 16px; padding: 26px; text-align: center;
+    display: block; border: 1.5px dashed var(--line-200); border-radius: var(--radius-lg); padding: 26px; text-align: center;
     cursor: pointer; background: var(--surface-100);
   }
   .onb-drop:hover { border-color: var(--green-500); }
-  .onb-note { margin-top: 12px; background: var(--wash-green); color: var(--green-700); font-weight: 700; font-size: 13px; padding: 10px 14px; border-radius: 12px; }
-  .onb-chips { display: flex; flex-wrap: wrap; gap: 7px; }
-  .onb-chip { background: var(--wash-green); color: var(--green-700); font-size: 12.5px; font-weight: 700; padding: 6px 12px; border-radius: var(--radius-pill); }
+  .onb-drop.compact { padding: 22px 12px; }
+  .onb-drop-ic { font-size: var(--fs-xl); margin-bottom: 6px; }
+  .onb-drop-t { font-weight: 800; font-size: var(--fs-md); color: var(--ink-700); }
+  .onb-drop.compact .onb-drop-t { font-size: var(--fs-sm); }
+  .onb-drop-s { font-size: var(--fs-sm); color: var(--ink-300); margin-top: 4px; }
+  /* Note with stacked action buttons (roster conflict note) */
+  .onb-note-col { flex-direction: column; align-items: stretch; }
+  .onb-note-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .onb-note-acts .btn-line { flex: 1; min-width: 150px; }
 
   @media (max-width: 640px) {
-    .onb-card { padding: 26px 20px; border-radius: 20px; }
+    .onb-card { padding: 26px 20px; border-radius: var(--radius-xl); }
     .onb-grid2, .onb-checkgrid, .onb-methods { grid-template-columns: 1fr; }
     .onb-secgrid { grid-template-columns: repeat(2, 1fr); }
-    .onb-scale-btn { width: 46px; height: 46px; font-size: 15px; }
+    .onb-scale-btn { width: 46px; height: 46px; font-size: var(--fs-md); }
   }
 </style>
 </head>
@@ -315,7 +279,7 @@
 <div class="brand-rail" aria-hidden="true"><span></span><span class="seg pink"></span><span class="seg cyan"></span><span class="seg yellow"></span></div>
 
 <div class="onb" id="onb">
-  <div class="onb-sun" aria-hidden="true"></div>
+  <div class="sun onb-sun" aria-hidden="true"></div>
   <div class="onb-band flower-band" id="flower-band" aria-hidden="true"></div>
   <div class="onb-stage" id="onb-root"></div>
 </div>
@@ -323,11 +287,11 @@
 <!-- Dashboard mounts here after onboarding (Phase 2). Hidden until then. -->
 <div id="dash-root" style="display:none"></div>
 
-<script src="assets/school-data.js?v=20261012l"></script>
-<script src="assets/tilli-api.js?v=20261012l"></script>
-<script src="assets/dashboard-data.js?v=20261012l"></script>
-<script src="assets/flower-band.js?v=20261012l"></script>
-<script src="assets/teacher-dashboard.js?v=20261012l"></script>
-<script src="assets/teacher.js?v=20261012l"></script>
+<script src="assets/school-data.js?v=20261012m"></script>
+<script src="assets/tilli-api.js?v=20261012m"></script>
+<script src="assets/dashboard-data.js?v=20261012m"></script>
+<script src="assets/flower-band.js?v=20261012m"></script>
+<script src="assets/teacher-dashboard.js?v=20261012m"></script>
+<script src="assets/teacher.js?v=20261012m"></script>
 </body>
 </html>

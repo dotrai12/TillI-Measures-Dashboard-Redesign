@@ -6,7 +6,19 @@
    ============================================================ */
 (function () {
   const NS = 'http://www.w3.org/2000/svg';
-  const PETALS = ['#E866B0', '#26BDE2', '#FCC30B', '#E91E8C'];
+  // Petal palette is shared site-wide (TilliPalette in tilli-api.js); fallback keeps
+  // the band standalone. ART holds every other illustration colour in one place.
+  const PETALS = (window.TilliPalette && window.TilliPalette.PETALS) || ['#E866B0', '#26BDE2', '#FCC30B', '#E91E8C'];
+  const ART = {
+    stem: '#56C02B',      // stems, leaves, ground line
+    leafDark: '#3F9E1D',  // shaded upper leaf
+    sprout: '#8FD96B',    // light sprout leaf
+    centre: '#FCC30B',    // flower centre
+    ground: '#F1FFEC',    // ground wash
+    shine: '#fff',        // tulip highlight
+    trioA: '#E91E8C',     // mini-trio flower petal
+    trioB: '#FCC30B',     // mini-trio tulip petal
+  };
   const GY = 196; // ground y
 
   /* One fixed size per plant category so every plant of a kind shares the
@@ -40,14 +52,14 @@
         }),
         el('path', {
           d: `M ${cx} ${cy - hh} C ${cx - w * 0.34} ${cy - hh * 0.4} ${cx - w * 0.34} ${cy + 4 * scale} ${cx} ${cy + 9 * scale} C ${cx + w * 0.34} ${cy + 4 * scale} ${cx + w * 0.34} ${cy - hh * 0.4} ${cx} ${cy - hh} Z`,
-          fill: '#fff', opacity: 0.22,
+          fill: ART.shine, opacity: 0.22,
         }),
       ]);
     }
     if (kind === 'sprout') {
       return el('g', {}, [
-        el('path', { d: `M ${cx} ${cy + 12 * scale} q -${16 * scale} -${6 * scale} -${20 * scale} -${20 * scale} q ${16 * scale} ${2 * scale} ${20 * scale} ${16 * scale} Z`, fill: '#56C02B' }),
-        el('path', { d: `M ${cx} ${cy + 12 * scale} q ${16 * scale} -${6 * scale} ${20 * scale} -${20 * scale} q -${16 * scale} ${2 * scale} -${20 * scale} ${16 * scale} Z`, fill: '#8FD96B' }),
+        el('path', { d: `M ${cx} ${cy + 12 * scale} q -${16 * scale} -${6 * scale} -${20 * scale} -${20 * scale} q ${16 * scale} ${2 * scale} ${20 * scale} ${16 * scale} Z`, fill: ART.stem }),
+        el('path', { d: `M ${cx} ${cy + 12 * scale} q ${16 * scale} -${6 * scale} ${20 * scale} -${20 * scale} q -${16 * scale} ${2 * scale} -${20 * scale} ${16 * scale} Z`, fill: ART.sprout }),
       ]);
     }
     // flower
@@ -56,7 +68,7 @@
       const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
       petals.push(el('circle', { cx: cx + Math.cos(a) * rad, cy: cy + Math.sin(a) * rad, r: rad * 0.84, fill: petal }));
     }
-    petals.push(el('circle', { cx, cy, r: 6.5 * scale, fill: '#FCC30B' }));
+    petals.push(el('circle', { cx, cy, r: 6.5 * scale, fill: ART.centre }));
     return el('g', {}, petals);
   }
 
@@ -67,9 +79,9 @@
       className: 'tm-sway',
       style: `animation:${sway} ${dur}s ease-in-out ${delay}s infinite alternate`,
     }, [
-      el('path', { d: `M ${x} ${groundY} C ${x - 3} ${groundY - h * 0.45} ${cx + 3} ${topY + h * 0.35} ${cx} ${topY}`, stroke: '#56C02B', 'stroke-width': 3.6 * scale, fill: 'none', 'stroke-linecap': 'round' }),
-      el('path', { d: `M ${x - 1} ${groundY - h * 0.4} q -${19 * scale} -${5 * scale} -${25 * scale} ${9 * scale} q ${15 * scale} ${4 * scale} ${25 * scale} -${9 * scale} Z`, fill: '#56C02B' }),
-      el('path', { d: `M ${x + 1} ${groundY - h * 0.62} q ${17 * scale} -${6 * scale} ${23 * scale} ${8 * scale} q -${14 * scale} ${4 * scale} -${23 * scale} -${8 * scale} Z`, fill: '#3F9E1D' }),
+      el('path', { d: `M ${x} ${groundY} C ${x - 3} ${groundY - h * 0.45} ${cx + 3} ${topY + h * 0.35} ${cx} ${topY}`, stroke: ART.stem, 'stroke-width': 3.6 * scale, fill: 'none', 'stroke-linecap': 'round' }),
+      el('path', { d: `M ${x - 1} ${groundY - h * 0.4} q -${19 * scale} -${5 * scale} -${25 * scale} ${9 * scale} q ${15 * scale} ${4 * scale} ${25 * scale} -${9 * scale} Z`, fill: ART.stem }),
+      el('path', { d: `M ${x + 1} ${groundY - h * 0.62} q ${17 * scale} -${6 * scale} ${23 * scale} ${8 * scale} q -${14 * scale} ${4 * scale} -${23 * scale} -${8 * scale} Z`, fill: ART.leafDark }),
       el('g', {}, [head(cx, topY, petal, kind, scale)]),
     ]);
   }
@@ -102,7 +114,7 @@
       style: 'width:100%;height:100%;display:block',
       'aria-hidden': 'true',
     });
-    svg.appendChild(el('rect', { x: 0, y: 150, width: 1440, height: 90, fill: '#F1FFEC' }));
+    svg.appendChild(el('rect', { x: 0, y: 150, width: 1440, height: 90, fill: ART.ground }));
     let c = 0;
     const plants = SPECS.map(([x, o]) => {
       const prof = PROFILE[o.kind] || {};
@@ -111,7 +123,7 @@
       return plant(x, GY, Object.assign({ petal }, spec));
     });
     svg.appendChild(el('g', {}, plants));
-    svg.appendChild(el('rect', { x: 0, y: 194, width: 1440, height: 5, fill: '#56C02B' }));
+    svg.appendChild(el('rect', { x: 0, y: 194, width: 1440, height: 5, fill: ART.stem }));
     target.innerHTML = '';
     target.appendChild(svg);
   };
@@ -127,8 +139,8 @@
     const gap = cfg.spacing != null ? cfg.spacing : 86;
     const xs = [baseX, baseX + gap, baseX + gap * 2];
     const trio = [
-      { x: xs[0], h: PROFILE.flower.h, scale: PROFILE.flower.scale, kind: 'flower', petal: '#E91E8C', sway: 'swayA', dur: 4.6, delay: 0.1, lean: 2 },
-      { x: xs[1], h: PROFILE.tulip.h,  scale: PROFILE.tulip.scale,  kind: 'tulip',  petal: '#FCC30B', sway: 'swayB', dur: 5.0, delay: 0.5, lean: -2 },
+      { x: xs[0], h: PROFILE.flower.h, scale: PROFILE.flower.scale, kind: 'flower', petal: ART.trioA, sway: 'swayA', dur: 4.6, delay: 0.1, lean: 2 },
+      { x: xs[1], h: PROFILE.tulip.h,  scale: PROFILE.tulip.scale,  kind: 'tulip',  petal: ART.trioB, sway: 'swayB', dur: 5.0, delay: 0.5, lean: -2 },
       { x: xs[2], h: PROFILE.sprout.h, scale: PROFILE.sprout.scale, kind: 'sprout', petal: null,      sway: 'swayC', dur: 3.6, delay: 0.3 },
     ];
     const svg = el('svg', {

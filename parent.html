@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css">
+<link rel="stylesheet" href="assets/tilli.css?v=20261012m">
 <style>
   /* ---- Parent-flow layout ---- */
   .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
@@ -20,77 +20,45 @@
   .p-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: relative; z-index: 40; view-transition-name: parent-top; }
   .p-main { max-width: 860px; width: 100%; margin: 22px auto 0; }
 
-  /* ---- Child switcher ---- */
+  /* page-local helpers (candidates for tilli.css) */
+
+  /* ---- Child switcher (menu itself = .ui-menu / .ui-menu-item) ---- */
   .switcher { position: relative; margin-left: auto; }
-  .switch-btn { display: inline-flex; align-items: center; gap: 10px; background: #fff;
+  .switch-btn { display: inline-flex; align-items: center; gap: 10px; background: var(--white);
     border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 6px 8px 6px 16px;
-    cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--ink-700);
+    cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700);
     transition: border-color .2s; }
   .switch-btn:hover { border-color: var(--cyan-500); }
-  .switch-btn .av { width: 32px; height: 32px; border-radius: 50%; background: var(--wash-yellow);
-    display: flex; align-items: center; justify-content: center; }
-  .switch-btn .av img { width: 55%; }
-  .switch-btn .caret { color: var(--ink-300); font-size: 11px; }
-  .switch-menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 30; background: #fff;
-    border: 1px solid var(--line-200); border-radius: 18px; box-shadow: 0 12px 30px rgba(20,20,20,.12);
-    padding: 8px; min-width: 250px; }
-  .switch-item { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; border: none;
-    background: transparent; border-radius: 12px; padding: 10px 12px; cursor: pointer;
-    font-family: 'Montserrat',sans-serif; transition: background .15s; }
-  .switch-item:hover { background: var(--surface-100); }
-  .switch-item.on { background: var(--wash-green); }
-  .switch-item .dot { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex;
-    align-items: center; justify-content: center; }
-  .switch-item .nm { display: block; font-weight: 700; font-size: 14px; color: var(--ink-900); }
-  .switch-item .mt { display: block; font-weight: 600; font-size: 11.5px; color: var(--ink-300); margin-top: 1px; }
-  .switch-item .ck { margin-left: auto; color: var(--green-700); font-weight: 700; }
-  .switch-add { width: 100%; text-align: left; border: 1.5px dashed var(--line-200); background: #fff;
-    border-radius: 12px; padding: 10px 12px; margin-top: 4px; cursor: pointer; text-decoration: none; display: block;
-    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--green-700);
-    transition: border-color .2s; }
-  .switch-add:hover { border-color: var(--green-500); }
-  /* thin rule + nav rows (Profile / Log out) below the child list */
+  .switch-btn .caret { color: var(--ink-300); font-size: var(--fs-xs); }
+  .switch-menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 30; min-width: 250px; }
+  .switch-menu .nm { display: block; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .switch-menu .mt { display: block; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-300); margin-top: 1px; }
+  .switch-menu .ck { margin-left: auto; color: var(--green-700); font-weight: 700; }
+  .switch-menu .ui-menu-item svg { width: 18px; height: 18px; flex: none; }
+  /* thin rule between the child list and the Profile / Log out rows */
   .switch-sep { height: 1px; background: var(--line-200); margin: 8px 4px; }
-  .switch-nav { width: 100%; display: flex; align-items: center; gap: 11px; text-align: left; border: none;
-    background: transparent; border-radius: 12px; padding: 10px 12px; cursor: pointer;
-    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13.5px; color: var(--ink-700);
-    transition: background .15s; }
-  .switch-nav svg { width: 18px; height: 18px; flex: none; }
-  .switch-nav:hover { background: var(--surface-100); }
-  .switch-nav.danger { color: var(--pink-600); }
 
   /* ---- Profile page ---- */
   .profile-head { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
   .profile-face { width: clamp(64px,9vw,84px); height: clamp(64px,9vw,84px); flex: none; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 26px rgba(86,192,43,.24); }
+    display: flex; align-items: center; justify-content: center; background: var(--green-500);
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--green-500) 24%, transparent); }
   .profile-face img { width: 52%; }
   .kid-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
-  .kid-card { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
-    background: #fff; border: 1px solid var(--line-200); border-radius: 18px; padding: 16px 18px;
-    cursor: pointer; font-family: 'Montserrat',sans-serif;
-    transition: border-color .2s, box-shadow .2s, transform .15s; }
-  .kid-card:hover { border-color: var(--green-500); box-shadow: 0 12px 26px rgba(20,20,20,.08); transform: translateY(-1px); }
-  .kid-av { width: 48px; height: 48px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
-  .kid-av img { width: 56%; }
+  .kid-card { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; }
   .kid-info { flex: 1; min-width: 0; }
-  .kid-info b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
-  .kid-info span { display: block; font-weight: 600; font-size: 12.5px; color: var(--ink-450); margin-top: 2px; }
+  .kid-info b { display: block; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .kid-info span { display: block; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); margin-top: 2px; }
   .kid-prog { flex: none; display: flex; align-items: center; gap: 11px; }
-  .kid-status { text-align: right; font-family: 'Montserrat',sans-serif; }
-  .kid-status b { display: block; font-weight: 700; font-size: 13px; }
-  .kid-status span { display: block; font-weight: 600; font-size: 11px; color: var(--ink-450); margin-top: 1px; }
-  .kid-card .chev { color: var(--ink-300); font-size: 20px; flex: none; }
-  .kid-add { display: block; text-align: center; text-decoration: none; border: 1.5px dashed var(--line-200);
-    background: #fff; border-radius: 18px; padding: 16px; font-family: 'Montserrat',sans-serif; font-weight: 700;
-    font-size: 14px; color: var(--green-700); transition: border-color .2s, background .2s; }
-  .kid-add:hover { border-color: var(--green-500); background: var(--wash-green); }
-  .btn-logout { background: #fff; border: 1.5px solid var(--line-200); color: var(--ink-600);
-    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14px; border-radius: var(--radius-pill);
-    padding: 12px 22px; cursor: pointer; transition: border-color .2s, color .2s; }
-  .btn-logout:hover { border-color: var(--pink-600); color: var(--pink-600); }
+  .kid-status { text-align: right; }
+  .kid-status b { display: block; font-weight: 700; font-size: var(--fs-sm); }
+  .kid-status span { display: block; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); margin-top: 1px; }
+  .kid-card .chev { color: var(--ink-300); font-size: var(--fs-lg); flex: none; }
+  .btn-ghost.logout:hover { border-color: var(--pink-600); color: var(--pink-600); }
+  .report-actions.profile-actions { margin-top: 26px; }
   @media (max-width: 640px) {
     .kid-status span { display: none; }
-    .kid-card { padding: 14px 15px; gap: 11px; }
+    .kid-card { gap: 11px; }
   }
 
   /* ---- Hero ---- */
@@ -99,76 +67,69 @@
   .p-face { width: clamp(96px,13vw,130px); height: clamp(96px,13vw,130px); flex: none;
     border-radius: 50%; display: flex; align-items: center; justify-content: center; }
   .p-face img { width: 52%; height: auto; }
-  .p-eyebrow { font-weight: 700; font-size: clamp(11px,1.1vw,13px); letter-spacing: .16em;
+  .p-eyebrow { font-weight: 700; font-size: var(--fs-sm); letter-spacing: .16em;
     text-transform: uppercase; color: var(--green-700); margin: 0 0 6px; }
-  .p-title { font-weight: 700; letter-spacing: -.02em; font-size: clamp(28px,4vw,46px);
+  .p-eyebrow.spaced { margin-top: 8px; }      /* report view: sits directly under the top bar */
+  .p-eyebrow.tight { margin-bottom: 4px; }    /* profile view: hugs the parent's name */
+  .p-title { font-weight: 700; letter-spacing: -.02em; font-size: var(--fs-2xl);
     line-height: 1.05; margin: 0; text-wrap: balance; }
   .p-title span { color: var(--pink-600); }
-  .p-sub { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: clamp(14px,1.5vw,17px);
+  .p-sub { font-family: var(--font-body); font-weight: 600; font-size: var(--fs-lg);
     color: var(--ink-600); margin: 10px 0 0; }
+  .p-sub.narrow { max-width: 52ch; }
+  .p-sub.spaced { margin-top: 14px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .chip { display: inline-flex; align-items: center; gap: 7px; border-radius: var(--radius-pill);
-    padding: 6px 13px; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12px; }
-  .chip .cd { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .chip.school { background: var(--wash-cyan); color: var(--cyan-700); }
-  .chip.grade  { background: var(--wash-green); color: var(--green-700); }
-  .chip.adm    { background: var(--wash-yellow); color: #7a5c00; }
 
   /* ---- Section headers ---- */
   .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
     margin: clamp(30px,4vh,44px) 0 14px; }
-  .sec-head h2 { font-weight: 700; font-size: clamp(18px,2vw,22px); margin: 0; }
-  .sec-head .muted { font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink-300); }
+  .sec-head h2 { font-weight: 700; font-size: var(--fs-xl); margin: 0; }
+  .sec-head .muted { font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); color: var(--ink-300); }
   .sec-head .muted.due { margin-left: auto; }
   .sec-head .accent { color: var(--pink-600); }
 
   /* ---- Progress card + donut ---- */
   .prog-card { display: flex; align-items: center; gap: 18px; width: 100%; text-align: left;
     background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-card);
-    padding: 18px 22px; }
-  .prog-card .txt b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
-  .prog-card .txt span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12.5px;
+    padding: 18px 22px; margin-bottom: 14px; }
+  .prog-card .txt b { display: block; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .prog-card .txt span { display: block; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--ink-450); margin-top: 3px; }
 
   /* ---- Assessment timeline ---- */
-  .timeline { position: relative; background: #fff; border: 1px solid var(--line-200);
+  .timeline { position: relative; background: var(--white); border: 1px solid var(--line-200);
     border-radius: var(--radius-card); padding: 8px 18px; }
   .timeline::before { content: ''; position: absolute; left: 33px; top: 30px; bottom: 30px;
     width: 3px; background: var(--line-200); border-radius: 2px; }
   .t-row { position: relative; display: flex; align-items: center; gap: 14px; width: 100%;
     text-align: left; background: none; border: none; cursor: pointer; padding: 13px 2px;
-    font-family: 'Montserrat',sans-serif; border-radius: 12px; transition: background .15s; }
+    font-family: var(--font-body); border-radius: var(--radius-md); transition: background .15s; }
+  div.t-row { cursor: default; }   /* read-only rows (history / created-school done + missed) */
   .t-row:hover { background: var(--surface-100); }
   .t-dot { position: relative; z-index: 1; flex: none; width: 18px; height: 18px; border-radius: 50%;
     box-sizing: border-box; margin: 0 6px; }
   .t-dot.done { background: var(--green-500); border: 3px solid var(--green-600); }
   .t-dot.progress { background: var(--yellow-500); border: 3px solid var(--orange-500); }
-  .t-dot.pending { background: #fff; border: 3px solid #C9CDD6; }
+  .t-dot.pending { background: var(--white); border: 3px solid var(--line-200); }
   .t-body { flex: 1; min-width: 0; }
-  .t-body b { display: block; font-weight: 700; font-size: 15px; color: var(--ink-900); }
-  .t-body span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12px;
+  .t-body b { display: block; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .t-body span { display: block; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--ink-450); margin-top: 1px; }
-  .t-badge { flex: none; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12px;
-    border-radius: var(--radius-pill); padding: 7px 15px; }
-  .t-badge.done { color: var(--green-700); background: var(--wash-green); }
-  .t-badge.progress { color: #8a6100; background: var(--wash-yellow); }
-  .t-badge.pending { color: var(--ink-600); background: var(--surface-100); }
 
-  /* resting card shown for the "In between" window (no assessments open) */
-  .win-rest { display: flex; align-items: center; gap: 16px; background: var(--wash-cyan);
-    border: 1.5px solid #B7E6F1; border-radius: var(--radius-card); padding: 20px 22px; margin-top: 6px; }
-  .win-rest .ico { width: 48px; height: 48px; border-radius: 50%; background: #fff; flex: none;
-    display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 3px 10px rgba(20,20,20,.08); }
-  .win-rest .rt b { display: block; font-weight: 700; font-size: 16px; color: var(--ink-900); }
-  .win-rest .rt span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600;
-    font-size: 13px; color: var(--ink-600); margin-top: 3px; }
+  /* resting card shown for the "In between" window (no assessments open) — .ui-card.md.tint-cyan */
+  .win-rest { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+  .win-rest .ico { width: 48px; height: 48px; border-radius: 50%; background: var(--white); flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: var(--fs-xl); box-shadow: var(--shadow-card); }
+  .win-rest .rt b { display: block; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .win-rest .rt span { display: block; font-family: var(--font-body); font-weight: 600;
+    font-size: var(--fs-sm); color: var(--ink-600); margin-top: 3px; }
 
   /* ---- Phases overview (Baseline → Midline → Endline timeline) ----
      Intermediate screen between child-select and home: one card, a vertical
      line, and a dot per assessment phase with its own completion + CTA. */
   /* phases view fills the viewport height so the timeline spans it fully */
   .p-main.phases-main { flex: 1; display: flex; flex-direction: column; }
-  .phase-head { text-align: center; font-weight: 700; font-size: clamp(20px,2.6vw,27px);
+  .phase-head { text-align: center; font-weight: 700; font-size: var(--fs-xl);
     color: var(--ink-900); margin: clamp(6px,2vh,16px) 0 clamp(18px,3vh,28px); text-wrap: balance; }
   .phase-head span { color: var(--pink-600); }
   .phase-timeline { position: relative; flex: 1; display: flex; flex-direction: column;
@@ -181,15 +142,15 @@
     box-sizing: border-box; margin-top: 3px; }
   .phase-dot.done     { background: var(--green-500); border: 4px solid var(--green-600); }
   .phase-dot.progress { background: var(--yellow-500); border: 4px solid var(--orange-500); }
-  .phase-dot.pending  { background: #fff; border: 3px solid #C9CDD6; }
-  .phase-title { display: block; font-weight: 700; font-size: clamp(16px,2vw,20px); color: var(--ink-900); }
+  .phase-dot.pending  { background: var(--white); border: 3px solid var(--line-200); }
+  .phase-title { display: block; font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
   .phase-title .ph-date { color: var(--pink-600); }
-  .phase-meta { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13.5px;
+  .phase-meta { display: block; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--ink-450); margin: 7px 0 15px; line-height: 1.5; }
   .phase-meta b { color: var(--ink-700); }
   .phase-cta { display: flex; gap: 10px; flex-wrap: wrap; }
   .btn-locked { display: inline-block; background: var(--surface-100); border: 1.5px solid var(--line-200);
-    color: var(--ink-300); font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14px;
+    color: var(--ink-300); font-family: var(--font-body); font-weight: 700; font-size: var(--fs-md);
     border-radius: var(--radius-pill); padding: 11px 24px; cursor: not-allowed; }
 
   /* ---- Report CTA ---- */
@@ -197,81 +158,46 @@
     border-radius: var(--radius-card); padding: 22px 24px; border: 2px solid; transition: border-color .2s, background .2s; }
   .report-cta.ready { background: var(--wash-green); border-color: var(--green-500); }
   .report-cta.locked { background: var(--surface-100); border-color: var(--line-200); }
-  .report-cta .ico { width: 54px; height: 54px; border-radius: 50%; background: #fff; flex: none;
-    display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(20,20,20,.08); }
+  .report-cta .ico { width: 54px; height: 54px; border-radius: 50%; background: var(--white); flex: none;
+    display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-card); }
   .report-cta .ico img { width: 52%; }
   .report-cta .rt { flex: 1; min-width: 180px; }
-  .report-cta .rt b { display: block; font-weight: 700; font-size: 18px; color: var(--ink-900); }
-  .report-cta .rt span { display: block; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13px;
+  .report-cta .rt b { display: block; font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
+  .report-cta .rt span { display: block; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--ink-450); margin-top: 3px; }
   .report-cta .snap-gate { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .report-cta .snap-gate-note { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12px;
+  .report-cta .snap-gate-note { font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--ink-450); }
 
   /* ---- Garden report ---- */
   .garden { position: relative; overflow: hidden; border-radius: var(--radius-card);
     background: linear-gradient(180deg, var(--wash-cyan) 0%, var(--wash-green) 48%);
-    padding: clamp(22px,3vw,32px) clamp(14px,2vw,24px) clamp(16px,2.4vw,26px); margin-top: 6px; }
+    padding: clamp(22px,3vw,32px) clamp(14px,2vw,24px) clamp(16px,2.4vw,26px); margin-top: 20px; }
   .garden .bed { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px 0; align-items: end; }
   @media (max-width: 620px) { .garden .bed { grid-template-columns: repeat(4, 1fr); } }
   .flower-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; }
   .flower-cell .fl { line-height: 0; }
-  .flower-cell .lbl { font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 9.5px;
+  .flower-cell .lbl { font-family: var(--font-body); font-weight: 700; font-size: var(--fs-xs);
     color: var(--green-700); text-align: center; line-height: 1.15; max-width: 12ch; }
 
+  /* per-skill cards — .ui-card.sm + .ui-badge.lvl-N + .ui-meter.light */
   .skill-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
-  .skill-card { background: #fff; border: 1px solid var(--line-200); border-radius: 16px; padding: 14px 16px; }
-  .skill-card .sk-top { display: flex; align-items: center; gap: 10px; }
-  .skill-card .sk-name { font-weight: 700; font-size: 14.5px; color: var(--ink-900); flex: 1; }
-  .skill-card .sk-tag { font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 11.5px;
-    border-radius: var(--radius-pill); padding: 4px 11px; }
-  .skill-card .sk-bar { height: 9px; background: var(--surface-100); border-radius: 99px; overflow: hidden; margin: 10px 0 8px; }
-  .skill-card .sk-fill { height: 100%; border-radius: 99px; transition: width .6s var(--ease); }
-  .skill-card .sk-note { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 12.5px;
+  .sk-top { display: flex; align-items: center; gap: 10px; }
+  .sk-name { font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); flex: 1; }
+  .sk-bar { margin: 10px 0 8px; }
+  .sk-note { font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--ink-450); line-height: 1.5; }
 
-  .tips { background: var(--wash-yellow); border: 1px solid #F1DA7A; border-radius: var(--radius-card);
-    padding: 20px 22px; margin-top: 20px; }
-  .tips h3 { margin: 0 0 8px; font-weight: 700; font-size: 16px; color: #6b5100; }
-  .tips p { font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13px; color: #7a5c00;
+  /* home tips — .ui-card.md.tint-yellow */
+  .tips { margin-top: 20px; }
+  .tips h3 { margin: 0 0 8px; font-weight: 700; font-size: var(--fs-md); color: var(--lvl-2-ink); }
+  .tips p { font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm); color: var(--lvl-2-ink);
     line-height: 1.6; margin: 5px 0; }
 
   .report-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
-  .btn-outline { background: #fff; border: 1.5px solid var(--green-500); color: var(--green-600);
-    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 14px; border-radius: var(--radius-pill);
-    padding: 12px 22px; cursor: pointer; transition: background .2s; }
-  .btn-outline:hover { background: var(--wash-green); }
 
-  .footnote { text-align: center; font-family: 'Montserrat',sans-serif; font-weight: 600; font-size: 13px;
+  .footnote { text-align: center; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm);
     color: var(--green-600); margin: 30px 0 0; }
-
-  /* ---- Parent snapshot (post-survey, parent-facing copy) ---- */
-  .snap-meta { font-family:'Montserrat',sans-serif; font-weight:700; font-size:12.5px;
-    color: var(--ink-300); margin: 8px 0 0; }
-  .snap-lead { font-family:'Montserrat',sans-serif; font-weight:600; font-size:clamp(14px,1.5vw,17px);
-    color: var(--ink-600); margin: 12px 0 0; max-width: 60ch; line-height:1.6; }
-  .shine { list-style:none; margin: 6px 0 0; padding:0; display:flex; flex-direction:column; gap:10px; }
-  .shine li { position:relative; background: var(--wash-green); border:1px solid #BFE6AE; border-radius:16px;
-    padding:14px 16px 14px 44px; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
-    color: var(--green-700); line-height:1.55; }
-  .shine li::before { content:'🌼'; position:absolute; left:15px; top:12px; font-size:15px; }
-  .grow-card { background: var(--wash-cyan); border:1px solid #B7E6F1; border-radius:var(--radius-card);
-    padding:18px 20px; margin-top:6px; }
-  .grow-card h3 { margin:0 0 6px; font-weight:700; font-size:16px; color: var(--cyan-700); }
-  .grow-card p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
-    color: var(--ink-600); line-height:1.6; max-width:62ch; }
-  .try { display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:6px; }
-  @media (max-width:640px){ .try { grid-template-columns:1fr; } }
-  .try .card { background:#fff; border:1px solid var(--line-200); border-radius:16px; padding:16px; }
-  .try .card b { display:block; font-weight:700; font-size:14px; color:var(--ink-900); margin-bottom:5px; }
-  .try .card span { font-family:'Montserrat',sans-serif; font-weight:600; font-size:12.5px;
-    color: var(--ink-450); line-height:1.55; }
-  .teacher-card { display:flex; align-items:flex-start; gap:14px; background: var(--wash-yellow);
-    border:1px solid #F1DA7A; border-radius:var(--radius-card); padding:18px 20px; margin-top:6px; }
-  .teacher-card .ico { width:44px; height:44px; border-radius:50%; background:#fff; flex:none;
-    display:flex; align-items:center; justify-content:center; font-size:20px; }
-  .teacher-card p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
-    color:#7a5c00; line-height:1.6; max-width:60ch; }
 
   /* ============================================================
      Parent report — mockup redesign (image 1). Structure only;
@@ -279,10 +205,9 @@
      ============================================================ */
   /* hero note */
   .note-hero { margin-top: 8px; }
-  .note-kicker { font-family:'Montserrat',sans-serif; font-weight:700; font-size:clamp(15px,1.6vw,18px);
+  .note-kicker { font-family: var(--font-body); font-weight:700; font-size: var(--fs-lg);
     color: var(--ink-450); margin:0 0 2px; }
-  .note-hero .p-title { font-size: clamp(28px,4vw,44px); }
-  .note-lead { font-family:'Montserrat',sans-serif; font-weight:600; font-size:clamp(14px,1.5vw,16px);
+  .note-lead { font-family: var(--font-body); font-weight:600; font-size: var(--fs-md);
     color: var(--ink-600); margin:12px 0 0; max-width:60ch; line-height:1.6; }
 
   /* grey band that groups the graded report content, setting it apart from
@@ -296,39 +221,37 @@
     padding: 0 clamp(24px,6vw,90px); }
   .report-band-inner > :first-child { margin-top: 0; }
 
-  /* framed panels (shining / support) */
-  .panel { border-radius: var(--radius-card); padding: clamp(14px,2vw,18px); margin-top: 16px; }
-  .panel-title { font-weight:700; font-size:clamp(16px,1.8vw,19px); margin:0 0 12px; text-align:center; }
-  .panel-body { background:#fff; border-radius:18px; padding: clamp(14px,2vw,18px); }
+  /* framed panels (shining = .ui-card.md.tint-green, support = .ui-card.md.tint-cyan) */
+  .panel { margin-top: 16px; }
+  .panel-title { font-weight:700; font-size: var(--fs-lg); margin:0 0 12px; text-align:center; }
+  .panel-title.is-green { color: var(--green-700); }
+  .panel-title.is-cyan { color: var(--cyan-700); }
+  .panel-body { background: var(--white); border-radius: var(--radius-lg); padding: clamp(14px,2vw,18px); }
 
-  .panel-shine { background: var(--wash-green); border:1.5px solid #BFE6AE; }
-  .panel-shine .panel-title { color: var(--green-700); }
   .shine-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px; }
   .shine-list li { display:flex; gap:11px; align-items:flex-start; }
-  .shine-list .di { color: var(--orange-500); font-size:12px; line-height:1.6; flex:none; margin-top:1px; }
-  .shine-list p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
+  .shine-list .di { color: var(--orange-500); font-size: var(--fs-sm); line-height:1.6; flex:none; margin-top:1px; }
+  .shine-list p { margin:0; font-family: var(--font-body); font-weight:600; font-size: var(--fs-sm);
     color: var(--ink-600); line-height:1.55; }
 
-  .panel-support { background: var(--wash-cyan); border:1.5px solid #B7E6F1; }
-  .panel-support .panel-title { color: var(--cyan-700); }
   .support-body { display:grid; grid-template-columns:1fr auto; gap:14px; align-items:end; }
-  .support-text h3 { margin:0 0 6px; font-weight:700; font-size:16px; color: var(--ink-900); }
-  .support-text p { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px;
+  .support-text h3 { margin:0 0 6px; font-weight:700; font-size: var(--fs-md); color: var(--ink-900); }
+  .support-text p { margin:0; font-family: var(--font-body); font-weight:600; font-size: var(--fs-sm);
     color: var(--ink-600); line-height:1.6; }
   .support-ill { width:92px; height:auto; align-self:end; }
   @media (max-width:640px){ .support-ill { width:70px; } }
 
   /* try-at-home clickable cards */
-  .try-sub { text-align:center; font-family:'Montserrat',sans-serif; font-weight:600; font-size:12.5px;
+  .try-sub { text-align:center; font-family: var(--font-body); font-weight:600; font-size: var(--fs-sm);
     color: var(--ink-300); margin:6px 0 12px; }
   /* try-at-home tag cards — stacked with overlap; bottom card tilts (image 3).
      --card-overlap = how far each card slides up under the one above.
      --bottom-tilt  = rotation of the last (bottom) card. */
   .try-list { position:relative; display:block; --card-overlap:20px; }
-  .try-card { position:relative; display:block; text-decoration:none; background:#fff;
-    border:3.5px solid var(--c,var(--line-200)); border-radius:20px;
+  .try-card { position:relative; display:block; text-decoration:none; background: var(--white);
+    border:3.5px solid var(--c,var(--line-200)); border-radius: var(--radius-xl);
     padding:29px 18px;
-    box-shadow: 0 8px 20px rgba(20,20,20,.06);
+    box-shadow: var(--shadow-hover);
     transform-origin: 65% 0%;
     transition: transform .18s var(--ease), box-shadow .2s; }
   .try-card + .try-card { margin-top: calc(-1 * var(--card-overlap)); }
@@ -336,14 +259,14 @@
   .try-card:nth-child(1) { transform: rotate(2deg) translateY(6px); }
   .try-card:nth-child(2) { transform: rotate(0deg) translateY(1px); }
   .try-card:nth-child(3) { transform: rotate(2deg) translateY(17px); }
-  .try-card:hover { z-index:5; box-shadow: 0 16px 34px rgba(20,20,20,.12); }
-  .tc-tags { display:flex; justify-content:space-between; gap:10px; font-family:'Montserrat',sans-serif;
-    font-weight:700; font-size:11.5px; }
+  .try-card:hover { z-index:5; box-shadow: var(--shadow-pop); }
+  .tc-tags { display:flex; justify-content:space-between; gap:10px; font-family: var(--font-body);
+    font-weight:700; font-size: var(--fs-xs); }
   .tc-type { color: var(--c,var(--ink-600)); }
   .tc-freq { color: var(--ink-450); }
-  .tc-topic { font-weight:700; font-size:14px; letter-spacing:.02em; text-transform:uppercase;
+  .tc-topic { font-weight:700; font-size: var(--fs-md); letter-spacing:.02em; text-transform:uppercase;
     color: var(--ink-900); margin:10px 0 5px; }
-  .tc-desc { margin:0; font-family:'Montserrat',sans-serif; font-weight:600; font-size:12.5px;
+  .tc-desc { margin:0; font-family: var(--font-body); font-weight:600; font-size: var(--fs-sm);
     color: var(--ink-450); line-height:1.55; }
 
   /* decorative flower row */
@@ -353,12 +276,12 @@
 
   /* work with the teacher */
   .teach-head { text-transform:uppercase; letter-spacing:.05em; }
-  .teach-copy { font-family:'Montserrat',sans-serif; font-weight:600; font-size:13.5px; color: var(--ink-600);
+  .teach-copy { font-family: var(--font-body); font-weight:600; font-size: var(--fs-sm); color: var(--ink-600);
     line-height:1.6; margin:0; max-width:62ch; }
 
   /* download + footer */
   .download-row { display:flex; justify-content:center; margin-top:28px; }
-  .download-row .btn-primary { padding:13px 42px; font-size:15px; }
+  .download-row .btn-primary { padding:13px 42px; font-size: var(--fs-md); }
 
   /* ---- Mobile (portrait phones ≤ 640px) ---- */
   @media (max-width: 640px) {
@@ -369,7 +292,6 @@
 
     .p-hero { gap: 16px; margin-top: 12px; }
     .p-face { width: 72px; height: 72px; }
-    .p-title { font-size: clamp(26px, 8vw, 34px); }
 
     .sec-head { margin: 26px 0 12px; }
     .prog-card { padding: 16px 18px; gap: 14px; }
@@ -380,7 +302,7 @@
     .report-actions { gap: 8px; }
     .report-actions .btn-primary,
     .report-actions .btn-outline,
-    .report-actions .btn-ghost { flex: 1 0 100%; width: 100%; text-align: center; }
+    .report-actions .btn-ghost:not(.logout) { flex: 1 0 100%; width: 100%; text-align: center; }
 
     .garden { padding: 20px 12px 16px; }
   }
@@ -394,17 +316,41 @@
 
 <div id="app"></div>
 
-<script src="assets/school-data.js?v=20261012l"></script>
-<script src="assets/tilli-api.js?v=20261012l"></script>
+<script src="assets/school-data.js?v=20261012m"></script>
+<script src="assets/tilli-api.js?v=20261012m"></script>
 <script>
 (function () {
   const DS = '_ds/tilli/assets/';
   const LOGO = DS + 'logos/tilli-wordmark-crop.png';
   const SMILEY = DS + 'icons/smiley.png';
 
+  // ============================================================
+  // Palettes — UI colours come from tokens (window.TilliPalette / var(--…));
+  // ART holds the illustration + data hex (kept exact), defined once here.
+  // ============================================================
+  const PAL = window.TilliPalette;
+  const tok = (name) => PAL.css(name);   // resolved hex for SVG presentation attributes
+  const ART = {
+    // Each child is represented by a smiley in their own colour (stable per slot).
+    SMILE: ['#56C02B', '#E91E8C', '#26BDE2', '#F99B1C', '#A99BD6', '#E866B0'],
+    // One flower colour per skill (12 distinct hues — not the 4-colour brand petal set).
+    SKILL: {
+      emotion_awareness: '#E91E8C', emotion_regulation: '#F0A84A', empathy: '#EFA9B8',
+      relationship_skills: '#F99B1C', metacognition: '#A99BD6', critical_thinking: '#7FB2E6',
+      working_memory: '#26BDE2', planning: '#5AA9E6', cognitive_flexibility: '#6FC3B8',
+      inhibition_distraction: '#FCC30B', inhibition_response: '#E866B0', attention: '#56C02B',
+    },
+    // Decorative flower row on the snapshot — a cool brand-blue set.
+    FLOWER_ROW: ['#26BDE2', '#5AA9E6', '#26BDE2', '#7FB2E6', '#26BDE2'],
+    // flowerSVG() parts.
+    FLOWER: { centre: '#FCC30B', stem: '#56C02B', leaf: '#3F9E1D', sproutLight: '#8FD96B' },
+    // Try-at-home card borders (token colours, cycled per card).
+    TRY: ['var(--green-500)', 'var(--cyan-500)', 'var(--orange-500)'],
+  };
+
   // Inline stroke icons for the switcher menu (no matching PNG in the DS set).
-  const ICON_USER = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--ink-450)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`;
-  const ICON_LOGOUT = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--pink-600)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M15 12H5"/></svg>`;
+  const ICON_USER = `<svg viewBox="0 0 24 24" fill="none" stroke="${tok('--ink-450')}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>`;
+  const ICON_LOGOUT = `<svg viewBox="0 0 24 24" fill="none" stroke="${tok('--pink-600')}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M15 12H5"/></svg>`;
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -430,29 +376,27 @@
     return tpl.replace(/\{(\w+)\}/g, (mm, k) => (k in m ? m[k] : mm));
   }
 
-  // Each child is represented by a smiley in their own colour (stable per slot).
-  const SMILE_COLORS = ['#56C02B', '#E91E8C', '#26BDE2', '#F99B1C', '#A99BD6', '#E866B0'];
-  const smileColor = (i) => SMILE_COLORS[((i % SMILE_COLORS.length) + SMILE_COLORS.length) % SMILE_COLORS.length];
+  const smileColor = (i) => ART.SMILE[((i % ART.SMILE.length) + ART.SMILE.length) % ART.SMILE.length];
 
   // ---- seeded RNG (stable per child) ----
   function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
   function mulberry32(a) { return function () { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-  // ---- 12 skills (SEL + cognitive), each with a flower colour ----
+  // ---- 12 skills (SEL + cognitive); flower colour per skill lives in ART.SKILL ----
   const SKILLS = [
-    { key: 'emotion_awareness',    name: 'Emotion Awareness',      color: '#E91E8C' },
-    { key: 'emotion_regulation',   name: 'Emotion Regulation',     color: '#F0A84A' },
-    { key: 'empathy',              name: 'Empathy',                color: '#EFA9B8' },
-    { key: 'relationship_skills',  name: 'Relationship Skills',    color: '#F99B1C' },
-    { key: 'metacognition',        name: 'Metacognition',          color: '#A99BD6' },
-    { key: 'critical_thinking',    name: 'Critical Thinking',      color: '#7FB2E6' },
-    { key: 'working_memory',       name: 'Working Memory',         color: '#26BDE2' },
-    { key: 'planning',             name: 'Planning & Organizing',  color: '#5AA9E6' },
-    { key: 'cognitive_flexibility',name: 'Cognitive Flexibility',  color: '#6FC3B8' },
-    { key: 'inhibition_distraction',name:'Focus (Distraction)',    color: '#FCC30B' },
-    { key: 'inhibition_response',  name: 'Self-control',           color: '#E866B0' },
-    { key: 'attention',            name: 'Attention',              color: '#56C02B' },
+    { key: 'emotion_awareness',    name: 'Emotion Awareness'     },
+    { key: 'emotion_regulation',   name: 'Emotion Regulation'    },
+    { key: 'empathy',              name: 'Empathy'               },
+    { key: 'relationship_skills',  name: 'Relationship Skills'   },
+    { key: 'metacognition',        name: 'Metacognition'         },
+    { key: 'critical_thinking',    name: 'Critical Thinking'     },
+    { key: 'working_memory',       name: 'Working Memory'        },
+    { key: 'planning',             name: 'Planning & Organizing' },
+    { key: 'cognitive_flexibility',name: 'Cognitive Flexibility' },
+    { key: 'inhibition_distraction',name:'Focus (Distraction)'   },
+    { key: 'inhibition_response',  name: 'Self-control'          },
+    { key: 'attention',            name: 'Attention'             },
   ];
 
   // Warm, concrete "help at home" tips, keyed by skill.
@@ -471,12 +415,9 @@
     attention:            'Read together a little longer each week to stretch sustained focus.',
   };
 
+  // Band → the site-wide level scale via TilliPalette.levelOf():
+  // seedling = 1 (cyan), sprouting = 2 (amber), blooming = 3 (green).
   function bandOf(pct) { return pct < 34 ? 'seedling' : pct < 67 ? 'sprouting' : 'blooming'; }
-  const BAND_META = {
-    blooming:  { tag: 'Blooming',  color: 'var(--green-700)', bg: 'var(--wash-green)',  fill: 'var(--green-500)' },
-    sprouting: { tag: 'Sprouting', color: '#8a6100',          bg: 'var(--wash-yellow)', fill: 'var(--yellow-500)' },
-    seedling:  { tag: 'Seedling',  color: 'var(--pink-600)',  bg: 'var(--wash-pink)',   fill: 'var(--pink-400)' },
-  };
 
   // Build a child's 12-skill garden (stable per name + window). Later windows get
   // a gentle upward bump so toggling Baseline → Midline → Endline shows real growth.
@@ -493,7 +434,7 @@
         : band === 'sprouting'
         ? sk.name + ' is coming along nicely — a little practice helps.'
         : sk.name + ' is just beginning to grow; gentle support will help.';
-      return { key: sk.key, name: sk.name, color: sk.color, pct, band, note, seed: hashStr(name + sk.key) % 97 };
+      return { key: sk.key, name: sk.name, color: ART.SKILL[sk.key], pct, band, note, seed: hashStr(name + sk.key) % 97 };
     });
   }
 
@@ -511,19 +452,19 @@
       stemH = 58; headY = gy - stemH;
       const rad = 12, pet = [];
       for (let i = 0; i < 5; i++) { const a = (Math.PI * 2 * i) / 5 - Math.PI / 2; pet.push(`<circle cx="${(cx + Math.cos(a) * rad).toFixed(1)}" cy="${(headY + Math.sin(a) * rad).toFixed(1)}" r="${(rad * .84).toFixed(1)}" fill="${color}"/>`); }
-      head = pet.join('') + `<circle cx="${cx}" cy="${headY}" r="6.5" fill="#FCC30B"/>`;
+      head = pet.join('') + `<circle cx="${cx}" cy="${headY}" r="6.5" fill="${ART.FLOWER.centre}"/>`;
     } else if (band === 'sprouting') {
       stemH = 40; headY = gy - stemH;
       const tw = 12, th = 22;
       head = `<path d="M ${cx - tw} ${headY + 3} C ${cx - tw} ${headY - th * .55} ${cx - tw * .55} ${headY - th} ${cx} ${headY - th} C ${cx + tw * .55} ${headY - th} ${cx + tw} ${headY - th * .55} ${cx + tw} ${headY + 3} C ${cx + tw * .6} ${headY + 10} ${cx - tw * .6} ${headY + 10} ${cx - tw} ${headY + 3} Z" fill="${color}"/>`;
     } else {
       stemH = 24; headY = gy - stemH;
-      head = `<path d="M ${cx} ${headY + 10} q -14 -5 -18 -18 q 14 2 18 14 Z" fill="#56C02B"/><path d="M ${cx} ${headY + 10} q 14 -5 18 -18 q -14 2 -18 14 Z" fill="#8FD96B"/>`;
+      head = `<path d="M ${cx} ${headY + 10} q -14 -5 -18 -18 q 14 2 18 14 Z" fill="${ART.FLOWER.stem}"/><path d="M ${cx} ${headY + 10} q 14 -5 18 -18 q -14 2 -18 14 Z" fill="${ART.FLOWER.sproutLight}"/>`;
     }
     const topY = gy - stemH;
-    const stem = `<path d="M ${cx} ${gy} C ${cx - 3} ${gy - stemH * .45} ${cx + 3} ${topY + stemH * .35} ${cx} ${topY}" stroke="#56C02B" stroke-width="3.4" fill="none" stroke-linecap="round"/>`;
+    const stem = `<path d="M ${cx} ${gy} C ${cx - 3} ${gy - stemH * .45} ${cx + 3} ${topY + stemH * .35} ${cx} ${topY}" stroke="${ART.FLOWER.stem}" stroke-width="3.4" fill="none" stroke-linecap="round"/>`;
     const leaf = band === 'seedling' ? '' :
-      `<path d="M ${cx - 1} ${gy - stemH * .42} q -17 -5 -22 8 q 13 4 22 -8 Z" fill="#3F9E1D"/>`;
+      `<path d="M ${cx - 1} ${gy - stemH * .42} q -17 -5 -22 8 q 13 4 22 -8 Z" fill="${ART.FLOWER.leaf}"/>`;
     return `<svg width="${w}" height="${h}" viewBox="0 0 60 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
       <g class="tm-sway" style="transform:rotate(${tilt}deg);animation:swayC ${(4 + rnd(7) * 1.6).toFixed(1)}s ease-in-out infinite alternate">
         ${stem}${leaf}${head}
@@ -624,6 +565,8 @@
   // mid-flight, future windows not started. Locked children are all pending.
   // `between` has no checklist (null).
   const blank = (v) => ({ parent: v, hearts: v, memory: v, emt1: v, emt2: v, emt3: v });
+  // assessment status → .ui-chip modifier for its badge
+  const BADGE_CLS = { done: 'ok', progress: 'prog', pending: 'muted' };
   const STATUS = {};
   children.forEach((c) => {
     STATUS[c.name] = {};
@@ -672,9 +615,9 @@
   function switcher() {
     const c = child();
     const items = children.map((k, i) => `
-      <button class="switch-item ${i === state.selected ? 'on' : ''}" data-select="${i}">
-        <span class="dot" style="background:${smileColor(i)}"><img src="${SMILEY}" alt="" style="width:55%"></span>
-        <span style="flex:1;min-width:0">
+      <button class="ui-menu-item ${i === state.selected ? 'on' : ''}" data-select="${i}">
+        <span class="ui-avatar sm" style="background:${smileColor(i)}"><img src="${SMILEY}" alt=""></span>
+        <span class="flex-1">
           <span class="nm">${esc(k.name)}</span>
           <span class="mt">${[k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ') || 'No grade set'}</span>
         </span>
@@ -683,14 +626,14 @@
     return `<div class="switcher">
       <button class="switch-btn focus" data-act="toggle-switch" aria-haspopup="menu" aria-expanded="${state.switcherOpen}">
         ${esc(c.name)}'s parent
-        <span class="av" style="background:${smileColor(state.selected)}"><img src="${SMILEY}" alt=""></span>
+        <span class="ui-avatar sm" style="background:${smileColor(state.selected)}"><img src="${SMILEY}" alt=""></span>
         <span class="caret" aria-hidden="true">▾</span>
       </button>
-      ${state.switcherOpen ? `<div class="switch-menu" role="menu">${items}
-        <a href="index.html" class="switch-add focus">+ Add another child</a>
+      ${state.switcherOpen ? `<div class="ui-menu switch-menu" role="menu">${items}
+        <a href="index.html" class="btn-dashed mt-1 focus">+ Add another child</a>
         <div class="switch-sep" role="separator"></div>
-        <button class="switch-nav focus" data-act="open-profile" role="menuitem">${ICON_USER}<span>Profile</span></button>
-        <button class="switch-nav danger focus" data-act="logout" role="menuitem">${ICON_LOGOUT}<span>Log out</span></button>
+        <button class="ui-menu-item focus" data-act="open-profile" role="menuitem">${ICON_USER}<span>Profile</span></button>
+        <button class="ui-menu-item danger focus" data-act="logout" role="menuitem">${ICON_LOGOUT}<span>Log out</span></button>
       </div>` : ''}
     </div>`;
   }
@@ -698,10 +641,10 @@
   function donut(pct) {
     const r = 26, circ = 2 * Math.PI * r, off = circ * (1 - pct / 100);
     return `<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-      <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--line-200)" stroke-width="7"/>
-      <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--green-500)" stroke-width="7" stroke-linecap="round"
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="${tok('--line-200')}" stroke-width="7"/>
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="${tok('--green-500')}" stroke-width="7" stroke-linecap="round"
         stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 32 32)" style="transition:stroke-dashoffset .5s ease"/>
-      <text x="32" y="37" text-anchor="middle" font-family="'Montserrat',sans-serif" font-weight="700" font-size="14" fill="var(--ink-900)">${pct}%</text>
+      <text x="32" y="37" text-anchor="middle" font-family="${tok('--font-body')}" font-weight="700" font-size="15" fill="${tok('--ink-900')}">${pct}%</text>
     </svg>`;
   }
 
@@ -734,7 +677,7 @@
         : complete
         ? `<div class="phase-cta">
              <button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">View details →</button>
-             <button class="btn-outline focus" data-act="phase-report" data-win="${w.id}">View report</button>
+             <button class="btn btn-outline md focus" data-act="phase-report" data-win="${w.id}">View report</button>
            </div>`
         : `<button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">Continue assessment →</button>`;
 
@@ -758,6 +701,16 @@
     </div>`;
   }
 
+  // Hero info chips (school · grade/section · admission) — shared by the demo
+  // home and the created-school home.
+  function heroChips(c, schoolName) {
+    return [
+      `<span class="pill-info"><span class="ui-dot sm dot-cyan"></span>${esc(schoolName)}</span>`,
+      c.grade ? `<span class="ui-chip lg ok"><span class="ui-dot sm dot-green"></span>${esc(c.grade)}${c.section ? ' · Section ' + esc(c.section) : ''}</span>` : '',
+      c.adm ? `<span class="ui-chip lg prog"><span class="ui-dot sm dot-yellow"></span>Admission ${esc(c.adm)}</span>` : '',
+    ].filter(Boolean).join('');
+  }
+
   // ============================================================
   // HOME VIEW
   // ============================================================
@@ -778,11 +731,7 @@
     const phase = winPhase(w.id);
     const faceColor = smileColor(state.selected);
 
-    const chips = [
-      `<span class="chip school"><span class="cd" style="background:var(--cyan-500)"></span>${esc(school)}</span>`,
-      c.grade ? `<span class="chip grade"><span class="cd" style="background:var(--green-500)"></span>${esc(c.grade)}${c.section ? ' · Section ' + esc(c.section) : ''}</span>` : '',
-      c.adm ? `<span class="chip adm"><span class="cd" style="background:var(--yellow-500)"></span>Admission ${esc(c.adm)}</span>` : '',
-    ].filter(Boolean).join('');
+    const chips = heroChips(c, school);
 
     const heroTop = `
         <div class="p-hero" data-rise>
@@ -807,18 +756,18 @@
              <span class="ico"><img src="${DS}icons/chart-up.png" alt=""></span>
              <span class="rt"><b>${esc(c.name)}'s ${esc(last.label)} snapshot</b>
                <span>Revisit the warm summary from ${esc(c.name)}'s last completed window.</span></span>
-             <button class="btn btn-primary focus" data-act="open-last-report" data-win="${last.id}" style="flex:none">See snapshot →</button>
+             <button class="btn btn-primary flex-none focus" data-act="open-last-report" data-win="${last.id}">See snapshot →</button>
            </div>`
         : `<div class="report-cta locked">
              <span class="ico"><img src="${DS}icons/clock.png" alt=""></span>
              <span class="rt"><b>No snapshot yet</b><span>${esc(c.name)}'s first report appears once a window is complete.</span></span>
-             <button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>
+             <button class="btn btn-primary flex-none focus" disabled>Locked</button>
            </div>`;
       return heroTop
         .replace('__EYEBROW__', 'Parent home · In between windows')
         .replace('__SUB__', `No check-ins are open right now — ${esc(c.name)}'s garden is resting until ${nextTxt}.`)
         + `
-        <div class="win-rest">
+        <div class="ui-card md tint-cyan win-rest">
           <span class="ico">🌿</span>
           <div class="rt"><b>Nothing to complete right now</b>
             <span>${nextTxt.charAt(0).toUpperCase() + nextTxt.slice(1)}. You can revisit past reports any time.</span></div>
@@ -850,10 +799,10 @@
       const s = locked ? 'pending' : st[a.id];
       const badge = locked ? 'Upcoming' : s === 'done' ? 'Completed' : s === 'progress' ? 'In progress' : 'Start';
       const tag = editable ? 'button' : 'div';
-      return `<${tag} class="t-row${editable ? ' focus' : ''}"${editable ? ` data-tap="${a.id}"` : ' style="cursor:default"'}>
+      return `<${tag} class="t-row${editable ? ' focus' : ''}"${editable ? ` data-tap="${a.id}"` : ''}>
         <span class="t-dot ${s}"></span>
         <span class="t-body"><b>${esc(a.title)}</b><span>${esc(a.sub)}</span></span>
-        <span class="t-badge ${s}">${badge}</span>
+        <span class="ui-chip lg ${BADGE_CLS[s]}">${badge}</span>
       </${tag}>`;
     }).join('');
 
@@ -861,11 +810,10 @@
       : phase === 'past' ? `<span class="muted due">Completed <span class="accent">${esc(w.date || '')}</span></span>`
       : `<span class="muted due">Due <span class="accent">15 August</span></span>`;
 
-    const progStyle = 'margin-bottom:14px' + (editable ? '' : ';cursor:default');
     const progHint = phase === 'current' ? 'Tap an assessment to start it, then tap again to mark it done.'
       : phase === 'past' ? 'This window is complete — a look back at ' + esc(c.name) + "'s history."
       : esc(w.label) + ' opens ' + (w.date ? esc(w.date) : 'soon') + '.';
-    const progCard = `<button class="prog-card${editable ? ' focus' : ''}" ${editable ? 'data-act="progress-tap" ' : ''}style="${progStyle}">
+    const progCard = `<button class="prog-card${editable ? ' focus' : ''}" ${editable ? ' data-act="progress-tap"' : ''}>
           ${donut(locked ? 0 : pct)}
           <span class="txt"><b>${locked ? 'Not started yet' : done + ' of ' + total + ' completed'}</b>
           <span>${progHint}</span></span>
@@ -876,7 +824,7 @@
           <span class="ico"><img src="${DS}icons/clock.png" alt=""></span>
           <span class="rt"><b>${esc(c.name)}'s ${esc(w.label)} snapshot</b>
             <span>Opens ${w.date ? esc(w.date) : 'soon'} — complete the window to unlock it.</span></span>
-          <button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>
+          <button class="btn btn-primary flex-none focus" disabled>Locked</button>
         </div>`
       : `<div class="report-cta ${reportReady ? 'ready' : 'locked'}">
           <span class="ico"><img src="${DS}icons/${reportReady ? 'chart-up.png' : 'clock.png'}" alt=""></span>
@@ -886,12 +834,12 @@
           </span>
           ${reportReady
             ? (allDone
-                ? `<button class="btn btn-primary focus" data-act="open-snapshot" style="flex:none">See snapshot →</button>`
-                : `<span class="snap-gate" style="flex:none;text-align:center">
-                     <button class="btn btn-primary focus" style="flex:none" disabled>See snapshot →</button>
+                ? `<button class="btn btn-primary flex-none focus" data-act="open-snapshot">See snapshot →</button>`
+                : `<span class="snap-gate flex-none text-center">
+                     <button class="btn btn-primary flex-none focus" disabled>See snapshot →</button>
                      <span class="snap-gate-note">Complete all assessments to access it</span>
                    </span>`)
-            : `<button class="btn btn-primary focus" style="flex:none" disabled>Locked</button>`}
+            : `<button class="btn btn-primary flex-none focus" disabled>Locked</button>`}
         </div>`;
 
     return heroTop.replace('__EYEBROW__', eyebrow).replace('__SUB__', sub) + `
@@ -931,11 +879,7 @@
     const schoolId = sc.school_id;
     const faceColor = smileColor(state.selected);
 
-    const chips = [
-      `<span class="chip school"><span class="cd" style="background:var(--cyan-500)"></span>${esc(sc.name)}</span>`,
-      c.grade ? `<span class="chip grade"><span class="cd" style="background:var(--green-500)"></span>${esc(c.grade)}${c.section ? ' · Section ' + esc(c.section) : ''}</span>` : '',
-      c.adm ? `<span class="chip adm"><span class="cd" style="background:var(--yellow-500)"></span>Admission ${esc(c.adm)}</span>` : '',
-    ].filter(Boolean).join('');
+    const chips = heroChips(c, sc.name);
 
     // Live + ended Parent lanes, indexed by phase.
     const lanes = (API.deploymentsFor(schoolId, 'Parent', { includeEnded: true }) || []);
@@ -964,7 +908,7 @@
       // Not deployed yet → muted resting card (appears once the admin deploys it).
       if (!lane) {
         return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Not deployed yet</span></div>
-          <div class="win-rest">
+          <div class="ui-card md tint-cyan win-rest">
             <span class="ico">🌿</span>
             <div class="rt"><b>Not deployed yet</b>
               <span>${esc(c.name)}'s ${esc(phase)} check-ins will show up here once your school opens this window.</span></div>
@@ -981,7 +925,7 @@
           return `<div class="t-row">
             <span class="t-dot done"></span>
             <span class="t-body"><b>${esc(a.name)}</b><span>Parent check-in</span></span>
-            <span class="t-badge done">Completed</span>
+            <span class="ui-chip lg ok">Completed</span>
           </div>`;
         }
         // Ended-but-unfinished stays visible but read-only; live is tappable.
@@ -989,12 +933,12 @@
           ? `<div class="t-row">
               <span class="t-dot pending"></span>
               <span class="t-body"><b>${esc(a.name)}</b><span>Window ended · not completed</span></span>
-              <span class="t-badge pending">Missed</span>
+              <span class="ui-chip lg muted">Missed</span>
             </div>`
           : `<button class="t-row focus" data-act="mark-done" data-phase="${esc(phase)}" data-assess="${esc(a.id)}">
               <span class="t-dot pending"></span>
               <span class="t-body"><b>${esc(a.name)}</b><span>Parent check-in · tap to mark done</span></span>
-              <span class="t-badge pending">Mark done</span>
+              <span class="ui-chip lg muted">Mark done</span>
             </button>`;
       }).join('') : `<div class="t-row"><span class="t-body"><b>No assessments in this window yet</b></span></div>`;
 
@@ -1033,13 +977,13 @@
       </div>`).join('');
 
     const cards = skills.map((s) => {
-      const b = BAND_META[s.band];
-      return `<div class="skill-card">
+      const lv = PAL.levelOf(s.band);
+      return `<div class="ui-card sm">
         <div class="sk-top">
           <span class="sk-name">${esc(s.name)}</span>
-          <span class="sk-tag" style="color:${b.color};background:${b.bg}">${b.tag}</span>
+          <span class="ui-badge lvl-${lv.n}">${cap(s.band)}</span>
         </div>
-        <div class="sk-bar"><div class="sk-fill" style="width:${s.pct}%;background:${b.fill}"></div></div>
+        <div class="ui-meter light sk-bar"><div style="width:${s.pct}%;background:${lv.strong}"></div></div>
         <div class="sk-note">${esc(s.note)}</div>
       </div>`;
     }).join('');
@@ -1050,30 +994,30 @@
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
+        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; Back to home</button>
       </div>
       <div class="p-main" data-rise>
 
-        <p class="p-eyebrow" style="margin-top:8px">${esc(w.label)} · ${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
-        <h1 class="p-title" style="font-size:clamp(26px,3.4vw,40px)">${esc(c.name)}'s garden</h1>
-        <p class="p-sub" style="max-width:52ch">${esc(c.name)}'s garden is growing — ${blooms} of ${skills.length} skills are blooming, with a few still finding the sun. Here's the whole picture.</p>
+        <p class="p-eyebrow spaced">${esc(w.label)} · ${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
+        <h1 class="p-title">${esc(c.name)}'s garden</h1>
+        <p class="p-sub narrow">${esc(c.name)}'s garden is growing — ${blooms} of ${skills.length} skills are blooming, with a few still finding the sun. Here's the whole picture.</p>
 
-        <div class="garden" style="margin-top:20px">
+        <div class="garden">
           <div class="bed">${bed}</div>
         </div>
 
         <div class="sec-head"><h2>Every skill, up close</h2><span class="muted">Overall ${avg}%</span></div>
         <div class="skill-list">${cards}</div>
 
-        <div class="tips">
+        <div class="ui-card md tint-yellow tips">
           <h3>How to help at home 🏡</h3>
           ${tips}
         </div>
 
         <div class="report-actions">
-          <button class="btn btn-primary focus" data-act="save-pdf" style="padding:12px 22px;font-size:14px">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF'}</button>
-          <button class="btn-outline focus" data-act="save-png">${state.saved === 'png' ? 'Saved ✓' : 'Save image'}</button>
-          <button class="btn-ghost focus" data-act="back-home" style="padding:12px 18px">Back to home</button>
+          <button class="btn btn-primary md focus" data-act="save-pdf">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF'}</button>
+          <button class="btn btn-outline md focus" data-act="save-png">${state.saved === 'png' ? 'Saved ✓' : 'Save image'}</button>
+          <button class="btn-ghost md focus" data-act="back-home">Back to home</button>
         </div>
 
         <p class="footnote">Sent to your email too · a fresh report follows each assessment window.</p>
@@ -1198,13 +1142,11 @@
   // Card i gets ACT_TYPE[i] / ACT_FREQ[i], a border colour and a placeholder link.
   const ACT_TYPE = ['Playful game', 'Everyday chat', 'Daily routine'];
   const ACT_FREQ = ['A few times a week', 'Once a day', 'Once a week'];
-  const TRY_COLORS = ['var(--green-500)', 'var(--cyan-500)', 'var(--orange-500)'];
   const ACT_LINK = 'https://www.tillikids.com'; // TODO placeholder — real how-to link (YouTube / article / steps)
 
-  // Decorative flower row — reuses flowerSVG() in a cool brand palette.
-  const FLOWER_ROW_COLORS = ['#26BDE2', '#5AA9E6', '#26BDE2', '#7FB2E6', '#26BDE2'];
+  // Decorative flower row — reuses flowerSVG() in a cool brand palette (ART.FLOWER_ROW).
   function flowerRow() {
-    return FLOWER_ROW_COLORS.map((col, i) =>
+    return ART.FLOWER_ROW.map((col, i) =>
       `<span class="fl">${flowerSVG(col, 'blooming', i * 7 + 3, 40)}</span>`).join('');
   }
 
@@ -1221,7 +1163,7 @@
 
     const tryCards = acts.map((a, i) =>
       `<a class="try-card focus" href="${ACT_LINK}" target="_blank" rel="noopener"
-          style="--c:${TRY_COLORS[i % TRY_COLORS.length]}">
+          style="--c:${ART.TRY[i % ART.TRY.length]}">
         <div class="tc-tags"><span class="tc-type">${esc(ACT_TYPE[i] || 'Activity')}</span>
           <span class="tc-freq">${esc(ACT_FREQ[i] || '')}</span></div>
         <div class="tc-topic">${esc(a.t)}</div>
@@ -1230,7 +1172,7 @@
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
+        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; Back to home</button>
       </div>
       <div class="p-main" data-rise>
 
@@ -1247,14 +1189,14 @@
         <div class="report-band-inner">
 
         <!-- 2 · three places where {name} is shining -->
-        <section class="panel panel-shine">
-          <h2 class="panel-title">3 places where ${esc(c.name)} is shining</h2>
+        <section class="ui-card md tint-green panel">
+          <h2 class="panel-title is-green">3 places where ${esc(c.name)} is shining</h2>
           <div class="panel-body"><ul class="shine-list">${shine}</ul></div>
         </section>
 
         <!-- 3 · where {name} needs support (single growth area) -->
-        <section class="panel panel-support">
-          <h2 class="panel-title">Where ${esc(c.name)} needs support</h2>
+        <section class="ui-card md tint-cyan panel">
+          <h2 class="panel-title is-cyan">Where ${esc(c.name)} needs support</h2>
           <div class="panel-body support-body">
             <div class="support-text">
               <h3>${esc(gf.head)}</h3>
@@ -1307,8 +1249,8 @@
       const pct = Math.round((done / total) * 100);
       const col = smileColor(i);
       const meta = [k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ') || 'No grade set';
-      return `<button class="kid-card focus" data-select="${i}">
-        <span class="kid-av" style="background:${col}"><img src="${SMILEY}" alt=""></span>
+      return `<button class="ui-card sm link kid-card focus" data-select="${i}">
+        <span class="ui-avatar lg" style="background:${col}"><img src="${SMILEY}" alt=""></span>
         <span class="kid-info"><b>${esc(k.name)}</b><span>${esc(meta)}</span></span>
         <span class="kid-prog">
           ${donut(pct)}
@@ -1323,25 +1265,25 @@
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost focus" data-act="back-home" style="margin-left:auto">&#8592; Back to home</button>
+        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; Back to home</button>
       </div>
       <div class="p-main" data-rise>
         <div class="profile-head">
-          <span class="profile-face" style="background:var(--green-500)"><img src="${SMILEY}" alt=""></span>
+          <span class="profile-face"><img src="${SMILEY}" alt=""></span>
           <div>
-            <p class="p-eyebrow" style="margin-bottom:4px">Your profile</p>
-            <h1 class="p-title" style="font-size:clamp(24px,3.2vw,38px)">${esc(PARENT_NAME)}</h1>
+            <p class="p-eyebrow tight">Your profile</p>
+            <h1 class="p-title">${esc(PARENT_NAME)}</h1>
           </div>
         </div>
-        <p class="p-sub" style="margin-top:14px">You're following ${children.length} ${children.length === 1 ? 'child' : 'children'} at ${esc(school)}. Tap a child to open their check-ins.</p>
+        <p class="p-sub spaced">You're following ${children.length} ${children.length === 1 ? 'child' : 'children'} at ${esc(school)}. Tap a child to open their check-ins.</p>
 
         <div class="sec-head"><h2>Your children</h2><span class="muted">${children.length} linked</span></div>
         <div class="kid-list">${kids}
-          <a href="index.html" class="kid-add focus">+ Add another child</a>
+          <a href="index.html" class="btn-dashed lg focus">+ Add another child</a>
         </div>
 
-        <div class="report-actions" style="margin-top:26px">
-          <button class="btn-logout focus" data-act="logout">Log out</button>
+        <div class="report-actions profile-actions">
+          <button class="btn-ghost md logout focus" data-act="logout">Log out</button>
         </div>
       </div>
     </div>`;

@@ -24,6 +24,55 @@
      offboardStudent / revokeParentLink / reassignTeacher ... Flow C (Admin-only)
      verifySchool / inviteAdmin / inviteTeacher / acceptInvite ... Flow A / A1–A3
    ============================================================ */
+/* ============================================================
+   TilliPalette — the ONE place JS reads colours from.
+   CSS custom properties in assets/tilli.css are the source of truth;
+   these maps hold var() strings for use in style="" / innerHTML, and
+   css(name) resolves a token to its hex for SVG presentation
+   attributes (fill="…"), which cannot read var().
+   Exact-hex art/chart palettes (petals, growth lines) live here too so
+   they are defined once instead of copied into every renderer.
+   ============================================================ */
+(function () {
+  function css(name) {
+    try {
+      var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      if (v) return v;
+    } catch (e) {}
+    return '';
+  }
+  // Level index 1..4 → token set. Labels map onto the index via levelOf().
+  function level(n) {
+    return { strong: 'var(--lvl-' + n + ')', soft: 'var(--lvl-' + n + '-soft)', wash: 'var(--lvl-' + n + '-wash)', ink: 'var(--lvl-' + n + '-ink)', n: n };
+  }
+  var LEVEL_INDEX = {
+    beginner: 1, emerging: 1, seedling: 1,
+    learner: 2, developing: 2, sprouting: 2,
+    expert: 3, secure: 3, proficient: 3, blooming: 3,
+    advanced: 4,
+  };
+  window.TilliPalette = {
+    css: css,
+    level: level,
+    levelOf: function (label) { return level(LEVEL_INDEX[String(label || '').toLowerCase()] || 1); },
+    PERSPECTIVE: { teacher: 'var(--persp-teacher)', parent: 'var(--persp-parent)', student: 'var(--persp-student)', studentDirect: 'var(--persp-student)' },
+    // Resolved hex (for SVG attributes / rgba math)
+    perspHex: function (k) { return css('--persp-' + (k === 'studentDirect' ? 'student' : k)); },
+    STATUS: {
+      done:        { bg: 'var(--status-done-bg)', fg: 'var(--status-done-fg)', dot: 'var(--status-done-dot)', cls: 'done' },
+      in_progress: { bg: 'var(--status-prog-bg)', fg: 'var(--status-prog-fg)', dot: 'var(--status-prog-dot)', cls: 'prog' },
+      pending:     { bg: 'var(--status-pend-bg)', fg: 'var(--status-pend-fg)', dot: 'var(--status-pend-dot)', cls: 'pend' },
+    },
+    // Brand petal palette for every flower illustration (flower band, garden, mini trios).
+    PETALS: ['#E866B0', '#26BDE2', '#FCC30B', '#E91E8C'],
+    // Onboarding progress-ring petals (five brand colours).
+    RING_PETALS: ['#FCC30B', '#26BDE2', '#F99B1C', '#E866B0', '#56C02B'],
+    // Growth-over-time chart series (distinct, colour-blind-safe set) + reference line.
+    GROWTH: ['#2A78D6', '#EB6834', '#1BAF7A', '#EDA100', '#E87BA4', '#008300'],
+    GROWTH_REF: 'var(--ink-300)',
+  };
+})();
+
 (function () {
   'use strict';
 

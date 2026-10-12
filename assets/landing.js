@@ -184,11 +184,13 @@
   function set(patch) { Object.assign(state, patch); render(); }
 
   // ---- google icon markup ----
+  // Google's brand colours — illustration art, kept exact.
+  const GOOGLE = { blue: '#4285F4', green: '#34A853', yellow: '#FBBC05', red: '#EA4335' };
   const gIcon = `<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-    <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
-    <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
-    <path fill="#FBBC05" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
-    <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+    <path fill="${GOOGLE.blue}" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+    <path fill="${GOOGLE.green}" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+    <path fill="${GOOGLE.yellow}" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
+    <path fill="${GOOGLE.red}" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
   </svg>`;
 
   // eye (password hidden) / eye-off (password visible) toggle icon
@@ -338,9 +340,7 @@
     return `<div class="dialog" role="dialog" aria-label="Get started with Tilli Measures">
         ${showBack ? `<button class="btn-ghost dialog-back focus" data-act="back">&#8592; Back</button>` : ''}
         <button class="dialog-close focus" data-act="close" aria-label="Close">&#215;</button>
-        <div style="display:flex;justify-content:center;margin:10px 0 14px">
-          <img src="${LOGO}" alt="Tilli" style="height:26px;width:auto;display:block">
-        </div>
+        <div class="dlg-logo"><img src="${LOGO}" alt="Tilli"></div>
         ${inner}
       </div>`;
   }
@@ -409,20 +409,20 @@
 
   function roleView() {
     const card = (accent, icon, label, sub, role) => `
-      <button class="focus" data-role="${role}" style="display:flex;align-items:center;gap:16px;border:2px solid ${accent};background:#fff;border-radius:24px;padding:18px;cursor:pointer;transition:transform .2s var(--ease)" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='none'">
-        <span style="flex:none;width:56px;height:56px;border-radius:50%;background:${accent};display:flex;align-items:center;justify-content:center"><img src="${DS}icons/${icon}" alt="" aria-hidden="true" style="width:52%;height:auto"></span>
-        <span style="text-align:left">
-          <span style="display:block;font-weight:700;font-size:17px;color:var(--ink-700)">${label}</span>
-          <span style="display:block;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:var(--ink-450);margin-top:3px">${sub}</span>
+      <button class="ui-card outline lift role-card focus" data-role="${role}" style="border-color:${accent}">
+        <span class="ic-circle" style="background:${accent}"><img src="${DS}icons/${icon}" alt="" aria-hidden="true"></span>
+        <span>
+          <span class="lbl">${label}</span>
+          <span class="sub">${sub}</span>
         </span>
       </button>`;
     return `
-      <h2 style="font-weight:700;font-size:24px;text-align:center;margin:0 0 6px">Who are you?</h2>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-600);text-align:center;margin:0 0 22px">We'll set up the right garden for you.</p>
-      <div style="display:flex;flex-direction:column;gap:14px">
-        ${card('#FCC30B', 'family.png', 'Parent / Home', "Follow your child's assessments", 'parent')}
-        ${card('#26BDE2', 'graduation-cap.png', 'School', 'See your whole class garden', 'teacher')}
-        ${card('#56C02B', 'sparkle.png', 'Tilli Team', 'Internal view across the school', 'tilli')}
+      <h2 class="dlg-title">Who are you?</h2>
+      <p class="dlg-sub">We'll set up the right garden for you.</p>
+      <div class="stack">
+        ${card('var(--yellow-500)', 'family.png', 'Parent / Home', "Follow your child's assessments", 'parent')}
+        ${card('var(--cyan-500)', 'graduation-cap.png', 'School', 'See your whole class garden', 'teacher')}
+        ${card('var(--green-500)', 'sparkle.png', 'Tilli Team', 'Internal view across the school', 'tilli')}
       </div>`;
   }
 
@@ -436,28 +436,29 @@
     const exactish = ALL.some((x) => x.toLowerCase() === q);
     const canContinue = !!(state.school || state.schoolQuery.trim());
     const listItems = matches.map((name) => `
-      <button role="option" class="focus school-opt" data-school="${esc(name)}" style="width:100%;text-align:left;border:none;border-radius:8px;padding:11px 13px;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-900);display:flex;align-items:center;gap:10px;background:${state.school === name ? '#F1FFEC' : 'transparent'}">
-        <span style="width:7px;height:7px;border-radius:50%;background:#56C02B;flex:none"></span>${esc(name)}
+      <button role="option" class="ui-menu-item school-opt focus${state.school === name ? ' on' : ''}" data-school="${esc(name)}">
+        <span class="ui-dot sm"></span>${esc(name)}
       </button>`).join('');
     const hint = !enoughChars
-      ? `<div style="padding:12px 13px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-300)">Type at least ${SCHOOL_MIN_CHARS} letters to search&#8230;</div>`
+      ? `<div class="dlg-hint">Type at least ${SCHOOL_MIN_CHARS} letters to search&#8230;</div>`
       : '';
     const noMatch = enoughChars && !exactish && matches.length === 0;
 
     return `
-      <h2 style="font-weight:700;font-size:22px;text-align:center;margin:0 0 6px;text-wrap:balance">${isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-600);text-align:center;margin:0 0 20px">Start typing to find it in the list.</p>
-      <div style="position:relative">
-        <input id="school-input" class="input focus" value="${esc(state.schoolQuery)}" placeholder="Select school" aria-label="Search school" autocomplete="off" style="padding-right:40px" autofocus>
-        <span aria-hidden="true" style="position:absolute;right:15px;top:24px;transform:translateY(-50%);color:var(--ink-300);font-size:12px">&#9662;</span>
+      <h2 class="dlg-title">${isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
+      <p class="dlg-sub">Start typing to find it in the list.</p>
+      <div>
+        <span class="select-wrap">
+          <input id="school-input" class="input focus" value="${esc(state.schoolQuery)}" placeholder="Select school" aria-label="Search school" autocomplete="off" style="padding-right:40px" autofocus>
+        </span>
         ${state.schoolListOpen ? `
-          <div role="listbox" style="margin-top:8px;background:#fff;border:1px solid var(--line-200);border-radius:16px;box-shadow:0 2px 10px rgba(20,20,20,.06);max-height:200px;overflow-y:auto;padding:6px">
+          <div role="listbox" class="ui-menu school-menu">
             ${hint}
             ${listItems}
-            ${noMatch ? `<div style="padding:12px 13px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-300)">No match &#8212; <span style="color:#56C02B">use &#8220;${esc(state.schoolQuery)}&#8221;</span></div>` : ''}
+            ${noMatch ? `<div class="dlg-hint">No match &#8212; <span style="color:var(--green-500)">use &#8220;${esc(state.schoolQuery)}&#8221;</span></div>` : ''}
           </div>` : ''}
       </div>
-      <button class="btn btn-primary block focus" data-act="school-continue" ${canContinue ? '' : 'disabled'} style="margin-top:16px">Continue &#8594;</button>`;
+      <button class="btn btn-primary block focus mt-4" data-act="school-continue" ${canContinue ? '' : 'disabled'}>Continue &#8594;</button>`;
   }
 
   function emailView() {
@@ -471,39 +472,39 @@
         ? 'Demo: use teacher@tilli.edu to sign in, or any new email to sign up (Little Sprouts school code: LSPR-2210).'
         : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
     return `
-      <h2 style="font-weight:700;font-size:24px;text-align:center;margin:0 0 10px">Enter your email</h2>
-      <p style="text-align:center;margin:0 0 20px">${pill}</p>
-      <form id="email-form" style="display:flex;flex-direction:column;gap:14px">
+      <h2 class="dlg-title">Enter your email</h2>
+      <p class="text-center" style="margin:0 0 20px">${pill}</p>
+      <form id="email-form" class="dlg-form">
         <input id="email-input" class="input focus" type="email" required value="${esc(state.email)}" placeholder="you@email.com" aria-label="Email address" autofocus>
         <button type="submit" class="btn btn-primary block focus">Enter &#8594;</button>
       </form>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12px;color:var(--ink-300);text-align:center;margin:14px 0 0">${hint}</p>`;
+      <p class="dlg-hint text-center" style="margin-top:14px">${hint}</p>`;
   }
 
   function checkingView() {
     return `
       <div style="text-align:center;padding:24px 0 14px">
         <div class="spinner" style="margin:0 auto 18px"></div>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:15px;color:var(--ink-600);margin:0">Checking if your account exists&#8230;</p>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:var(--ink-300);margin:6px 0 0;word-break:break-all">${esc(state.email)}</p>
+        <p class="dlg-sub" style="font-weight:700;margin:0">Checking if your account exists&#8230;</p>
+        <p class="dlg-hint break-all" style="margin-top:6px">${esc(state.email)}</p>
       </div>`;
   }
 
   function loginView(isSignup) {
     const verb = isSignup ? 'Create' : 'Enter';
     return `
-      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 8px">${isSignup ? 'Create your Tilli account' : 'Enter your Tilli account'}</h2>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-600);text-align:center;margin:0 0 20px;word-break:break-all">${esc(state.email)}</p>
-      <button class="focus" data-act="google" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--line-200);background:#fff;color:var(--ink-700);font-weight:700;font-size:14.5px;padding:14px;border-radius:999px;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='#26BDE2'" onmouseout="this.style.borderColor='#ECEEF2'">${gIcon} ${verb} via Google</button>
-      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink-300);font-family:'Quicksand',sans-serif;font-size:12px;font-weight:700"><span style="flex:1;height:1px;background:var(--line-200)"></span>OR<span style="flex:1;height:1px;background:var(--line-200)"></span></div>
-      <form id="pw-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
+      <h2 class="dlg-title">${isSignup ? 'Create your Tilli account' : 'Enter your Tilli account'}</h2>
+      <p class="dlg-sub break-all">${esc(state.email)}</p>
+      <button class="btn-ghost md btn-google focus" data-act="google">${gIcon} ${verb} via Google</button>
+      <div class="or-rule">OR</div>
+      <form id="pw-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
         <div style="position:relative">
           <input id="pw-input" class="input focus ${state.errs.pw ? 'err' : ''}" type="password" required placeholder="${isSignup ? 'Create a password' : 'Enter your password'}" aria-label="Password" value="${esc(state.password)}" style="padding-right:44px">
-          <button type="button" id="pw-toggle" class="focus" aria-label="Show password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:none;cursor:pointer;color:var(--ink-450);border-radius:8px">${eyeIcon(false)}</button>
+          <button type="button" id="pw-toggle" class="focus" aria-label="Show password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:none;cursor:pointer;color:var(--ink-450);border-radius:var(--radius-sm)">${eyeIcon(false)}</button>
         </div>
-        ${state.errs.pw ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0">That password doesn't match this account. Please try again.</p>` : ''}
-        ${isSignup ? '' : `<button type="button" data-act="forgot" class="focus" style="align-self:flex-end;margin-top:-4px;border:none;background:none;padding:0;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:700;font-size:13px;color:var(--ink-450);text-decoration:underline;text-underline-offset:2px">Forgot password?</button>`}
-        ${!isSignup && state.forgotSent ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12.5px;color:var(--ink-600);margin:0;line-height:1.5">To reset your password, contact your school admin — they can re-send an invite that lets you set a new one.</p>` : ''}
+        ${state.errs.pw ? `<p class="err-text">That password doesn't match this account. Please try again.</p>` : ''}
+        ${isSignup ? '' : `<button type="button" data-act="forgot" class="btn-link muted focus" style="align-self:flex-end;margin-top:-4px">Forgot password?</button>`}
+        ${!isSignup && state.forgotSent ? `<p class="dlg-hint" style="color:var(--ink-600);line-height:1.5">To reset your password, contact your school admin — they can re-send an invite that lets you set a new one.</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">${verb} via password &#8594;</button>
       </form>`;
   }
@@ -515,17 +516,17 @@
     const e = state.errs.code;
     if (!known) {
       return `
-        <h2 style="font-weight:700;font-size:22px;text-align:center;margin:0 0 10px">We can&rsquo;t find your school yet</h2>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-600);text-align:center;margin:0 0 20px;line-height:1.5"><b>${esc(state.school)}</b> isn&rsquo;t set up on Tilli Measures. Check the name, or ask your school admin to invite you.</p>
+        <h2 class="dlg-title">We can&rsquo;t find your school yet</h2>
+        <p class="dlg-sub" style="line-height:1.5"><b>${esc(state.school)}</b> isn&rsquo;t set up on Tilli Measures. Check the name, or ask your school admin to invite you.</p>
         <button class="btn btn-primary block focus" data-act="pick-school-again">Choose a different school</button>`;
     }
     return `
-      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 6px">Enter your school code</h2>
-      <p style="text-align:center;margin:0 0 8px"><span class="pill-info">${esc(known.name)}</span></p>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-600);text-align:center;margin:0 0 20px">Your school admin can share it with you.</p>
-      <form id="code-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
+      <h2 class="dlg-title">Enter your school code</h2>
+      <p class="text-center" style="margin:0 0 8px"><span class="pill-info">${esc(known.name)}</span></p>
+      <p class="dlg-sub">Your school admin can share it with you.</p>
+      <form id="code-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
         <input id="code-input" class="input focus ${e ? 'err' : ''}" required value="${esc(state.schoolCode)}" placeholder="e.g. ABCD-1234" aria-label="School code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-align:center;letter-spacing:.12em;font-weight:700;text-transform:uppercase" autofocus>
-        ${e ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0;text-align:center">${esc(e)}</p>` : ''}
+        ${e ? `<p class="err-text text-center">${esc(e)}</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">Verify &#8594;</button>
       </form>`;
   }
@@ -533,15 +534,15 @@
     const sc = state.codeSchool || {};
     const where = [sc.city, sc.country].filter(Boolean).join(', ');
     return `
-      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 6px">Confirm school</h2>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14px;color:var(--ink-600);text-align:center;margin:0 0 18px">You&rsquo;re joining as a teacher at:</p>
-      <div style="border:2px solid #56C02B;background:#F1FFEC;border-radius:20px;padding:18px 20px;text-align:center;margin-bottom:18px">
-        <div style="font-weight:700;font-size:19px;color:var(--ink-900)">${esc(sc.name || state.school)}</div>
-        ${where ? `<div style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-450);margin-top:4px">${esc(where)}</div>` : ''}
-        ${sc.board ? `<div style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:12px;color:var(--ink-300);margin-top:6px">${esc(sc.board)}</div>` : ''}
+      <h2 class="dlg-title">Confirm school</h2>
+      <p class="dlg-sub">You&rsquo;re joining as a teacher at:</p>
+      <div class="ui-card md outline tint-green confirm-card" style="margin-bottom:18px">
+        <div style="font-weight:700;font-size:var(--fs-lg);color:var(--ink-900)">${esc(sc.name || state.school)}</div>
+        ${where ? `<div class="dlg-hint" style="color:var(--ink-450);margin-top:4px">${esc(where)}</div>` : ''}
+        ${sc.board ? `<div class="dlg-hint" style="font-weight:700;margin-top:6px">${esc(sc.board)}</div>` : ''}
       </div>
       <button class="btn btn-primary block focus" data-act="confirm-school">Yes, that&rsquo;s my school &#8594;</button>
-      <button class="focus" data-act="pick-school-again" style="display:block;margin:12px auto 0;border:none;background:none;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:700;font-size:13px;color:var(--ink-450);text-decoration:underline;text-underline-offset:2px">Not my school</button>`;
+      <button class="btn-link muted link-center focus" data-act="pick-school-again">Not my school</button>`;
   }
 
   // First-login password reset — shown once, right after an invited account
@@ -555,16 +556,16 @@
       ? window.TilliAPI.resolveSchool(acct.school_id) : null;
     const roleLabel = acct && acct.role ? String(acct.role).replace(/\b\w/g, (c) => c.toUpperCase()) : '';
     const joinLine = roleLabel
-      ? `<p style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:13px;color:var(--ink-450);text-align:center;margin:-14px 0 20px">Joining as <span style="color:var(--ink-700)">${esc(roleLabel)}</span>${sc && sc.name ? ` for <span style="color:var(--ink-700)">${esc(sc.name)}</span>` : ''}</p>`
+      ? `<p class="dlg-hint text-center" style="font-weight:700;color:var(--ink-450);margin:-14px 0 20px">Joining as <span style="color:var(--ink-700)">${esc(roleLabel)}</span>${sc && sc.name ? ` for <span style="color:var(--ink-700)">${esc(sc.name)}</span>` : ''}</p>`
       : '';
     return `
-      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 8px">Set your password</h2>
-      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-600);text-align:center;margin:0 0 20px;word-break:break-all">${esc(state.email)}</p>
+      <h2 class="dlg-title">Set your password</h2>
+      <p class="dlg-sub break-all">${esc(state.email)}</p>
       ${joinLine}
-      <form id="setpw-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
+      <form id="setpw-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
         <input id="np-input" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="New password (min 6 characters)" aria-label="New password" value="${esc(state.password)}">
         <input id="np-confirm" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="Confirm new password" aria-label="Confirm new password">
-        ${e.np ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0">${esc(e.np)}</p>` : ''}
+        ${e.np ? `<p class="err-text">${esc(e.np)}</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">Set password &amp; continue &#8594;</button>
       </form>`;
   }
@@ -576,26 +577,26 @@
       : 'Add your first child to get started.';
     const kids = state.kids.map((k, i) => {
       const done = k.status.indexOf('complete') >= 0;
-      return `<button class="focus child-card" data-child-idx="${i}" style="text-align:left;border:2px solid ${done ? '#56C02B' : '#ECEEF2'};background:#fff;border-radius:24px;padding:20px 24px;cursor:pointer;min-width:220px;transition:transform .2s var(--ease)" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='none'">
-        <span style="display:flex;align-items:center;gap:12px">
-          <span style="flex:none;width:40px;height:40px;border-radius:50%;background:${done ? '#56C02B' : '#FCC30B'};display:flex;align-items:center;justify-content:center"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true" style="width:55%;height:auto"></span>
-          <span style="font-weight:700;font-size:19px;color:var(--ink-700)">${esc(k.name)}</span>
+      return `<button class="ui-card outline lift child-card focus${done ? ' done' : ''}" data-child-idx="${i}">
+        <span class="head">
+          <span class="ic-circle sm${done ? '' : ' yellow'}"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true"></span>
+          <span class="nm">${esc(k.name)}</span>
         </span>
-        <span style="display:block;margin-top:10px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:12px;color:${done ? '#3F9E1D' : '#5B6170'}">${esc(k.status)}</span>
+        <span class="st">${esc(k.status)}</span>
       </button>`;
     }).join('');
 
     return `<div class="sheet">
-      <div style="width:100%;max-width:660px">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:clamp(20px,3.4vh,32px)">
+      <div class="sheet-wrap wide">
+        <div class="sheet-head wrap">
           ${brandMark}
-          <span class="pill-info" style="margin-left:auto">${esc(state.school)}</span>
+          <span class="pill-info ml-auto">${esc(state.school)}</span>
         </div>
-        <h1 style="font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,36px);line-height:1.14;margin:0 0 8px;text-wrap:balance">Select the child you want to know more about</h1>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 clamp(20px,3vh,28px)">${sub}</p>
+        <h1 class="sheet-title">Select the child you want to know more about</h1>
+        <p class="sheet-sub">${sub}</p>
         <div style="display:flex;flex-wrap:wrap;gap:16px">
           ${kids}
-          <button class="focus" data-act="add-child" style="border:2px dashed #ECEEF2;background:#fff;border-radius:24px;padding:22px 26px;cursor:pointer;font-weight:700;font-size:16px;color:#56C02B;min-width:170px;transition:transform .2s var(--ease),border-color .2s" onmouseover="this.style.borderColor='#56C02B';this.style.transform='translateY(-4px)'" onmouseout="this.style.borderColor='#ECEEF2';this.style.transform='none'">+ add child</button>
+          <button class="ui-card outline lift add-child-tile focus" data-act="add-child">+ add child</button>
         </div>
       </div>
     </div>`;
@@ -632,18 +633,18 @@
   function childFormView() {
     const c = state.child, e = state.errs;
     return `<div class="sheet">
-      <div style="width:100%;max-width:520px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:clamp(20px,3.4vh,30px)">
+      <div class="sheet-wrap">
+        <div class="sheet-head">
           ${brandMark}
-          <button class="btn-ghost focus" data-act="child-back" style="margin-left:auto">&#8592; Back</button>
+          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; Back</button>
         </div>
-        <h1 style="font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,34px);margin:0 0 8px">Add your child</h1>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Enter your child&#39;s admission number. We&#39;ll ask for a verification code next to keep their information private.</p>
-        <form id="child-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:16px;background:#fff;border:1px solid var(--line-200);border-radius:24px;padding:clamp(20px,3vw,28px)">
+        <h1 class="sheet-title">Add your child</h1>
+        <p class="sheet-sub">Enter your child&#39;s admission number. We&#39;ll ask for a verification code next to keep their information private.</p>
+        <form id="child-form" class="ui-card roomy sheet-form ${state.shake ? 'tm-shake' : ''}">
           <label class="field">Admission number *
             <input id="cf-adm" class="input focus ${e.adm ? 'err' : ''}" value="${esc(c.adm)}" placeholder="Enter admission number of your child" autofocus>
           </label>
-          <button type="submit" class="btn btn-primary block focus" style="margin-top:4px">Continue &#8594;</button>
+          <button type="submit" class="btn btn-primary block focus mt-1">Continue &#8594;</button>
         </form>
         <div id="cf-flowers" style="width:min(264px,70%);margin:clamp(28px,5vh,52px) auto 0"></div>
       </div>
@@ -658,29 +659,29 @@
     const locked = !!e.locked;
     const mins = locked ? Math.max(1, Math.ceil((cl.retryAt - Date.now()) / 60000)) : 0;
     const banner = (e.mismatch || locked) ? `
-      <div style="display:flex;align-items:flex-start;gap:10px;background:#FDECEF;border:1px solid #F6C9D3;border-radius:14px;padding:13px 15px">
-        <span aria-hidden="true" style="flex:none;font-size:16px;line-height:1.3">&#9888;&#65039;</span>
-        <span style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:#B22447;line-height:1.5">
+      <div class="ui-note danger">
+        <span aria-hidden="true" style="flex:none;font-size:var(--fs-md);line-height:1.3">&#9888;&#65039;</span>
+        <span>
           ${locked
             ? `Too many attempts. For your child&#39;s safety, please try again in about ${mins} minute${mins === 1 ? '' : 's'}.`
             : `Those details don&#39;t match. Check the admission number and code your school gave you, and try again.`}</span>
       </div>` : '';
     return `<div class="sheet">
-      <div style="width:100%;max-width:520px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:clamp(20px,3.4vh,30px)">
+      <div class="sheet-wrap">
+        <div class="sheet-head">
           ${brandMark}
-          <button class="btn-ghost focus" data-act="child-back" style="margin-left:auto">&#8592; Back</button>
+          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; Back</button>
         </div>
-        <h1 style="font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,34px);margin:0 0 8px">Verify it&#39;s your child</h1>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Enter the verification code your school shared for this child. This keeps every child&#39;s information private.</p>
-        <form id="verify-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:16px;background:#fff;border:1px solid var(--line-200);border-radius:24px;padding:clamp(20px,3vw,28px)">
+        <h1 class="sheet-title">Verify it&#39;s your child</h1>
+        <p class="sheet-sub">Enter the verification code your school shared for this child. This keeps every child&#39;s information private.</p>
+        <form id="verify-form" class="ui-card roomy sheet-form ${state.shake ? 'tm-shake' : ''}">
           <label class="field">Verification code *
             <input id="cf-code" class="input focus ${(e.code || e.mismatch) ? 'err' : ''}" value="${esc(cl.code)}" placeholder="e.g. TIL-AB12" autocomplete="off" ${locked ? 'disabled' : 'autofocus'}>
           </label>
           ${banner}
-          <button type="submit" class="btn btn-primary block focus" style="margin-top:4px" ${locked ? 'disabled' : ''}>Verify &#8594;</button>
+          <button type="submit" class="btn btn-primary block focus mt-1" ${locked ? 'disabled' : ''}>Verify &#8594;</button>
         </form>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12.5px;color:var(--ink-300);text-align:center;margin:16px 0 0">Don&#39;t have a code? Ask your child&#39;s teacher or school office.</p>
+        <p class="dlg-hint text-center" style="margin-top:16px">Don&#39;t have a code? Ask your child&#39;s teacher or school office.</p>
       </div>
     </div>`;
   }
@@ -692,22 +693,22 @@
     const full = (m.name || `${m.first || ''} ${m.last || ''}`).trim();
     const gradeSection = [m.grade, m.section && 'Section ' + m.section].filter(Boolean).join(', ');
     return `<div class="sheet">
-      <div style="width:100%;max-width:520px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:clamp(20px,3.4vh,30px)">
+      <div class="sheet-wrap">
+        <div class="sheet-head">
           ${brandMark}
-          <button class="btn-ghost focus" data-act="child-back" style="margin-left:auto">&#8592; Back</button>
+          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; Back</button>
         </div>
-        <h1 style="font-weight:700;letter-spacing:-.01em;font-size:clamp(24px,3vw,34px);margin:0 0 8px">We found your child</h1>
-        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:15px;color:var(--ink-600);margin:0 0 24px">Please confirm this is the right student.</p>
-        <div style="background:#fff;border:2px solid #56C02B;border-radius:24px;padding:clamp(22px,3vw,28px);text-align:center">
-          <span style="display:inline-flex;width:56px;height:56px;border-radius:50%;background:#56C02B;align-items:center;justify-content:center;margin:0 0 14px"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true" style="width:55%;height:auto"></span>
+        <h1 class="sheet-title">We found your child</h1>
+        <p class="sheet-sub">Please confirm this is the right student.</p>
+        <div class="ui-card outline roomy confirm-card">
+          <span class="ic-circle" style="margin:0 0 14px"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true"></span>
           <p class="pill-info" style="display:inline-block;margin:0 0 14px">Admission code &middot; ${esc(m.student_id || m.adm)}</p>
-          <p style="font-weight:700;font-size:clamp(20px,2.6vw,26px);color:var(--ink-900);margin:0 0 4px">${esc(full)}</p>
-          <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-600);margin:0">${esc(gradeSection)}</p>
-          <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--green-700);margin:16px 0 0;line-height:1.5">Understand <b>${esc(full)}</b> with Tilli Measures.</p>
+          <p style="font-weight:700;font-size:var(--fs-xl);color:var(--ink-900);margin:0 0 4px">${esc(full)}</p>
+          <p class="dlg-sub" style="margin:0">${esc(gradeSection)}</p>
+          <p class="dlg-hint" style="color:var(--green-700);margin-top:16px;line-height:1.5">Understand <b>${esc(full)}</b> with Tilli Measures.</p>
         </div>
         <button class="btn btn-primary block focus" data-act="confirm-child" style="margin-top:18px">Yes, that's my child &#8594;</button>
-        <button class="focus" data-act="not-child" style="display:block;width:100%;background:none;border:none;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:700;font-size:13.5px;color:var(--ink-450);text-decoration:underline;margin-top:14px">Not your child? Click here</button>
+        <button class="btn-link muted link-center focus" data-act="not-child">Not your child? Click here</button>
       </div>
     </div>`;
   }

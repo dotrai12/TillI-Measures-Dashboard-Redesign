@@ -36,10 +36,16 @@
   //  leadership surface carries no garden metaphor (spec §1, §9).
   //  Thresholds map a 0–100 skill score onto a band.
   // ---------------------------------------------------------------
+  //  Colours come from the unified skill-level scale (tilli.css --lvl-*):
+  //  Emerging = level 1, Developing = level 2, Secure = level 3. `color`/`wash`
+  //  are var() strings for style=""; `token` is the custom-property name so SVG
+  //  attributes (which can't read var()) can resolve it via TilliPalette.css().
+  var PAL = window.TilliPalette;
+  function bandColours(n) { var l = PAL.level(n); return { lvl: n, token: '--lvl-' + n, color: l.strong, wash: l.wash, ink: l.ink }; }
   var BANDS = [
-    { key: 'emerging',   label: 'Emerging',   color: '#F0A84A', wash: '#FFF1DC' },
-    { key: 'developing', label: 'Developing', color: '#26BDE2', wash: '#DFF6FE' },
-    { key: 'secure',     label: 'Secure',     color: '#56C02B', wash: '#E9F8E1' },
+    Object.assign({ key: 'emerging',   label: 'Emerging' },   bandColours(1)),
+    Object.assign({ key: 'developing', label: 'Developing' }, bandColours(2)),
+    Object.assign({ key: 'secure',     label: 'Secure' },     bandColours(3)),
   ];
   var BAND_EMERGING_MAX = 40;   // score < 40  → Emerging
   var BAND_DEVELOPING_MAX = 70; // 40–69       → Developing; ≥70 → Secure

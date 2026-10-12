@@ -75,7 +75,10 @@
     { name: 'Canada', flag: '🇨🇦', cities: ['Toronto', 'Vancouver', 'Montreal', 'Calgary', 'Ottawa'] },
     { name: 'Kenya', flag: '🇰🇪', cities: ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru'] },
   ];
-  const PETAL_COLORS = ['#FCC30B', '#26BDE2', '#F99B1C', '#E866B0', '#56C02B'];
+  // Five brand ring/petal colours — the one copy lives in TilliPalette (tilli-api.js).
+  const PETAL_COLORS = (window.TilliPalette && window.TilliPalette.RING_PETALS) || [];
+  // Padlock on read-only fields; colour comes from .onb-locked svg (currentColor).
+  const LOCK_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="currentColor"></rect><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="currentColor" stroke-width="2"></path></svg>';
 
   // ---------- URL context (passed from the landing signup flow) ----------
   const params = new URLSearchParams(location.search);
@@ -335,7 +338,7 @@
       }
     } catch (err) {
       console.error('dashboard load failed', err);
-      dashRoot.innerHTML = '<div style="padding:48px;text-align:center;font-family:Montserrat,sans-serif;color:#545454">Could not load your dashboard. Please refresh.</div>';
+      dashRoot.innerHTML = '<div class="text-center text-body" style="padding:48px">Could not load your dashboard. Please refresh.</div>';
     }
   }
 
@@ -361,7 +364,7 @@
     // `filled` = solid coloured discs (used for the "done" celebration);
     // default = coloured outline on a white fill.
     const spans = cen.map((c, i) => {
-      const bg = filled ? PETAL_COLORS[i] : '#fff';
+      const bg = filled ? PETAL_COLORS[i] : 'var(--white)';
       return `<span style="top:${c[0] - s / 2}px;left:${c[1] - s / 2}px;width:${s}px;height:${s}px;background:${bg};border:${bw}px solid ${PETAL_COLORS[i]};animation-delay:${0.3 + i * 0.1}s"></span>`;
     }).join('');
     return `<div class="onb-petals" style="width:${wrap}px;height:${wrap}px">${spans}</div>`;
@@ -373,10 +376,10 @@
 
   // ---- intro (reflection quote) ----
   function introView() {
-    return `<div style="text-align:center;padding:10px 0">
-      <div style="font-style:italic;font-weight:700;font-size:14px;color:var(--ink-300);margin-bottom:14px">You can not pour from an empty cup</div>
-      <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,27px);line-height:1.35;margin:0 0 28px;color:var(--ink-900)">Before you know your class,<br>you must know yourself.</h1>
-      <button class="btn btn-primary focus" data-act="intro-next">Begin reflection &#8594;</button>
+    return `<div class="ui-empty onb-hero">
+      <div class="onb-kicker mb-3">You can not pour from an empty cup</div>
+      <h1 class="ui-empty-t">Before you know your class,<br>you must know yourself.</h1>
+      <div class="actions"><button class="btn btn-primary focus" data-act="intro-next">Begin reflection &#8594;</button></div>
     </div>`;
   }
 
@@ -396,12 +399,12 @@
     scope = scope || 'demo';
     const open = state.openSelect === id;
     const opts = options.map((o) =>
-      `<button type="button" class="onb-sel-opt focus${value === o ? ' on' : ''}" data-sel-scope="${scope}" data-sel-id="${esc(id)}" data-sel-val="${esc(o)}"><span>${esc(o)}</span>${value === o ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
+      `<button type="button" class="ui-menu-item onb-sel-opt focus${value === o ? ' on' : ''}" data-sel-scope="${scope}" data-sel-id="${esc(id)}" data-sel-val="${esc(o)}"><span>${esc(o)}</span>${value === o ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
     return `<div>
       <label class="onb-label">${esc(label)}</label>
       <div class="onb-sel${open ? ' open' : ''}">
-        <button type="button" class="onb-sel-trigger focus${value ? '' : ' is-placeholder'}" data-sel-toggle="${esc(id)}"><span class="onb-sel-val">${esc(value || placeholder)}</span></button>
-        ${open ? `<div class="onb-sel-menu">${opts}</div>` : ''}
+        <button type="button" class="input onb-sel-trigger focus${value ? '' : ' is-placeholder'}" data-sel-toggle="${esc(id)}"><span class="onb-sel-val">${esc(value || placeholder)}</span></button>
+        ${open ? `<div class="ui-menu onb-sel-menu">${opts}</div>` : ''}
       </div>
     </div>`;
   }
@@ -409,12 +412,12 @@
   function demoView() {
     const d = state.demo;
     return `
-      <span class="onb-eyebrow">Demographic questions</span>
+      <span class="ui-eyebrow pill mb-3">Demographic questions</span>
       <div class="onb-steprow">
         <h2 class="onb-title">${esc(demoTitle(d.step))}</h2>
         <span class="onb-step">Step ${d.step} of 4</span>
       </div>
-      <div class="onb-progress"><span style="width:${(d.step / 4) * 100}%"></span></div>
+      <div class="ui-meter mt-3 mb-3"><span style="width:${(d.step / 4) * 100}%"></span></div>
       <p class="onb-help">This one-time setup unlocks your dashboard. All fields are required.</p>
       ${d.step === 1 ? demoStep1() : d.step === 2 ? demoStep2() : d.step === 3 ? demoStep3() : demoStep4()}
       <div class="onb-actions">
@@ -427,8 +430,8 @@
     const d = state.demo;
     const emailRow = ctx.email
       ? `<div><label class="onb-label">Email</label>
-          <div class="onb-locked"><span style="overflow:hidden;text-overflow:ellipsis">${esc(ctx.email)}</span>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="#b0b7c3"></rect><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="#b0b7c3" stroke-width="2"></path></svg>
+          <div class="onb-locked"><span>${esc(ctx.email)}</span>
+            ${LOCK_SVG}
           </div></div>` : '';
     return `<div class="onb-fields">
       <div><label class="onb-label">Full Name *</label>
@@ -454,24 +457,24 @@
     const cityQuery = d.city.trim().toLowerCase();
     const cityMatches = country ? country.cities.filter((ct) => ct.toLowerCase().includes(cityQuery)) : [];
 
-    const countryMenu = d.countryOpen ? `<div class="onb-ac-menu">
-      ${cMatches.map((c) => `<button class="onb-ac-opt focus" data-country="${esc(c.name)}">${c.flag} ${esc(c.name)}</button>`).join('')}
+    const countryMenu = d.countryOpen ? `<div class="ui-menu onb-ac-menu">
+      ${cMatches.map((c) => `<button class="ui-menu-item focus" data-country="${esc(c.name)}">${c.flag} ${esc(c.name)}</button>`).join('')}
       ${cMatches.length === 0 ? '<div class="onb-ac-empty">No matches — keep typing to use your own</div>' : ''}
     </div>` : '';
-    const cityMenu = d.cityOpen ? `<div class="onb-ac-menu">
-      ${cityMatches.map((ct) => `<button class="onb-ac-opt focus" data-city="${esc(ct)}">${esc(ct)}</button>`).join('')}
+    const cityMenu = d.cityOpen ? `<div class="ui-menu onb-ac-menu">
+      ${cityMatches.map((ct) => `<button class="ui-menu-item focus" data-city="${esc(ct)}">${esc(ct)}</button>`).join('')}
       ${cityMatches.length === 0 ? `<div class="onb-ac-empty">${country ? 'No matches — keep typing to use your own' : 'Pick a country first'}</div>` : ''}
     </div>` : '';
 
     return `<div class="onb-fields">
       <div><label class="onb-label">School</label>
-        <div class="onb-locked"><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.school)}</span>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="#b0b7c3"></rect><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="#b0b7c3" stroke-width="2"></path></svg>
+        <div class="onb-locked"><span>${esc(d.school)}</span>
+          ${LOCK_SVG}
         </div></div>
       <div class="onb-grid2">
         <div class="onb-ac"><label class="onb-label">Country *</label>
           <input class="input focus" data-demo-ac="country" value="${esc(d.country)}" placeholder="Search country…" style="padding-right:38px" autocomplete="off">
-          <span class="onb-ac-flag" style="top:38px">${flag}</span>
+          <span class="onb-ac-flag">${flag}</span>
           ${countryMenu}
         </div>
         <div class="onb-ac"><label class="onb-label">City *</label>
@@ -485,7 +488,7 @@
   function demoStep3() {
     const d = state.demo;
     const gradePills = allowedGradeIdx().map((gi) =>
-      `<button class="onb-pill focus${d.gradesSel[gi] ? ' on' : ''}" data-grade="${gi}">${esc(DEMO_GRADES[gi])}</button>`).join('');
+      `<button class="ui-filterchip solid focus${d.gradesSel[gi] ? ' on' : ''}" data-grade="${gi}">${esc(DEMO_GRADES[gi])}</button>`).join('');
     const hasGrades = Object.keys(d.gradesSel).length > 0;
     const secCards = !hasGrades ? '' : allowedGradeIdx().map((gi) => {
       const name = DEMO_GRADES[gi];
@@ -496,19 +499,19 @@
         const on = !!d.secs[gi + '-' + sx];
         return `<button class="onb-check focus" data-sec="${gi}-${sx}"><span class="onb-box${on ? ' on' : ''}">${on ? '✓' : ''}</span>${sx}</button>`;
       }).join('');
-      return `<div class="onb-seccard">
-        <div class="onb-sechead"><span style="font-size:13.5px;font-weight:800;color:var(--ink-700)">${esc(name)}</span>
-          ${count ? `<span class="onb-badge">${count} selected</span>` : ''}</div>
+      return `<div class="ui-card sm subtle onb-seccard">
+        <div class="onb-sechead"><span style="font-size:var(--fs-sm);font-weight:800;color:var(--ink-700)">${esc(name)}</span>
+          ${count ? `<span class="ui-chip ok">${count} selected</span>` : ''}</div>
         <div class="onb-secgrid">${secs}</div>
       </div>`;
     }).join('');
-    return `<div class="onb-fields" style="gap:18px">
+    return `<div class="onb-fields loose">
       <div>
-        <label class="onb-label" style="margin-bottom:8px">Grades you teach *</label>
+        <label class="onb-label spaced">Grades you teach *</label>
         <div class="onb-pills">${gradePills}</div>
       </div>
       ${hasGrades ? `<div>
-        <label class="onb-label" style="margin-bottom:8px">Sections you teach in each grade *</label>
+        <label class="onb-label spaced">Sections you teach in each grade *</label>
         ${secCards}
       </div>` : ''}
     </div>`;
@@ -524,11 +527,11 @@
       const on = !!d.resources[label];
       return `<button class="onb-check focus" data-resource="${esc(label)}"><span class="onb-box${on ? ' on' : ''}">${on ? '✓' : ''}</span>${esc(label)}</button>`;
     }).join('');
-    return `<div class="onb-fields" style="gap:18px">
-      <div><label class="onb-label" style="margin-bottom:6px">Subjects you teach *</label>
+    return `<div class="onb-fields loose">
+      <div><label class="onb-label">Subjects you teach *</label>
         <div class="onb-checkgrid">${subjects}</div></div>
       ${selectField('Resource Sufficiency *', 'resSuff', d.resSuff, RES_SUFF, 'Select…')}
-      <div><label class="onb-label" style="margin-bottom:6px">Classroom Resources *</label>
+      <div><label class="onb-label">Classroom Resources *</label>
         <div class="onb-checkgrid">${resources}</div></div>
     </div>`;
   }
@@ -548,19 +551,19 @@
   function greetView() {
     const first = (state.demo.name || '').trim().split(/\s+/)[0] || 'there';
     if (state.reflectOnly) {
-      return `<div style="text-align:center;padding:16px 0">
+      return `<div class="ui-empty onb-hero">
         ${petals('sm')}
-        <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Time for your ${esc(state.reflectOnly.label.toLowerCase())} reflection, ${esc(first)}</h1>
-        <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">The same ${SELF.length} questions as before. Your Teaching Mirror will keep both, so you can see how you&rsquo;ve changed.</p>
-        <button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button>
-        <div style="margin-top:14px"><button class="roster-skip focus" data-act="reflect-cancel">Not now — back to my dashboard</button></div>
+        <h1 class="ui-empty-t">Time for your ${esc(state.reflectOnly.label.toLowerCase())} reflection, ${esc(first)}</h1>
+        <p class="ui-empty-b">The same ${SELF.length} questions as before. Your Teaching Mirror will keep both, so you can see how you&rsquo;ve changed.</p>
+        <div class="actions"><button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button></div>
+        <div class="mt-3"><button class="onb-quiet focus" data-act="reflect-cancel">Not now — back to my dashboard</button></div>
       </div>`;
     }
-    return `<div style="text-align:center;padding:16px 0">
+    return `<div class="ui-empty onb-hero">
       ${petals('sm')}
-      <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Hi ${esc(first)}, it&rsquo;s nice to meet you!</h1>
-      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">A short reflection helps Tilli understand you — about ${Math.max(1, Math.round(SELF.length * 0.3))} minutes, ${SELF.length} quick questions.</p>
-      <button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button>
+      <h1 class="ui-empty-t">Hi ${esc(first)}, it&rsquo;s nice to meet you!</h1>
+      <p class="ui-empty-b">A short reflection helps Tilli understand you — about ${Math.max(1, Math.round(SELF.length * 0.3))} minutes, ${SELF.length} quick questions.</p>
+      <div class="actions"><button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button></div>
     </div>`;
   }
 
@@ -576,19 +579,18 @@
       const done = SELF.every((sq, k) => sq.cat !== ci || selfAnswered(k));
       const cur = ci === q.cat;
       const col = PETAL_COLORS[ci % PETAL_COLORS.length];
-      const bg = done ? col : '#fff';
+      const bg = done ? col : 'var(--white)';
       const bd = done || cur ? col : 'var(--line-200)';
       const ang = (ci / CATS.length) * Math.PI * 2 - Math.PI / 2;
       const cx = 28 + Math.cos(ang) * R - D / 2, cy = 28 + Math.sin(ang) * R - D / 2;
-      return `<span style="position:absolute;box-sizing:border-box;left:${cx}px;top:${cy}px;width:${D}px;height:${D}px;border-radius:50%;background:${bg};border:2px solid ${bd};transition:all .2s"></span>`;
+      return `<span style="left:${cx}px;top:${cy}px;width:${D}px;height:${D}px;background:${bg};border-color:${bd}"></span>`;
     }).join('');
     // category chips (highlight the current one)
     const cats = CATS.map((c, ci) => {
       const on = ci === q.cat;
-      const style = on
-        ? `background:${c.color};color:#3a3a3a`
-        : 'background:var(--surface-100);color:var(--ink-300)';
-      return `<span class="onb-cat" style="${style}">${esc(c.name)}</span>`;
+      // c.color is admin-editable reflection data (tilli-api) — stays dynamic.
+      const style = on ? `background:${c.color};color:var(--ink-700)` : 'color:var(--ink-300)';
+      return `<span class="ui-chip" style="${style}">${esc(c.name)}</span>`;
     }).join('');
 
     let body = '';
@@ -613,7 +615,7 @@
       <h2 class="onb-question">${esc(q.q)}</h2>
       ${q.hint ? `<p class="onb-qhint">${esc(q.hint)}</p>` : ''}
       ${body}
-      <div style="display:flex;justify-content:flex-end;margin-top:20px">
+      <div class="row end mt-5">
         <button class="btn btn-primary focus" data-act="self-next"${selfAnswered(i) ? '' : ' disabled'} style="padding:13px 30px">${i >= SELF.length - 1 ? 'Finish reflection' : 'Next'} &#8594;</button>
       </div>`;
   }
@@ -624,11 +626,11 @@
 
   // ---- profile done ----
   function doneView() {
-    return `<div style="text-align:center;padding:12px 0">
+    return `<div class="ui-empty onb-hero">
       ${petals('lg', true)}
-      <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 8px;color:var(--ink-900)">Amazing! Your profile is created</h1>
-      <p style="color:var(--ink-450);font-size:15px;margin:0 0 26px">Now let&rsquo;s meet your class.</p>
-      <button class="btn btn-primary focus" data-act="to-roster">Add my students &#8594;</button>
+      <h1 class="ui-empty-t">Amazing! Your profile is created</h1>
+      <p class="ui-empty-b">Now let&rsquo;s meet your class.</p>
+      <div class="actions"><button class="btn btn-primary focus" data-act="to-roster">Add my students &#8594;</button></div>
     </div>`;
   }
 
@@ -662,10 +664,10 @@
     const all = opts.slice();
     if (current && all.indexOf(current) < 0) all.unshift(current);   // keep an off-list value visible
     const menu = all.map((o) =>
-      `<button type="button" class="onb-sel-opt focus${o === current ? ' on' : ''}" data-gs-opt="${gi}" data-gs-val="${esc(o)}"><span>${esc(o)}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
+      `<button type="button" class="ui-menu-item onb-sel-opt focus${o === current ? ' on' : ''}" data-gs-opt="${gi}" data-gs-val="${esc(o)}"><span>${esc(o)}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
     return `<div class="onb-sel${open ? ' open' : ''}">
-      <button type="button" class="onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-gs-toggle="${gi}" aria-label="Grade and section for this group"><span class="onb-sel-val">${esc(current || 'Choose grade · section')}</span></button>
-      ${open ? `<div class="onb-sel-menu">${menu}</div>` : ''}
+      <button type="button" class="input onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-gs-toggle="${gi}" aria-label="Grade and section for this group"><span class="onb-sel-val">${esc(current || 'Choose grade · section')}</span></button>
+      ${open ? `<div class="ui-menu onb-sel-menu">${menu}</div>` : ''}
     </div>`;
   }
 
@@ -676,8 +678,8 @@
   function rosterView() {
     const r = state.roster;
     const head = (sub) => `
-      <div style="text-align:center;margin-bottom:${sub ? 18 : 20}px">
-        <div style="font-style:italic;font-weight:700;font-size:13px;color:var(--ink-300);margin-bottom:6px">Let&rsquo;s create your garden</div>
+      <div class="text-center" style="margin-bottom:${sub ? 18 : 20}px">
+        <div class="onb-kicker mb-2">Let&rsquo;s create your garden</div>
         <h2 class="onb-title">Add your students</h2>
         ${sub ? `<p class="onb-help" style="margin-top:6px">${sub}</p>` : ''}
       </div>`;
@@ -697,13 +699,13 @@
     if (r.method === 'csv') {
       return head('') + `
         <label class="onb-drop">
-          <input type="file" accept=".csv" data-roster-csv style="display:none">
-          <div style="font-size:24px;margin-bottom:6px">📄</div>
-          <div style="font-weight:800;font-size:14px;color:var(--ink-700)">Upload a CSV</div>
-          <div style="font-size:12.5px;color:var(--ink-300);margin-top:4px">Columns: first name, last name, grade, section</div>
+          <input type="file" accept=".csv" data-roster-csv class="hidden">
+          <div class="onb-drop-ic">📄</div>
+          <div class="onb-drop-t">Upload a CSV</div>
+          <div class="onb-drop-s">Columns: first name, last name, grade, section</div>
         </label>
-        ${r.csvMsg ? `<div class="onb-note" style="margin-top:12px">${esc(r.csvMsg)}</div>` : ''}
-        <div class="onb-actions" style="margin-top:18px">
+        ${r.csvMsg ? `<div class="ui-note ok mt-3">${esc(r.csvMsg)}</div>` : ''}
+        <div class="onb-actions tight">
           <button class="btn btn-primary grow focus" data-act="roster-finish"${r.csvMsg ? '' : ' disabled'}>Enter my garden &#8594;</button>
         </div>`;
     }
@@ -712,20 +714,20 @@
     if (r.method === 'pic') {
       return head('') + `
         <div class="onb-grid2">
-          <label class="onb-drop" style="padding:22px 12px">
-            <input type="file" accept="image/*" data-roster-pic style="display:none">
-            <div style="font-size:22px;margin-bottom:6px">🖼️</div>
-            <div style="font-weight:800;font-size:13.5px;color:var(--ink-700)">Upload a picture</div>
+          <label class="onb-drop compact">
+            <input type="file" accept="image/*" data-roster-pic class="hidden">
+            <div class="onb-drop-ic">🖼️</div>
+            <div class="onb-drop-t">Upload a picture</div>
           </label>
-          <label class="onb-drop" style="padding:22px 12px">
-            <input type="file" accept="image/*" capture="environment" data-roster-pic style="display:none">
-            <div style="font-size:22px;margin-bottom:6px">📷</div>
-            <div style="font-weight:800;font-size:13.5px;color:var(--ink-700)">Take a picture</div>
+          <label class="onb-drop compact">
+            <input type="file" accept="image/*" capture="environment" data-roster-pic class="hidden">
+            <div class="onb-drop-ic">📷</div>
+            <div class="onb-drop-t">Take a picture</div>
           </label>
         </div>
-        <div style="font-size:12.5px;color:var(--ink-300);margin-top:10px;text-align:center">Snap your class register — we&rsquo;ll read the names for you.</div>
-        ${r.picMsg ? `<div class="onb-note" style="margin-top:12px">${esc(r.picMsg)}</div>` : ''}
-        <div class="onb-actions" style="margin-top:18px">
+        <div class="text-muted text-center" style="font-size:var(--fs-sm);margin-top:10px">Snap your class register — we&rsquo;ll read the names for you.</div>
+        ${r.picMsg ? `<div class="ui-note ok mt-3">${esc(r.picMsg)}</div>` : ''}
+        <div class="onb-actions tight">
           <button class="btn btn-primary grow focus" data-act="roster-finish"${r.picMsg ? '' : ' disabled'}>Enter my garden &#8594;</button>
         </div>`;
     }
@@ -747,31 +749,31 @@
         const iss = issues[gi + '-' + i];
         const note = iss ? `<div class="roster-issue">${esc(iss.text)}${iss.kind === 'name_dup'
           ? ` <button class="roster-issue-btn focus" data-rowforce="${gi}-${i}">Different child — add anyway</button>` : ''}</div>` : '';
-        return `<div class="roster-row${iss ? ' has-issue' : ''}">
+        return `<div class="roster-sheet-row${iss ? ' has-issue' : ''}">
           <input class="input focus" data-rowk="first" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
           <input class="input focus" data-rowk="last" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
           <input class="input focus" data-rowk="adm" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.adm)}" placeholder="Admission #" aria-label="Admission number, student ${i + 1}">
-          <button class="roster-del focus" data-rowdel="${gi}-${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
+          <button class="btn-icon bare roster-del focus" data-rowdel="${gi}-${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
         </div>${note}`;
       }).join('');
       return `<section class="roster-group">
         <div class="roster-group-head">
           <div class="roster-group-gs">${gsSelect(gi, g.gs, gopts)}</div>
           <span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span>
-          ${r.groups.length > 1 ? `<button class="roster-group-del focus" data-groupdel="${gi}" title="Remove this section and its students">Remove</button>` : ''}
+          ${r.groups.length > 1 ? `<button class="onb-quiet del focus" data-groupdel="${gi}" title="Remove this section and its students">Remove</button>` : ''}
         </div>
         <div class="roster-sheet">${header}${rowsHTML}</div>
-        <button class="roster-addrow focus" data-rowadd="${gi}">+ Add student</button>
+        <button class="btn-dashed mt-2 focus" data-rowadd="${gi}">+ Add student</button>
       </section>`;
     }).join('');
     const canAddGroup = !opts.length || r.groups.length < opts.length;
 
     return head(prefilled ? 'We&rsquo;ve pre-filled the students on file — check, edit, or add more below.' : 'Pick the grade &amp; section once, then add its students. Add another section if you teach more than one.') + `
-      ${opts.length ? '' : '<div class="onb-note" style="margin-bottom:12px">Tip: pick the grades &amp; sections you teach in the previous step and they&rsquo;ll appear in the grade · section picker.</div>'}
-      ${Object.keys(issues).length ? '<div class="onb-note" style="margin-bottom:12px;background:#FFF4E5;border:1px solid #F6D9A8">A few students need a quick check before we can plant them — see the highlighted rows.</div>' : ''}
+      ${opts.length ? '' : '<div class="ui-note ok mt-3 mb-3">Tip: pick the grades &amp; sections you teach in the previous step and they&rsquo;ll appear in the grade · section picker.</div>'}
+      ${Object.keys(issues).length ? '<div class="ui-note warn mt-3 mb-3">A few students need a quick check before we can plant them — see the highlighted rows.</div>' : ''}
       ${groupsHTML}
-      ${canAddGroup ? '<button class="btn btn-ghost block focus" data-groupadd style="margin-top:4px">+ Add another section</button>' : ''}
-      <div style="text-align:center;margin-top:16px">
+      ${canAddGroup ? '<button class="btn btn-ghost block mt-1 focus" data-groupadd>+ Add another section</button>' : ''}
+      <div class="text-center mt-4">
         <button class="btn btn-primary focus" data-act="roster-finish"${sheetValid() ? '' : ' disabled'}>Enter my garden &#8594;</button>
       </div>`;
   }
@@ -823,14 +825,10 @@
   // handleAct). Colours: green = added, blue = updated, amber = needs a decision.
   function rosterNoteHTML(n) {
     if (!n) return '';
-    const pal = {
-      created: ['#EAF7E3', '#BEE6AC'], merged: ['#EAF4FF', '#C9DEF6'],
-      name_dup: ['#EAF4FF', '#C9DEF6'], id_conflict: ['#FFF4E5', '#F6D9A8'],
-      info: ['#EEF1F4', '#D8DEE6'],
-    };
-    const [bg, bd] = pal[n.kind] || pal.info;
-    const wrap = (inner) => `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">${inner}</div>`;
-    const choiceBtn = (act, label) => `<button class="focus" data-act="${act}" style="flex:1;min-width:150px;cursor:pointer;background:#fff;border:1.5px solid var(--line-200);border-radius:10px;padding:11px 12px;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--ink-700)">${label}</button>`;
+    const tone = { created: 'ok', merged: 'info', name_dup: 'info', id_conflict: 'warn', info: '' };
+    const mod = tone[n.kind] != null ? tone[n.kind] : '';
+    const wrap = (inner) => `<div class="onb-note-acts">${inner}</div>`;
+    const choiceBtn = (act, label) => `<button class="btn-line focus" data-act="${act}">${label}</button>`;
     let actions = '';
     if (n.kind === 'name_dup') {
       actions = wrap(
@@ -846,7 +844,7 @@
         choiceBtn('roster-conflict-replace', `Use <b>${incNm}</b>`)
       );
     }
-    return `<div class="onb-note" style="margin-top:12px;background:${bg};border:1px solid ${bd};color:var(--ink-700)">${esc(n.text)}${actions}</div>`;
+    return `<div class="ui-note ${mod} mt-3${actions ? ' onb-note-col' : ''}"><div>${esc(n.text)}</div>${actions}</div>`;
   }
 
   // A student can only be added once every field is filled: first name,
