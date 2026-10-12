@@ -840,3 +840,86 @@ table.ui-table { width: 100%; border-collapse: collapse; }
 .ml-auto { margin-left: auto; }
 .flex-none { flex: none; }
 a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none; }
+
+/* ============================================================
+   Floating bubbles (assets/float-help.js) — Ask Tilli + Need help?
+   Pages with a mobile bottom nav raise the stack via --tf-bottom.
+   ============================================================ */
+:root {
+  --tf-bubble-bg: var(--yellow-500);     /* bubble fill (brand yellow) */
+  --tf-bubble-bg-hover: color-mix(in srgb, var(--yellow-500) 88%, var(--ink-900)); /* bubble fill on hover / pressed */
+  --tf-icon: var(--white);               /* bubble icon colour */
+  --tf-icon-halo: rgba(110, 72, 0, .75); /* dark amber edge around the white icon — what makes white readable on yellow */
+  --tf-icon-stroke: 2.75;                /* bubble icon line weight (SVG stroke width; was 2) */
+  --tf-accent: var(--warn-700);          /* help-card icons + hover border (yellow is unreadable on white) */
+  --tf-ask-size: 60px;             /* Ask Tilli bubble diameter */
+  --tf-help-size: 48px;            /* Need help? bubble diameter */
+  --tf-gap: 12px;                  /* vertical space between the bubbles */
+  --tf-bottom: 22px;               /* distance from viewport bottom */
+  --tf-right: 22px;                /* distance from viewport right */
+}
+.tf-stack {
+  position: fixed; right: var(--tf-right); bottom: calc(var(--tf-bottom) + env(safe-area-inset-bottom));
+  z-index: 55; display: flex; flex-direction: column; align-items: flex-end; gap: var(--tf-gap);
+  font-family: var(--font-body);
+}
+.tf-row { display: flex; align-items: center; gap: 10px; }
+.tf-row[hidden] { display: none; }
+.tf-bubble {
+  flex: none; display: grid; place-items: center; border: none; cursor: pointer;
+  background: var(--tf-bubble-bg); color: var(--tf-icon); border: none; border-radius: 50%;
+  box-shadow: var(--shadow-pop); transition: background .15s, transform .15s;
+}
+.tf-bubble:hover { background: var(--tf-bubble-bg-hover); transform: translateY(-1px); }
+.tf-bubble:active { transform: scale(.95); }
+.tf-bubble:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* Speech-bubble silhouette: bottom-right corner tucks in like a tail. */
+.tf-ask { width: var(--tf-ask-size); height: var(--tf-ask-size); border-radius: 50% 50% 22% 50%; }
+.tf-bubble svg {
+  stroke-width: var(--tf-icon-stroke);
+  /* Stacked tight shadows trace a thin dark outline round the white strokes. */
+  filter: drop-shadow(0 0 .6px var(--tf-icon-halo)) drop-shadow(0 0 .6px var(--tf-icon-halo)) drop-shadow(0 1px 1px var(--tf-icon-halo));
+}
+.tf-ask svg { width: 24px; height: 24px; }
+.tf-help { width: var(--tf-help-size); height: var(--tf-help-size); box-shadow: var(--shadow-pop), 0 0 0 4px color-mix(in srgb, var(--tf-bubble-bg) 35%, transparent); }
+.tf-help svg { width: 22px; height: 22px; }
+.tf-stack.pop-open .tf-help { background: var(--tf-bubble-bg-hover); }
+
+/* Label pill beside a bubble — revealed on hover / keyboard focus. */
+.tf-label {
+  background: var(--white); color: var(--ink-900); border: 1px solid var(--line-200);
+  border-radius: var(--radius-pill); padding: 8px 14px; font-weight: 700; font-size: var(--fs-sm);
+  white-space: nowrap; box-shadow: var(--shadow-pop); pointer-events: none;
+  opacity: 0; transform: translateX(6px); transition: opacity .15s, transform .15s;
+}
+.tf-row:hover .tf-label, .tf-row:focus-within .tf-label { opacity: 1; transform: none; }
+.tf-stack.pop-open .tf-label { opacity: 0; }
+
+/* Help card — opens above the stack. */
+.tf-pop {
+  position: absolute; right: 0; bottom: calc(100% + 10px); width: min(320px, calc(100vw - 28px));
+  background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal); padding: 14px; display: flex; flex-direction: column; gap: 6px;
+}
+.tf-pop[hidden] { display: none; }
+.tf-pop-h { display: flex; align-items: center; justify-content: space-between; }
+.tf-pop-h b { font-family: var(--font-heading); font-size: var(--fs-md); color: var(--ink-900); }
+.tf-pop-x { border: none; background: none; cursor: pointer; font-size: var(--fs-xl); line-height: 1; color: var(--ink-450); padding: 2px 6px; border-radius: var(--radius-xs); }
+.tf-pop-x:hover { background: var(--surface-100); }
+.tf-pop-sub { margin: 0 0 6px; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-450); font-weight: 600; }
+.tf-pop-item {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; text-decoration: none;
+  background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-md);
+  padding: 10px 12px; cursor: pointer; font: inherit; color: var(--ink-900);
+}
+.tf-pop-item:hover { border-color: var(--tf-accent); background: var(--white); }
+.tf-pop-item svg { width: 20px; height: 20px; flex: none; color: var(--tf-accent); }
+.tf-pop-item b { display: block; font-size: var(--fs-sm); font-weight: 800; }
+.tf-pop-item small { display: block; font-size: var(--fs-xs); color: var(--ink-450); font-weight: 600; }
+
+@media (max-width: 640px) {
+  :root { --tf-ask-size: 54px; --tf-help-size: 44px; --tf-gap: 10px; --tf-right: 14px; --tf-bottom: 16px; }
+}
+@media (hover: none) { .tf-label { display: none; } }
+@media (prefers-reduced-motion: reduce) { .tf-bubble, .tf-label { transition: none; } .tf-bubble:hover, .tf-bubble:active { transform: none; } }
+@media print { .tf-stack { display: none !important; } }

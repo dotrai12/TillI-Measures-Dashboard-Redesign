@@ -1544,19 +1544,14 @@
     askWireFoot('ask-screen');
   };
 
+  // Floating Ask Tilli bubble (shared stack, assets/float-help.js) — hidden while
+  // the panel is open or the user is already on the Ask Tilli screen.
   function buildFab() {
-    if (document.getElementById('ask-fab-btn')) return;
-    var b = document.createElement('button'); b.className = 'ask-fab'; b.id = 'ask-fab-btn';
-    b.innerHTML = ICONS.asktilli + '<span>Ask Tilli</span>';
-    b.addEventListener('click', askOpenPanel);
-    document.body.appendChild(b);
+    if (window.TilliFloat) TilliFloat.mount({ role: 'School admin', ask: askOpenPanel });
     syncFab();
   }
-  // Hide the floating button while the panel is open or the user is already
-  // on the Ask Tilli screen — otherwise it's redundant.
   function syncFab() {
-    var b = document.getElementById('ask-fab-btn'); if (!b) return;
-    b.style.display = (askState.open || currentRoute().screen === 'asktilli') ? 'none' : '';
+    if (window.TilliFloat) TilliFloat.hideAsk(askState.open || currentRoute().screen === 'asktilli');
   }
 
   // ========================================================

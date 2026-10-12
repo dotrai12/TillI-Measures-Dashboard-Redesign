@@ -200,6 +200,7 @@
     var sform = document.getElementById('tl-search'); var sin = document.getElementById('tl-search-in');
     if (sform) sform.addEventListener('submit', function (ev) { ev.preventDefault(); go('search', { q: (sin.value || '').trim() }); });
     if (sin && r.screen === 'search') sin.value = r.params.q || '';
+    if (window.TilliFloat) TilliFloat.hideAsk(r.screen === 'ask-tilli');
   }
 
   function openAcctMenu(anchor) {
@@ -2844,6 +2845,9 @@
   function copy(text, msg) { var ok = msg || 'Link copied.'; try { navigator.clipboard.writeText(text).then(function () { toast(ok); }, function () { toast('Copy failed.'); }); } catch (e) { toast('Copy not supported.'); } }
 
   // ---------- boot ----------
+  // Floating Ask Tilli + Need help bubbles (assets/float-help.js). Ask Tilli
+  // routes to its nav destination — there's no platform-level chat yet.
+  if (window.TilliFloat) TilliFloat.mount({ role: 'Platform admin', ask: function () { go('ask-tilli', {}); } });
   window.addEventListener('hashchange', render);
   if (!location.hash) location.replace('#/controlroom');
   render();

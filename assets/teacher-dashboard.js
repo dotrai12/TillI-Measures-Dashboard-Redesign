@@ -315,11 +315,17 @@
       vw: window.innerWidth,
       select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
       profileEdit: false, profileDraft: null,
-      ask: { open: false, context: '', prompt: '', thread: [] },
+      // Ask Tilli: one live conversation shared by the side panel (floating
+      // bubble / in-card prompts) and the full screen (nav). `chats` = history.
+      ask: { open: false, context: '', prompt: '', thread: [], thinking: false, chatId: null, scope: 'all', histOpen: false },
+      chats: [], askReturn: 'garden',
       gardener: (ctx.teacher && ctx.teacher.demo && ctx.teacher.demo.gender === 'Male') ? 'm' : 'f',
     };
     rebuildData();
+    S.chats = loadChats() || seedChats();
     injectCSS();
+    // Floating Ask Tilli bubble joins the Need-help bubble teacher.html mounted.
+    if (window.TilliFloat) TilliFloat.mount({ ask: () => openAsk('', '') });
     let rt;
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { S.vw = window.innerWidth; render(); }, 120); });
     bindBackButton();
@@ -430,7 +436,7 @@
 
     // Section picker persists across all five destinations (spec). Only the
     // profile panel — which isn't one of the five — hides it.
-    const showChips = S.nav !== 'profile';
+    const showChips = S.nav !== 'profile' && S.nav !== 'ask';
     // "All" appears only when there's more than one grade to combine.
     const allChip = S.data.sections.length > 1
       ? `<button class="ui-filterchip solid${S.sectionId === 'all' ? ' on' : ''}" data-section="all">All</button>` : '';
@@ -442,9 +448,9 @@
     root.innerHTML = `
       <div class="dash">
         ${sidebar}
-        <div class="dash-col">
-          <header class="dash-header">${chips}</header>
-          <main class="dash-main">${mainView()}</main>
+        <div class="dash-col${S.nav === 'ask' ? ' ask-mode' : ''}">
+          <header class="dash-header">${S.nav === 'ask' ? askCrumbs() : chips}</header>
+          <main class="dash-main${S.nav === 'ask' ? ' ask-mode' : ''}">${mainView()}</main>
         </div>
         ${bottomNav}
         ${S.ask.open ? askPanel() : ''}
@@ -452,6 +458,13 @@
         ${addModal()}
         ${stateSwitcherGUI()}
       </div>`;
+    // Phone: the bottom nav's raised centre button already is Ask Tilli.
+    if (window.TilliFloat) {
+      TilliFloat.hideAsk(S.ask.open || isPhone || S.nav === 'ask');
+      // #dash-root is position:fixed (its own stacking context), so the stack must
+      // live inside it to sit *under* the Ask panel / modals rather than over them.
+      TilliFloat.attach(root);
+    }
     wire();
   }
 
@@ -472,6 +485,7 @@
 
   function mainView() {
     if (S.nav === 'profile') return profilePanel();
+    if (S.nav === 'ask') return askScreenView();
     if (!hasStudents()) return emptyClassView();
     if (S.nav === 'garden') return S.gardenLevel === 'beds' ? bedsView() : S.gardenLevel === 'section' ? sectionGardenView() : landingView();
     if (S.nav === 'students') return S.studentId ? studentDetailView() : rosterView();
@@ -2698,7 +2712,7 @@
   // ---------------- Ask Tilli ----------------
   function askPanel() {
     const a = S.ask;
-    const thread = a.thread.map((m) => `<div class="ask-msg ${m.role}">${esc(m.text)}</div>`).join('');
+    const thread = a.thread.map((m) => `<div class="ask-msg ${m.role}">${fmtMsg(m.text)}</div>`).join('');
     // While "thinking", a shimmering three-dot bubble stands in for Tilli's reply
     // so the assistant reads as considering the question, not answering instantly.
     const typing = a.thinking ? `<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>` : '';
@@ -2708,6 +2722,7 @@
         <div class="ask-head">
           <span class="ask-ic">${chatIcon('var(--green-700)')}</span>
           <div class="ask-hmeta"><div class="t">Ask Tilli</div><div class="s">Your teaching assistant</div></div>
+          <button class="btn-icon" data-ask-expand title="Open full screen" aria-label="Open Ask Tilli full screen">${LU.max}</button>
           <button class="btn-icon" data-close-ask>×</button>
         </div>
         <div class="ask-body">
@@ -2720,7 +2735,217 @@
         </div>
       </div>`;
   }
-  function openAsk(context, prompt) { S.ask = { open: true, context: context || '', prompt: prompt || '', thread: [] }; render(); }
+  // Side panel (floating bubble + every in-card "Ask Tilli…" button): always a fresh chat.
+  function openAsk(context, prompt) {
+    newChat();
+    Object.assign(S.ask, { open: true, context: context || '', prompt: prompt || '', scope: S.sectionId || 'all' });
+    render();
+  }
+  // ---------------- Ask Tilli: shared chat engine ----------------
+  // The live conversation (S.ask.thread) is mirrored into a saved history
+  // (S.chats, localStorage) that the full screen lists, reopens and deletes.
+  // Replies are demo answers computed from the class data in scope.
+  const CHATS_KEY = 'tilliMeasures.askChats';
+  const ASK_TRY = [
+    'Which students need help with empathy?',
+    "What's the biggest skill gap in my class?",
+    'Show me students struggling with self-regulation',
+    'Give me a 10-minute activity for this week',
+  ];
+  const lu = (d, size) => `<svg width="${size || 20}" height="${size || 20}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const LU = {
+    spark: lu('<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/>', 22),
+    sparkLg: lu('<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/>', 40),
+    min: lu('<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>', 18),
+    max: lu('<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>', 16),
+    share: lu('<path d="M12 3v12M17 8l-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>', 18),
+    msg: lu('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', 17),
+    trash: lu('<path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/>', 17),
+    pin: lu('<path d="M20 10c0 5-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>', 14),
+    send: lu('<path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/>', 20),
+    plus: lu('<path d="M5 12h14M12 5v14"/>', 18),
+    panel: lu('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>', 18),
+  };
+
+  function loadChats() { try { const v = JSON.parse(localStorage.getItem(CHATS_KEY) || 'null'); return Array.isArray(v) ? v : null; } catch (e) { return null; } }
+  function saveChats() { try { localStorage.setItem(CHATS_KEY, JSON.stringify(S.chats)); } catch (e) { /* private mode — history just won't persist */ } }
+  // Demo history so the list isn't empty on first visit (only saved once something changes).
+  function seedChats() {
+    const day = 864e5, now = Date.now();
+    return [[ASK_TRY[1], 1], [ASK_TRY[0], 3], [ASK_TRY[2], 12], [ASK_TRY[3], 20]].map(([q, ago], i) => ({
+      id: 'seed' + i, title: q, at: new Date(now - ago * day).toISOString(), scope: 'all',
+      thread: [{ role: 'user', text: q }, { role: 'tilli', text: askReply(q, 'all') }],
+    }));
+  }
+
+  function scopeSection(scope) { return S.data.sections.find((x) => x.id === scope); }
+  function scopeName(scope) { const sec = scopeSection(scope); return sec ? sec.name : 'All my classes'; }
+  function scopeStudents(scope) {
+    const sec = scopeSection(scope);
+    return (sec ? sec.students : S.data.sections.flatMap((x) => x.students)).filter((st) => st.state !== 'waiting');
+  }
+
+  // Message text: **bold** + line breaks, everything else escaped.
+  function fmtMsg(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>'); }
+
+  const SKILL_WORDS = [['empathy', 'empathy'], ['self-regulation', 'emotion_regulation'], ['regulat', 'emotion_regulation'], ['calm', 'emotion_regulation'],
+    ['emotion awareness', 'emotion_awareness'], ['feeling', 'emotion_awareness'], ['friend', 'relationship_skills'], ['relationship', 'relationship_skills'],
+    ['teamwork', 'relationship_skills'], ['metacogn', 'metacognition'], ['critical', 'critical_thinking'], ['memory', 'working_memory'], ['planning', 'planning'],
+    ['organi', 'planning'], ['flexib', 'cognitive_flexibility'], ['distract', 'inhibition_distraction'], ['impuls', 'inhibition_response'], ['attention', 'attention']];
+  function askReply(q, scope) {
+    const t = q.toLowerCase(), where = scopeName(scope), kids = scopeStudents(scope);
+    if (/activity|idea|game|lesson|routine/.test(t) && !SKILL_WORDS.some(([w]) => t.includes(w))) {
+      return "Here's a warm, practical idea you can try today — open with a **3-minute feelings check-in**, then a **paired activity** where partners take turns naming one thing that was tricky this week, and close with one sentence of specific praise.\n\nWant me to tailor it to a skill or a group of students?";
+    }
+    if (!kids.length) return `I don't have assessment results for ${where} yet. Once the Baseline is complete I can point to specific students and skills — until then, ask me for activities or ideas any time.`;
+    const hit = SKILL_WORDS.find(([w]) => t.includes(w));
+    if (hit) {
+      const sk = S.data.skills.find((x) => x.key === hit[1]);
+      const rows = kids.map((st) => ({ st, x: st.skills.find((k) => k.key === sk.key) })).filter((r) => r.x).sort((a, b) => a.x.pct - b.x.pct);
+      const beg = rows.filter((r) => r.x.band === 'Beginner');
+      const list = (beg.length ? beg : rows.slice(0, 3)).slice(0, 6).map((r) => `• ${r.st.name} — ${r.x.band} (${r.x.pct}%)`).join('\n');
+      const head = beg.length
+        ? `In ${where}, **${countNoun(beg.length, 'student', 'students')}** ${nounFor(beg.length, 'is', 'are')} at Beginner in **${sk.name}**:`
+        : `Nobody in ${where} is at Beginner in **${sk.name}** — these students have the most room to grow:`;
+      return `${head}\n${list}${beg.length > 6 ? `\n…and ${beg.length - 6} more.` : ''}\n\nWant a 10-minute ${sk.name} activity you can run with them this week?`;
+    }
+    const stats = skillStatsFor(kids).filter((x) => x.total);
+    if (!stats.length) return `I couldn't find skill results for ${where} yet.`;
+    if (/strength|strong|best|well/.test(t)) {
+      const top = [...stats].sort((a, b) => b.counts.Expert - a.counts.Expert)[0];
+      return `${where}'s biggest strength is **${top.name}** — ${top.counts.Expert} of ${top.total} students are already at Expert. Celebrate it out loud, and use it as a bridge into the skills that are still growing.`;
+    }
+    if (/gap|weak|lowest|struggl|focus|need|help|support/.test(t)) {
+      const [a, b] = [...stats].sort((x, y) => y.counts.Beginner - x.counts.Beginner);
+      return `The biggest skill gap in ${where} is **${a.name}** — ${a.counts.Beginner} of ${a.total} students are at Beginner.` +
+        (b ? ` Next is **${b.name}** (${b.counts.Beginner} at Beginner).` : '') +
+        `\n\nA small daily routine aimed at ${a.name} will move the most children. Want me to suggest one?`;
+    }
+    return `Good question. Looking at ${where}, I can tell you which students need support in a skill, where the biggest gaps are, or suggest an activity — try asking about a specific skill like **empathy** or **attention**.`;
+  }
+
+  function newChat() { Object.assign(S.ask, { chatId: null, thread: [], thinking: false, prompt: '', context: '', histOpen: false }); }
+  function loadChat(id) {
+    const c = S.chats.find((x) => x.id === id); if (!c) return;
+    Object.assign(S.ask, { chatId: c.id, thread: c.thread.slice(), scope: c.scope || 'all', thinking: false, prompt: '', context: '', histOpen: false });
+  }
+  function deleteChat(id) { S.chats = S.chats.filter((x) => x.id !== id); saveChats(); if (S.ask.chatId === id) newChat(); }
+  // Writes the live thread into history (creating the chat on its first message), newest first.
+  function storeChat() {
+    const a = S.ask;
+    let c = S.chats.find((x) => x.id === a.chatId);
+    if (!c) { c = { id: 'c' + Date.now().toString(36), title: a.thread[0].text }; a.chatId = c.id; }
+    Object.assign(c, { thread: a.thread.slice(), scope: a.scope, at: new Date().toISOString() });
+    S.chats = [c].concat(S.chats.filter((x) => x !== c));
+    saveChats();
+    return c;
+  }
+  function sendAsk(text) {
+    const p = (text || '').trim(); if (!p || S.ask.thinking) return;
+    // Question shows at once + a "thinking" bubble; the reply lands after a short beat.
+    S.ask.thread = S.ask.thread.concat([{ role: 'user', text: p }]);
+    S.ask.prompt = ''; S.ask.thinking = true;
+    const chat = storeChat();
+    render();
+    setTimeout(() => {
+      chat.thread = chat.thread.concat([{ role: 'tilli', text: askReply(p, chat.scope) }]);
+      chat.at = new Date().toISOString(); saveChats();
+      if (S.ask.chatId !== chat.id) return;   // switched chats mid-think — reply is saved, just not shown
+      S.ask.thinking = false; S.ask.thread = chat.thread.slice();
+      if (S.ask.open || S.nav === 'ask') render();
+    }, 900);
+  }
+  function exportChat() {
+    const a = S.ask; if (!a.thread.length) return;
+    const c = S.chats.find((x) => x.id === a.chatId);
+    const lines = [`Ask Tilli — ${c ? c.title : 'Chat'}`, `Scope: ${scopeName(a.scope)}`, `Exported: ${new Date().toLocaleString()}`, ''];
+    a.thread.forEach((m) => lines.push((m.role === 'user' ? 'You' : 'Tilli') + ':', m.text.replace(/\*\*/g, ''), ''));
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = `ask-tilli-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ---------------- Ask Tilli: full screen (nav destination) ----------------
+  function askCrumbs() {
+    return `<nav class="askx-crumbs" aria-label="Breadcrumb"><button class="focus" data-nav="garden">Home</button><span aria-hidden="true">›</span><b>Ask Tilli</b></nav>`;
+  }
+  function askScreenView() {
+    const a = S.ask, weekAgo = Date.now() - 7 * 864e5;
+    const item = (c) => `<div class="askx-item${c.id === a.chatId ? ' on' : ''}">
+        <button class="askx-open focus" data-askx-open="${esc(c.id)}" title="${esc(c.title)}">${LU.msg}<span>${esc(c.title)}</span></button>
+        <button class="askx-del focus" data-askx-del="${esc(c.id)}" aria-label="Delete chat: ${esc(c.title)}" title="Delete chat">${LU.trash}</button>
+      </div>`;
+    const group = (h, list) => list.length ? `<div class="askx-gh">${h}</div>${list.map(item).join('')}` : '';
+    const recent = S.chats.filter((c) => +new Date(c.at) >= weekAgo), older = S.chats.filter((c) => +new Date(c.at) < weekAgo);
+    const opts = [['all', 'All my classes']].concat(S.data.sections.map((x) => [x.id, x.name]))
+      .map(([v, l]) => `<option value="${esc(v)}"${v === a.scope ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    const body = (a.thread.length || a.thinking)
+      ? `<div class="askx-thread">${a.thread.map((m) => `<div class="ask-msg ${m.role}">${fmtMsg(m.text)}</div>`).join('')}${a.thinking ? '<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>' : ''}</div>`
+      : `<div class="askx-empty">
+          <span class="askx-spark">${LU.sparkLg}</span>
+          <h2>Hi! I'm Tilli 👋</h2>
+          <p>I can help you understand your students' skills and create personalised learning plans.</p>
+          <div class="askx-try"><div class="askx-try-h">Try asking:</div>
+            ${ASK_TRY.map((q) => `<button class="askx-sug focus" data-askx-try="${esc(q)}">${esc(q)}</button>`).join('')}
+          </div>
+        </div>`;
+    return `<div class="askx${a.histOpen ? ' hist-open' : ''}">
+      <aside class="askx-hist" aria-label="Chat history">
+        <button class="btn btn-primary block askx-new focus" data-askx-new>${LU.plus} New Chat</button>
+        <div class="askx-list">${S.chats.length ? group('This week', recent) + group('Earlier', older) : '<div class="askx-none">No chats yet — ask your first question.</div>'}</div>
+        ${S.chats.length ? `<button class="askx-clear focus" data-askx-clear>${LU.trash} Clear all history</button>` : ''}
+      </aside>
+      <button class="askx-scrim" data-askx-hist aria-label="Close chat history"></button>
+      <section class="askx-main">
+        <div class="askx-head">
+          <button class="askx-tool askx-histbtn focus" data-askx-hist aria-label="Chat history" title="Chat history">${LU.panel}</button>
+          <span class="askx-ava">${LU.spark}</span>
+          <div class="askx-hmeta"><div class="askx-t">Ask Tilli</div><div class="askx-s">Your AI teaching assistant</div></div>
+          <div class="askx-tools">
+            <button class="askx-tool focus" data-askx-min title="Minimise to side panel" aria-label="Minimise to side panel">${LU.min}</button>
+            <button class="askx-tool focus" data-askx-export title="Export this chat" aria-label="Export this chat"${a.thread.length ? '' : ' disabled'}>${LU.share}</button>
+          </div>
+        </div>
+        <div class="askx-scope"><select class="askx-select focus" data-askx-scope aria-label="Which classes Tilli answers about">${opts}</select></div>
+        <div class="askx-scoped">${LU.pin} Currently scoped to: <b>${esc(scopeName(a.scope))}</b></div>
+        <div class="askx-body">${body}</div>
+        <div class="askx-foot">
+          <form class="askx-compose" data-askx-form>
+            <input class="askx-input" placeholder="Ask about your students…" value="${esc(a.prompt)}" autocomplete="off" aria-label="Message Ask Tilli">
+            <button class="askx-send" type="submit" aria-label="Send"${a.thinking ? ' disabled' : ''}>${LU.send}</button>
+          </form>
+          <p class="askx-note">Questions and prompts asked from the AI tool will be analysed by our research team for improvement, safeguarding and research purposes.</p>
+        </div>
+      </section>
+    </div>`;
+  }
+  function wireAskScreen() {
+    const ax = root.querySelector('.askx'); if (!ax) return;
+    const on = (sel, fn, ev) => ax.querySelectorAll(sel).forEach((b) => b.addEventListener(ev || 'click', (e) => fn(b, e)));
+    const inp = ax.querySelector('.askx-input');
+    inp.addEventListener('input', () => { S.ask.prompt = inp.value; });
+    on('[data-askx-form]', (f, e) => { e.preventDefault(); sendAsk(inp.value); }, 'submit');
+    on('[data-askx-try]', (b) => sendAsk(b.dataset.askxTry));
+    on('[data-askx-new]', () => { newChat(); render(); });
+    on('[data-askx-open]', (b) => { loadChat(b.dataset.askxOpen); render(); });
+    on('[data-askx-del]', (b) => { deleteChat(b.dataset.askxDel); render(); });
+    on('[data-askx-clear]', () => {
+      if (!confirm('Delete all your Ask Tilli chats? This can’t be undone.')) return;
+      S.chats = []; saveChats(); newChat(); render();
+    });
+    on('[data-askx-scope]', (sel) => {
+      S.ask.scope = sel.value;
+      const c = S.chats.find((x) => x.id === S.ask.chatId); if (c) { c.scope = sel.value; saveChats(); }
+      render();
+    }, 'change');
+    on('[data-askx-min]', () => { S.nav = S.askReturn || 'garden'; S.ask.open = true; render(); });
+    on('[data-askx-export]', exportChat);
+    on('[data-askx-hist]', () => { S.ask.histOpen = !S.ask.histOpen; render(); });
+    const bd = ax.querySelector('.askx-body'); bd.scrollTop = bd.scrollHeight;
+    if (!bp().isPhone) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
 
   // ---------------- Profile ----------------
   function fmtDate(iso) {
@@ -2895,7 +3120,10 @@
   function wire() {
     root.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.nav;
-      if (k === 'ask') { openAsk('', 'Ask me anything about your class or a student.'); return; }
+      if (k === 'ask') {   // nav → full-screen Ask Tilli (the floating bubble opens the side panel)
+        if (S.nav !== 'ask') { S.askReturn = S.nav === 'profile' ? 'garden' : S.nav; newChat(); }
+        S.ask.open = false; S.nav = 'ask'; render(); return;
+      }
       S.ask.open = false;
       if (k === 'garden') { S.nav = 'garden'; S.gardenLevel = 'landing'; } else S.nav = k;
       if (k !== 'students' && !S.select.busy) S.select = { on: false, ids: {}, busy: '', err: '' };
@@ -3049,21 +3277,12 @@
     const ai = root.querySelector('.ask-input');
     if (ai) ai.addEventListener('input', (e) => { S.ask.prompt = e.target.value; });
     const send = root.querySelector('[data-send-ask]');
-    if (send) send.addEventListener('click', () => {
-      const p = (S.ask.prompt || '').trim(); if (!p || S.ask.thinking) return;
-      // Show the question immediately + a "thinking" bubble, then reveal Tilli's
-      // reply after a short beat so it feels like the assistant is composing it.
-      S.ask.thread = S.ask.thread.concat([{ role: 'user', text: p }]);
-      S.ask.prompt = '';
-      S.ask.thinking = true;
-      render();
-      setTimeout(() => {
-        if (!S.ask.open) return; // panel closed mid-think — drop the reply
-        S.ask.thinking = false;
-        S.ask.thread = S.ask.thread.concat([{ role: 'tilli', text: "Here's a warm, practical idea you can try today — open with a 3-minute feelings check-in, then a paired activity, and close with one sentence of specific praise. Want me to tailor it to your materials?" }]);
-        render();
-      }, 900);
-    });
+    if (send) send.addEventListener('click', () => sendAsk(S.ask.prompt));
+    root.querySelectorAll('[data-ask-expand]').forEach((b) => b.addEventListener('click', () => {
+      if (S.nav !== 'ask') S.askReturn = S.nav === 'profile' ? 'garden' : S.nav;
+      S.ask.open = false; S.nav = 'ask'; render();
+    }));
+    wireAskScreen();
     root.querySelectorAll('[data-ask]').forEach((b) => b.addEventListener('click', () => {
       const sec = section();
       const skill = b.dataset.skill, band = b.dataset.band;
@@ -3287,6 +3506,99 @@
   .ask-input { width: 100%; border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 12px 14px; font-size: var(--fs-sm); color: var(--ink-900); resize: none; outline: none; background: var(--white); line-height: 1.45; font-family: var(--font-body); }
   .ask-input:focus { border-color: var(--focus); }
   .ask-foot .btn { margin-top: 10px; }
+  /* ask tilli (full screen — nav destination) */
+  .dash-col.ask-mode { height: 100vh; height: 100dvh; }
+  .dash-main.ask-mode { padding: 0; max-width: none; display: flex; min-height: 0; }
+  .askx-crumbs { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; font-size: var(--fs-md); }
+  .askx-crumbs button { background: none; border: none; padding: 2px 4px; font: inherit; color: var(--ink-450); cursor: pointer; border-radius: var(--radius-xs); }
+  .askx-crumbs button:hover { color: var(--ink-900); }
+  .askx-crumbs span { color: var(--ink-300); }
+  .askx-crumbs b { font-weight: 700; color: var(--ink-900); }
+  .askx {
+    /* --- tunable visual parameters --- */
+    --askx-hist-w: 300px;     /* width of the chat-history column */
+    --askx-max: 760px;        /* max width of the thread, suggestions and composer */
+    --askx-foot-pr: 84px;     /* composer right padding — keeps Send clear of the Need-help bubble */
+    flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; background: var(--white);
+  }
+  .askx-hist { width: var(--askx-hist-w); flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line-200); background: var(--surface-100); }
+  .askx-new { margin: 16px; width: auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .askx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; border-top: 1px solid var(--line-200); }
+  .askx-gh { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
+  .askx-item { display: flex; align-items: center; border-radius: var(--radius-md); }
+  .askx-item:hover { background: var(--white); }
+  .askx-item.on { background: var(--white); box-shadow: inset 3px 0 0 var(--green-500); }
+  .askx-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 11px 8px 11px 10px; background: none; border: none; cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); text-align: left; }
+  .askx-open svg { flex: none; color: var(--ink-450); }
+  .askx-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .askx-del { flex: none; display: grid; place-items: center; padding: 8px; margin-right: 4px; background: none; border: none; cursor: pointer; color: var(--ink-300); border-radius: var(--radius-xs); }
+  .askx-del:hover { color: var(--danger-700); background: var(--danger-wash); }
+  .askx-none { padding: 18px 8px; font-size: var(--fs-sm); color: var(--ink-300); }
+  .askx-clear { display: flex; align-items: center; gap: 9px; padding: 14px 20px; background: none; border: none; border-top: 1px solid var(--line-200); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); text-align: left; }
+  .askx-clear:hover { color: var(--danger-700); }
+  .askx-scrim { display: none; }
+  .askx-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .askx-head { display: flex; align-items: center; gap: 14px; padding: 18px 24px; border-bottom: 1px solid var(--line-200); }
+  .askx-ava { width: 46px; height: 46px; flex: none; border-radius: 50%; background: var(--green-500); color: var(--white); display: grid; place-items: center; }
+  .askx-hmeta { min-width: 0; }
+  .askx-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1.2; color: var(--ink-900); }
+  .askx-s { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
+  .askx-tools { margin-left: auto; display: flex; gap: 8px; }
+  .askx-tool { width: 42px; height: 42px; flex: none; display: grid; place-items: center; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); color: var(--ink-700); cursor: pointer; }
+  .askx-tool:hover:not(:disabled) { background: var(--surface-100); }
+  .askx-tool:disabled { opacity: .4; cursor: default; }
+  .askx-histbtn { display: none; }
+  .askx-scope { padding: 12px 24px 0; }
+  .askx-select {
+    width: 100%; appearance: none; -webkit-appearance: none; cursor: pointer;
+    border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 11px 40px 11px 14px;
+    font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900);
+    background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6170' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px;
+  }
+  .askx-select:focus { outline: none; border-color: var(--focus); }
+  .askx-scoped { display: flex; align-items: center; gap: 7px; padding: 9px 24px 12px; border-bottom: 1px solid var(--line-200); font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+  .askx-scoped b { color: var(--ink-700); }
+  .askx-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; background: var(--surface-100); }
+  .askx-thread { width: 100%; max-width: var(--askx-max); margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .askx-thread .ask-msg { font-size: var(--fs-md); line-height: 1.55; }
+  .askx-thread .ask-msg.tilli { background: var(--white); border: 1px solid var(--line-200); }
+  .askx-empty { margin: auto; width: 100%; max-width: var(--askx-max); display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .askx-spark { width: 92px; height: 92px; border-radius: 50%; background: var(--wash-green); color: var(--green-600); display: grid; place-items: center; margin-bottom: 18px; }
+  .askx-empty h2 { margin: 0; font-family: var(--font-heading); font-size: var(--fs-xl); color: var(--ink-900); }
+  .askx-empty p { margin: 10px 0 0; max-width: 520px; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-450); }
+  .askx-try { width: 100%; margin-top: 34px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .askx-try-h { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-bottom: 2px; }
+  .askx-sug { text-align: left; padding: 12px 16px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); }
+  .askx-sug:hover { border-color: var(--green-500); background: var(--wash-green); }
+  .askx-foot { padding: 14px var(--askx-foot-pr) 10px 24px; border-top: 1px solid var(--line-200); background: var(--white); }
+  .askx-compose { max-width: var(--askx-max); margin: 0 auto; display: flex; gap: 10px; }
+  .askx-input { flex: 1; min-width: 0; padding: 13px 16px; border: 1.5px solid var(--line-200); border-radius: var(--radius-md); outline: none; background: var(--white); font: inherit; font-size: var(--fs-md); color: var(--ink-900); }
+  .askx-input:focus { border-color: var(--green-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-500) 18%, transparent); }
+  .askx-send { width: 50px; flex: none; display: grid; place-items: center; border: none; border-radius: var(--radius-md); background: var(--green-500); color: var(--white); cursor: pointer; }
+  .askx-send:hover:not(:disabled) { background: var(--green-600); }
+  .askx-send:disabled { opacity: .5; cursor: default; }
+  .askx-note { max-width: var(--askx-max); margin: 8px auto 0; text-align: center; font-size: var(--fs-xs); line-height: 1.4; color: var(--ink-300); }
+  @media (max-width: 1023px) { .askx { --askx-hist-w: 250px; } }
+  /* Narrow: history becomes a slide-in drawer behind the header button. */
+  @media (max-width: 760px) {
+    .askx-hist { position: absolute; z-index: 5; top: 0; bottom: 0; left: 0; width: min(300px, 86%); transform: translateX(-102%); transition: transform .2s var(--ease); box-shadow: var(--shadow-modal); }
+    .askx.hist-open .askx-hist { transform: none; }
+    .askx.hist-open .askx-scrim { display: block; position: absolute; inset: 0; z-index: 4; border: none; background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
+    .askx-histbtn { display: grid; }
+    .askx-head { padding: 12px 14px; gap: 10px; }
+    .askx-ava { width: 38px; height: 38px; }
+    .askx-t { font-size: var(--fs-lg); }
+    .askx-scope { padding: 10px 14px 0; }
+    .askx-scoped { padding: 8px 14px 10px; }
+    .askx-body { padding: 16px 14px; }
+    .askx-foot { padding: 10px var(--askx-foot-pr) 8px 14px; }
+    .askx-try { margin-top: 22px; }
+  }
+  @media (max-width: 639px) {
+    .dash-main.ask-mode { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+    .askx { --askx-foot-pr: 66px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .askx-hist { transition: none; } }
 
   /* students: roster */
   .roster-tools { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 16px; }
@@ -3554,6 +3866,7 @@
   .pot-body { position: absolute; left: 50%; bottom: 4px; margin-left: -49px; width: 98px; height: 50px; background: ${ART.clayBody}; clip-path: polygon(4% 0, 96% 0, 84% 100%, 16% 100%); }
 
   /* bottom nav (mobile) — four quiet tabs + raised Ask Tilli in the centre */
+  @media (max-width: 639px) { :root { --tf-bottom: 82px; } }   /* lift floating Need-help bubble above it */
   .dash-bottomnav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; align-items: flex-end; background: var(--white); border-top: 1px solid var(--line-200); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
   .dash-bnav { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; background: none; border: none; cursor: pointer; color: var(--ink-300); font-family: var(--font-body); font-weight: 700; font-size: var(--fs-xs); padding: 4px 2px; min-height: 44px; }
   .dash-bnav .lb { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
