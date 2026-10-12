@@ -279,6 +279,7 @@
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
+      ovBand: null, ovSkill: null,   // Insights → Class Skill Overview: box filter + expanded skill
       add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
       vw: window.innerWidth,
       select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
@@ -1826,32 +1827,84 @@
 
   // --- Sub-tab 1: My class ---------------------------------------------------
   function insMyClass(stats, meas, scope) {
-    return `${bandSummaryCard(stats, scope)}
-      ${progressCard(stats, meas)}
-      ${breakdownCard(stats, meas)}`;
+    // Growth over time + Every skill up close only make sense once there is a
+    // second point to compare: Midline (or later) deployed or assessed.
+    const later = S.windowState === 'midline' || S.windowState === 'endline' || meas.mid || meas.post;
+    return `${classOverviewCard(stats, scope)}
+      ${later ? progressCard(stats, meas) + breakdownCard(stats, meas) : ''}`;
   }
 
-  // a) Skill-band summary — the 3 headline boxes (sorts SKILLS, not children).
-  function bandSummaryCard(stats, scope) {
-    const boxes = [
-      { tone: 'focus',  title: 'A place to focus', sub: 'Most children are at Beginner', list: stats.filter((s) => s.plurality === 'Beginner') },
-      { tone: 'devel',  title: 'Developing',       sub: 'Most children are at Learner',  list: stats.filter((s) => s.plurality === 'Learner') },
-      { tone: 'strong', title: 'Growing strong',   sub: 'Most children are at Expert',   list: stats.filter((s) => s.plurality === 'Expert') },
-    ];
-    const box = (b) => {
-      const multi = b.list.length > 3;
-      const body = b.list.length
-        ? `<ul class="bs-skills${multi ? ' two-col' : ''}">${b.list.map((s) => `<li>${esc(s.name)}</li>`).join('')}</ul>`
-        : `<div class="bs-none">Nothing sits here right now.</div>`;
-      return `<div class="bs-box bs-${b.tone}${multi ? ' bs-wide' : ''}">
-        <div class="bs-head"><span class="bs-count">${b.list.length}</span><div><div class="bs-title">${b.title}</div><div class="bs-sub">${b.sub}</div></div></div>
-        ${body}
+  // a) Class Skill Overview — per skill, how the class splits across
+  // Beginner / Learner / Expert. The 3 boxes count SKILLS by their largest
+  // group; tap a box to filter, tap a skill row for the student breakdown.
+  const OV_BANDS = [
+    { band: 'Beginner', label: 'Needs attention', tone: 'red' },
+    { band: 'Learner', label: 'Developing', tone: 'amber' },
+    { band: 'Expert', label: 'Strong', tone: 'green' },
+  ];
+  function classOverviewCard(stats, scope) {
+    const N = scope.students.length;
+    const notAssessed = scope.students.filter((s) => s.state === 'waiting').length;
+    const meta = (b) => OV_BANDS.find((x) => x.band === b) || OV_BANDS[1];
+    const boxes = OV_BANDS.map((b) => {
+      const n = stats.filter((s) => s.plurality === b.band).length;
+      const on = S.ovBand === b.band;
+      return `<button class="ov-box ov-${b.tone}${on ? ' on' : ''}${S.ovBand && !on ? ' dim' : ''} focus" data-ov-band="${b.band}" aria-pressed="${on}" title="${on ? 'Show all skills' : 'Show only skills where most students are ' + b.band}">
+        <span class="ov-count">${n}</span>
+        <span class="ov-title">${b.label}</span>
+        <span class="ov-sub">Most students are ${b.band}</span>
+      </button>`;
+    }).join('');
+    const rank = { Beginner: 0, Learner: 1, Expert: 2 };
+    const rows = stats
+      .filter((s) => !S.ovBand || s.plurality === S.ovBand)
+      .sort((a, b) => (rank[a.plurality] - rank[b.plurality]) || ((b.counts.Beginner / (b.total || 1)) - (a.counts.Beginner / (a.total || 1))) || ((a.counts.Expert / (a.total || 1)) - (b.counts.Expert / (b.total || 1))))
+      .map((s) => {
+        const t = s.total || 1, m = meta(s.plurality), open = S.ovSkill === s.key;
+        const seg = (b, tone) => s.counts[b] ? `<span class="ov-seg ov-seg-${tone}" style="width:${(s.counts[b] / t) * 100}%" title="${s.counts[b]} ${b}"></span>` : '';
+        return `<div class="ov-row${open ? ' open' : ''}">
+          <button class="ov-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}">
+            <span class="ov-name">${esc(s.name)}</span>
+            <span class="ov-bar">${seg('Beginner', 'red')}${seg('Learner', 'amber')}${seg('Expert', 'green')}</span>
+            <span class="ov-status ov-st-${m.tone}"><i></i>${m.label}</span>
+            <span class="ov-chev" aria-hidden="true">›</span>
+          </button>
+          ${open ? ovBreakdown(s, scope) : ''}
+        </div>`;
+      }).join('') || '<div class="ov-empty">No skills in this group right now.</div>';
+    return `<div class="dash-card ins-card ov" style="margin-top:16px">
+      <div class="ov-headrow">
+        <div>
+          <div class="ov-h">Class Skill Overview</div>
+          <div class="ov-lead">How your class is doing on each skill</div>
+          <p class="ov-desc">For every skill, we grouped your students into Beginner, Learner, and Expert. The colour is whichever group is largest, so green means most of your class is at Expert, not all of them.</p>
+        </div>
+        <span class="ov-scope"><i></i>${esc(scope.name)} · ${countNoun(N, 'student', 'students')}</span>
+      </div>
+      <div class="ov-boxes">${boxes}</div>
+      ${notAssessed ? `<div class="ov-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet</div>` : ''}
+      <div class="ov-hint">👆 <b>Tap a box</b> to see just those skills · <b>tap a skill</b> for the student breakdown</div>
+      <div class="ov-legend"><span><i class="ov-red"></i>Beginner</span><span><i class="ov-amber"></i>Learner</span><span><i class="ov-green"></i>Expert</span></div>
+      <div class="ov-list">${rows}</div>
+    </div>`;
+  }
+  // Which students sit in each band for one skill (assessed students only).
+  function ovBreakdown(stat, scope) {
+    const by = { Beginner: [], Learner: [], Expert: [] };
+    scope.students.filter((s) => s.state !== 'waiting').forEach((st) => {
+      const sk = st.skills.find((x) => x.key === stat.key);
+      if (sk && by[sk.band]) by[sk.band].push(st);
+    });
+    const col = (b) => {
+      const m = OV_BANDS.find((x) => x.band === b);
+      const list = by[b].sort((x, y) => x.name.localeCompare(y.name));
+      return `<div class="ov-bcol">
+        <div class="ov-bh"><i class="ov-${m.tone}"></i>${b} <span>${list.length}</span></div>
+        ${list.length ? list.map((st) => `<button class="ov-stu focus" data-open-student="${esc(st.id)}" title="Open ${esc(st.name)}">${esc(st.name)}</button>`).join('') : '<div class="ov-bnone">—</div>'}
       </div>`;
     };
-    return `<div class="dash-card ins-card" style="margin-top:16px">
-      <div class="ins-h">Where ${esc(scope.name)} sits across the 12 skills</div>
-      <div class="ins-sub">Grouped by where most children are right now — a place to start, never a grade.</div>
-      <div class="bs-grid">${boxes.map(box).join('')}</div>
+    return `<div class="ov-break">${col('Beginner')}${col('Learner')}${col('Expert')}
+      <div class="ov-bfoot"><button class="sc-ask focus" data-ask="build" data-skill="${esc(stat.name)}" data-band="${stat.plurality}" style="width:auto;padding:9px 14px">Ask Tilli how to build ${esc(stat.name)} →</button></div>
     </div>`;
   }
 
@@ -2483,6 +2536,8 @@
 
     // insights
     root.querySelectorAll('[data-inview]').forEach((b) => b.addEventListener('click', () => { S.insightsView = b.dataset.inview; render(); }));
+    root.querySelectorAll('[data-ov-band]').forEach((b) => b.addEventListener('click', () => { S.ovBand = S.ovBand === b.dataset.ovBand ? null : b.dataset.ovBand; S.ovSkill = null; render(); }));
+    root.querySelectorAll('[data-ov-skill]').forEach((b) => b.addEventListener('click', () => { S.ovSkill = S.ovSkill === b.dataset.ovSkill ? null : b.dataset.ovSkill; render(); }));
     root.querySelectorAll('[data-skillgroup]').forEach((b) => b.addEventListener('click', () => { S.skillGroup = b.dataset.skillgroup; render(); }));
     root.querySelectorAll('[data-cmpgrade]').forEach((b) => b.addEventListener('click', () => { S.compareGrade = b.dataset.cmpgrade; render(); }));
     root.querySelectorAll('[data-ask-ins]').forEach((b) => b.addEventListener('click', () => {
@@ -3225,6 +3280,59 @@
   .cr-cell b { font-size: 14px; font-weight: 800; color: var(--ink-900); }
   .cr-cell.done b { color: var(--green-700); }
 
+  /* Insights → Class Skill Overview */
+  .ov { --ov-red: #D9302C; --ov-amber: #E3A40E; --ov-green: #22B455; }
+  .ov-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .ov-h { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 22px; color: var(--ink-900); }
+  .ov-lead { font-size: 13.5px; font-weight: 700; color: var(--ink-450); margin-top: 4px; }
+  .ov-desc { font-size: 13.5px; color: var(--ink-450); margin: 4px 0 0; max-width: 620px; line-height: 1.5; }
+  .ov-scope { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-200); border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 700; color: var(--ink-900); background: #fff; white-space: nowrap; }
+  .ov-scope i { width: 9px; height: 9px; border-radius: 50%; background: #7FA3D6; }
+  .ov-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+  .ov-box { text-align: left; border-radius: 14px; padding: 16px 18px; cursor: pointer; font-family: 'Montserrat',sans-serif; border: 2px solid; display: flex; flex-direction: column; gap: 2px; transition: box-shadow .15s, opacity .15s; }
+  .ov-box:hover { box-shadow: 0 6px 16px rgba(60,60,60,.1); }
+  .ov-box.on { box-shadow: 0 0 0 3px rgba(20,20,20,.12); }
+  .ov-box.dim { opacity: .5; }
+  .ov-red { background: #F6E1E1; border-color: var(--ov-red); }   .ov-red .ov-count { color: var(--ov-red); }
+  .ov-amber { background: #F8EDD5; border-color: var(--ov-amber); } .ov-amber .ov-count { color: var(--ov-amber); }
+  .ov-green { background: #E1F4E7; border-color: var(--ov-green); } .ov-green .ov-count { color: var(--ov-green); }
+  .ov-count { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 34px; line-height: 1.1; }
+  .ov-title { font-weight: 800; font-size: 15px; color: var(--ink-900); }
+  .ov-sub { font-size: 12px; color: var(--ink-450); font-weight: 600; }
+  .ov-note { font-size: 12px; color: var(--ink-450); font-weight: 600; margin-top: 10px; }
+  .ov-hint { font-size: 13px; color: var(--ink-450); margin-top: 16px; } .ov-hint b { color: var(--ink-900); }
+  .ov-legend { display: flex; gap: 18px; margin: 12px 0 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-450); }
+  .ov-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .ov-legend i, .ov-bh i { width: 12px; height: 12px; border-radius: 3px; border: none; }
+  .ov-legend i.ov-red, .ov-bh i.ov-red { background: var(--ov-red); } .ov-legend i.ov-amber, .ov-bh i.ov-amber { background: var(--ov-amber); } .ov-legend i.ov-green, .ov-bh i.ov-green { background: var(--ov-green); }
+  .ov-list { border: 1px solid var(--line-200); border-radius: 16px; padding: 4px 10px; }
+  .ov-row + .ov-row { border-top: 1px solid var(--line-200); }
+  .ov-rowbtn { width: 100%; display: grid; grid-template-columns: minmax(150px, 220px) 1fr 130px 16px; gap: 16px; align-items: center; background: none; border: none; cursor: pointer; padding: 13px 8px; font-family: 'Montserrat',sans-serif; text-align: left; border-radius: 10px; }
+  .ov-rowbtn:hover { background: var(--surface-100); }
+  .ov-name { font-weight: 700; font-size: 14px; color: var(--ink-900); }
+  .ov-bar { display: flex; height: 24px; border-radius: 7px; overflow: hidden; background: var(--surface-100); }
+  .ov-seg { height: 100%; } .ov-seg-red { background: var(--ov-red); } .ov-seg-amber { background: var(--ov-amber); } .ov-seg-green { background: var(--ov-green); }
+  .ov-status { justify-self: end; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; }
+  .ov-status i { width: 9px; height: 9px; border-radius: 50%; }
+  .ov-st-red { color: var(--ov-red); } .ov-st-red i { background: var(--ov-red); }
+  .ov-st-amber { color: #B98205; } .ov-st-amber i { background: var(--ov-amber); }
+  .ov-st-green { color: #17913F; } .ov-st-green i { background: var(--ov-green); }
+  .ov-chev { color: var(--ink-300); font-size: 20px; line-height: 1; transition: transform .15s; }
+  .ov-row.open .ov-chev { transform: rotate(90deg); }
+  .ov-break { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 4px 8px 16px; }
+  .ov-bcol { background: var(--surface-100); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .ov-bh { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 800; color: var(--ink-700); margin-bottom: 2px; }
+  .ov-bh span { color: var(--ink-300); }
+  .ov-stu { background: #fff; border: 1px solid var(--line-200); border-radius: 999px; padding: 4px 11px; font-family: 'Montserrat',sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ink-700); cursor: pointer; }
+  .ov-stu:hover { border-color: var(--green-500); color: var(--green-700); }
+  .ov-bnone { color: var(--ink-300); font-size: 13px; }
+  .ov-bfoot { grid-column: 1 / -1; }
+  .ov-empty { padding: 18px; text-align: center; color: var(--ink-300); font-size: 13px; }
+  @media (max-width: 760px) {
+    .ov-boxes, .ov-break { grid-template-columns: 1fr; }
+    .ov-rowbtn { grid-template-columns: 1fr auto 16px; gap: 8px 10px; }
+    .ov-bar { grid-column: 1 / -1; grid-row: 2; }
+  }
   .ins-sample { margin-top: 12px; background: #FFF8E6; border: 1px solid #F3E2B3; color: #8a6a1d; border-radius: 12px; padding: 9px 14px; font-size: 13px; font-weight: 600; }
 
   .pf-edit { cursor: default; }
