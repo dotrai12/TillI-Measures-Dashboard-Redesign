@@ -1468,7 +1468,13 @@
     }
     const stu = (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
     const skills = S.data.skills, sk = skills[e.q], nQ = skills.length;
-    const saved = e.justDone ? `<div class="obs-saved">✓ ${esc(e.justDone)}&rsquo;s observation is saved — next up: <b>${esc(stu.dispFirst || stu.first)}</b> · ${countNoun(left, 'child', 'children')} still to observe</div>` : '';
+    const saved = e.justDone ? `<div class="obs-saved">✓ ${esc(e.justDone)}&rsquo;s observation is saved — next up: <b>${esc(stu.dispFirst || stu.first)}</b></div>` : '';
+    // Class progress for this window — completed vs still pending.
+    const total = sec.students.length, doneN = total - left;
+    const progress = `<div class="obs-prog" title="Teacher observations for ${esc(winLabel)} in ${esc(sec.name)}">
+        <div class="obs-prog-txt"><b>${doneN}</b> out of <b>${total}</b> completed <span class="obs-prog-pend">· ${left} pending</span></div>
+        <div class="obs-prog-bar"><div style="width:${total ? Math.round((doneN / total) * 100) : 0}%"></div></div>
+      </div>`;
     const dots = skills.map((_, i) => `<div class="obs-dot" style="background:${i < e.q ? '#56C02B' : i === e.q ? '#F2CE7B' : '#EAE3D3'}"></div>`).join('');
     const stars = STAR_LABELS.map((lbl, i) => {
       const picked = e.ratings[sk.key] === i + 1;
@@ -1477,7 +1483,7 @@
     }).join('');
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
     return `${saved}<div class="obs-enter">
-      <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · observation</div></div></div>
+      <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · ${esc(winLabel)} observation</div></div>${progress}</div>
       <div class="obs-dots">${dots}</div>
       <div class="obs-q">Question ${e.q + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
       <div class="obs-skill">${esc(sk.name)}</div>
@@ -2795,6 +2801,13 @@
   .obs-enter-head .pl { flex: none; }
   .obs-enter-head .nm { font-weight: 800; font-size: 16px; }
   .obs-enter-head .sub { font-size: 12px; color: var(--ink-300); font-weight: 600; }
+  .obs-prog { margin-left: auto; min-width: 190px; text-align: right; }
+  .obs-prog-txt { font-size: 13px; font-weight: 600; color: var(--ink-450); }
+  .obs-prog-txt b { color: var(--ink-900); font-weight: 800; }
+  .obs-prog-pend { color: #a98424; font-weight: 700; }
+  .obs-prog-bar { height: 7px; border-radius: 999px; background: #EAE3D3; margin-top: 6px; overflow: hidden; }
+  .obs-prog-bar > div { height: 100%; border-radius: 999px; background: var(--green-500); transition: width .3s; }
+  @media (max-width: 640px) { .obs-enter-head { flex-wrap: wrap; } .obs-prog { margin-left: 0; width: 100%; text-align: left; } }
   .obs-dots { display: flex; gap: 5px; margin: 14px 0 18px; }
   .obs-dot { flex: 1; height: 5px; border-radius: 3px; }
   .obs-q { font-size: 12.5px; color: var(--ink-300); font-weight: 700; margin-bottom: 4px; }
