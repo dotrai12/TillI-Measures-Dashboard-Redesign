@@ -46,6 +46,16 @@
     for (var i=0;i<4;i++){ out += abc[h % abc.length]; h = Math.floor(h/abc.length) ^ (h<<3); h>>>=0; }
     return 'TIL-' + out;
   }
+  // Student UID — the child's unique Tilli Measures code, shown to teachers on
+  // the roster + profile. Seeded by school::admission so it is stable for the
+  // life of the record AND unique across schools (makeClaimCode is seeded by
+  // admission number alone, so two schools' "A101" would collide).
+  function makeUid(schoolId, adm){
+    var abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    var h = hashStr(String(schoolId||'').trim().toLowerCase()+'::'+String(adm||'').trim().toUpperCase()+':uid'); var out = '';
+    for (var i=0;i<6;i++){ out += abc[h % abc.length]; h = Math.floor(h/abc.length) ^ (h<<5); h>>>=0; }
+    return 'TM-' + out;
+  }
   // Stable plausible DOB (used only when a school's second factor is 'dob' | 'both').
   function makeDob(adm, grade){
     var h = seeded(adm, 'dob');
@@ -53,6 +63,38 @@
     var month = (h % 12) + 1; var day = ((h>>4) % 28) + 1;
     return baseYear + '-' + String(month).padStart(2,'0') + '-' + String(day).padStart(2,'0');
   }
+
+  /* ---------- teacher pre-training reflection (editable question bank) ----------
+     The one-time teacher reflection shown during onboarding. Stored in the
+     shared DB (db.config.reflection) so the Platform Admin "Reflection
+     questions" screen can edit it and every teacher app reads the same bank.
+     Each question carries a stable `id`; teacher answers are keyed by it, so
+     edits / reorders never shift answers onto the wrong question.
+     cat = category id. type: 'scale' (1–5, lo/hi end labels) | 'choice'
+     (options[]) | 'text'. Categories are fixed at 5 (they map onto the 5 petal
+     colours of the onboarding progress ring). */
+  var DEFAULT_REFLECTION = {
+    cats: [
+      { id:'mindsets',  name:'Mindsets',         color:'#F2CE7B' },
+      { id:'sel',       name:'SEL Competencies', color:'#9DBE8D' },
+      { id:'practices', name:'Practices',        color:'#A7CDE2' },
+      { id:'climate',   name:'Climate',          color:'#F6C6D2' },
+      { id:'wellbeing', name:'Wellbeing',        color:'#F0B97D' },
+    ],
+    questions: [
+      { id:'q01', cat:'mindsets',  type:'scale',  q:'Social Emotional Learning belongs in everyday teaching.', hint:'Woven into academic lessons, routines and behaviour support — not a separate subject or one-time activity.' },
+      { id:'q02', cat:'mindsets',  type:'scale',  q:'When a student misbehaves, I look for the reason before I respond.' },
+      { id:'q03', cat:'sel',       type:'scale',  q:'In the last two weeks, I calmed myself when I felt a strong emotion at work.' },
+      { id:'q04', cat:'sel',       type:'text',   q:'Describe a recent situation at work where you felt a strong emotion. What did you do to calm or manage yourself?' },
+      { id:'q05', cat:'sel',       type:'scale',  q:'I have a reliable way to recover after a hard day.' },
+      { id:'q06', cat:'practices', type:'scale',  q:'In the last 3–4 weeks, I checked in on how students were feeling.' },
+      { id:'q07', cat:'practices', type:'choice', q:'In a typical week, how many SEL activities do you run?', hint:'Emotion check-ins, reflection exercises, conflict-resolution talks, mindfulness, collaborative games…', options:['0','1–2','3–4','5+'] },
+      { id:'q08', cat:'climate',   type:'scale',  q:'Students in my classroom feel safe.', hint:'Able to participate, make mistakes, express themselves and ask for help without fear.' },
+      { id:'q09', cat:'climate',   type:'text',   q:'What is one thing you do that helps create a safe classroom environment?' },
+      { id:'q10', cat:'wellbeing', type:'scale',  q:'Over the last two weeks, I felt emotionally drained by work.', lo:'Never', hi:'Always', reverse:true },
+    ],
+  };
+  function clone(o){ return JSON.parse(JSON.stringify(o)); }
 
   /* ---------- string helpers ---------- */
   function norm(s){ return String(s==null?'':s).trim(); }
@@ -122,6 +164,8 @@
     var sc = SRC.school;
     db.schools[sc.id] = {
       school_id: sc.id, name: sc.name, board: sc.board || 'CBSE',
+      city: sc.city || '', country: sc.country || '',
+      joinCode: sc.joinCode || '',    // teacher self-sign-up verification code
       verified: true,                 // Tilli verified this demo school (spec A1)
       status: 'active',
       claimMethod: 'code',            // spec §9.1 per-school setting: default to claim code
@@ -152,6 +196,7 @@
         grade: r.grade, section: r.section, gender: r.gender,
         dob: makeDob(r.adm, r.grade),
         claimCode: makeClaimCode(r.adm),
+        uid: makeUid(sc.id, r.adm),
         parentName: r.parentName || '', parentEmail: low(r.parentEmail||''),
         status: 'active',                       // 'active' | 'left'  (spec §3.2)
         source: 'seed', createdAt: null,
@@ -176,6 +221,15 @@
     // created schools).
     if (!db.accounts){ db.accounts = {}; write(db); }
     if (!db.outcomes){ db.outcomes = {}; write(db); }
+    // Stores seeded before the demo school had a join code / location: copy them in.
+    var SRC = window.TILLI_SCHOOL && window.TILLI_SCHOOL.school;
+    var seededSc = SRC && db.schools[SRC.id];
+    if (seededSc && (!seededSc.joinCode && SRC.joinCode)){
+      seededSc.joinCode = SRC.joinCode; seededSc.city = seededSc.city || SRC.city || ''; seededSc.country = seededSc.country || SRC.country || '';
+      write(db);
+    }
+    if (!db.config){ db.config = {}; }
+    if (!db.config.reflection){ db.config.reflection = clone(DEFAULT_REFLECTION); write(db); }
     return db;
   }
 
@@ -258,7 +312,7 @@
       scoped = all.filter(function(s){ return mine.indexOf(s.section_id)>=0; }); }  // own sections only
     else scoped = [];                                                    // parents don't list rosters
     if (!opts.includeLeft) scoped = scoped.filter(function(s){ return s.status!=='left'; });
-    return scoped.map(function(s){ return Object.assign({}, s); });
+    return scoped.map(pubStudent);
   }
 
   // SERVER-SIDE (spec A4): dedupe-on-add. All three add-paths (manual / CSV /
@@ -333,6 +387,7 @@
       section: input.section || (db.sections[sectionId]&&db.sections[sectionId].section) || '',
       gender: input.gender || '', dob: input.dob || '',
       claimCode: makeClaimCode(sid),           // stable code the teacher hands to the parent
+      uid: makeUid(schoolId, sid),             // student's unique Tilli Measures code
       parentName: norm(input.parentName), parentEmail: low(input.parentEmail),
       status:'active', source: input.source||'manual', createdAt: Date.now(),
     };
@@ -618,7 +673,31 @@
   }
 
   /* ---------- read helpers the UI needs ---------- */
-  function getStudent(schoolId, studentId){ var db=getDB(); var s=db.students[keyOf(schoolId,studentId)]; return s?Object.assign({},s):null; }
+  // Public copy of a student record. `uid` is derived when a record predates
+  // the UID field (deterministic, so the value never changes).
+  function pubStudent(s){ var o=Object.assign({},s); if(!o.uid) o.uid=makeUid(o.school_id,o.student_id); return o; }
+  // Teacher edits a child's name and/or UID. The UID must stay unique across
+  // every school (compared case-insensitively against stored + derived UIDs).
+  var UID_RE = /^[A-Z0-9][A-Z0-9-]{2,19}$/;
+  function updateStudent(schoolId, studentId, patch){
+    var db = getDB(); var k = keyOf(schoolId, studentId); var rec = db.students[k];
+    if (!rec) return { ok:false, reason:'not_found' };
+    patch = patch || {};
+    var first = patch.first != null ? norm(patch.first) : rec.first;
+    var last  = patch.last  != null ? norm(patch.last)  : rec.last;
+    if (!first) return { ok:false, reason:'name_required' };
+    var uid = patch.uid != null ? up(patch.uid) : (rec.uid || makeUid(rec.school_id, rec.student_id));
+    if (!UID_RE.test(uid)) return { ok:false, reason:'uid_format' };
+    var clash = Object.keys(db.students).some(function(x){
+      if (x === k) return false;
+      var s = db.students[x]; return up(s.uid || makeUid(s.school_id, s.student_id)) === uid;
+    });
+    if (clash) return { ok:false, reason:'uid_taken' };
+    rec.first = first; rec.last = last; rec.name = (first+' '+last).trim(); rec.uid = uid;
+    write(db);
+    return { ok:true, student: pubStudent(rec) };
+  }
+  function getStudent(schoolId, studentId){ var db=getDB(); var s=db.students[keyOf(schoolId,studentId)]; return s?pubStudent(s):null; }
   function schoolSettings(schoolNameOrId){ var sc=resolveSchool(schoolNameOrId); return sc?{ claimMethod:sc.claimMethod, verified:sc.verified }:null; }
   function reviewQueue(actorEmail, schoolId){ var db=getDB(); if(roleOf(db,actorEmail,schoolId)!=='admin') return []; return db.reviewQueue.filter(function(f){return f.school_id===schoolId;}); }
 
@@ -725,6 +804,17 @@
     for (var i=0;i<ids.length;i++){ if (up(db.schools[ids[i]].joinCode||'')===q) return Object.assign({}, db.schools[ids[i]]); }
     return null;
   }
+  // Teacher self-sign-up: the teacher picked a school, then proves it with that
+  // school's code. Case / spaces / hyphens are ignored. Never reveals which
+  // school a wrong code belongs to.
+  function verifySchoolCode(schoolNameOrId, codeStr){
+    var sc = resolveSchool(schoolNameOrId);
+    if (!sc) return { ok:false, reason:'unknown_school' };
+    var clean = function(x){ return up(x).replace(/[^A-Z0-9]/g,''); };
+    if (!sc.joinCode) return { ok:false, reason:'no_code' };
+    if (!clean(codeStr) || clean(codeStr)!==clean(sc.joinCode)) return { ok:false, reason:'mismatch' };
+    return { ok:true, school:Object.assign({}, sc) };
+  }
   function listSchools(){ var db=getDB(); return Object.keys(db.schools).map(function(k){ return Object.assign({}, db.schools[k]); }); }
   function staffFor(schoolId){ var db=getDB(); return (db.staff[schoolId]||[]).slice(); }
   // Unscoped roster for portfolio / coordinator DISPLAY (not a security path —
@@ -732,7 +822,7 @@
   function studentsForSchool(schoolId, opts){ var db=getDB(); opts=opts||{};
     return Object.keys(db.students).map(function(k){ return db.students[k]; })
       .filter(function(s){ return s.school_id===schoolId && (opts.includeLeft || s.status!=='left'); })
-      .map(function(s){ return Object.assign({}, s); }); }
+      .map(pubStudent); }
   // Grade/section structure + counts, for the org portfolio hub.
   function schoolStats(schoolId){
     var secs = sectionsForSchool(schoolId);
@@ -915,6 +1005,31 @@
     return out;
   }
 
+  /* ---------- reflection question bank (Platform Admin editable) ---------- */
+  function getReflectionConfig(){ return clone(getDB().config.reflection); }
+  // Replaces the whole bank. Keeps the 5 fixed categories; drops questions with
+  // no text; gives any new question a fresh stable id.
+  function setReflectionConfig(cfg){
+    if (!cfg || !Array.isArray(cfg.questions)) return { ok:false, reason:'bad_config' };
+    var db = getDB(); var cats = db.config.reflection.cats;
+    var catIds = cats.map(function(c){ return c.id; });
+    var used = {}; var n = 0;
+    var qs = cfg.questions.filter(function(q){ return q && norm(q.q); }).map(function(q){
+      var id = norm(q.id); if (!id || used[id]) { do { id = 'q' + Date.now().toString(36) + (n++); } while (used[id]); }
+      used[id] = true;
+      var type = ['scale','choice','text'].indexOf(q.type)>=0 ? q.type : 'scale';
+      var out = { id:id, cat: catIds.indexOf(q.cat)>=0 ? q.cat : catIds[0], type:type, q:norm(q.q) };
+      if (norm(q.hint)) out.hint = norm(q.hint);
+      if (type==='scale'){ if (norm(q.lo)) out.lo = norm(q.lo); if (norm(q.hi)) out.hi = norm(q.hi); if (q.reverse) out.reverse = true; }
+      if (type==='choice') out.options = (q.options||[]).map(norm).filter(Boolean);
+      return out;
+    });
+    db.config.reflection = { cats: cats, questions: qs, updatedAt: Date.now() };
+    write(db);
+    return { ok:true, config: clone(db.config.reflection) };
+  }
+  function resetReflectionConfig(){ var db=getDB(); db.config.reflection = clone(DEFAULT_REFLECTION); write(db); return clone(db.config.reflection); }
+
   /* ---------- dev utilities ---------- */
   function reset(){ try{ localStorage.removeItem(STORE_KEY); }catch(e){} return seedFromSchool(); }
   function _dump(){ return getDB(); }
@@ -950,12 +1065,18 @@
     setPassword: setPassword,
     // reads + config
     getStudent: getStudent,
+    updateStudent: updateStudent,
+    makeUid: makeUid,
+    getReflectionConfig: getReflectionConfig,
+    setReflectionConfig: setReflectionConfig,
+    resetReflectionConfig: resetReflectionConfig,
     schoolSettings: schoolSettings,
     resolveSchool: function(x){ var s=resolveSchool(x); return s?Object.assign({},s):null; },
     roleOf: function(email, schoolId){ return roleOf(getDB(), email, schoolId); },
     // NEW — full school creation + directory (Platform Admin "Add school")
     createSchoolFull: createSchoolFull,
     resolveJoinCode: resolveJoinCode,
+    verifySchoolCode: verifySchoolCode,
     listSchools: listSchools,
     staffFor: staffFor,
     sectionsForSchool: sectionsForSchool,

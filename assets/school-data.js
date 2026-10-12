@@ -62,7 +62,9 @@
   ];
 
   // ---- the school ----
-  const SCHOOL = { id: 'little-sprouts', name: 'Little Sprouts School', city: 'Bengaluru', country: 'India', term: 'Term One' };
+  // joinCode = the school code a self-registering teacher enters to verify
+  // their school at sign-up (matches the code shown in the Platform Admin).
+  const SCHOOL = { id: 'little-sprouts', name: 'Little Sprouts School', city: 'Bengaluru', country: 'India', term: 'Term One', joinCode: 'LSPR-2210' };
 
   // ---- 4 class teachers (one per section) ----
   const TEACHERS = [

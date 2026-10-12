@@ -95,6 +95,7 @@
     { icon: 'assessments', title: 'Assessments', items: [
       { key: 'templates', label: 'Templates' },
       { key: 'deployments', label: 'Deployments' },
+      { key: 'reflection', label: 'Reflection Questions' },
     ] },
     { icon: 'people', title: 'People', items: [
       { key: 'users', label: 'Users' },
@@ -2231,7 +2232,7 @@
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
       'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',
-      'observation.publish': 'Published observation phase', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
+      'observation.publish': 'Published observation phase', 'reflection.edit': 'Edited teacher reflection questions', 'reflection.reset': 'Reset teacher reflection questions', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
       'group.create': 'Created group', 'group.rename': 'Renamed group', 'group.delete': 'Deleted group',
       'invitation.resend': 'Resent invitation', 'invitation.send': 'Sent invitation', 'invitation.revoke': 'Revoked invitation',
       'user.delete': 'Deleted user', 'user.remove': 'Removed from school', 'issue.status': 'Changed issue status' })[a] || a;
@@ -2449,6 +2450,135 @@
       ORG.server.logAudit(me.name, 'observation.publish', sw.dataset.obphase + ' → ' + (sw.checked ? 'published' : 'draft'), 'template');
       toast('Phase ' + sw.dataset.obphase + (sw.checked ? ' published.' : ' set to draft.'));
     }); });
+  };
+
+  // ============================================================
+  //  TEACHER REFLECTION QUESTIONS — the one-time pre-training reflection every
+  //  teacher completes during dashboard onboarding. Stored in the shared
+  //  TilliAPI bank (db.config.reflection), so edits here reach the teacher app
+  //  without a rebuild. Categories are fixed (5 — they map to the onboarding
+  //  progress petals); questions are added / edited / reordered / removed per
+  //  category. Edits are a local draft until "Save changes".
+  // ============================================================
+  var reflDraft = null, reflDirty = false;
+  var REFL_TYPES = [['scale', 'Scale 1–5'], ['choice', 'Multiple choice'], ['text', 'Written answer']];
+  SCREEN.reflection = function (p, b) {
+    var API = window.TilliAPI;
+    if (!API || !API.getReflectionConfig) { b.innerHTML = screenHead('Reflection Questions', 'Question store unavailable.'); return; }
+    if (!reflDraft) { reflDraft = API.getReflectionConfig(); reflDirty = false; }
+    var cats = reflDraft.cats || [], qs = reflDraft.questions || [];
+    var n = 0;
+    var catCards = cats.map(function (c) {
+      var mine = qs.filter(function (q) { return q.cat === c.id; });
+      var rows = mine.map(function (q, k) {
+        n++;
+        var gi = qs.indexOf(q);
+        var typeSel = '<select class="input tl-refl-type" data-rq-type="' + gi + '">' + REFL_TYPES.map(function (t) {
+          return '<option value="' + t[0] + '"' + (q.type === t[0] ? ' selected' : '') + '>' + t[1] + '</option>'; }).join('') + '</select>';
+        var extra = '';
+        if (q.type === 'scale') {
+          extra = '<div class="tl-refl-extra"><input class="input" data-rq="' + gi + '" data-rk="lo" value="' + esc(q.lo || '') + '" placeholder="1 = Strongly disagree" title="Label under 1 (blank = Strongly disagree)">' +
+            '<input class="input" data-rq="' + gi + '" data-rk="hi" value="' + esc(q.hi || '') + '" placeholder="5 = Strongly agree" title="Label under 5 (blank = Strongly agree)">' +
+            '<label class="tl-refl-rev" title="Tick when agreeing is the LESS healthy answer (e.g. &quot;I felt drained&quot;). The Teaching Mirror flips it so higher always means more of that strength."><input type="checkbox" data-rq-rev="' + gi + '"' + (q.reverse ? ' checked' : '') + '> Reverse-scored</label></div>';
+        } else if (q.type === 'choice') {
+          extra = '<div class="tl-refl-extra"><input class="input grow" data-rq-opts="' + gi + '" value="' + esc((q.options || []).join(', ')) + '" placeholder="Options, comma-separated (e.g. 0, 1–2, 3–4, 5+)"></div>';
+        }
+        return '<div class="tl-refl-q">' +
+          '<span class="q-n">' + n + '</span>' +
+          '<div class="tl-refl-body">' +
+            '<textarea class="input tl-refl-text" rows="2" data-rq="' + gi + '" data-rk="q" placeholder="Question text">' + esc(q.q) + '</textarea>' +
+            '<input class="input tl-refl-hint" data-rq="' + gi + '" data-rk="hint" value="' + esc(q.hint || '') + '" placeholder="Helper text shown under the question (optional)">' +
+            '<div class="tl-refl-meta">' + typeSel + extra + '</div>' +
+          '</div>' +
+          '<div class="tl-refl-ctl">' +
+            '<button class="tl-refl-ic" data-rq-move="' + gi + ':-1" title="Move up"' + (k === 0 ? ' disabled' : '') + '>↑</button>' +
+            '<button class="tl-refl-ic" data-rq-move="' + gi + ':1" title="Move down"' + (k === mine.length - 1 ? ' disabled' : '') + '>↓</button>' +
+            '<button class="tl-refl-ic del" data-rq-del="' + gi + '" title="Delete question">×</button>' +
+          '</div></div>';
+      }).join('') || '<div class="tl-empty" style="padding:12px">No questions in this category.</div>';
+      return '<div class="tl-card tl-refl-cat"><div class="tl-mod-h"><div><h3 class="tl-mod-title"><span class="tl-refl-dot" style="background:' + esc(c.color) + '"></span>' + esc(c.name) + '</h3>' +
+        '<p class="tl-mod-note">' + mine.length + ' question' + (mine.length === 1 ? '' : 's') + '</p></div>' +
+        '<button class="btn btn-outline btn-sm" data-rq-add="' + esc(c.id) + '">+ Add question</button></div>' + rows + '</div>';
+    }).join('');
+    var saved = (reflDraft.updatedAt ? 'Last saved ' + timeAgo(reflDraft.updatedAt) + '. ' : '');
+    b.innerHTML = screenHead('Reflection Questions',
+        saved + 'The one-time teacher reflection in dashboard onboarding — ' + qs.length + ' questions across ' + cats.length + ' categories. Changes reach teachers the next time they open the reflection.',
+        '<button class="btn btn-outline btn-sm" id="rq-reset">Reset to default</button>' +
+        '<button class="btn btn-outline btn-sm" id="rq-discard"' + (reflDirty ? '' : ' disabled') + '>Discard</button>' +
+        '<button class="btn btn-primary btn-sm" id="rq-save"' + (reflDirty ? '' : ' disabled') + '>' + (reflDirty ? 'Save changes' : 'Saved') + '</button>') +
+      (reflDirty ? '<div class="tl-filterbanner">Unsaved changes — teachers still see the last saved version.</div>' : '') +
+      catCards;
+
+    function dirty() {
+      if (reflDirty) return;
+      reflDirty = true;
+      var sv = b.querySelector('#rq-save'), dc = b.querySelector('#rq-discard');
+      if (sv) { sv.disabled = false; sv.textContent = 'Save changes'; }
+      if (dc) dc.disabled = false;
+    }
+    function rerender() { reflDirty = true; SCREEN.reflection(p, b); }
+    // text fields patch the draft in place (no re-render → caret survives)
+    b.querySelectorAll('[data-rq]').forEach(function (el) { el.addEventListener('input', function () {
+      var q = qs[+el.dataset.rq]; if (!q) return; q[el.dataset.rk] = el.value; dirty();
+    }); });
+    b.querySelectorAll('[data-rq-opts]').forEach(function (el) { el.addEventListener('input', function () {
+      var q = qs[+el.dataset.rqOpts]; if (!q) return;
+      q.options = el.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); dirty();
+    }); });
+    b.querySelectorAll('[data-rq-rev]').forEach(function (el) { el.addEventListener('change', function () {
+      var q = qs[+el.dataset.rqRev]; if (q) { q.reverse = el.checked; dirty(); }
+    }); });
+    b.querySelectorAll('[data-rq-type]').forEach(function (el) { el.addEventListener('change', function () {
+      var q = qs[+el.dataset.rqType]; if (!q) return;
+      q.type = el.value;
+      if (q.type === 'choice' && !(q.options && q.options.length)) q.options = ['Option 1', 'Option 2'];
+      rerender();
+    }); });
+    b.querySelectorAll('[data-rq-add]').forEach(function (el) { el.addEventListener('click', function () {
+      var cat = el.dataset.rqAdd, last = -1;
+      qs.forEach(function (q, i) { if (q.cat === cat) last = i; });
+      qs.splice(last + 1, 0, { id: '', cat: cat, type: 'scale', q: '' });
+      rerender();
+      var t = b.querySelectorAll('[data-rk="q"]'); var target = b.querySelector('[data-rq="' + (last + 1) + '"][data-rk="q"]');
+      if (target) target.focus(); else if (t.length) t[t.length - 1].focus();
+    }); });
+    b.querySelectorAll('[data-rq-move]').forEach(function (el) { el.addEventListener('click', function () {
+      var parts = el.dataset.rqMove.split(':'), i = +parts[0], dir = +parts[1], q = qs[i];
+      // swap with the nearest question of the same category in that direction
+      for (var j = i + dir; j >= 0 && j < qs.length; j += dir) {
+        if (qs[j].cat === q.cat) { qs[i] = qs[j]; qs[j] = q; break; }
+      }
+      rerender();
+    }); });
+    b.querySelectorAll('[data-rq-del]').forEach(function (el) { el.addEventListener('click', function () {
+      var i = +el.dataset.rqDel, q = qs[i]; if (!q) return;
+      if (q.q && !confirm('Delete this question?\n\n“' + q.q + '”\n\nTeachers who already answered keep their answer on file.')) return;
+      qs.splice(i, 1); rerender();
+    }); });
+    b.querySelector('#rq-save').addEventListener('click', function () {
+      var empty = qs.filter(function (q) { return !String(q.q || '').trim(); }).length;
+      if (empty && !confirm(empty + ' question' + (empty === 1 ? ' has' : 's have') + ' no text and will be dropped. Save anyway?')) return;
+      // Keep the bank grouped by category order so teachers move through one
+      // category at a time (a question added later doesn't jump to the end).
+      var order = cats.map(function (c) { return c.id; });
+      var sorted = qs.map(function (q, i) { return { q: q, i: i }; })
+        .sort(function (a, c) { return (order.indexOf(a.q.cat) - order.indexOf(c.q.cat)) || (a.i - c.i); })
+        .map(function (x) { return x.q; });
+      var res = API.setReflectionConfig({ cats: cats, questions: sorted });
+      if (!res.ok) { toast('Could not save — ' + (res.reason || 'unknown error')); return; }
+      reflDraft = res.config; reflDirty = false;
+      ORG.server.logAudit(me.name, 'reflection.edit', reflDraft.questions.length + ' questions', 'template');
+      toast('Reflection questions saved — teachers see them next time.');
+      SCREEN.reflection(p, b);
+    });
+    b.querySelector('#rq-discard').addEventListener('click', function () { reflDraft = null; SCREEN.reflection(p, b); });
+    b.querySelector('#rq-reset').addEventListener('click', function () {
+      if (!confirm('Reset the reflection to the original 10 questions? This replaces the saved bank for every teacher.')) return;
+      reflDraft = API.resetReflectionConfig(); reflDirty = false;
+      ORG.server.logAudit(me.name, 'reflection.reset', 'Default bank', 'template');
+      toast('Reflection reset to the default questions.');
+      SCREEN.reflection(p, b);
+    });
   };
 
   // ============================================================

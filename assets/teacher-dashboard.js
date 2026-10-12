@@ -195,7 +195,7 @@
     return S.data.sections.find((s) => s.id === S.sectionId) || S.data.sections[0];
   }
   function sectionIdOfStudent(sid) { const s = S.data.sections.find((sec) => sec.students.some((st) => st.id === sid)); return s ? s.id : S.sectionId; }
-  function openStudent(sid) { S.classModal = null; S.sectionId = sectionIdOfStudent(sid); S.studentId = sid; S.studentTab = 'overview'; S.nav = 'students'; render(); }
+  function openStudent(sid) { S.stuEdit = null; S.classModal = null; S.sectionId = sectionIdOfStudent(sid); S.studentId = sid; S.studentTab = 'overview'; S.nav = 'students'; render(); }
   const bestOf = (stu) => [...stu.skills].sort((a, b) => b.pct - a.pct)[0].name;
   const weakOf = (stu) => [...stu.skills].sort((a, b) => a.pct - b.pct)[0].name;
   function bandLine(stu) {
@@ -231,11 +231,45 @@
     pending: { label: 'Not started', bg: '#F3ECDD', fg: '#9a9284', dot: '#d8cfba' },
   };
 
+  // ---------------- data: real class + preview overlay ----------------
+  // S.baseData = the teacher's real class. S.data = what every page renders:
+  // the real class in 'baseline', or the dev preview overlay (dashboard-data.js
+  // previewData) for the other states — with the teacher's saved observations
+  // applied on top either way. Call rebuildData() after either one changes.
+  const WIN_OF_STATE = { baseline: 'baseline', midline: 'mid', endline: 'post' };
+  const PHASE_OF_WIN = { baseline: 'Baseline', mid: 'Midline', post: 'Endline' };
+  function activeWindowKey() { return WIN_OF_STATE[S.windowState] || null; }
+  function rebuildData() {
+    const D = window.TilliDashData;
+    const d = (D && S.windowState !== 'baseline') ? D.previewData(S.baseData, S.windowState) : S.baseData;
+    S.data = applyObservations(d);
+  }
+  function logOf(st, wk) { return (st.assessLog || []).find((w) => w.key === wk); }
+  function teacherDone(st, wk) {
+    const w = logOf(st, wk); const p = w && w.persp.find((x) => x.key === 'teacher');
+    return !!(p && p.done);
+  }
+  function markTeacherDone(st, wk) {
+    const D = window.TilliDashData; const w = logOf(st, wk);
+    if (!D || !w) return;
+    const i = w.persp.findIndex((x) => x.key === 'teacher'); if (i < 0) return;
+    w.persp[i] = D.perspEntry(w.persp[i], w.persp[i].totalParts || 1);
+    D.finishWindow(w); D.finishLog(st);
+    if (wk === 'baseline') st.assess = 'done';
+  }
+  function applyObservations(d) {
+    const obs = (S.teacher && S.teacher.observations) || {};
+    Object.keys(obs).forEach((wk) => d.sections.forEach((sec) => sec.students.forEach((st) => {
+      if (obs[wk] && obs[wk][st.adm || st.id] && !teacherDone(st, wk)) markTeacherDone(st, wk);
+    })));
+    return d;
+  }
+
   // ---------------- mount ----------------
   function mount(mountEl, ctx) {
     root = mountEl;
     S = {
-      data: ctx.data, teacher: ctx.teacher || {},
+      data: ctx.data, baseData: ctx.data, teacher: ctx.teacher || {},
       nav: 'garden', sectionId: (ctx.data.sections[0] || {}).id,
       gardenLevel: 'landing', classModal: null, studentId: null,
       // A first-time class (built from onboarding) opens on Baseline — no prior
@@ -247,9 +281,12 @@
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
       vw: window.innerWidth,
+      select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
+      profileEdit: false, profileDraft: null,
       ask: { open: false, context: '', prompt: '', thread: [] },
       gardener: (ctx.teacher && ctx.teacher.demo && ctx.teacher.demo.gender === 'Male') ? 'm' : 'f',
     };
+    rebuildData();
     injectCSS();
     let rt;
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { S.vw = window.innerWidth; render(); }, 120); });
@@ -381,6 +418,7 @@
         ${S.ask.open ? askPanel() : ''}
         ${S.classModal ? classModalView() : ''}
         ${addModal()}
+        ${stateSwitcherGUI()}
       </div>`;
     wire();
   }
@@ -614,12 +652,12 @@
       ${hero}
       ${weekIdeaSlot()}
       ${tendSlot(ld, state)}
-      ${stateSwitcherGUI()}
     </div>`;
   }
 
-  // Dev-only landing-state switch (see spec build order: mock the current window
-  // first). Not part of the teacher UI — a scaffold to preview all four states.
+  // Dev-only state switch, shown on EVERY page (rendered from paintDom). Drives
+  // S.windowState → the landing variant AND the preview data every other page
+  // reads (rebuildData). Not part of the teacher UI — a scaffold for review.
   function stateSwitcherGUI() {
     const opts = [
       ['baseline', 'Baseline', 'State A — start of year, Baseline window open. Seedlings, no prior data; band mix hidden; tend list empty.'],
@@ -628,7 +666,7 @@
       ['endline', 'Endline', 'State D — year end, Endline window open. Full bloom; biggest celebration.'],
     ];
     return `<div class="mg-gui" role="group" aria-label="Landing state (dev only)">
-      <div class="mg-gui-h" title="Dev-only switch. Drives which of the 4 landing states renders (controls S.windowState). Not shown to teachers — bake or remove before ship.">Landing&nbsp;state <span class="mg-gui-star" title="Newly added control">*</span></div>
+      <div class="mg-gui-h" title="Dev-only switch, on every page. Previews the whole dashboard in each assessment state (controls S.windowState → landing variant + preview data overlay). Not shown to teachers — bake or remove before ship.">Preview&nbsp;state <span class="mg-gui-star" title="Now on every page">*</span></div>
       <div class="mg-gui-opts">${opts.map(([v, lb, tip]) => `<button class="mg-gui-opt${S.windowState === v ? ' on' : ''}" data-window-state="${v}" title="${esc(tip)}">${lb}</button>`).join('')}</div>
     </div>`;
   }
@@ -927,20 +965,47 @@
   }
 
   // ---------------- Students: roster ----------------
-  function rosterList() {
+  function rosterFiltered() {
     const sec = section();
-    let list = sec.students.filter((st) => st.name.toLowerCase().includes(S.rosterSearch.toLowerCase()));
+    const list = sec.students.filter((st) => st.name.toLowerCase().includes(S.rosterSearch.toLowerCase()));
     const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
     if (S.rosterSort === 'state') list.sort((a, b) => order[a.state] - order[b.state]);
     else if (S.rosterSort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
     else list.sort((a, b) => b.grewSincePre - a.grewSincePre);
+    return list;
+  }
+  function rosterList() {
+    const list = rosterFiltered();
     if (!list.length) return '<p class="dash-sub" style="padding:8px 2px">No students match “' + esc(S.rosterSearch) + '”.</p>';
-    return list.map((st, i) => `
-      <button class="roster-row" data-open-student="${esc(st.id)}">
+    const picking = S.select.on;
+    return list.map((st, i) => {
+      const on = !!S.select.ids[st.id];
+      const act = picking ? `data-pick-stu="${esc(st.id)}" aria-pressed="${on}"` : `data-open-student="${esc(st.id)}"`;
+      return `<button class="roster-row${picking ? ' picking' : ''}${on ? ' picked' : ''}" ${act}>
+        ${picking ? `<span class="rr-check${on ? ' on' : ''}" aria-hidden="true">${on ? '✓' : ''}</span>` : ''}
         <span class="rr-plant">${flowerArt(st.state, 46, i)}</span>
-        <span class="rr-info"><span class="nm">${esc(st.name)}</span><span class="sl">${esc(bandLine(st))}</span></span>
+        <span class="rr-info"><span class="nm">${esc(st.name)} ${uidChip(st, true)}</span><span class="sl">${esc(bandLine(st))}</span></span>
         <span class="rr-chips">${chipHTML(st.chips)}</span>
-      </button>`).join('');
+      </button>`;
+    }).join('');
+  }
+
+  // Multi-select bar (Students → "Parent reports"): pick children, download one
+  // PDF per child for their parent.
+  function selectBar() {
+    const sel = S.select;
+    if (!sel.on) return '';
+    const vis = rosterFiltered();
+    const n = Object.keys(sel.ids).length;
+    const allOn = vis.length > 0 && vis.every((st) => sel.ids[st.id]);
+    return `<div class="sel-bar">
+      <button class="sel-all focus" data-sel-all><span class="rr-check${allOn ? ' on' : ''}">${allOn ? '✓' : ''}</span>Select all</button>
+      <span class="sel-n">${n} selected</span>
+      ${sel.err ? `<span class="sel-err">${esc(sel.err)}</span>` : ''}
+      <span class="sel-sp"></span>
+      <button class="btn btn-ghost focus" data-sel-cancel style="padding:9px 16px">Cancel</button>
+      <button class="btn btn-primary focus" data-sel-pdf${n && !sel.busy ? '' : ' disabled'} style="padding:9px 16px">${sel.busy ? esc(sel.busy) : `⬇ Download ${n === 1 ? 'PDF' : 'PDFs'}${n ? ' (' + n + ')' : ''}`}</button>
+    </div>`;
   }
 
   function rosterView() {
@@ -948,8 +1013,17 @@
     const sortTabs = [['state', 'State'], ['name', 'Name'], ['growth', 'Growth']]
       .map(([k, l]) => `<button class="pill-tab rsort${S.rosterSort === k ? ' on' : ''}" data-sort="${k}">${l}</button>`).join('');
     return `<div class="dash-wrap" style="max-width:900px">
-      <h1 class="dash-h1">Students</h1>
-      <p class="dash-sub">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
+      <div class="roster-titlebar">
+        <div>
+          <h1 class="dash-h1">Students</h1>
+          <p class="dash-sub">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
+        </div>
+        <div class="roster-actions">
+          ${S.select.on ? '' : '<button class="ra-btn focus" data-sel-start title="Select students and download a PDF report for each, ready to share with parents">☑ Parent reports</button>'}
+          <button class="ra-btn primary focus" data-add-students title="Add students to one of your grades · sections">+ Add students</button>
+        </div>
+      </div>
+      ${selectBar()}
       <div class="roster-tools">
         <div class="roster-search">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="#9AA3AF" stroke-width="2"/><path d="M16 16l4 4" stroke="#9AA3AF" stroke-width="2" stroke-linecap="round"/></svg>
@@ -966,9 +1040,163 @@
     if (!listEl) return;
     listEl.innerHTML = rosterList();
     listEl.querySelectorAll('[data-open-student]').forEach((b) => b.addEventListener('click', () => openStudent(b.dataset.openStudent)));
+    listEl.querySelectorAll('[data-pick-stu]').forEach((b) => b.addEventListener('click', () => togglePick(b.dataset.pickStu)));
+  }
+  function togglePick(id) {
+    const ids = Object.assign({}, S.select.ids);
+    if (ids[id]) delete ids[id]; else ids[id] = true;
+    S.select = Object.assign({}, S.select, { ids, err: '' });
+    render();
+  }
+
+  // ---------------- parent report PDFs ----------------
+  // html2pdf.js (jsPDF + html2canvas) is loaded lazily from cdnjs the first time
+  // a teacher downloads. One A4 PDF per selected child. Layout is a placeholder
+  // until the sample parent PDF arrives — edit reportHTML() to match it.
+  const PDF_LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+  let pdfLibP = null;
+  function loadPdfLib() {
+    if (window.html2pdf) return Promise.resolve(window.html2pdf);
+    if (pdfLibP) return pdfLibP;
+    pdfLibP = new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = PDF_LIB_URL;
+      sc.onload = () => (window.html2pdf ? res(window.html2pdf) : rej(new Error('html2pdf missing')));
+      sc.onerror = () => { pdfLibP = null; rej(new Error('PDF library failed to load')); };
+      document.head.appendChild(sc);
+    });
+    return pdfLibP;
+  }
+  function reportFileName(stu) {
+    return ((stu.first || '') + '-' + (stu.last || '')).replace(/[^A-Za-z0-9-]+/g, '').replace(/^-|-$/g, '') + '-Tilli-report.pdf';
+  }
+  async function downloadReports() {
+    const all = S.data.sections.flatMap((x) => x.students);
+    const list = Object.keys(S.select.ids).map((id) => all.find((st) => st.id === id)).filter(Boolean);
+    if (!list.length || S.select.busy) return;
+    try {
+      S.select = Object.assign({}, S.select, { busy: 'Loading…', err: '' }); render();
+      const h2p = await loadPdfLib();
+      for (let i = 0; i < list.length; i++) {
+        S.select = Object.assign({}, S.select, { busy: `Preparing ${i + 1} of ${list.length}…` }); render();
+        const el = document.createElement('div');
+        el.className = 'pr';
+        el.innerHTML = reportHTML(list[i]);
+        await h2p().set({
+          margin: [10, 10, 12, 10], filename: reportFileName(list[i]),
+          image: { type: 'jpeg', quality: 0.96 },
+          html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] },
+        }).from(el).save();
+      }
+      S.select = { on: false, ids: {}, busy: '', err: '' };
+    } catch (err) {
+      console.error('report PDF failed', err);
+      S.select = Object.assign({}, S.select, { busy: '', err: 'Couldn’t create the PDFs — check your connection and try again.' });
+    }
+    render();
+  }
+  // One child's parent report (placeholder format).
+  function reportHTML(stu) {
+    const d = S.teacher.demo || {};
+    const school = d.school || S.teacher.school || '';
+    const today = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    const winDone = {}; (stu.assessLog || []).forEach((w) => { winDone[w.key] = w.status !== 'pending'; });
+    const v = (wk, val) => (winDone[wk] ? val + '%' : '—');
+    const waiting = stu.state === 'waiting';
+    const skillRows = (grp) => stu.skills.filter((sk) => sk.group === grp).map((sk) => `<tr>
+        <td class="sk">${esc(sk.name)}</td><td>${v('baseline', sk.pre)}</td><td>${v('mid', sk.mid)}</td><td>${v('post', sk.post)}</td>
+        <td><span class="pr-band pr-${(sk.band || '').toLowerCase()}">${waiting ? '—' : esc(sk.band)}</span></td></tr>`).join('');
+    const perspRows = stu.skills.map((sk) => `<tr><td class="sk">${esc(sk.name)}</td><td>${waiting ? '—' : sk.teacher + '%'}</td><td>${waiting ? '—' : sk.parent + '%'}</td><td>${waiting ? '—' : sk.student + '%'}</td></tr>`).join('');
+    const head = (cols) => `<tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr>`;
+    return `<div class="pr-top"><div class="pr-brand">🌱 Tilli <span>Measures</span></div><div class="pr-date">Progress report · ${esc(today)}</div></div>
+      <h1 class="pr-name">${esc(stu.name)}</h1>
+      <div class="pr-meta">${esc(stu.section || '')}${school ? ' · ' + esc(school) : ''}${uidOf(stu) ? ' · UID ' + esc(uidOf(stu)) : ''}</div>
+      ${waiting
+        ? `<div class="pr-callout">${esc(stu.first)}&rsquo;s first assessment is still in progress. This report fills in once Baseline is complete.</div>`
+        : `<div class="pr-summary">
+            <div class="pr-overall"><div class="k">Overall</div><div class="v">${esc(stu.band)}</div><div class="s">${stu.overallPct}% · ${stu.growth >= 0 ? '+' : ''}${stu.growth} since baseline</div></div>
+            <div class="pr-lines"><div><b>🌸 Something that grew</b><br>${esc(stu.celebrateLine)}</div><div><b>🪴 A place to focus</b><br>${esc(stu.tendReason)}.</div></div>
+          </div>`}
+      <h2 class="pr-h">Social-emotional skills</h2>
+      <table class="pr-table">${head(['Skill', 'Baseline', 'Mid-year', 'End of year', 'Band'])}${skillRows('sel')}</table>
+      <h2 class="pr-h">Executive function</h2>
+      <table class="pr-table">${head(['Skill', 'Baseline', 'Mid-year', 'End of year', 'Band'])}${skillRows('cog')}</table>
+      <h2 class="pr-h">Three perspectives</h2>
+      <table class="pr-table">${head(['Skill', '👩‍🏫 Teacher', '🏠 Home', '🧒 Child'])}${perspRows}</table>
+      <div class="pr-foot">Prepared by ${esc(d.name || 'your class teacher')}${school ? ', ' + esc(school) : ''}. Differences between views are normal — they&rsquo;re a conversation worth having, not a problem.</div>`;
   }
 
   // ---------------- Students: detail ----------------
+  // Student header card — name, class, UID — with inline "Edit" for name + UID.
+  function stuHead(stu, plantState, extra) {
+    const ed = S.stuEdit && S.stuEdit.id === stu.id ? S.stuEdit : null;
+    if (ed) {
+      return `<div class="stu-head">
+        <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
+        <div class="stu-meta stu-editform">
+          <div class="stu-edit-grid">
+            <label><span>First name</span><input class="stu-in focus" data-stu-edit="first" value="${esc(ed.first)}" placeholder="First name"></label>
+            <label><span>Last name</span><input class="stu-in focus" data-stu-edit="last" value="${esc(ed.last)}" placeholder="Last name"></label>
+            <label title="The child's unique Tilli Measures code. Letters, numbers and hyphens; must not be used by another student."><span>Student UID</span><input class="stu-in mono focus" data-stu-edit="uid" value="${esc(ed.uid)}" placeholder="TM-XXXXXX" maxlength="20" autocapitalize="characters" spellcheck="false"></label>
+          </div>
+          ${ed.err ? `<div class="stu-edit-err">${esc(ed.err)}</div>` : ''}
+          <div class="stu-edit-actions">
+            <button class="btn btn-primary focus" data-stu-save style="padding:10px 20px">Save</button>
+            <button class="btn btn-ghost focus" data-stu-cancel style="padding:10px 18px">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `<div class="stu-head">
+      <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
+      <div class="stu-meta">
+        <h1 class="stu-name">${esc(stu.name)}</h1>
+        <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
+        ${uidLine(stu)}
+        ${extra || ''}
+      </div>
+      <button class="ra-btn stu-editbtn focus" data-stu-editstart title="Edit this student's name and UID">✎ Edit</button>
+    </div>`;
+  }
+  const UID_ERR = {
+    name_required: 'A first name is required.',
+    uid_format: 'UID can use letters, numbers and hyphens (3–20 characters).',
+    uid_taken: 'That UID is already used by another student.',
+    not_found: 'This student isn’t on file at your school yet — the name was updated here only.',
+  };
+  // Apply the edit to the API record, the dashboard's real class and the
+  // teacher's saved roster. Returns an error message, or '' on success.
+  function saveStudentEdit() {
+    const ed = S.stuEdit; if (!ed) return '';
+    const first = ed.first.trim(), last = ed.last.trim(), uid = ed.uid.trim().toUpperCase();
+    if (!first) return UID_ERR.name_required;
+    if (!/^[A-Z0-9][A-Z0-9-]{2,19}$/.test(uid)) return UID_ERR.uid_format;
+    const base = S.baseData.sections.flatMap((x) => x.students).find((x) => x.id === ed.id);
+    if (!base) return '';
+    const A = window.TilliAPI, sid = schoolId();
+    if (A && A.updateStudent && sid && base.adm) {
+      const res = A.updateStudent(sid, base.adm, { first, last, uid });
+      if (!res.ok && res.reason !== 'not_found') return UID_ERR[res.reason] || 'Could not save — try again.';
+    } else if (S.baseData.sections.some((x) => x.students.some((o) => o.id !== base.id && String(o.uid || '').toUpperCase() === uid))) {
+      return UID_ERR.uid_taken;
+    }
+    Object.assign(base, { first, last, name: (first + ' ' + last).trim(), uid,
+      initials: ((first[0] || '') + (last[0] || '')).toUpperCase() || '?' });
+    const sec = S.baseData.sections.find((x) => x.students.indexOf(base) >= 0);
+    if (sec) {
+      const counts = {};
+      sec.students.forEach((o) => { counts[o.first] = (counts[o.first] || 0) + 1; });
+      sec.students.forEach((o) => { o.dispFirst = counts[o.first] > 1 ? o.first + ' ' + (o.last[0] || '') + '.' : o.first; });
+    }
+    if (window.TilliOnboarding && window.TilliOnboarding.updateStudent && base.adm) {
+      window.TilliOnboarding.updateStudent(base.adm, { first, last, uid });
+    }
+    rebuildData();
+    return '';
+  }
+
   function studentDetailView() {
     const sec = section();
     const stu = sec.students.find((x) => x.id === S.studentId);
@@ -979,14 +1207,7 @@
     if (stu.state === 'waiting') {
       return `<div class="dash-wrap" style="max-width:960px">
         <button class="link-back focus" data-back-roster>← All students</button>
-        <div class="stu-head">
-          <span class="stu-plant">${flowerArt('waiting', 76, 0)}</span>
-          <div class="stu-meta">
-            <h1 class="stu-name">${esc(stu.name)}</h1>
-            <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
-            ${claimCodeLine(stu)}
-          </div>
-        </div>
+        ${stuHead(stu, 'waiting')}
         <div class="dash-card" style="text-align:center;padding:40px 28px;margin-top:16px">
           <div style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:18px;color:var(--ink-900)">No assessment data yet</div>
           <p style="color:var(--ink-450);font-size:14px;margin:8px auto 0;max-width:420px;line-height:1.5">Once you complete ${esc(stu.dispFirst)}'s baseline, their skills, growth and perspectives will grow in here.</p>
@@ -1007,15 +1228,7 @@
 
     return `<div class="dash-wrap" style="max-width:960px">
       <button class="link-back focus" data-back-roster>← All students</button>
-      <div class="stu-head">
-        <span class="stu-plant">${flowerArt(stu.state, 76, 0)}</span>
-        <div class="stu-meta">
-          <h1 class="stu-name">${esc(stu.name)}</h1>
-          <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
-          ${claimCodeLine(stu)}
-          <div class="stu-chips">${chipHTML(stu.chips)}</div>
-        </div>
-      </div>
+      ${stuHead(stu, stu.state, `<div class="stu-chips">${chipHTML(stu.chips)}</div>`)}
       <div class="stu-tabs">${tabBtn}</div>
       ${panel}
     </div>`;
@@ -1171,26 +1384,49 @@
   function obsVine() {
     const sec = section();
     const nStu = sec.students.length;
-    const journey = [
-      { key: 'pre', title: 'Pre-training survey', meta: 'Completed · Apr 2', body: 'Your baseline reflection on the class.', st: 'done' },
-      { key: 'base', title: 'Baseline observations', meta: 'Completed · Apr 18', body: 'All ' + countNoun(nStu, 'student', 'students') + ' observed', st: 'done' },
-      { key: 'post', title: 'Post-training survey', meta: 'Due Apr 25', body: 'Reflect on your class after training', st: 'active' },
-      { key: 'm18', title: '18-week check-in', meta: 'Locked', body: '', st: 'locked' },
-      { key: 'mid', title: 'Mid-year report', meta: 'Locked', body: '', st: 'locked' },
-      { key: 'm36', title: '36-week check-in', meta: 'Locked', body: '', st: 'locked' },
-      { key: 'end', title: 'End-of-year report', meta: 'Locked', body: '', st: 'locked' },
-    ];
+    // The journey follows the preview state: every step before the state's
+    // current step is complete, the current one is active, later ones locked.
+    // Observation steps (baseline / mid / end) read the class's real teacher
+    // progress for that window and show as complete once everyone is observed.
+    const ORDER = ['pre', 'base', 'post', 'm18', 'mid', 'm36', 'end'];
+    const CURRENT = { baseline: 'base', between: 'm18', midline: 'mid', endline: 'end' };
+    const OBS_WIN = { base: 'baseline', mid: 'mid', end: 'post' };
+    const cur = ORDER.indexOf(CURRENT[S.windowState] || 'base');
+    const win = (k) => (S.data.windows || []).find((w) => w.key === k) || {};
+    const DEF = {
+      pre: { title: 'Pre-training survey', done: 'Completed · Apr 2', due: 'Due Apr 2', body: 'Your baseline reflection on the class.' },
+      base: { title: 'Baseline observations', done: 'Completed · Apr 18', due: 'Due ' + (win('baseline').date || 'Apr 2') },
+      post: { title: 'Post-training survey', done: 'Completed · Apr 25', due: 'Due Apr 25', body: 'Reflect on your class after training' },
+      m18: { title: '18-week check-in', done: 'Completed · Week 18', due: 'Due · Week 18', body: 'A quick check-in on how your class is settling' },
+      mid: { title: 'Mid-year report', done: 'Completed · ' + (win('mid').date || 'Jun 18'), due: 'Due ' + (win('mid').date || 'Jun 18') },
+      m36: { title: '36-week check-in', done: 'Completed · Week 36', due: 'Due · Week 36', body: 'A quick check-in before the year closes' },
+      end: { title: 'End-of-year report', done: 'Completed · ' + (win('post').date || 'Sep 24'), due: 'Due ' + (win('post').date || 'Sep 24') },
+    };
+    const journey = ORDER.map((key, i) => {
+      const d = DEF[key];
+      let st = i < cur ? 'done' : i === cur ? 'active' : 'locked';
+      let body = d.body || '';
+      const wk = OBS_WIN[key];
+      if (wk && st !== 'locked') {
+        const done = nStu - pendingIn(sec.students, wk);
+        if (st === 'active' && nStu && done === nStu) st = 'done';
+        body = st === 'done' && done === nStu ? 'All ' + countNoun(nStu, 'student', 'students') + ' observed'
+          : done + ' of ' + countNoun(nStu, 'student', 'students') + ' observed';
+      }
+      return { key, title: d.title, meta: st === 'done' ? d.done : st === 'active' ? d.due : 'Locked', body: st === 'locked' ? '' : body, st, obs: !!wk };
+    });
     const flower = '<svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="12" r="6.4" fill="#EFA9B8"/><circle cx="31.5" cy="19" r="6.4" fill="#EFA9B8"/><circle cx="27.8" cy="30" r="6.4" fill="#EFA9B8"/><circle cx="16.2" cy="30" r="6.4" fill="#EFA9B8"/><circle cx="12.5" cy="19" r="6.4" fill="#EFA9B8"/><circle cx="22" cy="22" r="6.6" fill="#F2CE7B"/></svg>';
     const sprout = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 21v-8" stroke="#348C11" stroke-width="2" stroke-linecap="round"/><path d="M12 13C12 9 9 6 5 6c0 4 3 7 7 7Z" fill="#9BDE1D"/><path d="M12 14c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="#56C02B"/></svg>';
     const lock = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="#b0a794"/><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="#b0a794" stroke-width="2"/></svg>';
     const nodes = journey.map((j) => {
-      const dn = j.st === 'done', active = j.st === 'active', locked = j.st === 'locked';
-      const isBase = j.key === 'base';
+      const dn = j.st === 'done', active = j.st === 'active';
       const clickable = active || dn;
-      const dataAttr = active || (dn && isBase) ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
+      const dataAttr = active ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
       const marker = dn ? flower : active ? `<div class="obs-marker active">${sprout}</div>` : `<div class="obs-marker lock">${lock}</div>`;
       const badge = dn ? 'Complete' : active ? 'Active' : 'Locked';
-      const cta = j.key === 'post' ? 'Start survey →' : (dn && isBase) ? 'Open baseline observations →' : '';
+      const what = j.title.replace(/ (observations|report)$/, '').toLowerCase();
+      const cta = active ? (j.obs ? 'Continue ' + what + ' observations →' : j.key.charAt(0) === 'm' ? 'Start check-in →' : 'Start survey →')
+        : (dn && j.obs) ? 'See who&rsquo;s complete →' : '';
       return `<div class="obs-row">
         <div class="obs-node">${marker}</div>
         <button class="obs-card ${j.st}" ${dataAttr} ${clickable ? '' : 'disabled'}>
@@ -1218,8 +1454,21 @@
   function obsEnter() {
     const sec = section();
     const e = S.enter;
+    const wk = activeWindowKey() || 'baseline';
+    const winLabel = ((S.data.windows || []).find((w) => w.key === wk) || {}).label || 'Baseline';
+    const left = pendingIn(sec.students, wk);
+    if (e.allDone && left > 0 && !e.studentId) e.allDone = false;
+    if (e.allDone) {
+      return `<div class="obs-alldone">
+        <div class="pl">${flowerArt('blossoming', 96, 0)}</div>
+        <div class="t">Every child is observed for ${esc(winLabel)} 🌸</div>
+        <p>${e.justDone ? esc(e.justDone) + '&rsquo;s observation is saved. ' : ''}No pending teacher observations left.</p>
+        <button class="btn btn-primary focus" data-assesstab="completed" style="padding:11px 22px">See who&rsquo;s complete →</button>
+      </div>`;
+    }
     const stu = (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
-    const skills = S.data.skills, sk = skills[e.q];
+    const skills = S.data.skills, sk = skills[e.q], nQ = skills.length;
+    const saved = e.justDone ? `<div class="obs-saved">✓ ${esc(e.justDone)}&rsquo;s observation is saved — next up: <b>${esc(stu.dispFirst || stu.first)}</b> · ${countNoun(left, 'child', 'children')} still to observe</div>` : '';
     const dots = skills.map((_, i) => `<div class="obs-dot" style="background:${i < e.q ? '#56C02B' : i === e.q ? '#F2CE7B' : '#EAE3D3'}"></div>`).join('');
     const stars = STAR_LABELS.map((lbl, i) => {
       const picked = e.ratings[sk.key] === i + 1;
@@ -1227,19 +1476,71 @@
       return `<button class="obs-star${picked ? ' on' : ''}" data-star="${i + 1}"><div class="row">${st}</div><div class="lb">${lbl}</div></button>`;
     }).join('');
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
-    return `<div class="obs-enter">
+    return `${saved}<div class="obs-enter">
       <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · observation</div></div></div>
       <div class="obs-dots">${dots}</div>
-      <div class="obs-q">Question ${e.q + 1} of 12 · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
+      <div class="obs-q">Question ${e.q + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
       <div class="obs-skill">${esc(sk.name)}</div>
       <p class="obs-anchor">${esc(OBS_ANCHORS[sk.key])}</p>
       <div class="obs-stars">${stars}</div>
-      <div class="obs-nav"><button class="obs-prev focus" data-enter-prev>← Back</button><button class="btn btn-primary focus" data-enter-next style="padding:11px 22px">${e.q >= 11 ? 'Finish 🌱' : 'Next →'}</button></div>
+      <div class="obs-nav"><button class="obs-prev focus" data-enter-prev>← Back</button><button class="btn btn-primary focus" data-enter-next style="padding:11px 22px">${e.q >= nQ - 1 ? (left > 1 ? 'Finish → next child' : 'Finish 🌱') : 'Next →'}</button></div>
     </div>${celebrate}`;
   }
 
   function startEnter(id) { S.assessTab = 'enter'; S.enter = { studentId: id, q: 0, ratings: {}, done: false }; render(); }
-  function continueAssess() { const sec = section(); const nxt = sec.students.find((s) => s.assess !== 'done'); startEnter(nxt ? nxt.id : sec.students[0].id); }
+  function continueAssess() {
+    const sec = section(); const wk = activeWindowKey() || 'baseline';
+    const nxt = sec.students.find((s) => !teacherDone(s, wk));
+    startEnter(nxt ? nxt.id : sec.students[0].id);
+  }
+  function pendingIn(list, wk) { return list.filter((s) => !teacherDone(s, wk)).length; }
+  // Next child still waiting on a teacher observation in this window: the rest of
+  // the current section first (roster order, wrapping), then the other sections.
+  function nextPending(curId, wk) {
+    const list = section().students;
+    const at = list.findIndex((s) => s.id === curId);
+    const ordered = list.slice(at + 1).concat(list.slice(0, Math.max(0, at)));
+    const hit = ordered.find((s) => s.id !== curId && !teacherDone(s, wk));
+    if (hit) return { stu: hit, sectionId: S.sectionId };
+    if (S.sectionId === 'all') return null;
+    for (const other of S.data.sections) {
+      if (other.id === S.sectionId) continue;
+      const h = other.students.find((s) => !teacherDone(s, wk));
+      if (h) return { stu: h, sectionId: other.id };
+    }
+    return null;
+  }
+  // Finish → save this child's observation, then move straight on to the next
+  // child with a pending observation until there are none left.
+  function finishObservation() {
+    const e = S.enter, wk = activeWindowKey() || 'baseline';
+    const sec = section();
+    const stu = (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
+    if (!stu) return;
+    markTeacherDone(stu, wk);
+    const key = stu.adm || stu.id;
+    const obs = Object.assign({}, S.teacher.observations);
+    obs[wk] = Object.assign({}, obs[wk], { [key]: { ratings: Object.assign({}, e.ratings), at: new Date().toISOString() } });
+    S.teacher.observations = obs;
+    if (window.TilliOnboarding && window.TilliOnboarding.saveObservation) window.TilliOnboarding.saveObservation(wk, key, e.ratings);
+    recordTeacherCompletion(stu, wk);
+    const who = stu.dispFirst || stu.first;
+    const next = nextPending(stu.id, wk);
+    if (next) { S.sectionId = next.sectionId; S.enter = { studentId: next.stu.id, q: 0, ratings: {}, done: false, justDone: who }; }
+    else S.enter = { studentId: null, q: 0, ratings: {}, done: false, allDone: true, justDone: who };
+    render();
+  }
+  // Mirror the completion into the shared lifecycle store (Teacher lane) so the
+  // school/platform admin dashboards count it. Best effort — no-op without a school.
+  function recordTeacherCompletion(stu, wk) {
+    try {
+      const A = window.TilliAPI, sid = schoolId(), phase = PHASE_OF_WIN[wk];
+      if (!A || !A.markComplete || !sid || !stu.adm || !phase) return;
+      const dep = (A.getDeployments ? A.getDeployments(sid) : []).find((d) => d.phase === phase && d.audience === 'Teacher');
+      const list = (dep && dep.assessments && dep.assessments.length) ? dep.assessments : [{ id: 'teacher-observation' }];
+      list.forEach((a) => A.markComplete(sid, phase, 'Teacher', stu.adm, a.id, S.teacher.email));
+    } catch (err) {}
+  }
 
   // ================= Assess · Completed sub-tab (was "Completion logs") =====
   // Body only — the h1/subtitle/sub-tabs now live in assessView(). Keeps its
@@ -1254,10 +1555,15 @@
       <span><span class="d" style="background:#d8cfba"></span>Not started</span>
       <span style="color:var(--ink-300)">· 👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
     const body = view === 'class' ? logsByClass() : view === 'student' ? logsByStudent() : logsList();
-    return `<div class="log-tabs">${tabs}</div>${legend}${body}`;
+    return `<div class="log-tabs-row"><div class="log-tabs">${tabs}</div>
+      <button class="csv-btn focus" data-csv title="Download the whole assessment log (every student × window × informant) as a CSV">⬇ Download CSV</button></div>${legend}${body}`;
   }
 
+  // Only one window open (baseline / midline / endline) → show just that window,
+  // with each child's completion per informant (Teacher · Parent · Student).
   function logsByClass() {
+    const wk = activeWindowKey();
+    if (wk) return logsSingleWindow(wk);
     const sec = section();
     const windows = S.data.windows;
     const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
@@ -1289,6 +1595,61 @@
       <div class="mtx-wrap"><div class="mtx"><div class="mtx-head"><div class="mtx-corner">Student</div>${head}</div>${rows}</div></div>
       <div class="log-strip-title">Your classes at a glance</div>
       <div class="strip-grid">${strip}</div>`;
+  }
+
+  function logsSingleWindow(wk) {
+    const sec = section();
+    const w = (S.data.windows || []).find((x) => x.key === wk) || { label: wk, sub: '', date: '' };
+    const total = sec.students.length;
+    const done = sec.students.filter((st) => (logOf(st, wk) || {}).status === 'done').length;
+    const all = done === total;
+    const card = `<div class="win-card"><div class="ring">${ringSVG(done, total)}</div><div class="wc-meta"><div class="wc-label">${esc(w.label)}</div><div class="wc-sub">${esc(w.sub)} · ${esc(w.date)}</div><span class="wc-badge" style="background:${all ? '#DCE8D4' : '#FCF1D2'};color:${all ? '#4e6b43' : '#a98424'}">${all ? 'All complete 🌸' : (total - done) + ' still to go'}</span></div></div>`;
+    const P = S.data.perspectives || [];
+    const tick = '<svg class="cr-tick" width="20" height="20" viewBox="0 0 24 24" aria-label="Complete"><circle cx="12" cy="12" r="11" fill="#56C02B"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const head = P.map((p) => `<div class="cr-h" title="${esc(p.label === 'Parent' ? 'Parent questionnaires (home)' : p.label === 'Student' ? 'Student direct tasks' : 'Teacher observation')}"><span class="ic">${p.icon}</span><span class="lb">${esc(p.label === 'Parent' ? 'Parent (Home)' : p.label)}</span></div>`).join('');
+    const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
+    const sorted = [...sec.students].sort((a, b) => (order[a.state] - order[b.state]) || a.name.localeCompare(b.name));
+    const rows = sorted.map((st) => {
+      const lw = logOf(st, wk) || { persp: [] };
+      const cells = P.map((p) => {
+        const e = lw.persp.find((x) => x.key === p.key) || { doneParts: 0, totalParts: 1, done: false };
+        return `<div class="cr-cell${e.done ? ' done' : ''}"><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}</div>`;
+      }).join('');
+      return `<button class="cr-row" data-log-open="${esc(st.id)}"><div class="mtx-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.dispFirst)}</span></div>${cells}</button>`;
+    }).join('');
+    const strip = S.data.sections.map((s) => {
+      const n = s.students.length;
+      const fully = s.students.filter((st) => (logOf(st, wk) || {}).status === 'done').length;
+      const pct = n ? Math.round((fully / n) * 100) : 0;
+      const on = s.id === S.sectionId;
+      return `<button class="strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
+    }).join('');
+    return `<div class="win-cards">${card}</div>
+      <div class="cr-wrap">
+        <div class="cr-title">Completed rate <span>· ${esc(w.label)} — ${esc(w.sub)}</span></div>
+        <div class="cr"><div class="cr-head"><div class="mtx-corner">Student</div>${head}</div>${rows}</div>
+      </div>
+      <div class="log-strip-title">Your classes at a glance</div>
+      <div class="strip-grid">${strip}</div>`;
+  }
+
+  // Whole assessment log → CSV (every student × window × informant, all sections).
+  // Placeholder columns until the sample CSV arrives.
+  function downloadCSV() {
+    const head = ['student_uid', 'first_name', 'last_name', 'admission_no', 'grade', 'section', 'window', 'window_date', 'informant', 'parts_done', 'parts_total', 'informant_complete', 'window_status'];
+    const q = (v) => { const t = String(v == null ? '' : v); return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const lines = [head.join(',')];
+    S.data.sections.forEach((sec) => sec.students.forEach((st) => (st.assessLog || []).forEach((w) => w.persp.forEach((p) => {
+      lines.push([uidOf(st), st.first, st.last, st.adm || '', sec.grade, sec.section || '', w.label, w.date, p.label,
+        p.doneParts != null ? p.doneParts : (p.done ? 1 : 0), p.totalParts || 1, p.done ? 'yes' : 'no', (STATUS_META[w.status] || {}).label || w.status].map(q).join(','));
+    }))));
+    saveBlob(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'tilli-assessment-log-' + new Date().toISOString().slice(0, 10) + '.csv');
+  }
+  function saveBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
   }
 
   function logsByStudent() {
@@ -1412,7 +1773,15 @@
   function insightsView() {
     const scope = section();
     const meas = measuredMap(scope.students);
-    // Before baseline exists at all → one calm whole-page state, no empty modules.
+    // No baseline yet → show the overview on clearly-labelled sample data (the
+    // 'between' preview of this class) instead of an empty page. To confirm with
+    // product; insPreBaseline stays as the fallback.
+    if (!meas.baseline && window.TilliDashData && !S._insSample) {
+      const real = S.data;
+      S.data = window.TilliDashData.previewData(S.baseData, 'between');
+      S._insSample = true;
+      try { return insightsView(); } finally { S.data = real; S._insSample = false; }
+    }
     if (!meas.baseline) return insPreBaseline(scope);
 
     if (S.insightsView === 'compare' && !canCompare()) S.insightsView = 'myclass';
@@ -1430,6 +1799,7 @@
     return `<div class="dash-wrap" style="max-width:1040px">
       <h1 class="dash-h1">Insights</h1>
       <p class="dash-sub">A quiet place to plan — where ${esc(scope.name)} is strong, growing, and ready for focus.</p>
+      ${S._insSample ? '<div class="ins-sample">🌱 Sample view — your class&rsquo;s real insights replace this once Baseline is complete.</div>' : ''}
       <div class="log-tabs" role="tablist" style="margin-top:16px">${tabs}</div>
       ${body}
     </div>`;
@@ -1628,44 +1998,100 @@
     S._schoolId = sc ? sc.school_id : null;
     return S._schoolId;
   }
-  // The stable verification code the parent needs to claim this child (spec §5).
-  // Looked up from the guard layer by admission number; shown to the teacher so
-  // they can pass it on. Falls back to nothing if the child isn't in the store.
-  function claimCodeLine(stu) {
-    if (!stu || !stu.adm || !window.TilliAPI || !window.TilliAPI.getStudent) return '';
-    const rec = window.TilliAPI.getStudent(schoolId(), stu.adm);
-    if (!rec || !rec.claimCode) return '';
-    return `<div class="stu-sub" style="margin-top:2px">Parent verification code:
-      <span style="font-family:'Quicksand',sans-serif;font-weight:700;color:var(--green-700);background:#EAF7E3;border-radius:999px;padding:2px 10px;margin-left:4px">${esc(rec.claimCode)}</span></div>`;
+  // The child's unique Tilli Measures code. Carried on the roster record when
+  // known, else looked up / derived from the guard layer by admission number.
+  function uidOf(stu) {
+    if (!stu) return '';
+    if (stu.uid) return stu.uid;
+    let u = '';
+    try {
+      const A = window.TilliAPI, sid = schoolId();
+      if (A && sid && stu.adm) {
+        const rec = A.getStudent ? A.getStudent(sid, stu.adm) : null;
+        u = (rec && rec.uid) || (A.makeUid ? A.makeUid(sid, stu.adm) : '');
+      }
+    } catch (e) {}
+    if (u) stu.uid = u;
+    return u;
+  }
+  function uidChip(stu, small) {
+    const u = uidOf(stu);
+    return u ? `<span class="uid-chip${small ? ' sm' : ''}" title="Student UID — this child's unique Tilli Measures code">${esc(u)}</span>` : '';
+  }
+  function uidLine(stu) {
+    const chip = uidChip(stu);
+    return chip ? `<div class="stu-sub stu-uid">Student UID ${chip}</div>` : '';
   }
 
   // ================= Add student flow =================
+  // Grade · section is chosen once for the whole batch (an existing section, or
+  // a new one). Every planted child lands in it — in the dashboard right away
+  // and in the teacher's saved roster (TilliOnboarding.appendStudents).
   function openAddFlow() {
-    S.add = { active: true, step: 'count', sectionId: S.sectionId, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] };
+    const secs = S.baseData.sections;
+    const sid = (S.sectionId && S.sectionId !== 'all' && secs.some((x) => x.id === S.sectionId)) ? S.sectionId : ((secs[0] || {}).id || 'new');
+    S.add = { active: true, step: 'count', from: S.nav, sectionId: sid, newGrade: '', newSection: '', count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] };
     render();
   }
+  // The base-data section this batch goes into; creates it for "+ New".
+  function ensureAddSection() {
+    const a = S.add, secs = S.baseData.sections;
+    if (a.sectionId !== 'new') return secs.find((x) => x.id === a.sectionId) || secs[0];
+    const grade = (a.newGrade || '').trim() || 'My class', sx = (a.newSection || '').trim().toUpperCase();
+    let sec = secs.find((x) => x.grade === grade && (x.section || '') === sx);
+    if (!sec) {
+      sec = { id: 'sec_' + Date.now().toString(36), name: sx ? grade + ' ' + sx : grade, grade, section: sx, n: 0, students: [] };
+      secs.push(sec);
+    }
+    a.sectionId = sec.id;
+    return sec;
+  }
+  function addSectionOK() { const a = S.add; return a.sectionId !== 'new' || !!(a.newGrade || '').trim(); }
   // Persist one planted student through the dedupe guard (spec A4). Records the
   // outcome (created / merged / review) so the finish screen can summarise it and
   // show the parent verification codes for the new children.
   function persistPlantedStudent() {
     const a = S.add;
-    const first = (a.first || '').trim(), last = (a.last || '').trim(), adm = (a.adm || '').trim();
-    if (!window.TilliAPI || !window.TilliAPI.addStudent) { a.results.push({ name: (first + ' ' + last).trim(), result: 'created' }); return; }
-    const sec = S.data.sections.find((x) => x.id === a.sectionId) || {};
-    // DEMO: ensure this teacher has scope for the section (real system: scope is
-    // granted by the Admin invite, spec A3). Keeps the guard's shape intact.
-    const scope = window.TilliAPI.ensureTeacherScope(S.teacher.email, S.teacher.school, sec.grade, sec.section);
-    const res = window.TilliAPI.addStudent({
-      actorEmail: S.teacher.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
-      student_id: adm || ('TMP-' + Date.now()), first, last, grade: sec.grade, section: sec.section, source: 'manual',
-    });
-    a.results.push({
-      name: (first + ' ' + last).trim(), result: res.result,
-      claimCode: res.student && res.student.claimCode,
-      matched: res.matched && res.matched.name,
-    });
+    const first = (a.first || '').trim(), last = (a.last || '').trim();
+    const adm = (a.adm || '').trim() || ('TMP-' + Date.now());
+    const name = (first + ' ' + last).trim();
+    const sec = ensureAddSection();
+    let res = null;
+    if (window.TilliAPI && window.TilliAPI.addStudent) {
+      // DEMO: ensure this teacher has scope for the section (real system: scope is
+      // granted by the Admin invite, spec A3). Keeps the guard's shape intact.
+      const scope = window.TilliAPI.ensureTeacherScope(S.teacher.email, S.teacher.school, sec.grade, sec.section);
+      res = window.TilliAPI.addStudent({
+        actorEmail: S.teacher.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
+        student_id: adm, first, last, grade: sec.grade, section: sec.section, source: 'manual',
+      });
+    }
+    const result = (res && res.ok) ? res.result : 'created';
+    const rec = (res && res.student) || {};
+    const uid = rec.uid || null;
+    a.results.push({ name, result, uid, matched: res && res.matched && res.matched.name });
+    // Same name / taken admission number → the guard didn't create a record; don't plant.
+    if (result !== 'created' && result !== 'merged') return;
+    const id = rec.student_id || adm;
+    if (S.baseData.sections.some((x) => x.students.some((st) => st.id === id))) return;
+    const D = window.TilliDashData;
+    if (D) {
+      sec.students.push(D.buildFreshStudent(sec, { first, last, adm: id, uid }));
+      sec.n = sec.students.length;
+      const firstCounts = {};
+      sec.students.forEach((st) => { firstCounts[st.first] = (firstCounts[st.first] || 0) + 1; });
+      sec.students.forEach((st) => { st.dispFirst = firstCounts[st.first] > 1 ? st.first + ' ' + (st.last[0] || '') + '.' : st.first; });
+    }
+    if (window.TilliOnboarding && window.TilliOnboarding.appendStudents) {
+      window.TilliOnboarding.appendStudents([{ first, last, adm: id, grade: sec.grade, section: sec.section, uid }]);
+    }
+    rebuildData();
   }
-  function addGradeName() { const s = S.data.sections.find((x) => x.id === S.add.sectionId); return s ? s.name : 'your class'; }
+  function addGradeName() {
+    const a = S.add;
+    if (a.sectionId === 'new') return ((a.newGrade || '').trim() + ' ' + (a.newSection || '').trim().toUpperCase()).trim() || 'a new section';
+    const s = S.baseData.sections.find((x) => x.id === a.sectionId); return s ? s.name : 'your class';
+  }
   function potHTML(done) {
     const sprouts = Array.from({ length: Math.min(done, 14) }, (_, i) => `<span style="width:6px;height:${14 + (i % 4) * 7}px;background:${i % 2 ? '#8FB57E' : '#56C02B'};border-radius:5px 5px 0 0;align-self:end"></span>`).join('');
     const seed = done > 0 ? '<span class="pot-seed"></span>' : '';
@@ -1676,9 +2102,16 @@
     const a = S.add;
     let step = '';
     if (a.step === 'count') {
-      const canNext = !!a.count && parseInt(a.count, 10) >= 1;
-      step = `<div class="add-center">
-        <div class="add-title">How many students do you have in<br>${esc(addGradeName())}?</div>
+      const canNext = !!a.count && parseInt(a.count, 10) >= 1 && addSectionOK();
+      const secChips = S.baseData.sections.map((x) =>
+        `<button class="add-secchip focus${a.sectionId === x.id ? ' on' : ''}" data-add-sec="${esc(x.id)}">${esc(x.name)}</button>`).join('');
+      const secPick = `<div class="add-secpick">
+          <div class="add-seclbl">Grade · section</div>
+          <div class="add-secchips">${secChips}<button class="add-secchip focus${a.sectionId === 'new' ? ' on' : ''}" data-add-sec="new">+ New</button></div>
+          ${a.sectionId === 'new' ? `<div class="add-newsec"><input id="add-new-grade" value="${esc(a.newGrade)}" placeholder="Grade (e.g. Grade 1)"><input id="add-new-section" value="${esc(a.newSection)}" placeholder="Section (e.g. A)" maxlength="3"></div>` : ''}
+        </div>`;
+      step = `${secPick}<div class="add-center">
+        <div class="add-title">How many students are you adding to<br>${esc(addGradeName())}?</div>
         <div class="add-pot">${potHTML(a.done)}</div>
         <input id="add-count" class="add-count" value="${esc(a.count)}" inputmode="numeric" placeholder="Type a number…">
         <div style="margin-top:22px"><button class="btn btn-primary focus" data-add-to-entry ${canNext ? '' : 'disabled'}>Start planting →</button></div>
@@ -1699,30 +2132,31 @@
       const created = results.filter((r) => r.result === 'created');
       const merged = results.filter((r) => r.result === 'merged');
       const review = results.filter((r) => r.result === 'review');
+      const clash = results.filter((r) => r.result === 'name_dup' || r.result === 'id_conflict');
       // Dedupe outcome — surfaced so the teacher sees duplicates were prevented.
-      const dedupeNote = (merged.length || review.length) ? `
+      const dedupeNote = (merged.length || review.length || clash.length) ? `
         <div class="add-done-sub" style="background:#EAF4FF;border:1px solid #C9DEF6;border-radius:12px;padding:10px 14px;margin:0 auto 12px;max-width:340px;color:#33465e">
           ${merged.length ? `${merged.length} admission number${merged.length === 1 ? ' was' : 's were'} already on the roster — merged instead of duplicated.` : ''}
           ${review.length ? ` ${review.length} entr${review.length === 1 ? 'y looks' : 'ies look'} like an existing student — flagged for your admin to review.` : ''}
+          ${clash.length ? ` ${clash.length} not added (${clash.map((r) => esc(r.name)).join(', ')}) — same name or admission number as a student already on file.` : ''}
         </div>` : '';
-      // Parent verification codes for the newly created children (spec §5).
-      const codes = created.filter((r) => r.claimCode).map((r) =>
+      // Student UIDs for the newly planted children.
+      const codes = created.concat(merged).filter((r) => r.uid).map((r) =>
         `<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #EFEAe0">
           <span style="font-weight:700;color:#4b463c">${esc(r.name)}</span>
-          <span style="font-family:'Quicksand',sans-serif;font-weight:700;color:var(--green-700)">${esc(r.claimCode)}</span></div>`).join('');
+          <span class="uid-chip">${esc(r.uid)}</span></div>`).join('');
       const codeCard = codes ? `
         <div style="background:#fff;border:1px solid #EFEAe0;border-radius:14px;padding:12px 16px;margin:0 auto 16px;max-width:340px;text-align:left">
-          <div style="font-weight:800;font-size:12.5px;color:#8a8272;margin-bottom:4px">Parent verification codes</div>
-          <div style="font-size:12px;color:#9a9284;margin-bottom:6px">Share each code with the child’s parent so they can securely link to them.</div>
+          <div style="font-weight:800;font-size:12.5px;color:#8a8272;margin-bottom:6px">Student UIDs</div>
           ${codes}
         </div>` : '';
       step = `<div class="add-center" style="padding:14px 0 4px">
         <div style="display:flex;justify-content:center;margin:6px 0 14px">${flowerArt('growing', 96, 0)}</div>
-        <div class="add-done-title">${created.length || a.total} seeds planted 🌱</div>
+        <div class="add-done-title">${created.length + merged.length} ${created.length + merged.length === 1 ? 'seed' : 'seeds'} planted 🌱</div>
         <p class="add-done-sub">Your ${esc(addGradeName())} bed is ready. Time to help them grow.</p>
         ${dedupeNote}
         ${codeCard}
-        <button class="btn btn-primary focus" data-add-finish>Go to my garden →</button>
+        <button class="btn btn-primary focus" data-add-finish>${a.from === 'students' ? 'Back to students →' : 'Go to my garden →'}</button>
       </div>`;
     }
     return `<div class="add-backdrop">
@@ -1737,12 +2171,17 @@
   function wireAddFlow() {
     if (!S.add.active) return;
     // count input: sanitize + toggle Start button without re-render (keep caret)
+    const syncStart = () => { const btn = root.querySelector('[data-add-to-entry]'); if (btn) btn.disabled = !(S.add.count && parseInt(S.add.count, 10) >= 1 && addSectionOK()); };
     const cnt = root.querySelector('#add-count');
     if (cnt) cnt.addEventListener('input', (e) => {
       const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
       S.add.count = v; e.target.value = v;
-      const btn = root.querySelector('[data-add-to-entry]');
-      if (btn) btn.disabled = !(v && parseInt(v, 10) >= 1);
+      syncStart();
+    });
+    root.querySelectorAll('[data-add-sec]').forEach((b) => b.addEventListener('click', () => { S.add.sectionId = b.dataset.addSec; render(); }));
+    [['add-new-grade', 'newGrade'], ['add-new-section', 'newSection']].forEach(([id, key]) => {
+      const el = root.querySelector('#' + id);
+      if (el) el.addEventListener('input', (e) => { S.add[key] = e.target.value; syncStart(); });
     });
     // entry text fields: patch in place
     [['add-first', 'first'], ['add-last', 'last'], ['add-adm', 'adm']].forEach(([id, key]) => {
@@ -1754,7 +2193,7 @@
     });
     const toEntry = root.querySelector('[data-add-to-entry]');
     if (toEntry) toEntry.addEventListener('click', () => {
-      const n = parseInt(S.add.count, 10) || 0; if (n < 1) return;
+      const n = parseInt(S.add.count, 10) || 0; if (n < 1 || !addSectionOK()) return;
       S.add = Object.assign({}, S.add, { step: 'entry', total: n, done: 0, first: '', last: '', adm: '' }); render();
     });
     const plant = root.querySelector('[data-add-plant]');
@@ -1774,7 +2213,13 @@
     });
     root.querySelectorAll('[data-add-close]').forEach((b) => b.addEventListener('click', () => { S.add = Object.assign({}, S.add, { active: false }); render(); }));
     const fin = root.querySelector('[data-add-finish]');
-    if (fin) fin.addEventListener('click', () => { S.sectionId = S.add.sectionId || S.sectionId; S.add = Object.assign({}, S.add, { active: false }); S.nav = 'garden'; S.gardenLevel = 'section'; render(); });
+    if (fin) fin.addEventListener('click', () => {
+      S.sectionId = S.add.sectionId || S.sectionId;
+      if (S.add.from === 'students') { S.nav = 'students'; S.studentId = null; }
+      else { S.nav = 'garden'; S.gardenLevel = 'section'; }
+      S.add = Object.assign({}, S.add, { active: false });
+      render();
+    });
   }
 
   // ---------------- Ask Tilli ----------------
@@ -1804,18 +2249,93 @@
   }
   function openAsk(context, prompt) { S.ask = { open: true, context: context || '', prompt: prompt || '', thread: [] }; render(); }
 
-  // ---------------- Profile (minimal) ----------------
+  // ---------------- Profile ----------------
+  function fmtDate(iso) {
+    const t = iso ? new Date(iso) : null;
+    return t && !isNaN(t) ? t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  }
+  // Grades · sections this teacher teaches = the sections of their class.
+  function gradesTaught() { return (S.baseData.sections || []).filter((x) => x.students && x.students.length).map((x) => x.name); }
+
+  // Teaching Mirror — the teacher's own reflection answers played back: average
+  // 1–5 per category (reverse-worded items flipped so higher = more of that
+  // strength), plus their written reflections.
+  function mirrorCard() {
+    const R = S.teacher.reflection || { cats: [], questions: [] };
+    const A = S.teacher.selfAnswers || {};
+    const cats = (R.cats || []).map((c, ci) => {
+      const vals = (R.questions || []).filter((q) => q.cat === ci && q.type === 'scale' && typeof A[q.id] === 'number')
+        .map((q) => (q.reverse ? 6 - A[q.id] : A[q.id]));
+      return { c, avg: vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : null };
+    });
+    const head = `<div class="mir-head"><div><div class="mir-t">🪞 Your Teaching Mirror</div><div class="mir-s">How you described yourself in your one-time reflection.</div></div></div>`;
+    if (!cats.some((x) => x.avg != null)) {
+      return `<div class="dash-card mir">${head}<p class="mir-empty">Finish your reflection to see your Teaching Mirror.</p></div>`;
+    }
+    const bars = cats.map(({ c, avg }) => `<div class="mir-row" title="${esc(c.name)} — average of your 1–5 answers">
+        <span class="mir-lb">${esc(c.name)}</span>
+        <span class="mir-track"><span class="mir-fill" style="width:${avg == null ? 0 : Math.round((avg / 5) * 100)}%;background:${esc(c.color || '#9DBE8D')}"></span></span>
+        <span class="mir-v">${avg == null ? '—' : avg.toFixed(1)}</span></div>`).join('');
+    const facts = (R.questions || []).filter((q) => q.type === 'choice' && A[q.id]).map((q) =>
+      `<div class="mir-fact"><span>${esc(q.q)}</span><b>${esc(A[q.id])}</b></div>`).join('');
+    const words = (R.questions || []).filter((q) => q.type === 'text' && String(A[q.id] || '').trim()).map((q) =>
+      `<blockquote class="mir-q"><div class="mir-qq">${esc(q.q)}</div>“${esc(String(A[q.id]).trim())}”</blockquote>`).join('');
+    return `<div class="dash-card mir">${head}
+      <div class="mir-bars">${bars}</div>
+      <div class="mir-scale">Out of 5 · higher = more of that strength</div>
+      ${facts}${words ? `<div class="mir-words">${words}</div>` : ''}
+    </div>`;
+  }
+
+  function profileEditView() {
+    const d = S.profileDraft || {};
+    const O = (window.TilliOnboarding && window.TilliOnboarding.options) || {};
+    const sel = (key, list) => {
+      const opts = (list && list.length ? list : [d[key]]).filter((x) => x != null && x !== '');
+      if (d[key] && opts.indexOf(d[key]) < 0) opts.unshift(d[key]);
+      return `<select class="pf-in focus" data-pf="${key}">${d[key] ? '' : '<option value="" selected>Select…</option>'}${opts.map((o) => `<option${o === d[key] ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    };
+    const txt = (key, ph, num) => `<input class="pf-in focus" data-pf="${key}" value="${esc(d[key] || '')}" placeholder="${esc(ph)}"${num ? ' inputmode="numeric"' : ''}>`;
+    const row = (label, ctrl) => `<label class="pf-row pf-edit"><span class="k">${label}</span>${ctrl}</label>`;
+    return `<div class="dash-wrap" style="max-width:720px">
+      <h1 class="dash-h1">Edit your details</h1>
+      <p class="dash-sub">Changes save to your profile right away.</p>
+      <div class="dash-card" style="margin-top:16px;padding:8px 20px">
+        ${row('Name', txt('name', 'Your full name'))}
+        <div class="pf-row"><span class="k">Email</span><span class="v">${esc(S.teacher.email || '')} 🔒</span></div>
+        ${row('Gender', sel('gender', O.genders))}
+        ${row('Age', txt('age', 'Age', true))}
+        ${row('Years teaching', txt('years', 'Years', true))}
+        ${row('Education', sel('edu', O.education))}
+        ${row('Country', txt('country', 'Country'))}
+        ${row('City', txt('city', 'City'))}
+      </div>
+      <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap">
+        <button class="btn btn-primary focus" data-pf-save style="padding:12px 22px"${(d.name || '').trim() ? '' : ' disabled'}>Save changes</button>
+        <button class="btn btn-ghost focus" data-pf-cancel style="padding:12px 20px">Cancel</button>
+      </div>
+    </div>`;
+  }
+
   function profilePanel() {
+    if (S.profileEdit) return profileEditView();
     const d = S.teacher.demo || {};
     const rows = [
       ['Name', d.name], ['Email', S.teacher.email], ['School', d.school || S.teacher.school],
       ['Location', [d.city, d.country].filter(Boolean).join(', ')],
+      ['Gender', d.gender], ['Age', d.age],
       ['Years teaching', d.years], ['Education', d.edu],
+      ['Grades taught', gradesTaught().join(', ')],
+      ['Joined Tilli Measures', fmtDate(S.teacher.joinedAt)],
     ].filter((r) => r[1]).map((r) => `<div class="pf-row"><span class="k">${esc(r[0])}</span><span class="v">${esc(r[1])}</span></div>`).join('');
-    return `<div class="dash-wrap" style="max-width:640px">
-      <h1 class="dash-h1">Your profile</h1>
-      <p class="dash-sub">From your one-time reflection setup.</p>
+    return `<div class="dash-wrap" style="max-width:720px">
+      <div class="pf-titlebar">
+        <div><h1 class="dash-h1">Your profile</h1>
+        <p class="dash-sub">From your one-time setup — keep it up to date.</p></div>
+        <button class="ra-btn focus" data-pf-edit title="Edit your name, age, experience, education and location">✎ Edit details</button>
+      </div>
       <div class="dash-card" style="margin-top:16px;padding:8px 20px">${rows}</div>
+      ${mirrorCard()}
       <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap">
         <button class="btn btn-ghost focus" data-redo style="padding:12px 20px">Redo reflection</button>
         <a class="btn focus" href="index.html" style="padding:12px 20px;text-decoration:none;background:#FBE7EA;color:#c0435c;font-weight:700">↩ Sign out</a>
@@ -1830,13 +2350,19 @@
       if (k === 'ask') { openAsk('', 'Ask me anything about your class or a student.'); return; }
       S.ask.open = false;
       if (k === 'garden') { S.nav = 'garden'; S.gardenLevel = 'landing'; } else S.nav = k;
+      if (k !== 'students' && !S.select.busy) S.select = { on: false, ids: {}, busy: '', err: '' };
+      if (k !== 'profile') S.profileEdit = false;
       S.studentId = null; render();
     }));
     root.querySelectorAll('[data-section]').forEach((b) => b.addEventListener('click', () => { S.sectionId = b.dataset.section; S.studentId = null; render(); }));
     root.querySelectorAll('[data-open-class]').forEach((b) => b.addEventListener('click', () => { S.classModal = b.dataset.openClass; render(); }));
     root.querySelectorAll('[data-back-beds]').forEach((b) => b.addEventListener('click', () => { S.gardenLevel = 'beds'; render(); }));
     // My Garden landing: dev state switch, hero/tend Ask-Tilli prompts, assess CTA, doorways.
-    root.querySelectorAll('[data-window-state]').forEach((b) => b.addEventListener('click', () => { S.windowState = b.dataset.windowState; render(); }));
+    root.querySelectorAll('[data-window-state]').forEach((b) => b.addEventListener('click', () => {
+      S.windowState = b.dataset.windowState;
+      S.enter = { studentId: null, q: 0, ratings: {}, done: false };
+      rebuildData(); render();
+    }));
     root.querySelectorAll('[data-ask-prompt]').forEach((b) => b.addEventListener('click', () => openAsk(b.dataset.askCtx || '', b.dataset.askPrompt || '')));
     root.querySelectorAll('[data-continue-assess]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'assess'; startEnter(b.dataset.continueAssess); }));
     root.querySelectorAll('[data-garden-level]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'garden'; S.gardenLevel = b.dataset.gardenLevel; render(); }));
@@ -1862,9 +2388,52 @@
       root.querySelectorAll('.rsort').forEach((x) => x.classList.toggle('on', x.dataset.sort === S.rosterSort));
       refreshRoster();
     }));
+    // students: + Add students, multi-select → parent report PDFs
+    root.querySelectorAll('[data-add-students]').forEach((b) => b.addEventListener('click', () => openAddFlow()));
+    root.querySelectorAll('[data-pick-stu]').forEach((b) => b.addEventListener('click', () => togglePick(b.dataset.pickStu)));
+    const selStart = root.querySelector('[data-sel-start]');
+    if (selStart) selStart.addEventListener('click', () => { S.select = { on: true, ids: {}, busy: '', err: '' }; render(); });
+    const selCancel = root.querySelector('[data-sel-cancel]');
+    if (selCancel) selCancel.addEventListener('click', () => { if (S.select.busy) return; S.select = { on: false, ids: {}, busy: '', err: '' }; render(); });
+    const selAll = root.querySelector('[data-sel-all]');
+    if (selAll) selAll.addEventListener('click', () => {
+      const vis = rosterFiltered(); const ids = Object.assign({}, S.select.ids);
+      const allOn = vis.every((st) => ids[st.id]);
+      vis.forEach((st) => { if (allOn) delete ids[st.id]; else ids[st.id] = true; });
+      S.select = Object.assign({}, S.select, { ids, err: '' }); render();
+    });
+    const selPdf = root.querySelector('[data-sel-pdf]');
+    if (selPdf) selPdf.addEventListener('click', () => { downloadReports(); });
+
     // students: detail tabs, back, and ask buttons
     root.querySelectorAll('[data-stab]').forEach((b) => b.addEventListener('click', () => { S.studentTab = b.dataset.stab; render(); }));
-    root.querySelectorAll('[data-back-roster]').forEach((b) => b.addEventListener('click', () => { S.studentId = null; render(); }));
+    root.querySelectorAll('[data-back-roster]').forEach((b) => b.addEventListener('click', () => { S.studentId = null; S.stuEdit = null; render(); }));
+    // students: edit name + UID
+    const seStart = root.querySelector('[data-stu-editstart]');
+    if (seStart) seStart.addEventListener('click', () => {
+      const stu = section().students.find((x) => x.id === S.studentId); if (!stu) return;
+      S.stuEdit = { id: stu.id, first: stu.first || '', last: stu.last || '', uid: uidOf(stu) || '', err: '' };
+      render();
+      const f = root.querySelector('[data-stu-edit="first"]'); if (f) f.focus();
+    });
+    root.querySelectorAll('[data-stu-edit]').forEach((el) => el.addEventListener('input', (e) => {
+      if (!S.stuEdit) return;
+      let v = e.target.value;
+      if (el.dataset.stuEdit === 'uid') { v = v.toUpperCase().replace(/[^A-Z0-9-]/g, ''); el.value = v; }
+      S.stuEdit[el.dataset.stuEdit] = v;
+    }));
+    root.querySelectorAll('[data-stu-edit]').forEach((el) => el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { const sv = root.querySelector('[data-stu-save]'); if (sv) sv.click(); }
+      else if (e.key === 'Escape') { S.stuEdit = null; render(); }
+    }));
+    const seSave = root.querySelector('[data-stu-save]');
+    if (seSave) seSave.addEventListener('click', () => {
+      const err = saveStudentEdit();
+      if (err) { S.stuEdit.err = err; render(); return; }
+      S.stuEdit = null; render();
+    });
+    const seCancel = root.querySelector('[data-stu-cancel]');
+    if (seCancel) seCancel.addEventListener('click', () => { S.stuEdit = null; render(); });
     root.querySelectorAll('[data-ask-stu]').forEach((b) => b.addEventListener('click', () => {
       const stu = section().students.find((x) => x.id === S.studentId); if (!stu) return;
       if (b.dataset.askStu === 'grew') openAsk(`${stu.first} · ${stu.topGrower.name}`, `${stu.first} is doing well in ${stu.topGrower.name}. How can I keep this growing and help ${stu.first} stretch further?`);
@@ -1887,8 +2456,8 @@
     }));
     root.querySelectorAll('[data-enter-prev]').forEach((b) => b.addEventListener('click', () => { S.enter = Object.assign({}, S.enter, { q: Math.max(0, S.enter.q - 1), done: false }); render(); }));
     root.querySelectorAll('[data-enter-next]').forEach((b) => b.addEventListener('click', () => {
-      if (S.enter.q >= 11) S.enter = Object.assign({}, S.enter, { done: true });
-      else S.enter = Object.assign({}, S.enter, { q: S.enter.q + 1, done: false });
+      if (S.enter.q >= S.data.skills.length - 1) { finishObservation(); return; }
+      S.enter = Object.assign({}, S.enter, { q: S.enter.q + 1, done: false });
       render();
     }));
 
@@ -1902,6 +2471,9 @@
     if (lss) lss.addEventListener('input', (e) => { S.logStudentSearch = e.target.value; S._refocus = 'log-stu-search'; render(); });
     const lls = root.querySelector('#log-list-search');
     if (lls) lls.addEventListener('input', (e) => { S.logListSearch = e.target.value; S._refocus = 'log-list-search'; render(); });
+
+    const csv = root.querySelector('[data-csv]');
+    if (csv) csv.addEventListener('click', downloadCSV);
 
     // insights
     root.querySelectorAll('[data-inview]').forEach((b) => b.addEventListener('click', () => { S.insightsView = b.dataset.inview; render(); }));
@@ -1946,6 +2518,34 @@
       else if (b.dataset.ask === 'cmp') openAsk(`${b.dataset.hi} → ${b.dataset.lo} · ${skill}`, `In my ${sec.grade}, ${b.dataset.hi} is ahead of ${b.dataset.lo} on ${skill}. Give me one activity or routine that might be working in ${b.dataset.hi} that I could bring to ${b.dataset.lo}.`);
       else openAsk(`${sec.name} · ${skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Beginner level in it.`);
     }));
+
+    // profile: edit details
+    const pfEdit = root.querySelector('[data-pf-edit]');
+    if (pfEdit) pfEdit.addEventListener('click', () => {
+      const d = S.teacher.demo || {};
+      S.profileDraft = { name: d.name || '', gender: d.gender || '', age: d.age || '', years: d.years || '', edu: d.edu || '', country: d.country || '', city: d.city || '' };
+      S.profileEdit = true; render();
+    });
+    root.querySelectorAll('[data-pf]').forEach((el) => {
+      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', (e) => {
+        const k = el.dataset.pf; let v = e.target.value;
+        if (k === 'age' || k === 'years') { v = v.replace(/[^0-9]/g, '').slice(0, 2); el.value = v; }
+        S.profileDraft[k] = v;
+        const save = root.querySelector('[data-pf-save]');
+        if (save) save.disabled = !(S.profileDraft.name || '').trim();
+      });
+    });
+    const pfSave = root.querySelector('[data-pf-save]');
+    if (pfSave) pfSave.addEventListener('click', () => {
+      const patch = Object.assign({}, S.profileDraft, { name: (S.profileDraft.name || '').trim() });
+      if (!patch.name) return;
+      S.teacher.demo = (window.TilliOnboarding && window.TilliOnboarding.updateDemo)
+        ? window.TilliOnboarding.updateDemo(patch) : Object.assign({}, S.teacher.demo, patch);
+      S.gardener = S.teacher.demo.gender === 'Male' ? 'm' : 'f';
+      S.profileEdit = false; S.profileDraft = null; render();
+    });
+    const pfCancel = root.querySelector('[data-pf-cancel]');
+    if (pfCancel) pfCancel.addEventListener('click', () => { S.profileEdit = false; S.profileDraft = null; render(); });
 
     // profile redo → hand back to onboarding (teacher.js owns that)
     const redo = root.querySelector('[data-redo]');
@@ -2543,6 +3143,120 @@
     .mg-gui-opts { flex-wrap: wrap; }
     .mg-gui-opt { flex: 1; }
   }
+
+  /* ---- teacher feedback build: UID, students actions, PDFs, completed rate, mirror ---- */
+  .uid-chip { display: inline-block; vertical-align: middle; font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 12px; letter-spacing: .04em;
+    color: var(--green-700); background: #EAF7E3; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .uid-chip.sm { font-size: 10.5px; padding: 1px 8px; margin-left: 6px; }
+  .stu-uid { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .stu-editbtn { align-self: flex-start; }
+  .stu-edit-grid { display: grid; grid-template-columns: 1fr 1fr 0.9fr; gap: 10px; }
+  .stu-edit-grid label span { display: block; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-300); margin-bottom: 5px; }
+  .stu-in { width: 100%; box-sizing: border-box; border: 1px solid var(--line-200); border-radius: 11px; padding: 10px 12px; font-size: 15px; font-family: 'Montserrat',sans-serif; font-weight: 600; color: var(--ink-900); background: var(--surface-100); outline: none; }
+  .stu-in:focus { border-color: var(--green-500); background: #fff; }
+  .stu-in.mono { font-family: 'Quicksand',sans-serif; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .stu-edit-err { margin-top: 8px; font-size: 12.5px; font-weight: 700; color: #c0435c; }
+  .stu-edit-actions { display: flex; gap: 8px; margin-top: 12px; }
+  @media (max-width: 640px) { .stu-edit-grid { grid-template-columns: 1fr; } }
+
+  .roster-titlebar, .pf-titlebar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .roster-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+  .ra-btn { border: 1px solid var(--line-200); background: #fff; color: var(--ink-700); cursor: pointer; border-radius: 12px; padding: 9px 14px;
+    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; white-space: nowrap; transition: border-color .15s, background .15s; }
+  .ra-btn:hover { border-color: var(--green-500); color: var(--green-700); }
+  .ra-btn.primary { background: var(--green-500); border-color: var(--green-500); color: #fff; }
+  .ra-btn.primary:hover { background: var(--green-600); color: #fff; }
+  .sel-bar { position: sticky; top: 8px; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px;
+    background: #fff; border: 1.5px solid var(--green-500); border-radius: 16px; padding: 10px 12px; box-shadow: 0 8px 20px rgba(60,90,50,.1); }
+  .sel-all { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; color: var(--ink-700); }
+  .sel-n { font-size: 12.5px; font-weight: 700; color: var(--ink-300); }
+  .sel-err { font-size: 12.5px; font-weight: 700; color: #c0435c; }
+  .sel-sp { flex: 1; }
+  .rr-check { flex: none; width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line-200); background: #fff; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+  .rr-check.on { background: var(--green-500); border-color: var(--green-500); }
+  .roster-row.picked { border-color: var(--green-500); background: var(--wash-green); }
+
+  .add-secpick { margin-top: 12px; }
+  .add-seclbl { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-300); margin-bottom: 8px; }
+  .add-secchips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .add-secchip { border: 1px solid var(--line-200); background: #fff; border-radius: 999px; padding: 7px 13px; cursor: pointer; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 12.5px; color: var(--ink-600); }
+  .add-secchip.on { background: var(--wash-green); border-color: var(--green-500); color: var(--green-700); }
+  .add-newsec { display: flex; gap: 8px; margin-top: 10px; }
+  .add-newsec input { flex: 1; min-width: 0; border: 1px solid var(--line-200); border-radius: 12px; padding: 10px 12px; font-size: 14px; font-family: 'Montserrat',sans-serif; background: var(--surface-100); outline: none; }
+  .add-newsec input:last-child { flex: 0 0 110px; }
+  .add-newsec input:focus { border-color: var(--green-500); }
+
+  .obs-saved { background: var(--wash-green); border: 1px solid #CDE9C0; color: #3d6b2b; border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+  .obs-alldone { text-align: center; background: #fff; border: 1px solid var(--line-200); border-radius: 22px; padding: 30px 24px; }
+  .obs-alldone .t { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 20px; color: var(--ink-900); margin-top: 10px; }
+  .obs-alldone p { color: var(--ink-450); font-size: 14px; margin: 8px 0 18px; }
+
+  .log-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+  .log-tabs-row > .log-tabs { margin: 0; }
+  .csv-btn { border: 1px solid var(--line-200); background: #fff; cursor: pointer; border-radius: 11px; padding: 8px 14px; font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 13px; color: var(--green-700); }
+  .csv-btn:hover { border-color: var(--green-500); background: var(--wash-green); }
+  .cr-wrap { background: #fff; border: 1px solid var(--line-200); border-radius: 20px; padding: 8px; overflow-x: auto; }
+  .cr-title { text-align: center; font-weight: 800; font-size: 15px; color: var(--ink-900); padding: 12px 0 4px; }
+  .cr-title span { font-weight: 600; color: var(--ink-300); font-size: 13px; }
+  .cr { min-width: 420px; }
+  .cr-head, .cr-row { display: grid; grid-template-columns: minmax(120px,1.6fr) repeat(3, minmax(84px,1fr)); }
+  .cr-head { padding: 10px 12px; align-items: end; }
+  .cr-h { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .cr-h .ic { font-size: 28px; line-height: 1; }
+  .cr-h .lb { font-size: 11px; font-weight: 800; color: var(--ink-300); text-transform: uppercase; letter-spacing: .03em; }
+  .cr-row { width: 100%; background: none; border: none; border-top: 1px solid #F3ECDD; padding: 10px 12px; cursor: pointer; text-align: left; font-family: 'Montserrat',sans-serif; align-items: center; }
+  .cr-row:hover { background: var(--surface-100); }
+  .cr-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; justify-content: center; }
+  .cr-cell + .cr-cell { border-left: 2px solid var(--ink-900); }
+  .cr-cell b { font-size: 14px; font-weight: 800; color: var(--ink-900); }
+  .cr-cell.done b { color: var(--green-700); }
+
+  .ins-sample { margin-top: 12px; background: #FFF8E6; border: 1px solid #F3E2B3; color: #8a6a1d; border-radius: 12px; padding: 9px 14px; font-size: 13px; font-weight: 600; }
+
+  .pf-edit { cursor: default; }
+  .pf-in { flex: 0 1 260px; min-width: 0; border: 1px solid var(--line-200); border-radius: 10px; padding: 9px 12px; font-size: 14px; font-family: 'Montserrat',sans-serif; color: var(--ink-900); background: var(--surface-100); outline: none; text-align: right; }
+  .pf-in:focus { border-color: var(--green-500); background: #fff; }
+  .mir { margin-top: 16px; padding: 18px 22px; }
+  .mir-t { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 18px; color: var(--ink-900); }
+  .mir-s { font-size: 12.5px; color: var(--ink-300); font-weight: 600; margin-top: 2px; }
+  .mir-empty { color: var(--ink-450); font-size: 14px; margin: 12px 0 2px; }
+  .mir-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .mir-row { display: grid; grid-template-columns: 140px 1fr 34px; gap: 12px; align-items: center; }
+  .mir-lb { font-size: 13px; font-weight: 700; color: var(--ink-700); }
+  .mir-track { height: 12px; border-radius: 999px; background: var(--surface-100); overflow: hidden; }
+  .mir-fill { display: block; height: 100%; border-radius: 999px; }
+  .mir-v { font-size: 13px; font-weight: 800; color: var(--ink-700); text-align: right; }
+  .mir-scale { font-size: 11.5px; color: var(--ink-300); font-weight: 600; margin-top: 8px; text-align: right; }
+  .mir-fact { display: flex; justify-content: space-between; gap: 14px; font-size: 13px; color: var(--ink-450); border-top: 1px solid var(--line-200); padding-top: 10px; margin-top: 12px; }
+  .mir-fact b { color: var(--ink-900); white-space: nowrap; }
+  .mir-words { display: grid; gap: 10px; margin-top: 12px; }
+  .mir-q { margin: 0; background: #FBF7EE; border-radius: 14px; padding: 12px 14px; font-size: 14px; color: #5a5040; line-height: 1.5; font-style: italic; }
+  .mir-qq { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--ink-300); margin-bottom: 4px; }
+  @media (max-width: 640px) { .mir-row { grid-template-columns: 1fr 34px; } .mir-lb { grid-column: 1 / -1; } }
+
+  /* parent report PDF (rendered off-screen by html2pdf, A4 portrait) */
+  .pr { width: 190mm; font-family: 'Montserrat',sans-serif; color: #1f2a1f; background: #fff; font-size: 11px; }
+  .pr-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #56C02B; padding-bottom: 8px; }
+  .pr-brand { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 16px; } .pr-brand span { color: #56C02B; }
+  .pr-date { font-size: 10px; color: #6b7280; font-weight: 600; }
+  .pr-name { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 24px; margin: 14px 0 2px; }
+  .pr-meta { font-size: 11px; color: #6b7280; font-weight: 600; }
+  .pr-callout { margin: 14px 0; background: #F1FFEC; border-radius: 10px; padding: 10px 12px; font-size: 11.5px; }
+  .pr-summary { display: flex; gap: 12px; margin: 14px 0 6px; }
+  .pr-overall { flex: 0 0 38mm; background: #F1FFEC; border-radius: 10px; padding: 10px 12px; }
+  .pr-overall .k { font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #6b7280; }
+  .pr-overall .v { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 20px; color: #348C11; }
+  .pr-overall .s { font-size: 10px; color: #4b5563; font-weight: 600; }
+  .pr-lines { flex: 1; display: grid; gap: 6px; font-size: 11px; line-height: 1.45; }
+  .pr-h { font-family: 'Quicksand',sans-serif; font-weight: 700; font-size: 13.5px; margin: 14px 0 6px; }
+  .pr-table { width: 100%; border-collapse: collapse; font-size: 10.5px; page-break-inside: avoid; }
+  .pr-table th { text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: .03em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding: 5px 6px; }
+  .pr-table td { border-bottom: 1px solid #f1f1ee; padding: 5px 6px; }
+  .pr-table td.sk { font-weight: 700; }
+  .pr-band { border-radius: 999px; padding: 1px 8px; font-weight: 700; font-size: 9.5px; }
+  .pr-beginner { background: #F3E1D2; color: #a06a44; } .pr-learner { background: #DCE8D4; color: #4e6b43; } .pr-expert { background: #F6D5D9; color: #b0546b; }
+  .pr-foot { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 8px; font-size: 9.5px; color: #6b7280; line-height: 1.5; }
 
   @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
   @media (max-width: 640px) {

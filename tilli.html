@@ -664,6 +664,25 @@
     .tl-screen-actions { width: 100%; }
     .tl-queue-grid { grid-template-columns: 1fr; }
   }
+  /* Reflection Questions editor (Platform Admin → Assessments) */
+  .tl-refl-cat { margin-bottom: var(--tl-gap); }
+  .tl-refl-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+  .tl-refl-q { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-200); }
+  .tl-refl-q .q-n { flex: none; width: 26px; height: 26px; margin-top: 6px; border-radius: 8px; background: var(--surface-100); display: grid; place-items: center; font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 12px; color: var(--ink-450); }
+  .tl-refl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .tl-refl-text { width: 100%; resize: vertical; font-weight: 600; font-size: 13.5px; line-height: 1.4; }
+  .tl-refl-hint { width: 100%; font-size: 12.5px; }
+  .tl-refl-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .tl-refl-type { flex: 0 0 170px; }
+  .tl-refl-extra { flex: 1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 220px; }
+  .tl-refl-extra .input { flex: 1; min-width: 140px; font-size: 12.5px; }
+  .tl-refl-rev { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ink-450); white-space: nowrap; cursor: pointer; }
+  .tl-refl-ctl { flex: none; display: flex; flex-direction: column; gap: 4px; }
+  .tl-refl-ic { width: 30px; height: 28px; border: 1px solid var(--line-200); background: #fff; border-radius: 8px; cursor: pointer; font-weight: 800; color: var(--ink-450); }
+  .tl-refl-ic:hover:not(:disabled) { border-color: var(--green-500); color: var(--green-700); }
+  .tl-refl-ic:disabled { opacity: .35; cursor: default; }
+  .tl-refl-ic.del:hover { border-color: #e7a0ad; color: #c0435c; }
+  @media (max-width: 640px) { .tl-refl-type { flex: 1 1 100%; } .tl-refl-ctl { flex-direction: row; } .tl-refl-q { flex-wrap: wrap; } }
 </style>
 </head>
 <body>

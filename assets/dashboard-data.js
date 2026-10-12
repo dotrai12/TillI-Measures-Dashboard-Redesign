@@ -31,6 +31,30 @@ const PERSPECTIVES = [
   { key: "student", label: "Student", icon: "🧒" },
 ];
 
+// How many separate parts each informant completes per assessment window
+// (e.g. the parent answers 2 questionnaires, the child does 5 direct tasks).
+// Drives the "Completed rate" columns — Teacher 0/1 · Parent 0/2 · Student 3/5.
+const INFORMANT_PARTS = { teacher: 1, parent: 2, student: 5 };
+
+// One informant's completion inside a window. `done` = every part finished.
+function perspEntry(p, doneParts) {
+  const total = INFORMANT_PARTS[p.key] || 1;
+  const d = clamp(Math.round(doneParts || 0), 0, total);
+  return { key: p.key, label: p.label, icon: p.icon, done: d >= total, doneParts: d, totalParts: total };
+}
+// Recompute a window's roll-up after its persp[] changed.
+function finishWindow(w) {
+  w.doneCount = w.persp.filter((p) => p.done).length;
+  w.status = w.doneCount === w.persp.length ? "done" : (w.doneCount === 0 && !w.persp.some((p) => p.doneParts > 0)) ? "pending" : "in_progress";
+  return w;
+}
+// Recompute a student's cross-window counters (windowsDone / perspDone).
+function finishLog(st) {
+  st.windowsDone = st.assessLog.filter((w) => w.status === "done").length;
+  st.perspDone = st.assessLog.reduce((a, w) => a + w.doneCount, 0);
+  return st;
+}
+
 const SECTIONS = [
   { id: "kg_a", name: "Kindergarten A", grade: "Kindergarten", n: 6 },
   { id: "kg_b", name: "Kindergarten B", grade: "Kindergarten", n: 6 },
@@ -122,6 +146,18 @@ function buildStudent(section, i, roster) {
     };
   });
 
+  return Object.assign({
+    id: roster ? roster.adm : section.id + "_" + i,
+    adm: roster ? roster.adm : null,
+    first, last, name, initials,
+    parentEmail: roster ? roster.parentEmail : (first + "." + last + "@parent.tilli.co").toLowerCase(),
+    section: section.name, grade: section.grade,
+  }, summarize(skills, noData));
+}
+
+// Score roll-ups for one student from their per-skill scores: overall band,
+// growth since baseline, band chips, plant state, celebrate / tend lines.
+function summarize(skills, noData) {
   const overallPct = Math.round(skills.reduce((a, s) => a + s.pct, 0) / skills.length);
   const overallPre = Math.round(skills.reduce((a, s) => a + s.pre, 0) / skills.length);
   const band = bandOf(overallPct);
@@ -142,15 +178,12 @@ function buildStudent(section, i, roster) {
   // Celebrate line = biggest grower; tend line = lowest skill.
   const grew = [...skills].sort((a, b) => (b.post - b.pre) - (a.post - a.pre))[0];
   const lowest = [...skills].sort((a, b) => a.pct - b.pct)[0];
-  const celebrateLine = `${grew.name} grew from ${bandOf(grew.pre)} to ${bandOf(grew.post)} since baseline`;
+  const celebrateLine = growth > 0
+    ? `${grew.name} grew from ${bandOf(grew.pre)} to ${bandOf(grew.post)} since baseline`
+    : `${[...skills].sort((a, b) => b.pct - a.pct)[0].name} is a strength from baseline`;
   const tendReason = TEND_PHRASE[lowest.key];
 
   return {
-    id: roster ? roster.adm : section.id + "_" + i,
-    adm: roster ? roster.adm : null,
-    first, last, name, initials,
-    parentEmail: roster ? roster.parentEmail : (first + "." + last + "@parent.tilli.co").toLowerCase(),
-    section: section.name, grade: section.grade,
     band, overallPct, overallPre, growth, chips, maxGap,
     state, skills, celebrateLine, tendReason,
     lowestSkill: lowest, topGrower: grew,
@@ -176,7 +209,7 @@ function buildFreshStudent(section, r) {
     id: (r.adm && String(r.adm).trim()) || section.id + "_" + name,
     adm: (r.adm && String(r.adm).trim()) || null,
     first, last, name, initials, dispFirst: first,
-    claimCode: r.claimCode || null,
+    uid: r.uid || null,
     parentEmail: r.parentEmail || (first + "." + last + "@parent.tilli.co").toLowerCase(),
     section: section.name, grade: section.grade,
     band: "Beginner", overallPct: 0, overallPre: 0, growth: 0,
@@ -187,7 +220,7 @@ function buildFreshStudent(section, r) {
     assess: "todo",
     assessLog: WINDOWS.map((w) => ({
       key: w.key, label: w.label, sub: w.sub, date: w.date,
-      persp: PERSPECTIVES.map((p) => ({ key: p.key, label: p.label, icon: p.icon, done: false })),
+      persp: PERSPECTIVES.map((p) => perspEntry(p, 0)),
       doneCount: 0, status: "pending",
     })),
     windowsDone: 0, perspDone: 0,
@@ -276,14 +309,12 @@ function buildAllData(opts) {
       st.assessLog = WINDOWS.map((w) => {
         const persp = PERSPECTIVES.map((p) => {
           const done = st.state === "waiting" ? false : rndA() < PROBS[w.key][p.key];
-          return { key: p.key, label: p.label, icon: p.icon, done };
+          const total = INFORMANT_PARTS[p.key] || 1;
+          return perspEntry(p, done ? total : Math.floor(rndA() * total));
         });
-        const doneCount = persp.filter((p) => p.done).length;
-        const status = doneCount === 3 ? "done" : doneCount === 0 ? "pending" : "in_progress";
-        return { key: w.key, label: w.label, sub: w.sub, date: w.date, persp, doneCount, status };
+        return finishWindow({ key: w.key, label: w.label, sub: w.sub, date: w.date, persp });
       });
-      st.windowsDone = st.assessLog.filter((w) => w.status === "done").length;
-      st.perspDone = st.assessLog.reduce((a, w) => a + w.doneCount, 0);
+      finishLog(st);
     });
     return { ...sec, students };
   });
@@ -291,5 +322,61 @@ function buildAllData(opts) {
     activeTeacherId, activeTeacher, teachers: (TS && TS.teachers) || [] };
 }
 
+// ---------------- landing-state preview (dev "Landing state" switch) ----------------
+// Lays plausible mock completion + scores over the teacher's REAL students so
+// every page can be previewed in each state. 'baseline' = the real data as-is
+// (fresh class). The other states assume earlier windows are finished:
+//   between → baseline complete, nothing open      (scores = baseline)
+//   midline → baseline complete, mid-year partial   (scores = mid-year)
+//   endline → baseline + mid complete, end partial  (scores = end of year)
+// Seeded by student id, so a state always previews identically.
+const PREVIEW_PLAN = {
+  between: { full: ["baseline"], partial: null, cur: "pre" },
+  midline: { full: ["baseline"], partial: "mid", cur: "mid" },
+  endline: { full: ["baseline", "mid"], partial: "post", cur: "post" },
+};
+// Completion odds per informant for the window that is open right now.
+const PARTIAL_PROBS = { teacher: 0.55, parent: 0.35, student: 0.3 };
+
+function previewStudent(sec, st, plan) {
+  const mock = buildStudent(sec, 0, { adm: String(st.id), first: st.first || "?", last: st.last || "?", parentEmail: st.parentEmail });
+  const rnd = mulberry32(hashStr(st.id + ":preview"));
+  // Freeze the trajectory at the current window: later windows haven't happened.
+  const skills = mock.skills.map((sk) => {
+    const x = Object.assign({}, sk);
+    if (plan.cur === "pre") { x.mid = x.pre; x.post = x.pre; }
+    else if (plan.cur === "mid") { x.post = x.mid; }
+    x.pct = x.post; x.band = bandOf(x.pct);
+    return x;
+  });
+  const noData = mock.state === "waiting";
+  const assessLog = WINDOWS.map((w) => {
+    const full = !noData && plan.full.indexOf(w.key) >= 0;
+    const open = !noData && plan.partial === w.key;
+    const persp = PERSPECTIVES.map((p) => {
+      const total = INFORMANT_PARTS[p.key] || 1;
+      if (full) return perspEntry(p, total);
+      if (open) return perspEntry(p, rnd() < PARTIAL_PROBS[p.key] ? total : Math.floor(rnd() * total));
+      return perspEntry(p, 0);
+    });
+    return finishWindow({ key: w.key, label: w.label, sub: w.sub, date: w.date, persp });
+  });
+  const out = Object.assign({}, st, summarize(skills, noData), { assessLog, dispFirst: st.dispFirst });
+  out.assess = assessLog[0].persp[0].done ? "done" : "todo";
+  return finishLog(out);
+}
+
+function previewData(data, windowState) {
+  const plan = PREVIEW_PLAN[windowState];
+  if (!data || !plan) return data;
+  const sections = data.sections.map((sec) => Object.assign({}, sec, {
+    students: sec.students.map((st) => previewStudent(sec, st, plan)),
+  }));
+  return Object.assign({}, data, { sections, preview: windowState });
+}
+
 window.buildAllData = buildAllData;
+// Helpers the dashboard reuses (add a student in place, preview states,
+// recompute completion after an observation is saved).
+window.TilliDashData = { buildFreshStudent, previewData, perspEntry, finishWindow, finishLog, INFORMANT_PARTS, WINDOWS };
 })();

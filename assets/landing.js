@@ -152,11 +152,13 @@
 
   // ---- state ----
   const state = {
-    // start|role|school|email|checking|login|signup|children|childLoading|childForm|childVerify|childConfirm
+    // start|role|school|email|checking|login|schoolcode|confirmschool|signup|children|childLoading|childForm|childVerify|childConfirm
     step: 'start',
     role: null,
     school: '', schoolQuery: '', schoolListOpen: false,
     email: '', password: '',
+    schoolCode: '',      // teacher self-sign-up: the code that verifies the picked school
+    codeSchool: null,    // the verified school record (shown on "Confirm school")
     kids: [],
     child: { first: '', last: '', adm: '', grade: '', section: '' },
     match: null,          // roster student matched by admission number (legacy fallback)
@@ -313,7 +315,7 @@
   // The backdrop is built once and kept in the DOM for the whole auth flow.
   // Only the white card is swapped between steps: the outgoing card is pinned
   // in place and slid out while the incoming card slides in from the side.
-  const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, signup: 4, setpw: 5 };
+  const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, schoolcode: 4, confirmschool: 5, signup: 6, setpw: 5 };
   let prevAuthStep = null;
   let slideCleanup = null;
 
@@ -328,6 +330,8 @@
     else if (s === 'email') inner = emailView();
     else if (s === 'checking') inner = checkingView();
     else if (s === 'login') inner = loginView(false);
+    else if (s === 'schoolcode') inner = schoolCodeView();
+    else if (s === 'confirmschool') inner = confirmSchoolView();
     else if (s === 'signup') inner = loginView(true);
     else if (s === 'setpw') inner = setPwView();
 
@@ -463,7 +467,9 @@
       : `<span class="pill-info">${esc(state.school)}</span>`;
     const hint = isTilli
       ? 'Demo: use team@tilli.org to sign in to the internal platform.'
-      : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
+      : state.role === 'teacher'
+        ? 'Demo: use teacher@tilli.edu to sign in, or any new email to sign up (Little Sprouts school code: LSPR-2210).'
+        : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
     return `
       <h2 style="font-weight:700;font-size:24px;text-align:center;margin:0 0 10px">Enter your email</h2>
       <p style="text-align:center;margin:0 0 20px">${pill}</p>
@@ -500,6 +506,42 @@
         ${!isSignup && state.forgotSent ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:12.5px;color:var(--ink-600);margin:0;line-height:1.5">To reset your password, contact your school admin — they can re-send an invite that lets you set a new one.</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">${verb} via password &#8594;</button>
       </form>`;
+  }
+
+  // ===== School sign-up (new email, School role) =====
+  // The teacher already picked their school; the school code proves it.
+  function schoolCodeView() {
+    const known = window.TilliAPI && window.TilliAPI.resolveSchool ? window.TilliAPI.resolveSchool(state.school) : null;
+    const e = state.errs.code;
+    if (!known) {
+      return `
+        <h2 style="font-weight:700;font-size:22px;text-align:center;margin:0 0 10px">We can&rsquo;t find your school yet</h2>
+        <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14.5px;color:var(--ink-600);text-align:center;margin:0 0 20px;line-height:1.5"><b>${esc(state.school)}</b> isn&rsquo;t set up on Tilli Measures. Check the name, or ask your school admin to invite you.</p>
+        <button class="btn btn-primary block focus" data-act="pick-school-again">Choose a different school</button>`;
+    }
+    return `
+      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 6px">Enter your school code</h2>
+      <p style="text-align:center;margin:0 0 8px"><span class="pill-info">${esc(known.name)}</span></p>
+      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-600);text-align:center;margin:0 0 20px">Your school admin can share it with you.</p>
+      <form id="code-form" class="${state.shake ? 'tm-shake' : ''}" style="display:flex;flex-direction:column;gap:14px">
+        <input id="code-input" class="input focus ${e ? 'err' : ''}" required value="${esc(state.schoolCode)}" placeholder="e.g. ABCD-1234" aria-label="School code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-align:center;letter-spacing:.12em;font-weight:700;text-transform:uppercase" autofocus>
+        ${e ? `<p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13px;color:#B22447;margin:0;text-align:center">${esc(e)}</p>` : ''}
+        <button type="submit" class="btn btn-primary block focus">Verify &#8594;</button>
+      </form>`;
+  }
+  function confirmSchoolView() {
+    const sc = state.codeSchool || {};
+    const where = [sc.city, sc.country].filter(Boolean).join(', ');
+    return `
+      <h2 style="font-weight:700;font-size:23px;text-align:center;margin:0 0 6px">Confirm school</h2>
+      <p style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:14px;color:var(--ink-600);text-align:center;margin:0 0 18px">You&rsquo;re joining as a teacher at:</p>
+      <div style="border:2px solid #56C02B;background:#F1FFEC;border-radius:20px;padding:18px 20px;text-align:center;margin-bottom:18px">
+        <div style="font-weight:700;font-size:19px;color:var(--ink-900)">${esc(sc.name || state.school)}</div>
+        ${where ? `<div style="font-family:'Quicksand',sans-serif;font-weight:600;font-size:13.5px;color:var(--ink-450);margin-top:4px">${esc(where)}</div>` : ''}
+        ${sc.board ? `<div style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:12px;color:var(--ink-300);margin-top:6px">${esc(sc.board)}</div>` : ''}
+      </div>
+      <button class="btn btn-primary block focus" data-act="confirm-school">Yes, that&rsquo;s my school &#8594;</button>
+      <button class="focus" data-act="pick-school-again" style="display:block;margin:12px auto 0;border:none;background:none;cursor:pointer;font-family:'Quicksand',sans-serif;font-weight:700;font-size:13px;color:var(--ink-450);text-decoration:underline;text-underline-offset:2px">Not my school</button>`;
   }
 
   // First-login password reset — shown once, right after an invited account
@@ -711,8 +753,39 @@
         clearTimeout(checkTimer);
         checkTimer = setTimeout(() => {
           const exists = !!loadAccounts()[email.toLowerCase()] || !!invitedAccount(email);
-          set({ step: exists ? 'login' : 'signup' });
+          // Existing account → sign in with password (no code). New School-role
+          // email → verify the picked school with its code before creating a password.
+          if (exists) set({ step: 'login' });
+          else if (state.role === 'teacher') set({ step: 'schoolcode', schoolCode: '', codeSchool: null, errs: {} });
+          else set({ step: 'signup' });
         }, 900);
+      });
+    }
+
+    // school code form (teacher self-sign-up)
+    const cfm = scope.querySelector('#code-form');
+    if (cfm) {
+      const ci = scope.querySelector('#code-input');
+      ci.addEventListener('input', (ev) => {
+        state.schoolCode = ev.target.value;
+        if (state.errs.code) { state.errs = {}; ev.target.classList.remove('err'); }
+      });
+      cfm.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const code = (ci.value || '').trim();
+        if (!code) return;
+        const res = window.TilliAPI && window.TilliAPI.verifySchoolCode
+          ? window.TilliAPI.verifySchoolCode(state.school, code) : { ok: false, reason: 'mismatch' };
+        if (!res.ok) {
+          const msg = res.reason === 'no_code'
+            ? 'This school hasn’t set up a school code yet — ask your school admin to invite you.'
+            : `That code doesn’t match ${state.school}. Check it with your school admin.`;
+          set({ errs: { code: msg }, shake: true, schoolCode: code });
+          clearTimeout(shakeTimer);
+          shakeTimer = setTimeout(() => set({ shake: false }), 450);
+          return;
+        }
+        set({ step: 'confirmschool', codeSchool: res.school, school: res.school.name, errs: {} });
       });
     }
 
@@ -877,6 +950,12 @@
       case 'forgot':
         set({ forgotSent: true });
         break;
+      case 'confirm-school':
+        set({ step: 'signup', password: '', errs: {} });
+        break;
+      case 'pick-school-again':
+        set({ step: 'school', school: '', schoolQuery: '', schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
+        break;
       case 'add-child':
         set({ step: 'childLoading', child: { first: '', last: '', adm: '', grade: '', section: '' }, match: null,
               claim: { challengeId: null, factor: 'code', code: '', reveal: null, token: null, retryAt: 0 }, errs: {} });
@@ -913,7 +992,10 @@
     if (s === 'school') set({ step: 'role' });
     // Tilli Team skipped the school step, so its email screen goes back to role.
     else if (s === 'email') set({ step: state.role === 'tilli' ? 'role' : 'school' });
-    else set({ step: 'email', password: '' });
+    // School sign-up: password → confirm school → code → email.
+    else if (s === 'signup' && state.role === 'teacher') set({ step: 'confirmschool', password: '' });
+    else if (s === 'confirmschool') set({ step: 'schoolcode', errs: {} });
+    else set({ step: 'email', password: '', errs: {} });
   }
 
   // ---- boot ----

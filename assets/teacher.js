@@ -1,9 +1,10 @@
 /* ============================================================
    Tilli Measures — teacher onboarding / self-reflection flow
-   intro → demographics (4 steps) → greeting → self-assessment (OPTIONAL)
+   intro → demographics (4 steps) → greeting → self-assessment
         → profile done → add students → enter garden
-   The greeting offers "I'll do this later", which skips the 10-question
-   self-assessment and goes straight to add-students → dashboard.
+   One-time and mandatory: the dashboard stays locked until a teacher has
+   finished it once (TeacherStore `onboarded`). The reflection questions come
+   from the shared bank in TilliAPI (editable in the Platform Admin).
    Vanilla state machine (no framework), rendered into #onb-root.
    Ported from the "Teacher Dashboard" prototype into the live
    design system. Phase 1 = onboarding; the dashboard slots in at
@@ -29,27 +30,29 @@
   };
 
   // ---------- content (self-report questions + option banks) ----------
-  // Drawn from the Tilli Pre-Training Teacher Self Report — 5 sections.
-  // Replaceable: edit CATS + SELF to swap in the final question bank.
-  const CATS = [
-    { name: 'Mindsets', color: '#F2CE7B' },
-    { name: 'SEL Competencies', color: '#9DBE8D' },
-    { name: 'Practices', color: '#A7CDE2' },
-    { name: 'Climate', color: '#F6C6D2' },
-    { name: 'Wellbeing', color: '#F0B97D' },
-  ];
-  const SELF = [
-    { cat: 0, type: 'scale', q: 'Social Emotional Learning belongs in everyday teaching.', hint: 'Woven into academic lessons, routines and behaviour support — not a separate subject or one-time activity.' },
-    { cat: 0, type: 'scale', q: 'When a student misbehaves, I look for the reason before I respond.' },
-    { cat: 1, type: 'scale', q: 'In the last two weeks, I calmed myself when I felt a strong emotion at work.' },
-    { cat: 1, type: 'text', q: 'Describe a recent situation at work where you felt a strong emotion. What did you do to calm or manage yourself?' },
-    { cat: 1, type: 'scale', q: 'I have a reliable way to recover after a hard day.' },
-    { cat: 2, type: 'scale', q: 'In the last 3–4 weeks, I checked in on how students were feeling.' },
-    { cat: 2, type: 'choice', q: 'In a typical week, how many SEL activities do you run?', hint: 'Emotion check-ins, reflection exercises, conflict-resolution talks, mindfulness, collaborative games…', options: ['0', '1–2', '3–4', '5+'] },
-    { cat: 3, type: 'scale', q: 'Students in my classroom feel safe.', hint: 'Able to participate, make mistakes, express themselves and ask for help without fear.' },
-    { cat: 3, type: 'text', q: 'What is one thing you do that helps create a safe classroom environment?' },
-    { cat: 4, type: 'scale', q: 'Over the last two weeks, I felt emotionally drained by work.', lo: 'Never', hi: 'Always' },
-  ];
+  // The reflection bank (Tilli Pre-Training Teacher Self Report — 5 sections)
+  // lives in TilliAPI so the Platform Admin can edit it without a rebuild.
+  // CATS = [{ id, name, color }]; SELF = questions with `cat` resolved to an
+  // index into CATS. Answers are keyed by question id (see answerKey).
+  const REFLECTION = (function () {
+    try { if (window.TilliAPI && window.TilliAPI.getReflectionConfig) return window.TilliAPI.getReflectionConfig(); }
+    catch (e) {}
+    return { cats: [], questions: [] };
+  })();
+  const CATS = REFLECTION.cats || [];
+  const SELF = (REFLECTION.questions || []).map((q) =>
+    Object.assign({}, q, { cat: Math.max(0, CATS.findIndex((c) => c.id === q.cat)) }));
+  const answerKey = (i) => (SELF[i] ? SELF[i].id : String(i));
+  // Answers saved before the bank moved to TilliAPI were keyed by array index
+  // (0–9). Re-key them onto the original 10 question ids.
+  const LEGACY_IDS = ['q01', 'q02', 'q03', 'q04', 'q05', 'q06', 'q07', 'q08', 'q09', 'q10'];
+  function migrateAnswers(a) {
+    if (!a) return {};
+    if (!Object.keys(a).some((k) => /^\d+$/.test(k))) return a;
+    const out = {};
+    Object.keys(a).forEach((k) => { out[/^\d+$/.test(k) && LEGACY_IDS[+k] ? LEGACY_IDS[+k] : k] = a[k]; });
+    return out;
+  }
 
   const GENDERS = ['Female', 'Male', 'Non-binary', 'Prefer not to say'];
   const EDU_LEVELS = ['High school', 'Diploma / Certificate', "Bachelor's degree", "Master's degree", 'Doctorate'];
@@ -88,18 +91,21 @@
     school: ctx.school, country: '', city: '', countryOpen: false, cityOpen: false,
     gradesSel: {}, secs: {}, subjects: {}, resSuff: '', resources: {},
   });
-  // `students` holds structured records { first, last, adm, grade, section, claimCode }
-  // (not display strings) so each add can run through the dedupe guard. `note`
-  // carries the result of the last add (created / merged / flagged for review).
-  // `rows` is the editable sheet (one object per student the teacher is entering);
-  // `students` is the committed set the garden reads. Legacy one-by-one fields
-  // (first/last/adm/method) are kept so the dashboard's add-more path still works.
-  const blankRoster = () => ({ method: null, grade: '', first: '', last: '', adm: '', rows: [], students: [], note: null, csvMsg: '', picMsg: '' });
+  // `students` holds structured records { first, last, adm, grade, section, uid }
+  // (not display strings) so each add can run through the dedupe guard — the
+  // committed set the garden reads. Legacy one-by-one fields (first/last/adm/
+  // note) are kept for the old single-add path.
+  // `groups` is the editable sheet: grade·section is picked ONCE per group, and
+  // each group lists its students [{ first, last, adm }]. `issues` flags rows the
+  // dedupe guard bounced on the last commit, keyed 'g-i'.
+  const blankRoster = () => ({ method: null, grade: '', first: '', last: '', adm: '', groups: [], students: [], note: null, issues: {}, csvMsg: '', picMsg: '' });
 
   const state = {
     phase: 'intro',   // intro | demo | greet | assess | done | roster | complete
     openSelect: null, // id of the currently-open custom dropdown (only one at a time)
-    skippedReflection: false, // true when the teacher chose "I'll do this later" on greet
+    onboarded: false, // true once the one-time setup has been completed
+    joinedAt: null,   // first completion (ISO) — "Joined Tilli Measures" on the profile
+    observations: {}, // { [windowKey]: { [adm]: { ratings, at } } } — teacher observations
     selfQ: 0,
     selfAnswers: {},
     demo: blankDemo(),
@@ -214,38 +220,46 @@
           adm: s.adm || s.student_id || '',
         };
       });
-      return rows.length ? { rows: rows } : {};
+      return rows.length ? { groups: rowsToGroups(rows) } : {};
     } catch (e) { return {}; }
   }
 
   // ---------- boot: resume or start ----------
+  // Older saves stored the sheet as flat rows with a per-row `gs`; regroup them.
+  function rowsToGroups(rows) {
+    const by = {}, order = [];
+    (rows || []).forEach((r) => {
+      const gs = r.gs || '';
+      if (!by[gs]) { by[gs] = { gs, rows: [] }; order.push(gs); }
+      by[gs].rows.push({ first: r.first || '', last: r.last || '', adm: r.adm || '' });
+    });
+    return order.map((gs) => by[gs]);
+  }
+  function loadRoster(saved) {
+    const r = Object.assign(blankRoster(), saved || {});
+    if ((!r.groups || !r.groups.length) && r.rows && r.rows.length) r.groups = rowsToGroups(r.rows);
+    delete r.rows;
+    r.issues = {};
+    return r;
+  }
+
   (function boot() {
     const saved = TeacherStore.load(ctx.email);
-    // A completed onboarding wins on reload — even if the URL still carries the
-    // one-shot ?new=1 flag. Without this, a refresh keeps forcing the reflection
-    // intro forever because new=1 never leaves the address bar.
+    // The one-time setup is mandatory: only a teacher who has finished it before
+    // goes straight to the dashboard. Everyone else (new, invited, or returning
+    // without a saved setup) runs it once, pre-filled from the platform.
+    consumeNewFlag();
     if (saved && saved.onboarded) {
-      consumeNewFlag();
-      Object.assign(state, { phase: 'complete' });
+      Object.assign(state, { phase: 'complete', onboarded: true,
+        joinedAt: saved.joinedAt || saved.completedAt || null, observations: saved.observations || {} });
       if (saved.demo) state.demo = Object.assign(blankDemo(), saved.demo);
-      if (saved.selfAnswers) state.selfAnswers = saved.selfAnswers;
-      if (saved.roster) state.roster = Object.assign(blankRoster(), saved.roster);
+      state.selfAnswers = migrateAnswers(saved.selfAnswers);
+      state.roster = loadRoster(saved.roster);
       render();
       return;
     }
-    // Returning "enter password" login (not activating an account): skip the
-    // whole onboarding and go straight to the dashboard, seeded from the platform.
-    if (!ctx.isNew) {
-      consumeNewFlag();
-      state.roster = Object.assign(blankRoster(), platformRoster());
-      Object.assign(state, { phase: 'complete' });
-      render();
-      return;
-    }
-    // New teacher (create-password or set-password-after-temp): run the full
-    // onboarding, pre-filled from the invite, with their students ready to add.
     state.demo = prefillDemo(blankDemo());
-    state.roster = Object.assign(blankRoster(), platformRoster());
+    state.roster = loadRoster(platformRoster());
     render();
   })();
 
@@ -253,6 +267,7 @@
     const payload = Object.assign({
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
+      onboarded: state.onboarded, joinedAt: state.joinedAt, observations: state.observations,
     }, extra || {});
     TeacherStore.save(ctx.email, payload);
   }
@@ -292,6 +307,8 @@
     const teacher = {
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
+      reflection: { cats: CATS, questions: SELF }, joinedAt: state.joinedAt,
+      observations: state.observations,
     };
     // dashboard-data.js is loaded as a classic <script> in teacher.html, so it
     // works under file:// too (no ES-module fetch). It exposes window.buildAllData.
@@ -519,14 +536,14 @@
     return `<div style="text-align:center;padding:16px 0">
       ${petals('sm')}
       <h1 style="font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(22px,3vw,26px);margin:0 0 10px;color:var(--ink-900)">Hi ${esc(first)}, it&rsquo;s nice to meet you!</h1>
-      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">A short reflection helps Tilli understand you — about 3 minutes, 10 quick questions.</p>
+      <p style="color:var(--ink-450);font-size:15.5px;line-height:1.5;margin:0 0 28px">A short reflection helps Tilli understand you — about ${Math.max(1, Math.round(SELF.length * 0.3))} minutes, ${SELF.length} quick questions.</p>
       <button class="btn btn-primary focus" data-act="greet-next">Begin reflection &#8594;</button>
     </div>`;
   }
 
   // ---- self-assessment ----
   function assessView() {
-    const i = state.selfQ, q = SELF[i];
+    const i = state.selfQ, q = SELF[i], ak = answerKey(i);
     // Section progress ring — exactly 5 outline circles, one per self-assessment
     // category, matching the celebration petal cluster (same 5 brand colours).
     // Each fills once every question in its category is answered; the current
@@ -535,7 +552,7 @@
     const dots = CATS.map((c, ci) => {
       const done = SELF.every((sq, k) => sq.cat !== ci || selfAnswered(k));
       const cur = ci === q.cat;
-      const col = PETAL_COLORS[ci];
+      const col = PETAL_COLORS[ci % PETAL_COLORS.length];
       const bg = done ? col : '#fff';
       const bd = done || cur ? col : 'var(--line-200)';
       const ang = (ci / CATS.length) * Math.PI * 2 - Math.PI / 2;
@@ -553,17 +570,17 @@
 
     let body = '';
     if (q.type === 'scale') {
-      const cur = state.selfAnswers[i];
+      const cur = state.selfAnswers[ak];
       const btns = [1, 2, 3, 4, 5].map((n) =>
         `<button class="onb-scale-btn focus${cur === n ? ' on' : ''}" data-scale="${n}">${n}</button>`).join('');
       body = `<div class="onb-scale">${btns}</div>
         <div class="onb-scale-ends"><span>${esc(q.lo || 'Strongly disagree')}</span><span>${esc(q.hi || 'Strongly agree')}</span></div>`;
     } else if (q.type === 'choice') {
-      const cur = state.selfAnswers[i];
-      body = `<div class="onb-choices">${q.options.map((o) =>
+      const cur = state.selfAnswers[ak];
+      body = `<div class="onb-choices">${(q.options || []).map((o) =>
         `<button class="onb-choice focus${cur === o ? ' on' : ''}" data-choice="${esc(o)}">${esc(o)}</button>`).join('')}</div>`;
     } else {
-      body = `<textarea class="onb-textarea focus" data-self-text rows="4" placeholder="Take a breath and write freely…">${esc(state.selfAnswers[i] || '')}</textarea>`;
+      body = `<textarea class="onb-textarea focus" data-self-text rows="4" placeholder="Take a breath and write freely…">${esc(state.selfAnswers[ak] || '')}</textarea>`;
     }
 
     return `
@@ -578,7 +595,7 @@
       </div>`;
   }
   function selfAnswered(i) {
-    const a = state.selfAnswers[i];
+    const a = state.selfAnswers[answerKey(i)];
     return typeof a === 'string' ? !!a.trim() : a != null;
   }
 
@@ -602,23 +619,29 @@
     });
     return out;
   }
-  const blankRow = (gs) => ({ gs: gs || '', first: '', last: '', adm: '' });
-  function sheetValid() { return (state.roster.rows || []).some((r) => r.first.trim() && r.last.trim() && r.adm.trim() && r.gs); }
+  const blankRow = () => ({ first: '', last: '', adm: '' });
+  const blankGroup = (gs) => ({ gs: gs || '', rows: [blankRow()] });
+  const rowComplete = (r) => !!(r.first.trim() && r.last.trim() && r.adm.trim());
+  function sheetValid() { return (state.roster.groups || []).some((g) => g.gs && g.rows.some(rowComplete)); }
   function splitGS(gs) { const p = String(gs || '').split(' · Section '); return [(p[0] || '').trim(), (p[1] || '').trim()]; }
+  // First grade·section not already taken by another group (for a new group).
+  function nextFreeGS() {
+    const used = (state.roster.groups || []).map((g) => g.gs);
+    return gradeSectionOpts().find((o) => used.indexOf(o) < 0) || '';
+  }
 
-  // Grade·section picker for a roster row. Uses the same custom .onb-sel
-  // dropdown as the rest of onboarding (native <select> mis-renders when the
-  // page is scaled and can't match the text-input styling). Open state is
-  // tracked per row via state.openSelect === 'rowgs-<i>'.
-  function gsSelect(i, current, opts) {
-    const id = 'rowgs-' + i;
+  // Grade·section picker for a whole group of students. Uses the same custom
+  // .onb-sel dropdown as the rest of onboarding (native <select> mis-renders
+  // when the page is scaled). Open state: state.openSelect === 'grpgs-<gi>'.
+  function gsSelect(gi, current, opts) {
+    const id = 'grpgs-' + gi;
     const open = state.openSelect === id;
     const all = opts.slice();
     if (current && all.indexOf(current) < 0) all.unshift(current);   // keep an off-list value visible
     const menu = all.map((o) =>
-      `<button type="button" class="onb-sel-opt focus${o === current ? ' on' : ''}" data-rowgs-opt="${i}" data-rowgs-val="${esc(o)}"><span>${esc(o)}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
+      `<button type="button" class="onb-sel-opt focus${o === current ? ' on' : ''}" data-gs-opt="${gi}" data-gs-val="${esc(o)}"><span>${esc(o)}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
     return `<div class="onb-sel${open ? ' open' : ''}">
-      <button type="button" class="onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-rowgs-toggle="${i}" aria-label="Grade and section for student ${i + 1}"><span class="onb-sel-val">${esc(current || 'Grade · section')}</span></button>
+      <button type="button" class="onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-gs-toggle="${gi}" aria-label="Grade and section for this group"><span class="onb-sel-val">${esc(current || 'Choose grade · section')}</span></button>
       ${open ? `<div class="onb-sel-menu">${menu}</div>` : ''}
     </div>`;
   }
@@ -638,7 +661,7 @@
 
     // --- entry: choose how to add students ---
     if (!r.method) {
-      const preN = (r.rows || []).filter((x) => x.first || x.adm).length;
+      const preN = (r.groups || []).reduce((a, g) => a + g.rows.filter((x) => x.first || x.adm).length, 0);
       return head(preN ? `${preN} student${preN === 1 ? '' : 's'} on file — pick &ldquo;Type them in&rdquo; to review &amp; edit them.` : '') + `
         <div class="onb-methods">
           <button class="onb-method focus" data-method="sheet"><span class="ic">🌱</span><span class="lb">Type them in</span></button>
@@ -685,51 +708,90 @@
     }
 
     // --- manual: editable sheet (r.method === 'sheet') ---
+    // Grade · section is chosen ONCE per group; the group's students sit under it.
     const opts = gradeSectionOpts();
-    if (!r.rows || !r.rows.length) r.rows = [blankRow(opts[0] || '')];   // always show one empty row
-    const prefilled = r.rows.some((x) => x.first || x.adm);
+    if (!r.groups || !r.groups.length) r.groups = [blankGroup(opts[0] || '')];   // always show one group
+    r.groups.forEach((g) => { if (!g.rows.length) g.rows.push(blankRow()); });
+    const prefilled = r.groups.some((g) => g.rows.some((x) => x.first || x.adm));
+    const issues = r.issues || {};
 
-    const header = `<div class="roster-head">` +
-      `<span>Grade · section</span><span>First name</span><span>Last name</span><span>Admission #</span><span></span></div>`;
-    const rowsHTML = r.rows.map((row, i) => `
-      <div class="roster-row">
-        ${gsSelect(i, row.gs, opts)}
-        <input class="input focus" data-rowk="first" data-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
-        <input class="input focus" data-rowk="last" data-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
-        <input class="input focus" data-rowk="adm" data-rowi="${i}" value="${esc(row.adm)}" placeholder="Admission #" aria-label="Admission number, student ${i + 1}">
-        <button class="roster-del focus" data-rowdel="${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
-      </div>`).join('');
+    const header = `<div class="roster-head"><span>First name</span><span>Last name</span><span>Admission #</span><span></span></div>`;
+    const groupsHTML = r.groups.map((g, gi) => {
+      const taken = r.groups.filter((_, k) => k !== gi).map((x) => x.gs);
+      const gopts = opts.filter((o) => taken.indexOf(o) < 0);
+      const n = g.rows.filter(rowComplete).length;
+      const rowsHTML = g.rows.map((row, i) => {
+        const iss = issues[gi + '-' + i];
+        const note = iss ? `<div class="roster-issue">${esc(iss.text)}${iss.kind === 'name_dup'
+          ? ` <button class="roster-issue-btn focus" data-rowforce="${gi}-${i}">Different child — add anyway</button>` : ''}</div>` : '';
+        return `<div class="roster-row${iss ? ' has-issue' : ''}">
+          <input class="input focus" data-rowk="first" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
+          <input class="input focus" data-rowk="last" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
+          <input class="input focus" data-rowk="adm" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.adm)}" placeholder="Admission #" aria-label="Admission number, student ${i + 1}">
+          <button class="roster-del focus" data-rowdel="${gi}-${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
+        </div>${note}`;
+      }).join('');
+      return `<section class="roster-group">
+        <div class="roster-group-head">
+          <div class="roster-group-gs">${gsSelect(gi, g.gs, gopts)}</div>
+          <span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span>
+          ${r.groups.length > 1 ? `<button class="roster-group-del focus" data-groupdel="${gi}" title="Remove this section and its students">Remove</button>` : ''}
+        </div>
+        <div class="roster-sheet">${header}${rowsHTML}</div>
+        <button class="roster-addrow focus" data-rowadd="${gi}">+ Add student</button>
+      </section>`;
+    }).join('');
+    const canAddGroup = !opts.length || r.groups.length < opts.length;
 
-    return head(prefilled ? 'We&rsquo;ve pre-filled the students on file — check, edit, or add more below.' : 'One row per student. Add as many as you need.') + `
-      ${opts.length ? '' : '<div class="onb-note" style="margin-bottom:12px">Tip: pick the grades &amp; sections you teach in the previous step and they&rsquo;ll appear in the grade column.</div>'}
-      <div style="overflow-x:auto"><div class="roster-sheet">${header}${rowsHTML}</div></div>
-      <button class="btn btn-ghost focus" data-rowadd style="margin-top:2px">+ Add student</button>
-      <div class="onb-actions" style="margin-top:18px">
-        <button class="btn btn-primary grow focus" data-act="roster-finish"${sheetValid() ? '' : ' disabled'}>Enter my garden &#8594;</button>
+    return head(prefilled ? 'We&rsquo;ve pre-filled the students on file — check, edit, or add more below.' : 'Pick the grade &amp; section once, then add its students. Add another section if you teach more than one.') + `
+      ${opts.length ? '' : '<div class="onb-note" style="margin-bottom:12px">Tip: pick the grades &amp; sections you teach in the previous step and they&rsquo;ll appear in the grade · section picker.</div>'}
+      ${Object.keys(issues).length ? '<div class="onb-note" style="margin-bottom:12px;background:#FFF4E5;border:1px solid #F6D9A8">A few students need a quick check before we can plant them — see the highlighted rows.</div>' : ''}
+      ${groupsHTML}
+      ${canAddGroup ? '<button class="btn btn-ghost block focus" data-groupadd style="margin-top:4px">+ Add another section</button>' : ''}
+      <div style="text-align:center;margin-top:16px">
+        <button class="btn btn-primary focus" data-act="roster-finish"${sheetValid() ? '' : ' disabled'}>Enter my garden &#8594;</button>
       </div>`;
   }
 
   // Commit the sheet: funnel every complete row through the dedupe guard (best
   // effort), then hand the committed students to the garden.
+  // Rows the guard bounces (same name / taken admission #) are flagged in place
+  // and block finishing until the teacher resolves them.
   function commitSheet() {
-    const rows = (state.roster.rows || []).filter((r) => r.first.trim() && r.last.trim() && r.adm.trim() && r.gs);
-    const students = rows.map((row) => {
-      const gs = splitGS(row.gs), grade = gs[0], section = gs[1];
-      const first = row.first.trim(), last = row.last.trim(), adm = row.adm.trim();
-      let claimCode;
-      try {
-        if (window.TilliAPI && window.TilliAPI.addStudent) {
-          const scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
-          const res = window.TilliAPI.addStudent({
-            actorEmail: ctx.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
-            student_id: adm, first, last, grade, section, source: 'manual',
-          });
-          claimCode = res && res.student && res.student.claimCode;
+    const issues = {}, students = [], seen = {};
+    (state.roster.groups || []).forEach((g, gi) => {
+      if (!g.gs) return;
+      const gs = splitGS(g.gs), grade = gs[0], section = gs[1];
+      g.rows.forEach((row, i) => {
+        if (!rowComplete(row)) return;
+        const first = row.first.trim(), last = row.last.trim(), adm = row.adm.trim();
+        let res = null, scope = null;
+        try {
+          if (window.TilliAPI && window.TilliAPI.addStudent) {
+            scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
+            res = window.TilliAPI.addStudent({
+              actorEmail: ctx.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
+              student_id: adm, first, last, grade, section, source: 'manual', force: row.force || null,
+            });
+          }
+        } catch (e) {}
+        if (res && res.result === 'name_dup') {
+          issues[gi + '-' + i] = { kind: 'name_dup', text: `“${first} ${last}” has the same name as a student already on file (#${res.matched.student_id}).` };
+          return;
         }
-      } catch (e) {}
-      return { first, last, adm, grade, section, claimCode };
+        if (res && res.result === 'id_conflict') {
+          issues[gi + '-' + i] = { kind: 'id_conflict', text: `#${adm} already belongs to ${res.existing.name}. Two children can’t share an admission number — use a different one.` };
+          return;
+        }
+        if (seen[normAdm(adm)]) return;
+        seen[normAdm(adm)] = true;
+        const uid = (res && res.student && res.student.uid)
+          || (scope && window.TilliAPI.makeUid ? window.TilliAPI.makeUid(scope.school_id, adm) : null);
+        students.push({ first, last, adm, grade, section, uid });
+      });
     });
-    state.roster = Object.assign({}, state.roster, { students });
+    if (Object.keys(issues).length) { setRoster({ issues }); return; }
+    state.roster = Object.assign({}, state.roster, { students, issues: {} });
     finishOnboard();
   }
 
@@ -902,7 +964,7 @@
     const ta = root.querySelector('[data-self-text]');
     if (ta) {
       ta.addEventListener('input', (e) => {
-        state.selfAnswers[state.selfQ] = e.target.value;
+        state.selfAnswers[answerKey(state.selfQ)] = e.target.value;
         const nx = root.querySelector('[data-act="self-next"]');
         if (nx) nx.disabled = !selfAnswered(state.selfQ);
       });
@@ -927,32 +989,58 @@
 
     // student sheet — patched in place so carets survive typing; add/remove rerender
     function syncFinish() { const f = root.querySelector('[data-act="roster-finish"]'); if (f) f.disabled = !sheetValid(); }
+    const groups = state.roster.groups || [];
+    const pair = (v) => String(v).split('-').map(Number);
     root.querySelectorAll('[data-rowk]').forEach((el) => {
       el.addEventListener('input', (e) => {
-        const i = +el.dataset.rowi, k = el.dataset.rowk;
-        if (state.roster.rows[i]) state.roster.rows[i][k] = e.target.value;
+        const g = groups[+el.dataset.rowg], i = +el.dataset.rowi, k = el.dataset.rowk;
+        if (g && g.rows[i]) {
+          g.rows[i][k] = e.target.value;
+          delete g.rows[i].force;                       // edited → re-check on commit
+          if (state.roster.issues) delete state.roster.issues[el.dataset.rowg + '-' + i];
+        }
         syncFinish();
       });
     });
-    // custom grade·section dropdown per row (open one at a time via openSelect)
-    root.querySelectorAll('[data-rowgs-toggle]').forEach((b) =>
+    // one grade·section dropdown per group (open one at a time via openSelect)
+    root.querySelectorAll('[data-gs-toggle]').forEach((b) =>
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = 'rowgs-' + b.dataset.rowgsToggle;
+        const id = 'grpgs-' + b.dataset.gsToggle;
         set({ openSelect: state.openSelect === id ? null : id });
       }));
-    root.querySelectorAll('[data-rowgs-opt]').forEach((b) =>
+    root.querySelectorAll('[data-gs-opt]').forEach((b) =>
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        const i = +b.dataset.rowgsOpt;
-        if (state.roster.rows[i]) state.roster.rows[i].gs = b.dataset.rowgsVal;
+        const g = groups[+b.dataset.gsOpt];
+        if (g) g.gs = b.dataset.gsVal;
         set({ openSelect: null });   // rerenders → new value + closed menu
       }));
-    const rowAdd = root.querySelector('[data-rowadd]');
-    if (rowAdd) rowAdd.addEventListener('click', () => { const o = gradeSectionOpts(); state.roster.rows.push(blankRow(o[0] || '')); render(); });
+    root.querySelectorAll('[data-rowadd]').forEach((b) => b.addEventListener('click', () => {
+      const g = groups[+b.dataset.rowadd]; if (!g) return;
+      g.rows.push(blankRow()); render();
+      const ins = root.querySelectorAll(`[data-rowg="${b.dataset.rowadd}"][data-rowk="first"]`);
+      if (ins.length) ins[ins.length - 1].focus();
+    }));
     root.querySelectorAll('[data-rowdel]').forEach((b) => b.addEventListener('click', () => {
-      state.roster.rows.splice(+b.dataset.rowdel, 1);
-      if (!state.roster.rows.length) state.roster.rows.push(blankRow(gradeSectionOpts()[0] || ''));
+      const [gi, i] = pair(b.dataset.rowdel), g = groups[gi]; if (!g) return;
+      g.rows.splice(i, 1);
+      if (!g.rows.length) g.rows.push(blankRow());
+      state.roster.issues = {};
+      render();
+    }));
+    const grpAdd = root.querySelector('[data-groupadd]');
+    if (grpAdd) grpAdd.addEventListener('click', () => { groups.push(blankGroup(nextFreeGS())); render(); });
+    root.querySelectorAll('[data-groupdel]').forEach((b) => b.addEventListener('click', () => {
+      groups.splice(+b.dataset.groupdel, 1);
+      state.roster.issues = {};
+      render();
+    }));
+    // "Different child — add anyway" on a same-name row → force past the name check
+    root.querySelectorAll('[data-rowforce]').forEach((b) => b.addEventListener('click', () => {
+      const [gi, i] = pair(b.dataset.rowforce), g = groups[gi];
+      if (g && g.rows[i]) g.rows[i].force = 'name';
+      delete state.roster.issues[b.dataset.rowforce];
       render();
     }));
 
@@ -998,7 +1086,7 @@
     setDemo({ [mapKey]: m });
   }
   function selfPick(v) {
-    state.selfAnswers = Object.assign({}, state.selfAnswers, { [state.selfQ]: v });
+    state.selfAnswers = Object.assign({}, state.selfAnswers, { [answerKey(state.selfQ)]: v });
     render();
   }
 
@@ -1013,11 +1101,7 @@
         else set({ phase: 'greet' });
         break;
       }
-      case 'greet-next': set({ phase: 'assess', selfQ: 0 }); break;
-      // Reflection is optional — jump straight to the class roster (and on to the
-      // dashboard). skippedReflection routes the roster Back button to 'greet'
-      // rather than the 'done' celebration the teacher never saw.
-      case 'greet-skip': set({ phase: 'roster', skippedReflection: true }); break;
+      case 'greet-next': set(SELF.length ? { phase: 'assess', selfQ: 0 } : { phase: 'done' }); break;
       case 'self-next': {
         if (!selfAnswered(state.selfQ)) return;
         if (state.selfQ >= SELF.length - 1) set({ phase: 'done' });
@@ -1067,12 +1151,15 @@
     } else if (p === 'roster') {
       const r = state.roster;
       if (r.method) setRoster({ method: null, csvMsg: '', picMsg: '' });
-      else set({ phase: state.skippedReflection ? 'greet' : 'done' });
+      else set({ phase: 'done' });
     }
   }
 
   function finishOnboard() {
-    persist({ onboarded: true, completedAt: new Date().toISOString() });
+    const now = new Date().toISOString();
+    state.onboarded = true;
+    if (!state.joinedAt) state.joinedAt = now;   // first completion only — redo keeps it
+    persist({ completedAt: now });
     // `new=1` is a one-shot sign-up flag. Consume it here so a page reload no
     // longer forces the reflection intro — a returning/reloading teacher whose
     // onboarding is saved now boots straight into the dashboard. (To redo the
@@ -1099,6 +1186,7 @@
     const dashRoot = document.getElementById('dash-root');
     if (dashRoot) dashRoot.style.display = 'none';
     if (onb) onb.style.display = '';
+    dashboardMounted = false;   // re-mount on finish so the profile shows the new answers
     set({ phase: 'intro', selfQ: 0 });
   }
   // Jump straight to the "add students" step (used by the dashboard empty state
@@ -1109,10 +1197,62 @@
     const dashRoot = document.getElementById('dash-root');
     if (dashRoot) dashRoot.style.display = 'none';
     if (onb) onb.style.display = '';
-    setRoster({ method: null, csvMsg: '', picMsg: '', note: null });
+    setRoster({ method: null, csvMsg: '', picMsg: '', note: null, issues: {} });
     set({ phase: 'roster' });
   }
-  window.TilliOnboarding = { replay: replayOnboarding, addStudents: goToAddStudents };
+
+  // ---- hooks the dashboard calls (it owns its own in-memory data) ----
+  // Students the teacher added from inside the dashboard. Saved to this
+  // teacher's roster (and its sheet groups) WITHOUT re-mounting the dashboard.
+  function appendStudents(list) {
+    const r = state.roster;
+    const students = (r.students || []).slice();
+    const groups = r.groups || (r.groups = []);
+    (list || []).forEach((s) => {
+      if (!s || !(s.first || '').trim()) return;
+      if (s.adm && students.some((x) => normAdm(x.adm) === normAdm(s.adm))) return;
+      students.push({ first: s.first, last: s.last || '', adm: s.adm || '', grade: s.grade || '', section: s.section || '', uid: s.uid || null });
+      const gs = (s.grade || '') + (s.section ? ' · Section ' + s.section : '');
+      let g = groups.find((x) => x.gs === gs);
+      if (!g) { g = { gs, rows: [] }; groups.push(g); }
+      g.rows = g.rows.filter(rowComplete);
+      g.rows.push({ first: s.first, last: s.last || '', adm: s.adm || '' });
+    });
+    state.roster = Object.assign({}, r, { students, groups });
+    persist();
+    dashboardRosterSig = rosterSig();   // dashboard already shows them — don't re-mount
+  }
+  // Student profile "Edit" → new name / UID for one child (matched by admission #).
+  function updateStudent(adm, p) {
+    const key = normAdm(adm); if (!key) return;
+    const r = state.roster;
+    const students = (r.students || []).map((s) => (normAdm(s.adm) === key ? Object.assign({}, s, p) : s));
+    (r.groups || []).forEach((g) => g.rows.forEach((row) => {
+      if (normAdm(row.adm) === key) { if (p.first != null) row.first = p.first; if (p.last != null) row.last = p.last; }
+    }));
+    state.roster = Object.assign({}, r, { students });
+    persist();
+    dashboardRosterSig = rosterSig();   // dashboard already updated itself — don't re-mount
+  }
+  // Profile "Edit details" → merge into the demographic record.
+  function updateDemo(patch) {
+    state.demo = Object.assign({}, state.demo, patch || {});
+    persist();
+    return state.demo;
+  }
+  // A finished teacher observation for one student in one window.
+  function saveObservation(winKey, adm, ratings) {
+    if (!winKey || !adm) return;
+    const w = Object.assign({}, state.observations[winKey]);
+    w[adm] = { ratings: Object.assign({}, ratings), at: new Date().toISOString() };
+    state.observations = Object.assign({}, state.observations, { [winKey]: w });
+    persist();
+  }
+  window.TilliOnboarding = {
+    replay: replayOnboarding, addStudents: goToAddStudents,
+    appendStudents, updateDemo, saveObservation, updateStudent,
+    options: { genders: GENDERS, education: EDU_LEVELS },
+  };
 
   // close autocomplete menus / custom dropdowns on outside click
   document.addEventListener('click', (e) => {
