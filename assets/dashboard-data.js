@@ -337,6 +337,10 @@ const PREVIEW_PLAN = {
 };
 // Completion odds per informant for the window that is open right now.
 const PARTIAL_PROBS = { teacher: 0.55, parent: 0.35, student: 0.3 };
+// Odds an informant is still pending in a window that has already closed —
+// real windows end with a few stragglers (a parent form not returned, a missed
+// task), so past windows preview as mostly, not perfectly, complete.
+const PAST_GAP_PROBS = { teacher: 0.08, parent: 0.3, student: 0.22 };
 
 function previewStudent(sec, st, plan) {
   const mock = buildStudent(sec, 0, { adm: String(st.id), first: st.first || "?", last: st.last || "?", parentEmail: st.parentEmail });
@@ -355,7 +359,7 @@ function previewStudent(sec, st, plan) {
     const open = !noData && plan.partial === w.key;
     const persp = PERSPECTIVES.map((p) => {
       const total = INFORMANT_PARTS[p.key] || 1;
-      if (full) return perspEntry(p, total);
+      if (full) return perspEntry(p, rnd() < PAST_GAP_PROBS[p.key] ? Math.floor(rnd() * total) : total);
       if (open) return perspEntry(p, rnd() < PARTIAL_PROBS[p.key] ? total : Math.floor(rnd() * total));
       return perspEntry(p, 0);
     });
