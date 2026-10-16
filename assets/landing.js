@@ -1,7 +1,9 @@
 /* ============================================================
    Tilli Measures — landing "Get started" flow
-   role → school → email → (login | signup) → child select
-   Teacher path routes to the teacher dashboard.
+   Parent:  role → school → email → (login | signup) → child select
+   School:  role → email → (login | school → school code → signup)
+            The email decides who you are (teacher / school admin / group admin);
+            only a brand-new email picks a school and proves it with the code.
    Vanilla state machine, no framework. Renders into #flow-root.
    ============================================================ */
 (function () {
@@ -144,21 +146,24 @@
     const want = SCHOOL_PW[String(email || '').toLowerCase()];
     return want == null ? true : pw === want;
   }
-  function saveAccount(email) {
+  // `meta` ({ role, school }) lets a self-signed-up teacher be found by email
+  // alone next time (School path is email-first). Older entries are just `true`.
+  function saveAccount(email, meta) {
     const a = loadAccounts();
-    a[email.toLowerCase()] = true;
+    a[email.toLowerCase()] = meta || true;
     try { localStorage.setItem(ACCT_KEY, JSON.stringify(a)); } catch (e) {}
   }
 
   // ---- state ----
   const state = {
-    // start|role|school|email|checking|login|schoolcode|confirmschool|signup|children|childLoading|childForm|childVerify|childConfirm
+    // start|role|school|email|checking|login|schoolcode|signup|children|childLoading|childForm|childVerify|childConfirm
     step: 'start',
     role: null,
     school: '', schoolQuery: '', schoolListOpen: false,
     email: '', password: '',
     schoolCode: '',      // teacher self-sign-up: the code that verifies the picked school
-    codeSchool: null,    // the verified school record (shown on "Confirm school")
+    codeSchool: null,    // the verified school record
+    found: null,         // School path: what the email resolved to ({ kind:'school'|'group', school })
     kids: [],
     child: { first: '', last: '', adm: '', grade: '', section: '' },
     match: null,          // roster student matched by admission number (legacy fallback)
@@ -212,6 +217,36 @@
   // Demo School Group Admin logins → group id ('*' = anyone else). Invited group
   // admins carry their own group_id on the account instead.
   const DEMO_GROUP_ADMINS = { 'group@vidyatrust.org': 'g-vidya', 'group@lankalearning.lk': 'g-lanka', '*': 'g-vidya' };
+
+  // School path (blue card) is email-first: does this email already belong to a
+  // school or a school group? Returns { kind:'group' } | { kind:'school', school }
+  // | null (new → pick school + school code). Checked in order: group admins,
+  // staff memberships in any school, invited school accounts, demo leadership,
+  // then teachers who self-signed-up on this device.
+  const DEMO_SCHOOL = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.school && window.TILLI_SCHOOL.school.name) || 'Little Sprouts School';
+  function lookupSchoolAccount(email) {
+    const e = String(email || '').trim().toLowerCase();
+    if (!e) return null;
+    const API = window.TilliAPI;
+    const acct = invitedAccount(e);
+    if ((acct && acct.group_id && !acct.school_id) || DEMO_GROUP_ADMINS[e]) return { kind: 'group' };
+    if (API && API.listSchools && API.roleOf) {
+      const sc = API.listSchools().find((x) => { const r = API.roleOf(e, x.school_id); return r && r !== 'parent'; });
+      if (sc) return { kind: 'school', school: sc.name };
+    }
+    if (acct && acct.school_id) {
+      const sc = API && API.resolveSchool ? API.resolveSchool(acct.school_id) : null;
+      if (sc) return { kind: 'school', school: sc.name };
+    }
+    if (admin(e)) return { kind: 'school', school: DEMO_SCHOOL };
+    const saved = loadAccounts()[e];
+    if (saved && typeof saved === 'object' && saved.role === 'teacher') return { kind: 'school', school: saved.school || DEMO_SCHOOL };
+    if (e === 'teacher@tilli.edu' || (saved === true && SCHOOL_PW[e] && e !== 'team@tilli.org' && !/example\.com$/.test(e))) return { kind: 'school', school: DEMO_SCHOOL };
+    return null;
+  }
+
+  // A school-path email that turned out to be a group admin opens the group view.
+  function enterFound() { if (state.role === 'teacher' && state.found && state.found.kind === 'group') state.role = 'group'; }
 
   function go() {
     // "New" = the teacher is activating an account: a fresh signup (create
@@ -329,7 +364,10 @@
   // The backdrop is built once and kept in the DOM for the whole auth flow.
   // Only the white card is swapped between steps: the outgoing card is pinned
   // in place and slid out while the incoming card slides in from the side.
-  const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, schoolcode: 4, confirmschool: 5, signup: 6, setpw: 5 };
+  const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, schoolcode: 4, signup: 6, setpw: 5 };
+  // School path runs email-first, so its school picker comes after the email check.
+  const AUTH_ORDER_SCHOOL = { role: 0, email: 1, checking: 2, login: 3, school: 3, schoolcode: 4, signup: 5, setpw: 4 };
+  const authOrder = (step) => (state.role === 'teacher' ? AUTH_ORDER_SCHOOL : AUTH_ORDER)[step];
   let prevAuthStep = null;
   let slideCleanup = null;
 
@@ -345,7 +383,6 @@
     else if (s === 'checking') inner = checkingView();
     else if (s === 'login') inner = loginView(false);
     else if (s === 'schoolcode') inner = schoolCodeView();
-    else if (s === 'confirmschool') inner = confirmSchoolView();
     else if (s === 'signup') inner = loginView(true);
     else if (s === 'setpw') inner = setPwView();
 
@@ -389,7 +426,7 @@
     // wrap up any transition still in flight before starting a new one
     if (slideCleanup) slideCleanup();
 
-    const back = (AUTH_ORDER[state.step] ?? 99) < (AUTH_ORDER[prevAuthStep] ?? -1);
+    const back = (authOrder(state.step) ?? 99) < (authOrder(prevAuthStep) ?? -1);
 
     // pin the outgoing card so the incoming one gets centered on its own
     const ol = oldDialog.offsetLeft, ot = oldDialog.offsetTop, ow = oldDialog.offsetWidth;
@@ -434,7 +471,6 @@
       <div class="stack">
         ${card('var(--yellow-500)', 'family.png', 'Parent / Home', "Follow your child's assessments", 'parent')}
         ${card('var(--cyan-500)', 'graduation-cap.png', 'School', 'See your whole class garden', 'teacher')}
-        ${card('var(--pink-400)', 'people.png', 'School Group', 'Every school in your group', 'group')}
         ${card('var(--green-500)', 'sparkle.png', 'Tilli Team', 'Internal view across the school', 'tilli')}
       </div>`;
   }
@@ -457,9 +493,13 @@
       : '';
     const noMatch = enoughChars && !exactish && matches.length === 0;
 
+    // School path: we only get here for an email with no account yet.
+    const sub = state.role === 'teacher'
+      ? `No account yet for <b class="break-all">${esc(state.email)}</b>. Pick your school to join it.`
+      : 'Start typing to find it in the list.';
     return `
       <h2 class="dlg-title">${isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
-      <p class="dlg-sub">Start typing to find it in the list.</p>
+      <p class="dlg-sub">${sub}</p>
       <div>
         <span class="select-wrap">
           <input id="school-input" class="input focus" value="${esc(state.schoolQuery)}" placeholder="Select school" aria-label="Search school" autocomplete="off" style="padding-right:40px" autofocus>
@@ -479,12 +519,13 @@
     const pill = isTilli
       ? `<span class="pill-info">Tilli Team &#183; internal</span>`
       : isGroup ? `<span class="pill-info">School group</span>`
+      : state.role === 'teacher' ? `<span class="pill-info">School &#183; teachers, admins &amp; school groups</span>`
       : `<span class="pill-info">${esc(state.school)}</span>`;
     const hint = isTilli
       ? 'Demo: use team@tilli.org to sign in to the internal platform.'
       : isGroup ? 'Demo: use group@vidyatrust.org (Vidya Trust) or group@lankalearning.lk (Lanka Learning Network).'
       : state.role === 'teacher'
-        ? 'Demo: use teacher@tilli.edu to sign in, or any new email to sign up (Little Sprouts school code: LSPR-2210).'
+        ? 'Demo: teacher@tilli.edu (teacher), meera.krishnan@littlesprouts.edu (school admin) or group@vidyatrust.org (school group) sign in. Any new email signs up — Little Sprouts school code: LSPR-2210.'
         : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
     return `
       <h2 class="dlg-title">Enter your email</h2>
@@ -510,6 +551,7 @@
     return `
       <h2 class="dlg-title">${isSignup ? 'Create your Tilli account' : 'Enter your Tilli account'}</h2>
       <p class="dlg-sub break-all">${esc(state.email)}</p>
+      ${state.role === 'teacher' && state.school ? `<p class="text-center" style="margin:-10px 0 18px"><span class="pill-info">${isSignup ? 'Joining ' : ''}${esc(state.school)}</span></p>` : ''}
       <button class="btn-ghost md btn-google focus" data-act="google">${gIcon} ${verb} via Google</button>
       <div class="or-rule">OR</div>
       <form id="pw-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
@@ -545,21 +587,6 @@
         <button type="submit" class="btn btn-primary block focus">Verify &#8594;</button>
       </form>`;
   }
-  function confirmSchoolView() {
-    const sc = state.codeSchool || {};
-    const where = [sc.city, sc.country].filter(Boolean).join(', ');
-    return `
-      <h2 class="dlg-title">Confirm school</h2>
-      <p class="dlg-sub">You&rsquo;re joining as a teacher at:</p>
-      <div class="ui-card md outline tint-green confirm-card" style="margin-bottom:18px">
-        <div style="font-weight:700;font-size:var(--fs-lg);color:var(--ink-900)">${esc(sc.name || state.school)}</div>
-        ${where ? `<div class="dlg-hint" style="color:var(--ink-450);margin-top:4px">${esc(where)}</div>` : ''}
-        ${sc.board ? `<div class="dlg-hint" style="font-weight:700;margin-top:6px">${esc(sc.board)}</div>` : ''}
-      </div>
-      <button class="btn btn-primary block focus" data-act="confirm-school">Yes, that&rsquo;s my school &#8594;</button>
-      <button class="btn-link muted link-center focus" data-act="pick-school-again">Not my school</button>`;
-  }
-
   // First-login password reset — shown once, right after an invited account
   // signs in with its temporary password. They set their own password here.
   function setPwView() {
@@ -742,6 +769,12 @@
           set({ step: 'email', role, school: role === 'tilli' ? 'Tilli Internal' : 'School group', schoolQuery: '', schoolListOpen: false, email: '', password: '' });
           return;
         }
+        // School (teachers, school admins, group admins): email first — it decides
+        // whether this is a sign-in or a new teacher joining a school.
+        if (role === 'teacher') {
+          set({ step: 'email', role, school: '', schoolQuery: '', schoolListOpen: false, email: '', password: '', found: null });
+          return;
+        }
         set({ step: 'school', role, school: '', schoolQuery: '', schoolListOpen: false });
       }));
 
@@ -769,12 +802,16 @@
         set({ email, step: 'checking', password: '', forgotSent: false });
         clearTimeout(checkTimer);
         checkTimer = setTimeout(() => {
+          // School path: the email alone finds the account (teacher, school admin
+          // or group admin). New email → pick school → school code → create password.
+          if (state.role === 'teacher') {
+            const found = lookupSchoolAccount(email);
+            if (found) set({ step: 'login', found, school: found.school || '' });
+            else set({ step: 'school', found: null, school: '', schoolQuery: '', schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
+            return;
+          }
           const exists = !!loadAccounts()[email.toLowerCase()] || !!invitedAccount(email);
-          // Existing account → sign in with password (no code). New School-role
-          // email → verify the picked school with its code before creating a password.
-          if (exists) set({ step: 'login' });
-          else if (state.role === 'teacher') set({ step: 'schoolcode', schoolCode: '', codeSchool: null, errs: {} });
-          else set({ step: 'signup' });
+          set({ step: exists ? 'login' : 'signup' });
         }, 900);
       });
     }
@@ -802,7 +839,8 @@
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
           return;
         }
-        set({ step: 'confirmschool', codeSchool: res.school, school: res.school.name, errs: {} });
+        // Code matches the picked school → create a password (no extra confirm step).
+        set({ step: 'signup', codeSchool: res.school, school: res.school.name, password: '', errs: {} });
       });
     }
 
@@ -840,7 +878,8 @@
         // own password before continuing.
         const acct = state.step === 'login' ? invitedAccount(state.email) : null;
         if (acct && acct.mustReset) { set({ step: 'setpw', password: '', errs: {} }); return; }
-        if (state.step === 'signup') saveAccount(state.email);
+        if (state.step === 'signup') saveAccount(state.email, state.role === 'teacher' ? { role: 'teacher', school: state.school } : null);
+        enterFound();
         go();
       });
     }
@@ -865,6 +904,7 @@
         const res = window.TilliAPI.setPassword(state.email, pw);
         if (!res.ok) return fail('Could not set the password. Try again.');
         saveAccount(state.email);   // mark known for the loose-demo account map too
+        enterFound();
         go();
       });
     }
@@ -957,18 +997,18 @@
       case 'school-continue': {
         const sVal = (state.school || state.schoolQuery).trim();
         if (!sVal) return;
-        set({ step: 'email', school: sVal, schoolListOpen: false, email: '', password: '' });
+        // School path already has the email — the picked school is proven with its code next.
+        if (state.role === 'teacher') set({ step: 'schoolcode', school: sVal, schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
+        else set({ step: 'email', school: sVal, schoolListOpen: false, email: '', password: '' });
         break;
       }
       case 'google':
-        if (state.step === 'signup') saveAccount(state.email);
+        if (state.step === 'signup') saveAccount(state.email, state.role === 'teacher' ? { role: 'teacher', school: state.school } : null);
+        enterFound();
         go();
         break;
       case 'forgot':
         set({ forgotSent: true });
-        break;
-      case 'confirm-school':
-        set({ step: 'signup', password: '', errs: {} });
         break;
       case 'pick-school-again':
         set({ step: 'school', school: '', schoolQuery: '', schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
@@ -1006,13 +1046,14 @@
   function authBack() {
     clearTimeout(checkTimer);
     const s = state.step;
-    if (s === 'school') set({ step: 'role' });
-    // Tilli Team skipped the school step, so its email screen goes back to role.
-    else if (s === 'email') set({ step: state.role === 'tilli' || state.role === 'group' ? 'role' : 'school' });
-    // School sign-up: password → confirm school → code → email.
-    else if (s === 'signup' && state.role === 'teacher') set({ step: 'confirmschool', password: '' });
-    else if (s === 'confirmschool') set({ step: 'schoolcode', errs: {} });
-    else set({ step: 'email', password: '', errs: {} });
+    const schoolPath = state.role === 'teacher';
+    // School path runs email → school → code → password; back walks it in reverse.
+    if (s === 'school') set(schoolPath ? { step: 'email', schoolListOpen: false } : { step: 'role' });
+    // Tilli Team / School Group / School skip the school step before email, so email goes back to role.
+    else if (s === 'email') set({ step: state.role === 'parent' ? 'school' : 'role' });
+    else if (s === 'signup' && schoolPath) set({ step: 'schoolcode', password: '', errs: {} });
+    else if (s === 'schoolcode') set({ step: 'school', schoolListOpen: false, errs: {} });
+    else set({ step: 'email', password: '', errs: {}, found: null });
   }
 
   // ---- boot ----

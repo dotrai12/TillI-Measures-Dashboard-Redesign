@@ -503,13 +503,19 @@
         if (n.disabled) return '<button class="ui-nav-item disabled" data-navsoon="1" title="Coming soon to the leadership view"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '<span class="ui-tag ml-auto">Soon</span></button>';
         return '<button class="ui-nav-item' + (n.key === r.screen ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
       }).join('') + '</nav>' +
-      '<div class="ui-side-foot">Leadership view · data updates 3× a year for outcomes, daily for activity.</div></aside>';
+      // Bottom-left stack, same on every dashboard: dev preview panel (placed by
+      // placeStatePanel) above the profile, which opens the account menu.
+      '<div class="ui-side-bottom"><div id="ad-dev-slot"></div>' +
+        '<button class="ui-side-profile" id="ad-acct-btn" aria-label="Account menu" title="Leadership view · data updates 3× a year for outcomes, daily for activity.">' +
+          '<span class="ui-avatar sm">' + esc(initials(me.name).toUpperCase()) + '</span>' +
+          '<span class="meta"><b>' + esc(me.name) + '</b><span>' + esc(roleLabel) + '</span></span><span class="chev">⋯</span>' +
+        '</button></div></aside>';
 
     var header = '<header class="ui-header dash-header">' +
       '<div><div class="ui-h-title">' + esc(AD.school.name) + '</div><div class="ui-h-sub desk-only">' + esc(AD.school.city + ', ' + AD.school.country) + '</div></div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' + lastChip + yearCtrl +
-      '<span class="ui-rolebadge">' + esc(roleLabel) + '</span>' +
-      '<button class="ui-avatar" id="ad-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
+      // Phone only (sidebar hidden): the avatar stands in for the sidebar profile.
+      '<button class="ui-avatar ad-acct-m" id="ad-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
     var bottom = '<nav class="ui-bottomnav dash-bottomnav">' + navItems().filter(function (n) { return !n.disabled && n.key !== 'asktilli'; }).map(function (n) {
       return '<button class="' + (n.key === r.screen ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.key] + '<span>' + esc(n.label) + '</span></button>';
@@ -522,13 +528,21 @@
   function wireChrome() {
     app.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
     app.querySelectorAll('[data-navsoon]').forEach(function (b) { b.addEventListener('click', function () { toast('Ask Tilli is coming to the leadership view soon.'); }); });
-    var acct = document.getElementById('ad-acct-btn');
-    if (acct) acct.addEventListener('click', function (ev) { ev.stopPropagation(); openAcctMenu(); });
+    ['ad-acct-btn', 'ad-acct-btn-m'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) b.addEventListener('click', function (ev) { ev.stopPropagation(); openAcctMenu(b); });
+    });
   }
-  function openAcctMenu() {
+  // Sidebar profile → menu opens upward from it; phone header avatar → downward, right-aligned.
+  function placeAcctMenu(m, anchor) {
+    var r = anchor.getBoundingClientRect();
+    if (anchor.closest('.ui-side')) { m.style.left = r.left + 'px'; m.style.bottom = (window.innerHeight - r.top + 6) + 'px'; }
+    else { m.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; m.style.top = (r.bottom + 6) + 'px'; }
+  }
+  function openAcctMenu(anchor) {
     closeAcctMenu();
     var m = document.createElement('div');
-    m.className = 'ui-menu ad-acct-menu'; m.id = 'ad-acct-menu';
+    m.className = 'ui-menu ui-acct-menu ad-acct-menu'; m.id = 'ad-acct-menu';
     // Tilli Team drilled in from the internal platform — offer a way back to it.
     var fromTilli = qp.get('from') === 'tilli' || role === 'tilli';
     var fromGroup = qp.get('from') === 'group' && qp.get('group');
@@ -537,7 +551,8 @@
       (fromGroup ? '<button class="ui-menu-item" data-am="group">← Group view</button>' : '') +
       '<button class="ui-menu-item" data-am="switch">Switch school year</button>' +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
-    document.querySelector('.ui-header').parentNode.appendChild(m);
+    document.body.appendChild(m);
+    placeAcctMenu(m, anchor);
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     if (fromGroup) m.querySelector('[data-am="group"]').addEventListener('click', function () { location.href = 'tilli.html?group=' + encodeURIComponent(qp.get('group')); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
@@ -556,6 +571,7 @@
     if (r.screen === 'implementation') { go('overview', {}, { replace: true }); return; }   // Implementation removed from nav
     closeAcctMenu();
     app.innerHTML = chromeHTML(r);
+    placeStatePanel();
     var body = document.getElementById('ad-main-body');
     if (!loadedScreens[r.screen]) {
       body.innerHTML = screenSkeleton();
@@ -1999,34 +2015,51 @@
   //  PREVIEW-STATE TOGGLE  (demo / dev tooling — NOT part of the
   //  shipped leadership UI). Lets you see the coordinator dashboard
   //  at every stage of a school's assessment year by flipping the
-  //  lifecycle state in ADMIN_DATA, then re-rendering. Lives OUTSIDE
-  //  #ad-app so it survives full re-renders. Delete this block (and
+  //  lifecycle state in ADMIN_DATA, then re-rendering. Docks in the
+  //  sidebar's bottom stack (re-placed after each render). Delete this block (and
   //  the LIFECYCLE_STATES layer in admin-data.js) to ship.
   // ============================================================
+  // Kept as a module reference: render() rebuilds #ad-app (including the
+  // sidebar slot it docks into), so the node is re-placed after every paint.
+  var statePanel = null;
+  var DEV_COLLAPSED_KEY = 'tilliMeasures.devPanelCollapsed';   // shared with the teacher dashboard
+  function devCollapsed() { try { return localStorage.getItem(DEV_COLLAPSED_KEY) === '1'; } catch (e) { return false; } }
   function buildStatePanel() {
-    if (document.getElementById('ad-statepanel')) return;
-    var wrap = document.createElement('div');
-    wrap.className = 'ad-statepanel'; wrap.id = 'ad-statepanel';
-    document.body.appendChild(wrap);
+    if (statePanel) return;
+    statePanel = document.createElement('div');
+    statePanel.className = 'ui-devpanel ad-statepanel' + (devCollapsed() ? ' collapsed' : '');
+    statePanel.id = 'ad-statepanel';
+    statePanel.setAttribute('role', 'group'); statePanel.setAttribute('aria-label', 'Preview stage (dev only)');
     renderStatePanel();
   }
+  // Docked in the sidebar's bottom stack when the sidebar shows; floating otherwise (≤860px).
+  function placeStatePanel() {
+    if (!statePanel) return;
+    var slot = document.getElementById('ad-dev-slot');
+    var docked = slot && getComputedStyle(slot.closest('.ui-side')).display !== 'none';
+    statePanel.classList.toggle('float', !docked);
+    (docked ? slot : document.body).appendChild(statePanel);
+  }
   function renderStatePanel() {
-    var wrap = document.getElementById('ad-statepanel'); if (!wrap) return;
+    var wrap = statePanel; if (!wrap) return;
     var active = AD.lifecycleState;
     var collapsed = wrap.classList.contains('collapsed');
     wrap.innerHTML =
-      '<div class="ad-sp-head">' +
-        '<span class="ad-sp-title">Preview stage <span class="ad-sp-new" title="Newly added demo control — remove before shipping">*</span></span>' +
-        '<button class="ad-sp-toggle" data-sptoggle="1" title="Show / hide the preview-stage buttons">' + (collapsed ? '▸' : '▾') + '</button>' +
-      '</div>' +
-      '<div class="ad-sp-body">' +
-        '<p class="ad-sp-hint">See the coordinator dashboard at each point of a school\'s year. Not shown to real users.</p>' +
+      '<button class="ui-devpanel-head" data-sptoggle="1" title="See the coordinator dashboard at each point of a school\'s year. Not shown to real users. Click to show / hide.">' +
+        '<span class="ui-devpanel-title">Preview stage</span>' +
+        '<span class="ui-devpanel-chev">' + (collapsed ? '▸' : '▾') + '</span>' +
+      '</button>' +
+      '<div class="ui-devpanel-body">' +
         AD.lifecycleStates.map(function (s) {
-          return '<button class="ad-sp-btn' + (s.key === active ? ' on' : '') + '" data-spstate="' + esc(s.key) + '" title="' + esc(s.hint) + '">' +
-            '<span class="ad-sp-dot"></span>' + esc(s.label) + '</button>';
+          return '<button class="ui-devpanel-btn' + (s.key === active ? ' on' : '') + '" data-spstate="' + esc(s.key) + '" title="' + esc(s.hint) + '">' +
+            '<span class="ui-devpanel-dot"></span>' + esc(s.label) + '</button>';
         }).join('') +
       '</div>';
-    wrap.querySelector('[data-sptoggle]').addEventListener('click', function () { wrap.classList.toggle('collapsed'); renderStatePanel(); });
+    wrap.querySelector('[data-sptoggle]').addEventListener('click', function () {
+      wrap.classList.toggle('collapsed');
+      try { localStorage.setItem(DEV_COLLAPSED_KEY, wrap.classList.contains('collapsed') ? '1' : '0'); } catch (e) {}
+      renderStatePanel();
+    });
     wrap.querySelectorAll('[data-spstate]').forEach(function (b) {
       b.addEventListener('click', function () {
         AD.setLifecycleState(b.dataset.spstate);
@@ -2037,6 +2070,7 @@
       });
     });
   }
+  window.matchMedia('(max-width: 860px)').addEventListener('change', placeStatePanel);
 
   // ---------- boot ----------
   buildStatePanel();

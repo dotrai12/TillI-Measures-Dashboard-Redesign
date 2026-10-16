@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261016zm">
+<link rel="stylesheet" href="assets/tilli.css?v=20261016zp">
 <style>
   /* ============================================================
      Tilli Measures — INTERNAL managing platform chrome.
@@ -17,7 +17,7 @@
      This block only holds what is unique to the Platform Admin.
      A calm, operational cross-school surface for the Tilli Team.
      ============================================================ */
-  :root { --tl-side-w: 236px; --tl-header-h: 66px; --tl-maxw: 1200px; }
+  :root { --tl-side-w: var(--side-w); --tl-header-h: 66px; --tl-maxw: 1200px; }
   body { background: var(--surface-100); }
 
   .tl-app { min-height: 100dvh; display: grid; grid-template-columns: var(--tl-side-w) 1fr; }
@@ -42,7 +42,8 @@
   .tl-search .ic svg { width: 17px; height: 17px; }
   .tl-search input { flex: 1; border: none; background: none; outline: none; font-family: var(--font-heading); font-weight: 600; font-size: var(--fs-sm); color: var(--ink-900); }
   .tl-h-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-  .tl-acct-menu { position: absolute; top: calc(var(--tl-header-h) - 8px); right: clamp(16px, 3vw, 32px); z-index: 40; min-width: 220px; }
+  /* Header avatar is the account entry only when the sidebar (and its profile) is hidden. */
+  .tl-header .tl-acct-m { display: none; }
 
   /* ---- Main ---- */
   .tl-main { padding: var(--page-gap) clamp(16px, 3vw, 32px) 96px; }
@@ -469,6 +470,7 @@
     :root { --tf-bottom: 78px; --tf-right: 14px; }   /* lift floating bubbles above the bottom nav */
     .tl-header { gap: 10px; padding: 0 16px; }
     .tl-header .desk-only { display: none; }
+    .tl-header .tl-acct-m { display: grid; }
     .tl-nav-head { margin-top: 10px; }
     .tl-phases { grid-template-columns: 1fr; }
     .tl-search { max-width: none; }
@@ -496,11 +498,11 @@
 <div id="tl-modal-root"></div>
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261016zm"></script>
-<script src="assets/tilli-api.js?v=20261016zm"></script>
-<script src="assets/tilli-history.js?v=20261016zm"></script>
-<script src="assets/tilli-org-data.js?v=20261016zm"></script>
-<script src="assets/float-help.js?v=20261016zm"></script>
-<script src="assets/tilli-admin.js?v=20261016zm"></script>
+<script src="assets/school-data.js?v=20261016zp"></script>
+<script src="assets/tilli-api.js?v=20261016zp"></script>
+<script src="assets/tilli-history.js?v=20261016zp"></script>
+<script src="assets/tilli-org-data.js?v=20261016zp"></script>
+<script src="assets/float-help.js?v=20261016zp"></script>
+<script src="assets/tilli-admin.js?v=20261016zp"></script>
 </body>
 </html>

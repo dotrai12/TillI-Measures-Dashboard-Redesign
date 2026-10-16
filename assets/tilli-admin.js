@@ -193,13 +193,19 @@
       return (sec.title ? iconHead : '') + items;
     }).join('');
 
+    var roleLabel = GROUP ? 'School Group Admin' + (groupPreview ? ' · preview' : '') : 'Super Admin';
     var side = '<aside class="ui-side tl-side">' +
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
       '<span class="ui-tag green tl-badge-int">' + (GROUP ? esc(GROUP.name) : 'Platform Admin') + '</span>' +
       '<nav class="ui-nav">' + nav + '</nav>' +
-      '<div class="ui-side-foot">' + (GROUP
-        ? 'School Group Admin · every school in ' + esc(GROUP.name) + '.' + (groupPreview ? ' Previewing as Tilli Team.' : '')
-        : 'Tilli Team · internal platform admin. The layer above school admins.') + '</div></aside>';
+      // Bottom-left profile, same on every dashboard; opens the account menu.
+      '<div class="ui-side-bottom">' +
+        '<button class="ui-side-profile" id="tl-acct-btn" aria-label="Account menu" title="' + (GROUP
+          ? 'School Group Admin · every school in ' + esc(GROUP.name) + '.' + (groupPreview ? ' Previewing as Tilli Team.' : '')
+          : 'Tilli Team · internal platform admin. The layer above school admins.') + '">' +
+          '<span class="ui-avatar sm">' + esc(initials(me.name).toUpperCase()) + '</span>' +
+          '<span class="meta"><b>' + esc(me.name) + '</b><span>' + roleLabel + '</span></span><span class="chev">⋯</span>' +
+        '</button></div></aside>';
 
     // Group mode drops the portfolio-wide search (it would reach other groups' schools).
     var header = '<header class="ui-header tl-header">' +
@@ -207,8 +213,8 @@
         : '<form class="tl-search" id="tl-search"><span class="ic">' + ICONS.search + '</span>' +
           '<input id="tl-search-in" placeholder="Search schools, students, users, invitations, deployments…" autocomplete="off"></form>') +
       '<div class="tl-h-actions">' +
-        '<span class="ui-rolebadge desk-only">' + (GROUP ? 'School Group Admin' + (groupPreview ? ' · preview' : '') : 'Super Admin') + '</span>' +
-        '<button class="ui-avatar" id="tl-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
+        // Phone only (sidebar hidden): the avatar stands in for the sidebar profile.
+        '<button class="ui-avatar tl-acct-m" id="tl-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
     var bottom = '<nav class="ui-bottomnav tl-bottomnav">' + (GROUP ? GROUP_BOTTOM : BOTTOM).map(function (n) {
       return '<button class="' + (n.key === active ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.icon] + '<span>' + esc(n.label) + '</span></button>';
@@ -230,7 +236,9 @@
     SCREEN[r.screen](r.params, body);
     // wire chrome
     app.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
-    var acct = document.getElementById('tl-acct-btn'); if (acct) acct.addEventListener('click', function (ev) { ev.stopPropagation(); openAcctMenu(acct); });
+    ['tl-acct-btn', 'tl-acct-btn-m'].forEach(function (id) {
+      var b = document.getElementById(id); if (b) b.addEventListener('click', function (ev) { ev.stopPropagation(); openAcctMenu(b); });
+    });
     var sform = document.getElementById('tl-search'); var sin = document.getElementById('tl-search-in');
     if (sform) sform.addEventListener('submit', function (ev) { ev.preventDefault(); go('search', { q: (sin.value || '').trim() }); });
     if (sin && r.screen === 'search') sin.value = r.params.q || '';
@@ -240,11 +248,15 @@
   function openAcctMenu(anchor) {
     if (document.querySelector('.tl-acct-menu')) return;
     var m = document.createElement('div');
-    m.className = 'ui-menu tl-acct-menu';
+    m.className = 'ui-menu ui-acct-menu tl-acct-menu';
     m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span></div>' +
       (groupPreview ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
-    anchor.parentNode.appendChild(m);
+    // Sidebar profile → opens upward from it; phone header avatar → downward, right-aligned.
+    var r = anchor.getBoundingClientRect();
+    if (anchor.closest('.ui-side')) { m.style.left = r.left + 'px'; m.style.bottom = (window.innerHeight - r.top + 6) + 'px'; }
+    else { m.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; m.style.top = (r.bottom + 6) + 'px'; }
+    document.body.appendChild(m);
     if (groupPreview) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email) + '#/group?id=' + encodeURIComponent(GROUP.id); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
     setTimeout(function () { document.addEventListener('click', function close(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } }); }, 0);

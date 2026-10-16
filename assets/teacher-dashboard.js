@@ -454,23 +454,28 @@
 
     const navBtns = NAV.map((it) => {
       const on = it.key === active;
-      return `<button class="dash-navbtn${on ? ' on' : ''}" data-nav="${it.key}" title="${esc(it.label)}"${on ? ' aria-current="page"' : ''}>
+      return `<button class="ui-nav-item dash-navbtn${on ? ' on' : ''}" data-nav="${it.key}" title="${esc(it.label)}"${on ? ' aria-current="page"' : ''}>
         <span class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none">${NAV_ICON[it.key]}</svg></span>
         ${sideWide ? `<span class="lb">${esc(it.label)}</span>` : ''}
       </button>`;
     }).join('');
 
+    // Same shell as the school-admin and Tilli dashboards (.ui-side in tilli.css):
+    // lockup → nav → bottom stack [dev preview panel, profile]. The narrow tablet
+    // rail keeps the sprout mark (the wordmark doesn't fit 76px) and floats the panel.
     const sidebar = showSidebar ? `
-      <aside class="dash-side${sideWide ? '' : ' narrow'}">
-        <div class="dash-brand">
-          <span class="dash-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 21V11" stroke="${ART.sproutStem}" stroke-width="2" stroke-linecap="round"/><path d="M12 11C12 7 9 4 5 4c0 4 3 7 7 7Z" fill="${ART.sproutLime}"/><path d="M12 13c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="${ART.green}"/></svg></span>
-          ${sideWide ? `<span class="dash-word">Tilli<span style="color:var(--green-500)"> Measures</span></span>` : ''}
+      <aside class="ui-side dash-side${sideWide ? '' : ' narrow'}">
+        ${sideWide
+          ? `<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>`
+          : `<div class="dash-brand"><span class="dash-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 21V11" stroke="${ART.sproutStem}" stroke-width="2" stroke-linecap="round"/><path d="M12 11C12 7 9 4 5 4c0 4 3 7 7 7Z" fill="${ART.sproutLime}"/><path d="M12 13c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="${ART.green}"/></svg></span></div>`}
+        <nav class="ui-nav dash-nav">${navBtns}</nav>
+        <div class="ui-side-bottom">
+          ${sideWide ? stateSwitcherGUI(false) : ''}
+          <button class="ui-side-profile dash-profilebtn" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">
+            <span class="ui-avatar sm dash-avatar">${esc(initials())}</span>
+            ${sideWide ? `<span class="meta"><b>${esc((S.teacher.demo && S.teacher.demo.name) || 'Teacher')}</b><span>Teacher</span></span><span class="chev">›</span>` : ''}
+          </button>
         </div>
-        <nav class="dash-nav">${navBtns}</nav>
-        <button class="dash-profilebtn" data-nav="profile">
-          <span class="ui-avatar sm dash-avatar">${esc(initials())}</span>
-          ${sideWide ? `<span class="dash-prof-meta"><b>${esc((S.teacher.demo && S.teacher.demo.name) || 'Teacher')}</b><span>Teacher</span></span>` : ''}
-        </button>
       </aside>` : '';
 
     const bottomNav = isPhone ? `
@@ -503,12 +508,16 @@
       return `<button class="ui-filterchip solid${on ? ' on' : ''}" data-section="${sec.id}">${esc(sec.name)}</button>`;
     }).join('')}</div>` : '';
 
+    // Header left = context title (school), like the admin header; right = the section picker.
+    const schoolName = (S.teacher.demo && S.teacher.demo.school) || S.teacher.school || '';
+    const headerId = schoolName && !isPhone ? `<div class="dash-h-id"><div class="ui-h-title">${esc(schoolName)}</div><div class="ui-h-sub">Teacher view</div></div>` : '';
+
     const askHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('ask-input'));
     root.innerHTML = `
       <div class="dash">
         ${sidebar}
         <div class="dash-col${S.nav === 'ask' ? ' ask-mode' : ''}">
-          ${S.nav === 'ask' ? '' : `<header class="dash-header">${chips}</header>`}
+          ${S.nav === 'ask' ? '' : `<header class="ui-header dash-header">${headerId}${chips}</header>`}
           <main class="dash-main${S.nav === 'ask' ? ' ask-mode' : ''}">${mainView()}</main>
         </div>
         ${bottomNav}
@@ -517,7 +526,7 @@
         ${S.histOpen ? histModalView() : ''}
         ${reportPreviewView()}
         ${addModal()}
-        ${stateSwitcherGUI()}
+        ${sideWide ? '' : stateSwitcherGUI(true)}
       </div>`;
     // Phone: the bottom nav's raised centre button already is Ask Tilli.
     if (window.TilliFloat) {
@@ -777,18 +786,26 @@
   // Dev-only state switch, shown on EVERY page (rendered from paintDom). Drives
   // S.windowState → the landing variant AND the preview data every other page
   // reads (rebuildData). Not part of the teacher UI — a scaffold for review.
-  function stateSwitcherGUI() {
+  // Same panel (.ui-devpanel, tilli.css) as the school-admin "Preview stage":
+  // docked in the sidebar on desktop, floating when the sidebar is narrow/hidden.
+  function stateSwitcherGUI(float) {
     const opts = [
       ['baseline', 'Baseline', 'State A — start of year, Baseline window open. Seedlings, no prior data; band mix hidden; tend list empty.'],
-      ['between', 'Between', 'State B — most of the year, no window open. Ask Tilli is the hero; garden is honestly "resting".'],
+      ['between', 'In between', 'State B — most of the year, no window open. Ask Tilli is the hero; garden is honestly "resting".'],
       ['midline', 'Midline', 'State C — mid-year window open. Garden has grown; celebration line appears.'],
       ['endline', 'Endline', 'State D — year end, Endline window open. Full bloom; biggest celebration.'],
     ];
-    return `<div class="mg-gui" role="group" aria-label="Landing state (dev only)">
-      <div class="mg-gui-h" title="Dev-only switch, on every page. Previews the whole dashboard in each assessment state (controls S.windowState → landing variant + preview data overlay). Not shown to teachers — bake or remove before ship.">Preview&nbsp;state <span class="mg-gui-star" title="Now on every page">*</span></div>
-      <div class="mg-gui-opts">${opts.map(([v, lb, tip]) => `<button class="mg-gui-opt${S.windowState === v ? ' on' : ''}" data-window-state="${v}" title="${esc(tip)}">${lb}</button>`).join('')}</div>
+    const collapsed = devCollapsed();
+    return `<div class="ui-devpanel mg-gui${float ? ' float' : ''}${collapsed ? ' collapsed' : ''}" role="group" aria-label="Preview stage (dev only)">
+      <button class="ui-devpanel-head" data-devpanel-toggle title="Dev-only switch, on every page. Previews the whole dashboard in each assessment state (controls S.windowState → landing variant + preview data overlay). Not shown to teachers — bake or remove before ship. Click to show / hide.">
+        <span class="ui-devpanel-title">Preview stage</span><span class="ui-devpanel-chev">${collapsed ? '▸' : '▾'}</span>
+      </button>
+      <div class="ui-devpanel-body">${opts.map(([v, lb, tip]) => `<button class="ui-devpanel-btn${S.windowState === v ? ' on' : ''}" data-window-state="${v}" title="${esc(tip)}"><span class="ui-devpanel-dot"></span>${lb}</button>`).join('')}</div>
     </div>`;
   }
+  // Collapsed/expanded is shared with the school-admin panel (same key).
+  const DEV_COLLAPSED_KEY = 'tilliMeasures.devPanelCollapsed';
+  function devCollapsed() { try { return localStorage.getItem(DEV_COLLAPSED_KEY) === '1'; } catch (e) { return false; } }
 
   // ---------------- My Garden: beds overview ----------------
   function computeBeds() {
@@ -3575,6 +3592,10 @@
     root.querySelectorAll('[data-section]').forEach((b) => b.addEventListener('click', () => { S.sectionId = b.dataset.section; S.studentId = null; render(); }));
     root.querySelectorAll('[data-open-class]').forEach((b) => b.addEventListener('click', () => { S.classModal = b.dataset.openClass; render(); }));
     // My Garden landing: dev state switch, hero/tend Ask-Tilli prompts, assess CTA, doorways.
+    root.querySelectorAll('[data-devpanel-toggle]').forEach((b) => b.addEventListener('click', () => {
+      try { localStorage.setItem(DEV_COLLAPSED_KEY, devCollapsed() ? '0' : '1'); } catch (e) {}
+      render();
+    }));
     root.querySelectorAll('[data-window-state]').forEach((b) => b.addEventListener('click', () => {
       S.windowState = b.dataset.windowState;
       S.enter = { studentId: null, page: 0, ratings: {}, done: false };
@@ -3859,29 +3880,23 @@
      components come from tilli.css; illustration hex comes from ART (top of file). */
   #dash-root { position: fixed; inset: 0; overflow: auto; background: var(--white); }
   .dash { min-height: 100vh; min-height: 100dvh; display: flex; background: var(--white); color: var(--ink-900); }
-  .dash-side { width: 224px; flex: none; background: var(--white); border-right: 1px solid var(--line-200); padding: 22px 16px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; height: 100dvh; }
-  .dash-side.narrow { width: 76px; padding: 22px 10px; align-items: center; }
-  .dash-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 22px; }
+  /* Sidebar look comes from .ui-side (tilli.css) — shared with the admin + Tilli dashboards. */
+  .dash-side { width: var(--side-w); flex: none; }
+  .dash-side.narrow { width: 76px; padding: 20px 10px; align-items: center; }
+  .dash-brand { display: flex; align-items: center; gap: 10px; padding: 4px 0 14px; }
   .dash-logo { width: 34px; height: 34px; border-radius: var(--radius-md); background: var(--wash-green); display: flex; align-items: center; justify-content: center; flex: none; }
-  .dash-word { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
-  .dash-nav { display: flex; flex-direction: column; gap: 5px; width: 100%; }
-  .dash-navbtn { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: var(--radius-md); border: none; cursor: pointer; background: none; color: var(--ink-450); font-family: var(--font-body); font-weight: 700; font-size: var(--fs-md); width: 100%; transition: background .15s, color .15s; }
+  .dash-nav { width: 100%; }
   .dash-side.narrow .dash-navbtn { justify-content: center; padding: 11px; }
-  .dash-navbtn:hover { background: var(--surface-100); }
-  .dash-navbtn.on { background: var(--wash-green); color: var(--green-700); }
-  .dash-navbtn .ic { display: flex; flex: none; }
-  .dash-profilebtn { margin-top: auto; display: flex; align-items: center; gap: 10px; background: none; border: none; cursor: pointer; padding: 10px 8px; border-radius: var(--radius-md); width: 100%; font-family: var(--font-body); }
-  .dash-side.narrow .dash-profilebtn { justify-content: center; }
-  .dash-profilebtn:hover { background: var(--surface-100); }
+  .dash-side.narrow .dash-profilebtn { justify-content: center; padding: 12px 0 4px; }
   /* .ui-avatar.sm, kept in the teacher's pink identity colour (same as .dash-avatarbtn) */
   .dash-avatar { background: var(--pink-400); color: var(--white); }
-  .dash-prof-meta { display: flex; flex-direction: column; text-align: left; line-height: 1.15; }
-  .dash-prof-meta b { font-size: var(--fs-sm); color: var(--ink-900); }
-  .dash-prof-meta span { font-size: var(--fs-xs); color: var(--ink-300); }
   .dash-col { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
-  .dash-header { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--white) 90%, transparent); backdrop-filter: blur(8px); padding: 14px 30px 6px; border-bottom: 1px solid var(--line-200); }
+  /* Header bar look comes from .ui-header (tilli.css) — same height/border as the admin header. */
   .dash-header:empty { display: none; }
-  .dash-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
+  .dash-h-id { flex: none; min-width: 0; max-width: 40%; }
+  .dash-h-id .ui-h-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dash-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; margin-left: auto; min-width: 0; }
+  .dash-header .dash-chips:only-child { margin-left: 0; }
   .dash-chips::-webkit-scrollbar { display: none; }
   .dash-chips .ui-filterchip { flex: none; }
   .dash-main { flex: 1; padding: 28px 40px; max-width: 1500px; width: 100%; margin: 0 auto; }
@@ -4563,23 +4578,13 @@
   .empty-card { padding: 44px 28px; }
   .empty-badge { margin: 0 auto 14px; width: 64px; height: 64px; border-radius: 50%; background: var(--wash-green); display: flex; align-items: center; justify-content: center; }
 
-  /* Dev-only landing-state switch (scaffold; not teacher-facing) */
-  /* Top-right so it clears the floating Ask Tilli / Need help bubbles (bottom-right). */
-  .mg-gui { position: fixed; right: 16px; top: 12px; z-index: 45; background: rgba(20,28,20,.9); color: #fff;
-    border-radius: 14px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); backdrop-filter: blur(4px); font-family: 'Montserrat',sans-serif; }
-  .mg-gui-h { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #B9E8A6; margin-bottom: 7px; }
-  .mg-gui-star { color: var(--yellow-500); }
-  .mg-gui-opts { display: flex; gap: 5px; }
-  .mg-gui-opt { border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #E6EFE2; cursor: pointer;
-    font-family: 'Montserrat',sans-serif; font-weight: 700; font-size: 11.5px; padding: 6px 10px; border-radius: 9px; transition: background .15s, border-color .15s; }
-  .mg-gui-opt:hover { background: rgba(255,255,255,.14); }
-  .mg-gui-opt.on { background: var(--green-500); border-color: var(--green-600); color: #fff; }
+  /* Dev-only preview-stage panel (scaffold; not teacher-facing). Look = .ui-devpanel (tilli.css).
+     Floating (tablet/phone, no wide sidebar): top-right so it clears the Ask Tilli / Need help bubbles. */
+  .mg-gui.float { right: 16px; top: 12px; z-index: 45; }   /* 45 = under the Ask panel / modals, as before */
 
   @media (max-width: 640px) {
     .mg-tend-grid { grid-template-columns: 1fr; }
-    .mg-gui { right: 10px; top: calc(8px + env(safe-area-inset-top)); left: 10px; }
-    .mg-gui-opts { flex-wrap: wrap; }
-    .mg-gui-opt { flex: 1; }
+    .mg-gui.float { right: 10px; top: calc(8px + env(safe-area-inset-top)); }
   }
 
   /* ---- teacher feedback build: UID, students actions, PDFs, completed rate, mirror ---- */
@@ -4809,7 +4814,7 @@
   @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
   @media (max-width: 640px) {
     .dash-main { padding: 16px 16px 90px; }
-    .dash-header { padding: 12px 16px 6px; }
+    .dash-header { padding: 0 16px; }
     .two-col { grid-template-columns: 1fr; }
     /* Phones: the bubble lives in the bottom nav, so the chat is a bottom sheet over a scrim. */
     .ask-panel { top: 12%; left: 0; right: 0; bottom: 0; width: auto; max-width: none; height: auto; border-radius: var(--radius-card) var(--radius-card) 0 0; transform-origin: bottom center; }
