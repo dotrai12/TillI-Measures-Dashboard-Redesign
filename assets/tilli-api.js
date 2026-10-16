@@ -46,8 +46,8 @@
     return { strong: 'var(--lvl-' + n + ')', soft: 'var(--lvl-' + n + '-soft)', wash: 'var(--lvl-' + n + '-wash)', ink: 'var(--lvl-' + n + '-ink)', n: n };
   }
   var LEVEL_INDEX = {
-    beginner: 1, emerging: 1, seedling: 1,
-    learner: 2, developing: 2, sprouting: 2,
+    beginner: 1, emerging: 1, seedling: 1, sprouting: 1,
+    learner: 2, developing: 2, growing: 2,
     expert: 3, secure: 3, proficient: 3, blooming: 3,
     advanced: 4,
   };
@@ -1047,7 +1047,7 @@
   function _hashStr(s){ var h=2166136261; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
   function _mulberry32(a){ return function(){ a|=0; a=(a+0x6d2b79f5)|0; var t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
   function _clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
-  function _band(p){ return p<34?'seedling':p<67?'sprouting':'blooming'; }
+  function _band(p){ return p<34?'sprouting':p<67?'growing':'blooming'; }
   // Mirror of school-data.js buildSkills(): a plausible year-long trajectory
   // (baseline < mid < post, with per-skill jitter) + 3 rater perspectives,
   // seeded off the student id so every reload is identical.

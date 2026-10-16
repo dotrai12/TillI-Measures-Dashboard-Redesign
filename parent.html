@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261016u">
+<link rel="stylesheet" href="assets/tilli.css?v=20261016w">
 <style>
   /* ---- Parent-flow layout ---- */
   .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
@@ -316,9 +316,9 @@
 
 <div id="app"></div>
 
-<script src="assets/school-data.js?v=20261016u"></script>
-<script src="assets/tilli-api.js?v=20261016u"></script>
-<script src="assets/float-help.js?v=20261016u"></script>
+<script src="assets/school-data.js?v=20261016w"></script>
+<script src="assets/tilli-api.js?v=20261016w"></script>
+<script src="assets/float-help.js?v=20261016w"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
 (function () {
@@ -418,8 +418,8 @@
   };
 
   // Band → the site-wide level scale via TilliPalette.levelOf():
-  // seedling = 1 (cyan), sprouting = 2 (amber), blooming = 3 (green).
-  function bandOf(pct) { return pct < 34 ? 'seedling' : pct < 67 ? 'sprouting' : 'blooming'; }
+  // sprouting = 1 (cyan), growing = 2 (amber), blooming = 3 (green).
+  function bandOf(pct) { return pct < 34 ? 'sprouting' : pct < 67 ? 'growing' : 'blooming'; }
 
   // Build a child's 12-skill garden (stable per name + window). Later windows get
   // a gentle upward bump so toggling Baseline → Midline → Endline shows real growth.
@@ -433,7 +433,7 @@
       const band = bandOf(pct);
       const note = band === 'blooming'
         ? name + ' shows real strength in ' + sk.name.toLowerCase() + '.'
-        : band === 'sprouting'
+        : band === 'growing'
         ? sk.name + ' is coming along nicely — a little practice helps.'
         : sk.name + ' is just beginning to grow; gentle support will help.';
       return { key: sk.key, name: sk.name, color: ART.SKILL[sk.key], pct, band, note, seed: hashStr(name + sk.key) % 97 };
@@ -455,7 +455,7 @@
       const rad = 12, pet = [];
       for (let i = 0; i < 5; i++) { const a = (Math.PI * 2 * i) / 5 - Math.PI / 2; pet.push(`<circle cx="${(cx + Math.cos(a) * rad).toFixed(1)}" cy="${(headY + Math.sin(a) * rad).toFixed(1)}" r="${(rad * .84).toFixed(1)}" fill="${color}"/>`); }
       head = pet.join('') + `<circle cx="${cx}" cy="${headY}" r="6.5" fill="${ART.FLOWER.centre}"/>`;
-    } else if (band === 'sprouting') {
+    } else if (band === 'growing') {
       stemH = 40; headY = gy - stemH;
       const tw = 12, th = 22;
       head = `<path d="M ${cx - tw} ${headY + 3} C ${cx - tw} ${headY - th * .55} ${cx - tw * .55} ${headY - th} ${cx} ${headY - th} C ${cx + tw * .55} ${headY - th} ${cx + tw} ${headY - th * .55} ${cx + tw} ${headY + 3} C ${cx + tw * .6} ${headY + 10} ${cx - tw * .6} ${headY + 10} ${cx - tw} ${headY + 3} Z" fill="${color}"/>`;
@@ -465,7 +465,7 @@
     }
     const topY = gy - stemH;
     const stem = `<path d="M ${cx} ${gy} C ${cx - 3} ${gy - stemH * .45} ${cx + 3} ${topY + stemH * .35} ${cx} ${topY}" stroke="${ART.FLOWER.stem}" stroke-width="3.4" fill="none" stroke-linecap="round"/>`;
-    const leaf = band === 'seedling' ? '' :
+    const leaf = band === 'sprouting' ? '' :
       `<path d="M ${cx - 1} ${gy - stemH * .42} q -17 -5 -22 8 q 13 4 22 -8 Z" fill="${ART.FLOWER.leaf}"/>`;
     return `<svg width="${w}" height="${h}" viewBox="0 0 60 100" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
       <g class="tm-sway" style="transform:rotate(${tilt}deg);animation:swayC ${(4 + rnd(7) * 1.6).toFixed(1)}s ease-in-out infinite alternate">

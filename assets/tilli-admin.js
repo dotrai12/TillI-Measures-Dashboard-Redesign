@@ -1727,14 +1727,13 @@
     inhibition_response: 'Controlling impulsive responses and actions',
     attention: 'Sustaining focus on tasks and filtering distractions',
   };
-  // Score → proficiency level on the site-wide level scale (1 Beginner · 2 Learner ·
-  // 3 Proficient · 4 Advanced → .ui-badge.lvl-N / TilliPalette.level(n)).
-  // Thresholds mirror the garden bands (34 / 67).
+  // Score → level on the ONE site-wide scale (1 Sprouting · 2 Growing · 3 Blooming
+  // → .ui-badge.lvl-N / TilliPalette.level(n)). Same 34 / 67 cut-offs as the
+  // teacher, parent and school-admin views.
   function skillLevel(p) {
-    if (p < 34) return { label: 'Beginner', n: 1 };
-    if (p < 67) return { label: 'Learner', n: 2 };
-    if (p < 85) return { label: 'Proficient', n: 3 };
-    return { label: 'Advanced', n: 4 };
+    if (p < 34) return { label: 'Sprouting', n: 1 };
+    if (p < 67) return { label: 'Growing', n: 2 };
+    return { label: 'Blooming', n: 3 };
   }
   function gapStatus(g) {
     if (g <= 10) return { label: 'Aligned', tone: 'ok', mark: '↗' };

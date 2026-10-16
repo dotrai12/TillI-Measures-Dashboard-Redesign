@@ -31,24 +31,25 @@
   var TODAY = new Date('2026-08-18T09:00:00');
 
   // ---------------------------------------------------------------
-  //  Band vocabulary — NEUTRAL, developmental. Deliberately NOT the
-  //  teacher/parent garden words (seedling/sprouting/blooming): the
-  //  leadership surface carries no garden metaphor (spec §1, §9).
+  //  Band vocabulary — the ONE site-wide scale (Sprouting / Growing /
+  //  Blooming), same words and same 34 / 67 cut-offs as the teacher and
+  //  parent views, so a child reads at the same level on every screen.
+  //  Internal keys stay emerging/developing/secure; only labels changed.
   //  Thresholds map a 0–100 skill score onto a band.
   // ---------------------------------------------------------------
   //  Colours come from the unified skill-level scale (tilli.css --lvl-*):
-  //  Emerging = level 1, Developing = level 2, Secure = level 3. `color`/`wash`
+  //  Sprouting = level 1, Growing = level 2, Blooming = level 3. `color`/`wash`
   //  are var() strings for style=""; `token` is the custom-property name so SVG
   //  attributes (which can't read var()) can resolve it via TilliPalette.css().
   var PAL = window.TilliPalette;
   function bandColours(n) { var l = PAL.level(n); return { lvl: n, token: '--lvl-' + n, color: l.strong, wash: l.wash, ink: l.ink }; }
   var BANDS = [
-    Object.assign({ key: 'emerging',   label: 'Emerging' },   bandColours(1)),
-    Object.assign({ key: 'developing', label: 'Developing' }, bandColours(2)),
-    Object.assign({ key: 'secure',     label: 'Secure' },     bandColours(3)),
+    Object.assign({ key: 'emerging',   label: 'Sprouting' },   bandColours(1)),
+    Object.assign({ key: 'developing', label: 'Growing' }, bandColours(2)),
+    Object.assign({ key: 'secure',     label: 'Blooming' },     bandColours(3)),
   ];
-  var BAND_EMERGING_MAX = 40;   // score < 40  → Emerging
-  var BAND_DEVELOPING_MAX = 70; // 40–69       → Developing; ≥70 → Secure
+  var BAND_EMERGING_MAX = 34;   // score < 34  → Sprouting
+  var BAND_DEVELOPING_MAX = 67; // 34–66       → Growing; ≥67 → Blooming
   function bandOf(pct) { return pct < BAND_EMERGING_MAX ? 'emerging' : pct < BAND_DEVELOPING_MAX ? 'developing' : 'secure'; }
   function bandMeta(key) { return BANDS.find(function (b) { return b.key === key; }); }
 
@@ -293,10 +294,10 @@
   // twelve distinct notes, not one line pasted twelve times. Still developmental
   // and non-empirical (authored:false) — never a stand-in for signed-off copy.
   var SHAPE_GENERIC = {
-    mostly_emerging: 'Most children here are at an emerging stage for {skill} — common at this age, and it responds well to short, frequent, playful practice.',
+    mostly_emerging: 'Most children here are still sprouting in {skill} — common at this age, and it responds well to short, frequent, playful practice.',
     balanced: 'Children are spread across the stages for {skill} — developmentally typical for this age group. Growth here comes in uneven spurts, so steady practice matters more than quick jumps.',
-    bimodal: 'For {skill}, the group splits into two clusters. Small-group activities that meet children where they are tend to help the emerging group catch up.',
-    mostly_secure: 'Most children are secure in {skill}. Keeping it lively with slightly harder challenges helps it hold as they grow.',
+    bimodal: 'For {skill}, the group splits into two clusters. Small-group activities that meet children where they are tend to help the sprouting group catch up.',
+    mostly_secure: 'Most children are blooming in {skill}. Keeping it lively with slightly harder challenges helps it hold as they grow.',
   };
   var SKILL_NAME = {};
   SKILLS.forEach(function (sk) { SKILL_NAME[sk.key] = sk.name; });

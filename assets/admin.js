@@ -203,7 +203,7 @@
 
   // ---------- band rendering (shared by Outcomes + Reports) ----------
   // `targetSecure` (optional) draws a target marker on the bar (feedback §2):
-  // Secure is the right-most segment, so an N% Secure target sits at (100−N)%
+  // Secure is the right-most segment, so an N% Blooming target sits at (100−N)%
   // from the left — the green block should reach that line.
   function bandBar(dist, slim, targetSecure) {
     var p = dist.pct;
@@ -214,13 +214,13 @@
     if (targetSecure == null) return bar;
     var left = Math.max(0, Math.min(100, 100 - targetSecure));
     return '<div class="ad-barwrap">' + bar +
-      '<span class="ad-bar-target" style="left:' + left + '%" title="Target: ' + targetSecure + '% Secure"></span></div>';
+      '<span class="ad-bar-target" style="left:' + left + '%" title="Target: ' + targetSecure + '% Blooming"></span></div>';
   }
-  // "62% Secure · target 70% (8 pts to go)" — the text half of the benchmark.
+  // "62% Blooming · target 70% (8 pts to go)" — the text half of the benchmark.
   function targetDelta(actualSecure, targetSecure) {
     if (targetSecure == null) return '';
     var gap = targetSecure - actualSecure;
-    return '<span class="ad-targetdelta' + (gap <= 0 ? ' met' : '') + '">Target ' + targetSecure + '% Secure · ' +
+    return '<span class="ad-targetdelta' + (gap <= 0 ? ' met' : '') + '">Target ' + targetSecure + '% Blooming · ' +
       (gap <= 0 ? 'met' : gap + (gap === 1 ? ' pt to go' : ' pts to go')) + '</span>';
   }
   function bandLegend() {
@@ -628,12 +628,12 @@
       head = 'The programme is running — no skills measured yet.';
       sub = [actLine, v.openPoint ? v.openPoint.label + ' window is collecting now' : ''].filter(Boolean).join(' · ');
     } else if (v.deltaSecure == null) {
-      head = v.pctSecure + '% of skill readings are Secure at ' + v.point.label + ' — your starting point.';
+      head = v.pctSecure + '% of skill readings are Blooming at ' + v.point.label + ' — your starting point.';
       sub = [actLine, windowLine].filter(Boolean).join(' · ');
     } else {
       var arrow = v.deltaSecure > 0 ? '▲' : v.deltaSecure < 0 ? '▼' : '—';
       cls = v.deltaSecure > 0 ? ' good' : v.deltaSecure < 0 ? ' watch' : '';
-      head = v.pctSecure + '% of skill readings are Secure at ' + v.point.label + ' — ' +
+      head = v.pctSecure + '% of skill readings are Blooming at ' + v.point.label + ' — ' +
         (v.deltaSecure === 0 ? 'level with Baseline.' : arrow + ' ' + Math.abs(v.deltaSecure) + ' points since Baseline.');
       var moved = v.movementAvail ? v.childrenUp + ' of ' + countNoun(v.childrenN, 'child', 'children') + ' moved up a band' : '';
       sub = [actLine, moved, windowLine].filter(Boolean).join(' · ');
@@ -642,7 +642,7 @@
     if (v.hasOutcomes) {
       var d = schoolDistAllSkills(v.point.key);
       right = '<div class="ad-verdict-right">' + bandBar(d, false, v.targetSecure) +
-        (v.targetSecure != null ? '<div class="ad-verdict-tgt"><span class="tk"></span>Target ' + v.targetSecure + '% Secure' +
+        (v.targetSecure != null ? '<div class="ad-verdict-tgt"><span class="tk"></span>Target ' + v.targetSecure + '% Blooming' +
           (v.pctSecure >= v.targetSecure ? ' · met' : ' · ' + (v.targetSecure - v.pctSecure) + ' pts to go') + '</div>' : '') +
         '<div style="margin-top:4px">' + bandLegend() + '</div></div>';
     }
@@ -668,7 +668,7 @@
     if (AD.completedPoints.length) {
       var gs = AD.growthStrength(AD.students, AD.latestComplete.key, 2);
       var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
-      var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
+      var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% blooming</span></li>'; }).join('') + '</ul>'; };
       var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4>' + gsList(gs.growth) + '</div>';
       var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4>' + gsList(gs.strength) + '</div>';
       gsSection = '<div class="mt-gap">' +
@@ -706,14 +706,14 @@
 
   function outcomeSnapshot() {
     if (!AD.completedPoints.length) return stEmpty('Not yet measured.', 'Skill bands appear after Baseline · ' + AD.points[0].month + '.');
-    // % of skill×student readings that are Secure at the latest complete point, school-wide.
+    // % of skill×student readings that are Blooming at the latest complete point, school-wide.
     var pt = AD.latestComplete;
     var secure = 0, tot = 0;
     AD.students.forEach(function (st) { st.skills.forEach(function (sk) { tot++; if (AD.bandOf(sk[pt.scoreField]) === 'secure') secure++; }); });
     var pctSecure = Math.round((secure / tot) * 100);
     var tgt = AD.targetsSet ? AD.pooledSecureTarget() : null;
     return '<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">' +
-      '<div class="ui-kpi"><div class="num">' + pctSecure + '%</div><div class="lbl">of skill readings are Secure at ' + esc(pt.label) + '</div>' +
+      '<div class="ui-kpi"><div class="num">' + pctSecure + '%</div><div class="lbl">of skill readings are Blooming at ' + esc(pt.label) + '</div>' +
         (tgt != null ? targetDelta(pctSecure, tgt) : '') + '</div>' +
       '<div style="flex:1;min-width:200px">' + bandBar(schoolDistAllSkills(pt.key), false, tgt) + '<div style="margin-top:10px">' + bandLegend() + '</div></div>' +
       '<button class="btn btn-cyan btn-sm" data-tooutcomes="1">See Outcomes →</button></div>';
@@ -837,7 +837,7 @@
     var navCards = '';
     if (level === 'school') navCards = '<div class="mb-gap">' + card('See your school as grades', 'Open a grade to look deeper.', gradeNavHTML(point), 'span2') + '</div>';
     else if (level === 'grade') {
-      // Headline snapshot from the grade card (school view): % Secure + band bar,
+      // Headline snapshot from the grade card (school view): % Blooming + band bar,
       // sitting above the section navigator so the drill opens on the same summary.
       var gStuds = AD.studentsInGrade(grade), gSecs = AD.sections.filter(function (s) { return s.grade === grade; });
       var gd = distAllSkills(gStuds, point), seMeta = AD.bandMeta('secure');
@@ -855,8 +855,8 @@
     if (level !== 'school') {
       var gs = AD.growthStrength(students, point, 2);
       var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
-      var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4><ul>' + gs.growth.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul></div>';
-      var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4><ul>' + gs.strength.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul></div>';
+      var gGrowth = '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4><ul>' + gs.growth.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% blooming</span></li>'; }).join('') + '</ul></div>';
+      var gStrength = '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4><ul>' + gs.strength.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% blooming</span></li>'; }).join('') + '</ul></div>';
       gsCard = '<div class="ad-grid two mb-gap">' + gGrowth + gStrength + '</div>';
     }
 
@@ -880,9 +880,9 @@
     // the children sit in. Used for the little status chip on each skill row.
     function cmpSkillVerdict(d) {
       var p = d.pct;
-      if (p.secure >= p.developing && p.secure >= p.emerging) return { label: 'Strong', color: AD.bandMeta('secure').color };
-      if (p.emerging >= p.developing && p.emerging >= p.secure) return { label: 'Emerging', color: AD.bandMeta('emerging').color };
-      return { label: 'Developing', color: AD.bandMeta('developing').color };
+      if (p.secure >= p.developing && p.secure >= p.emerging) return { label: 'Blooming', color: AD.bandMeta('secure').color };
+      if (p.emerging >= p.developing && p.emerging >= p.secure) return { label: 'Sprouting', color: AD.bandMeta('emerging').color };
+      return { label: 'Growing', color: AD.bandMeta('developing').color };
     }
     // One class column: picker on top, then (once picked) growth/strength,
     // a skill-band-bar list, and the multi-perspective radar — the full
@@ -899,7 +899,7 @@
       } else {
         var studs = AD.studentsInSection(sec);
         var gs = AD.growthStrength(studs, point, 2), em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
-        var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
+        var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% blooming</span></li>'; }).join('') + '</ul>'; };
         var gsBlock = '<div class="cmp-gs">' +
           '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Areas of growth</h4>' + gsList(gs.growth) + '</div>' +
           '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>Areas of strength</h4>' + gsList(gs.strength) + '</div></div>';
@@ -966,13 +966,13 @@
     return { emerging: Math.round(acc.emerging / tot), developing: Math.round(acc.developing / tot), secure: Math.round(acc.secure / tot) };
   }
   // Grade breakdown (school scope) — each grade in the Overview snapshot format:
-  // % Secure headline + band bar, then Areas of growth / strength, plus a
+  // % Blooming headline + band bar, then Areas of growth / strength, plus a
   // drill-in link. Section cards (grade scope) stay as the compact navigator.
   function gradeNavHTML(point) {
     var ptObj = AD.points.find(function (p) { return p.key === point; }) || AD.latestComplete;
     var ptLabel = ptObj ? ptObj.label : '';
     var em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
-    var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% secure</span></li>'; }).join('') + '</ul>'; };
+    var gsList = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% blooming</span></li>'; }).join('') + '</ul>'; };
     return '<div class="mb-3">' + bandLegend() + '</div>' +
       '<div class="ad-gradebreaks">' + AD.grades.map(function (g) {
         var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; });
@@ -1453,8 +1453,8 @@
       '<h1>' + esc(scopeName) + ' — Leadership summary</h1><p class="sub">Social-emotional & cognitive skills · Tilli Measures</p>' +
       '<p class="meta">Assessment point: <b>' + esc(pt.label) + ' · ' + esc(pt.month) + '</b> · Generated ' + genStamp() + '</p>' +
       '<div class="tiles"><div class="tile"><b>' + secs.length + '</b><span>sections running</span></div><div class="tile"><b>' + students.length + '</b><span>students assessed</span></div><div class="tile"><b>' + AD.completedPoints.length + '</b><span>assessment points complete</span></div></div>' +
-      '<table><thead><tr><th>Skill</th><th>Band distribution (Emerging / Developing / Secure)</th><th>Movement</th></tr></thead><tbody>' + skillRows + '</tbody></table>' +
-      '<p class="leg">Bands: Emerging (blue) · Developing (amber) · Secure (green). Figures are group distributions — no individual results are shown. No section-level teacher attribution.</p>' +
+      '<table><thead><tr><th>Skill</th><th>Band distribution (Sprouting / Growing / Blooming)</th><th>Movement</th></tr></thead><tbody>' + skillRows + '</tbody></table>' +
+      '<p class="leg">Bands: Sprouting (blue) · Growing (amber) · Blooming (green). Figures are group distributions — no individual results are shown. No section-level teacher attribution.</p>' +
       '<div class="print"><button onclick="window.print()">Print / Save as PDF</button></div></body></html>';
     var w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
@@ -1469,7 +1469,7 @@
     var p = d.pct;
     return '<span class="mini">' + AD.bands.map(function (b) {
       return '<i style="width:' + p[b.key] + '%;background:' + PAL.css(b.token) + '"></i>';
-    }).join('') + '</span> <span class="mini-l">' + p.secure + '% secure</span>';
+    }).join('') + '</span> <span class="mini-l">' + p.secure + '% blooming</span>';
   }
   function exportCSV(kind, scope, point) {
     var pt = AD.points.find(function (p) { return p.key === point; });
@@ -1481,7 +1481,7 @@
       AD.rosterRows().forEach(function (r) { if (scope !== 'school' && r.grade !== scope) return; lines.push([r.adm, r.name, r.grade, r.section, r.enrolment, r.claim].map(csvCell).join(',')); });
     } else {
       name = 'aggregate-outcomes';
-      lines.push(header); lines.push('Scope,Level,Skill,Emerging %,Developing %,Secure %');
+      lines.push(header); lines.push('Scope,Level,Skill,Sprouting %,Growing %,Blooming %');
       var scopes = [];
       if (scope === 'school') { scopes.push({ label: AD.school.name, level: 'School', students: AD.students }); AD.grades.forEach(function (g) { scopes.push({ label: g, level: 'Grade', students: AD.studentsInGrade(g) }); }); }
       else scopes.push({ label: scope, level: 'Grade', students: AD.studentsInGrade(scope) });
@@ -1520,7 +1520,7 @@
     var v = AD.leadershipVerdict();
     if (/work|secure|outcome|result|improv|progress|effect/.test(t)) {
       if (!v.hasOutcomes) return { html: 'Nothing is measured yet — the ' + esc(v.openPoint ? v.openPoint.label : 'Baseline') + ' window is still collecting. Skill outcomes appear once it closes.' };
-      var s = '<b>' + v.pctSecure + '%</b> of skill readings are Secure at ' + esc(v.point.label) + '.';
+      var s = '<b>' + v.pctSecure + '%</b> of skill readings are Blooming at ' + esc(v.point.label) + '.';
       if (v.deltaSecure != null) { s += ' That is ' + (v.deltaSecure >= 0 ? 'up ' : 'down ') + Math.abs(v.deltaSecure) + ' points since Baseline'; if (v.movementAvail) s += ', and ' + v.childrenUp + ' of ' + countNoun(v.childrenN, 'child', 'children') + ' moved up a band'; s += '.'; }
       if (v.targetSecure != null) { var gap = v.targetSecure - v.pctSecure; s += ' Your target is ' + v.targetSecure + '% (' + (gap <= 0 ? 'met' : gap + (gap === 1 ? ' point to go' : ' points to go')) + ').'; }
       return { html: s + ' ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
@@ -1537,12 +1537,12 @@
     if (/weak|lowest|struggl|growth|behind|room to grow|which skill/.test(t)) {
       if (!v.hasOutcomes) return { html: 'Skill areas appear once the first assessment window closes.' };
       var gg = AD.growthStrength(AD.students, v.point.key, 3);
-      return { html: 'The areas with the most room to grow: ' + gg.growth.map(function (x) { return '<b>' + esc(x.name) + '</b> (' + x.secure + '% secure)'; }).join(', ') + '. These respond well to short, frequent practice. ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
+      return { html: 'The areas with the most room to grow: ' + gg.growth.map(function (x) { return '<b>' + esc(x.name) + '</b> (' + x.secure + '% blooming)'; }).join(', ') + '. These respond well to short, frequent practice. ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
     }
     if (/strong|strength|best|highest|good at|doing well/.test(t)) {
       if (!v.hasOutcomes) return { html: 'Skill areas appear once the first assessment window closes.' };
       var gs = AD.growthStrength(AD.students, v.point.key, 3);
-      return { html: 'Your strongest areas: ' + gs.strength.map(function (x) { return '<b>' + esc(x.name) + '</b> (' + x.secure + '% secure)'; }).join(', ') + '. ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
+      return { html: 'Your strongest areas: ' + gs.strength.map(function (x) { return '<b>' + esc(x.name) + '</b> (' + x.secure + '% blooming)'; }).join(', ') + '. ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
     }
     if (/concern|flag|risk|worried|counsel|wellbeing|well-being/.test(t)) {
       var c = AD.concernCounts();
@@ -1554,13 +1554,13 @@
     if (/target|goal|benchmark|on track/.test(t)) {
       if (!v.hasOutcomes || v.targetSecure == null) return { html: 'Targets compare against measured outcomes, which appear once the first window closes.' };
       var gap2 = v.targetSecure - v.pctSecure;
-      return { html: 'Your Secure target is <b>' + v.targetSecure + '%</b> across all skills. You are at ' + v.pctSecure + '% — ' + (gap2 <= 0 ? 'target met.' : gap2 + ' points to go.') + ' ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
+      return { html: 'Your Blooming target is <b>' + v.targetSecure + '%</b> across all skills. You are at ' + v.pctSecure + '% — ' + (gap2 <= 0 ? 'target met.' : gap2 + ' points to go.') + ' ' + askLink('outcomes', 'See Outcomes', { point: v.point.key }) };
     }
     if (/how many|student count|roster|enrol|class list|section|teacher|staff/.test(t)) {
       return { html: 'Your school has <b>' + AD.students.length + '</b> students across <b>' + AD.sections.length + '</b> sections and <b>' + AD.teachers.length + '</b> teaching staff, tracking ' + AD.skills.length + ' skills. ' + (isCoordinator ? askLink('roster', 'Open Roster') : '') };
     }
-    if (/band|emerging|developing|what does|how do i read|meaning|explain|help/.test(t)) {
-      return { html: 'Skills are grouped into three developmental bands: <b>Emerging</b> (needs adult prompts), <b>Developing</b> (used with reminders), and <b>Secure</b> (steady and independent). Leadership only ever sees group distributions — never an individual child\'s score.' };
+    if (/band|emerging|developing|sprouting|blooming|what does|how do i read|meaning|explain|help/.test(t)) {
+      return { html: 'Skills are grouped into three developmental bands: <b>Sprouting</b> (needs adult prompts), <b>Growing</b> (used with reminders), and <b>Blooming</b> (steady and independent). Leadership only ever sees group distributions — never an individual child\'s score.' };
     }
     return { html: 'I can help with adoption (who is using Tilli), outcomes (is it working), concerns, targets, and getting a board-ready report. Try one of these:', sugs: true };
   }

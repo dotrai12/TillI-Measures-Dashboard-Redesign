@@ -109,6 +109,10 @@
     onboarded: false, // true once the one-time setup has been completed
     joinedAt: null,   // first completion (ISO) — "Joined Tilli Measures" on the profile
     observations: {}, // { [windowKey]: { [adm]: { ratings, at } } } — teacher observations
+    // Unfinished observations, saved on every rating tap so an interrupted child
+    // resumes where the teacher left off. Same shape as `observations`; an entry
+    // is removed once that child's observation is finished.
+    obsDrafts: {},
     // Every completed reflection, oldest first — the Teaching Mirror timeline.
     // { id, kind: 'pre' | 'post' | 'retake', label, at (ISO), answers }
     reflections: [],
@@ -260,7 +264,8 @@
     consumeNewFlag();
     if (saved && saved.onboarded) {
       Object.assign(state, { phase: 'complete', onboarded: true,
-        joinedAt: saved.joinedAt || saved.completedAt || null, observations: saved.observations || {} });
+        joinedAt: saved.joinedAt || saved.completedAt || null, observations: saved.observations || {},
+        obsDrafts: saved.obsDrafts || {} });
       if (saved.demo) state.demo = Object.assign(blankDemo(), saved.demo);
       state.selfAnswers = migrateAnswers(saved.selfAnswers);
       // Saves from before the timeline hold one answer set — that's the first mirror.
@@ -282,7 +287,7 @@
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
       onboarded: state.onboarded, joinedAt: state.joinedAt, observations: state.observations,
-      reflections: state.reflections,
+      obsDrafts: state.obsDrafts, reflections: state.reflections,
     }, extra || {});
     TeacherStore.save(ctx.email, payload);
   }
@@ -323,7 +328,7 @@
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
       reflection: { cats: CATS, questions: SELF }, joinedAt: state.joinedAt,
-      observations: state.observations, reflections: state.reflections,
+      observations: state.observations, obsDrafts: state.obsDrafts, reflections: state.reflections,
       startNav: state.startNav,
     };
     state.startNav = null;
@@ -1311,11 +1316,23 @@
     const w = Object.assign({}, state.observations[winKey]);
     w[adm] = { ratings: Object.assign({}, ratings), at: new Date().toISOString() };
     state.observations = Object.assign({}, state.observations, { [winKey]: w });
+    const d = Object.assign({}, state.obsDrafts[winKey]);   // finished → no longer a draft
+    delete d[adm];
+    state.obsDrafts = Object.assign({}, state.obsDrafts, { [winKey]: d });
+    persist();
+  }
+  // An unfinished observation — called on every rating tap. Empty ratings clear it.
+  function saveObservationDraft(winKey, adm, ratings) {
+    if (!winKey || !adm) return;
+    const d = Object.assign({}, state.obsDrafts[winKey]);
+    if (ratings && Object.keys(ratings).length) d[adm] = { ratings: Object.assign({}, ratings), at: new Date().toISOString() };
+    else delete d[adm];
+    state.obsDrafts = Object.assign({}, state.obsDrafts, { [winKey]: d });
     persist();
   }
   window.TilliOnboarding = {
     replay: replayOnboarding, addStudents: goToAddStudents,
-    appendStudents, updateDemo, saveObservation, updateStudent, takeReflection,
+    appendStudents, updateDemo, saveObservation, saveObservationDraft, updateStudent, takeReflection,
     options: { genders: GENDERS, education: EDU_LEVELS },
   };
 

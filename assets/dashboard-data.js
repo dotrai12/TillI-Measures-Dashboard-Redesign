@@ -45,7 +45,9 @@ function perspEntry(p, doneParts) {
 // Recompute a window's roll-up after its persp[] changed.
 function finishWindow(w) {
   w.doneCount = w.persp.filter((p) => p.done).length;
-  w.status = w.doneCount === w.persp.length ? "done" : (w.doneCount === 0 && !w.persp.some((p) => p.doneParts > 0)) ? "pending" : "in_progress";
+  // `started` = an informant began but hasn't finished a part (e.g. a teacher
+  // observation interrupted mid-child) — counts as in progress, not pending.
+  w.status = w.doneCount === w.persp.length ? "done" : (w.doneCount === 0 && !w.persp.some((p) => p.doneParts > 0 || p.started)) ? "pending" : "in_progress";
   return w;
 }
 // Recompute a student's cross-window counters (windowsDone / perspDone).
@@ -90,9 +92,9 @@ function hashStr(s) {
 }
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 function bandOf(pct) {
-  if (pct < 34) return "Beginner";
-  if (pct < 67) return "Learner";
-  return "Expert";
+  if (pct < 34) return "Sprouting";
+  if (pct < 67) return "Growing";
+  return "Blooming";
 }
 
 // Curated "tend reason" phrasing per skill (warm, teacher-to-teacher).
@@ -163,16 +165,16 @@ function summarize(skills, noData) {
   const band = bandOf(overallPct);
   const growth = overallPct - overallPre;
   const chips = {
-    beginner: skills.filter((s) => s.band === "Beginner").length,
-    learner: skills.filter((s) => s.band === "Learner").length,
-    expert: skills.filter((s) => s.band === "Expert").length,
+    beginner: skills.filter((s) => s.band === "Sprouting").length,
+    learner: skills.filter((s) => s.band === "Growing").length,
+    expert: skills.filter((s) => s.band === "Blooming").length,
   };
   const maxGap = Math.max(...skills.map((s) => s.gap));
 
   let state;
   if (noData) state = "waiting";
-  else if (band === "Expert" || growth >= 16) state = "blossoming";
-  else if (band === "Beginner" || chips.beginner >= 3 || maxGap >= 30) state = "tending";
+  else if (band === "Blooming" || growth >= 16) state = "blossoming";
+  else if (band === "Sprouting" || chips.beginner >= 3 || maxGap >= 30) state = "tending";
   else state = "growing";
 
   // Celebrate line = biggest grower; tend line = lowest skill.
@@ -202,7 +204,7 @@ function buildFreshStudent(section, r) {
   const initials = ((first[0] || "") + (last[0] || "")).toUpperCase() || "?";
   const skills = SKILLS.map((sk) => ({
     key: sk.key, name: sk.name, group: sk.group,
-    pct: 0, band: "Beginner", pre: 0, mid: 0, post: 0,
+    pct: 0, band: "Sprouting", pre: 0, mid: 0, post: 0,
     teacher: 0, parent: 0, student: 0, gap: 0,
   }));
   return {
@@ -212,7 +214,7 @@ function buildFreshStudent(section, r) {
     uid: r.uid || null,
     parentEmail: r.parentEmail || (first + "." + last + "@parent.tilli.co").toLowerCase(),
     section: section.name, grade: section.grade,
-    band: "Beginner", overallPct: 0, overallPre: 0, growth: 0,
+    band: "Sprouting", overallPct: 0, overallPre: 0, growth: 0,
     chips: { beginner: 0, learner: 0, expert: 0 }, maxGap: 0,
     state: "waiting", skills,
     celebrateLine: "", tendReason: "",

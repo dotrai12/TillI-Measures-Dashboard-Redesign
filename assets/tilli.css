@@ -57,7 +57,7 @@
   --accent-wash: var(--wash-green);
 
   /* Skill levels — ONE scale everywhere.
-     1 Beginner / Emerging · 2 Learner / Developing · 3 Expert / Secure / Proficient · 4 Advanced */
+     1 Sprouting / Beginner / Emerging · 2 Growing / Learner / Developing · 3 Blooming / Expert / Secure / Proficient · 4 Advanced */
   --lvl-1: #26BDE2;  --lvl-1-soft: #7FD6EE;  --lvl-1-wash: #D9F5FF;  --lvl-1-ink: var(--cyan-700);
   --lvl-2: #E3A40E;  --lvl-2-soft: #F2CF6B;  --lvl-2-wash: #FCF0C8;  --lvl-2-ink: #8A6400;
   --lvl-3: #56C02B;  --lvl-3-soft: #7FCB95;  --lvl-3-wash: #DDF3E3;  --lvl-3-ink: var(--green-700);

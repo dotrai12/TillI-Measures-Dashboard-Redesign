@@ -120,7 +120,7 @@
   // ---------------- constants ----------------
   const TO_BLOOM = { blossoming: 'expert', growing: 'learner', tending: 'beginner', waiting: 'beginner' };
   // Plant-state dot colours (completion matrices, list, band mix). Blossoming keeps
-  // the bloom-petal art colour; the rest are UI tokens (tending = Beginner level).
+  // the bloom-petal art colour; the rest are UI tokens (tending = Sprouting level).
   const STATE_DOT = { blossoming: ART.blush, growing: 'var(--green-500)', tending: 'var(--lvl-1-soft)', waiting: 'var(--ink-300)' };
   const SEARCH_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   // Clock-with-arrow (change history) — the student header's small History button.
@@ -234,13 +234,13 @@
   const bestOf = (stu) => [...stu.skills].sort((a, b) => b.pct - a.pct)[0].name;
   const weakOf = (stu) => [...stu.skills].sort((a, b) => a.pct - b.pct)[0].name;
   function bandLine(stu) {
-    if (stu.state === 'waiting') return 'Need more data — complete assessment';
-    if (stu.state === 'tending') return 'Beginner — start by focusing on ' + stu.lowestSkill.name;
-    if (stu.state === 'growing') return 'Learner';
-    return 'Expert';
+    if (stu.state === 'waiting') return 'Not assessed yet';
+    if (stu.state === 'tending') return 'Sprouting — start by focusing on ' + stu.lowestSkill.name;
+    if (stu.state === 'growing') return 'Growing';
+    return 'Blooming';
   }
   function chipHTML(chips) {
-    return [['Beginner', chips.beginner], ['Learner', chips.learner], ['Expert', chips.expert]]
+    return [['Sprouting', chips.beginner], ['Growing', chips.learner], ['Blooming', chips.expert]]
       .map(([label, count]) => `<span class="ui-badge lvl-${TP.levelOf(label).n}">${count} ${label}</span>`).join('');
   }
   function classSkills() {
@@ -251,9 +251,9 @@
       const now = Math.round(arr.reduce((a, x) => a + x.post, 0) / n);
       const pre = Math.round(arr.reduce((a, x) => a + x.pre, 0) / n);
       const gap = Math.round(arr.reduce((a, x) => a + x.gap, 0) / n);
-      const beginner = arr.filter((x) => x.band === 'Beginner').length;
-      const learner = arr.filter((x) => x.band === 'Learner').length;
-      const expert = arr.filter((x) => x.band === 'Expert').length;
+      const beginner = arr.filter((x) => x.band === 'Sprouting').length;
+      const learner = arr.filter((x) => x.band === 'Growing').length;
+      const expert = arr.filter((x) => x.band === 'Blooming').length;
       return { key: sk.key, name: sk.name, group: sk.group, now, pre, gap, beginner, learner, expert, total: arr.length };
     });
   }
@@ -294,7 +294,42 @@
     Object.keys(obs).forEach((wk) => d.sections.forEach((sec) => sec.students.forEach((st) => {
       if (obs[wk] && obs[wk][st.adm || st.id] && !teacherDone(st, wk)) markTeacherDone(st, wk);
     })));
+    const drafts = (S.teacher && S.teacher.obsDrafts) || {};
+    Object.keys(drafts).forEach((wk) => d.sections.forEach((sec) => sec.students.forEach((st) => {
+      if (drafts[wk] && drafts[wk][st.adm || st.id]) markTeacherStarted(st, wk);
+    })));
     return d;
+  }
+  // ---- unfinished observations (drafts) ----
+  // Every rating tap is saved as a draft, so a teacher pulled away mid-child
+  // resumes at the first unanswered question instead of starting over.
+  function draftOf(st, wk) {
+    const d = ((S.teacher && S.teacher.obsDrafts) || {})[wk];
+    return (st && d && d[st.adm || st.id]) || null;
+  }
+  // Teacher lane → "In progress" (not "Not started") while a draft exists.
+  function markTeacherStarted(st, wk) {
+    const D = window.TilliDashData; const w = logOf(st, wk);
+    if (!D || !w) return;
+    const p = w.persp.find((x) => x.key === 'teacher');
+    if (!p || p.done) return;
+    p.started = true;
+    D.finishWindow(w); D.finishLog(st);
+  }
+  function saveDraft(stu, wk, ratings) {
+    const key = stu.adm || stu.id;
+    const all = Object.assign({}, S.teacher.obsDrafts);
+    all[wk] = Object.assign({}, all[wk], { [key]: { ratings: Object.assign({}, ratings), at: new Date().toISOString() } });
+    S.teacher.obsDrafts = all;
+    if (window.TilliOnboarding && window.TilliOnboarding.saveObservationDraft) window.TilliOnboarding.saveObservationDraft(wk, key, ratings);
+    markTeacherStarted(stu, wk);
+  }
+  function clearDraft(stu, wk) {
+    const key = stu.adm || stu.id;
+    if (!draftOf(stu, wk)) return;
+    const all = Object.assign({}, S.teacher.obsDrafts);
+    all[wk] = Object.assign({}, all[wk]); delete all[wk][key];
+    S.teacher.obsDrafts = all;   // teacher.js clears its copy inside saveObservation()
   }
 
   // ---------------- mount ----------------
@@ -541,7 +576,7 @@
   // weekly idea. Applies the existing DS only; no new visual language.
 
   const fill = (tpl, map) => String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (map[k] != null ? map[k] : ''));
-  const bandOfPct = (p) => (p < 34 ? 'Beginner' : p < 67 ? 'Learner' : 'Expert');
+  const bandOfPct = (p) => (p < 34 ? 'Sprouting' : p < 67 ? 'Growing' : 'Blooming');
   function greetWord() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
   // Weekly rotation for "This week's idea" — independent of assessment data.
   function weekIdea() { const wk = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000)); return WEEK_IDEAS[wk % WEEK_IDEAS.length]; }
@@ -550,18 +585,19 @@
     const sec = section();
     const stu = sec.students;
     const N = stu.length;
-    // Band mix: three counts that sum to class size. No-data ("waiting") children
-    // fold into "Ready to tend" so the sum always equals N (they need attention too).
+    // Band mix: Blooming / Growing / Sprouting, plus "Not assessed yet" for no-data
+    // ("waiting") children — they aren't a level, so they're never counted as Sprouting.
     const blossoming = stu.filter((s) => s.state === 'blossoming').length;
     const growing = stu.filter((s) => s.state === 'growing').length;
-    const tend = N - blossoming - growing;
+    const notAssessed = stu.filter((s) => s.state === 'waiting').length;
+    const tend = N - blossoming - growing - notAssessed;
     // Celebration = plants that genuinely grew since the last window. Never fabricated.
     const grown = stu.filter((s) => s.grewSincePre >= 8).length;
     // Tend cards name only the gently-struggling few (max 3), always with an action.
     const tending = stu.filter((s) => s.state === 'tending');
-    // Data-grounded "down from X": children whose *baseline* overall band was Beginner.
-    const baselineTend = stu.filter((s) => bandOfPct(s.overallPre) === 'Beginner').length;
-    return { sec, stu, N, blossoming, growing, tend, grown, tending, nTend: tending.length, baselineTend };
+    // Data-grounded "down from X": children whose *baseline* overall band was Sprouting.
+    const baselineTend = stu.filter((s) => bandOfPct(s.overallPre) === 'Sprouting').length;
+    return { sec, stu, N, blossoming, growing, tend, notAssessed, grown, tending, nTend: tending.length, baselineTend };
   }
 
   // Progress for an open assessment window. Baseline uses the per-student `assess`
@@ -573,7 +609,8 @@
       const w = (s.assessLog || []).find((x) => x.key === winKey);
       return !w || w.status !== 'done';
     });
-    return { done: list.length - notDone.length, total: list.length, next: notDone[0] || list[0] };
+    const resume = notDone.find((s) => draftOf(s, winKey));   // interrupted child first
+    return { done: list.length - notDone.length, total: list.length, next: resume || notDone[0] || list[0] };
   }
 
   // Compose the calm garden scene from the existing plant art (no new illustration).
@@ -611,10 +648,10 @@
   // Band-mix strip: distinguishable without colour (each has a glyph + word + count).
   function bandMix(ld, note) {
     const items = [
-      ['Blossoming', ld.blossoming, STATE_DOT.blossoming, '✿'],
+      ['Blooming', ld.blossoming, STATE_DOT.blossoming, '✿'],
       ['Growing', ld.growing, STATE_DOT.growing, '❋'],
-      ['Ready to tend', ld.tend, STATE_DOT.tending, '◗'],
-    ];
+      ['Sprouting', ld.tend, STATE_DOT.tending, '◗'],
+    ].concat(ld.notAssessed ? [['Not assessed yet', ld.notAssessed, STATE_DOT.waiting, '○']] : []);
     return `<div class="mg-bandmix" role="group" aria-label="Class band mix">
       ${items.map(([lb, ct, c, ic]) => `<div class="mg-band"><span class="mg-band-ic" style="color:${c}" aria-hidden="true">${ic}</span><span class="mg-band-n">${ct}</span><span class="mg-band-lb">${lb}</span></div>`).join('')}
       ${note ? `<div class="mg-band-note">${esc(note)}</div>` : ''}
@@ -825,7 +862,7 @@
         const st = states[i];
         return {
           state: st, color, size, seed: (i * 7 + si * 13) % 97,
-          name: stu.name, bandLabel: st === 'expert' ? 'Expert' : st === 'learner' ? 'Learner' : 'Beginner',
+          name: stu.name, bandLabel: st === 'expert' ? 'Blooming' : st === 'learner' ? 'Growing' : 'Sprouting',
           goodSkill: bestOf(stu), helpSkill: weakOf(stu),
           left: Math.round(p.cx - size / 2), bottom: Math.round(svgH - p.cy - size / 2), z: 10 + Math.round(p.cy),
         };
@@ -877,9 +914,9 @@
     }).join('');
 
     const key = [
-      { state: 'beginner', title: 'Beginner', desc: 'a tiny bud', size: 18 },
-      { state: 'learner', title: 'Learner', desc: 'a small flower', size: 26 },
-      { state: 'expert', title: 'Expert', desc: 'a big open flower', size: 38 },
+      { state: 'beginner', title: 'Sprouting', desc: 'a tiny bud', size: 18 },
+      { state: 'learner', title: 'Growing', desc: 'a small flower', size: 26 },
+      { state: 'expert', title: 'Blooming', desc: 'a big open flower', size: 38 },
     ].map((k) => `<span>${bloomSVG(k.state, ART.keyBloom, k.size, 5)}<span class="lg-t"><b>${k.title}</b> · ${k.desc}</span></span>`).join('');
 
     return `<div class="dash-wrap garden-beds">
@@ -933,7 +970,7 @@
     const rows = [...sec.students].sort((a, b) => a.name.localeCompare(b.name)).map((stu, i) => {
       const st = TO_BLOOM[stu.state] || 'learner';
       const size = st === 'expert' ? 34 : st === 'learner' ? 26 : 20;
-      const label = st === 'expert' ? 'Expert' : st === 'learner' ? 'Learner' : 'Beginner';
+      const label = st === 'expert' ? 'Blooming' : st === 'learner' ? 'Growing' : 'Sprouting';
       return `<button class="cm-row" data-open-student="${esc(stu.id)}">
         <span class="cm-bloom">${bloomSVG(st, color, size, (i * 11) % 97)}</span>
         <span class="cm-info"><span class="nm">${esc(stu.name)}</span>
@@ -1027,10 +1064,10 @@
       </div>`).join('');
 
     const legend = [
-      { title: 'Expert', desc: 'thriving overall', dot: TP.level(3).soft },
-      { title: 'Learner', desc: 'on track', dot: TP.level(2).soft },
-      { title: 'Beginner', desc: 'start with one focus skill', dot: TP.level(1).soft },
-      { title: 'Need more data', desc: 'complete assessment', dot: STATE_DOT.waiting },
+      { title: 'Blooming', desc: 'thriving overall', dot: TP.level(3).soft },
+      { title: 'Growing', desc: 'on track', dot: TP.level(2).soft },
+      { title: 'Sprouting', desc: 'start with one focus skill', dot: TP.level(1).soft },
+      { title: 'Not assessed yet', desc: 'start their baseline', dot: STATE_DOT.waiting },
     ].map((l) => `<span><i class="round" style="background:${l.dot}"></i><span class="lg-t"><b>${l.title}</b> · ${l.desc}</span></span>`).join('');
 
     const blossomed = sec.students.filter((s) => s.state === 'blossoming').length;
@@ -1053,7 +1090,7 @@
 
     const highlights = top.map((t) => `<span class="hl-chip">${esc(t.name)} · ${t.now}%</span>`).join('');
     const growingRows = low.map((l) => `
-      <div class="grow-row"><div class="gm"><div class="nm">${esc(l.name)}</div><div class="sub">${countNoun(l.beginner, 'student', 'students')} at Beginner level</div></div>
+      <div class="grow-row"><div class="gm"><div class="nm">${esc(l.name)}</div><div class="sub">${countNoun(l.beginner, 'student', 'students')} at Sprouting level</div></div>
       <button class="btn-soft grow-ask focus" data-ask="class" data-skill="${esc(l.name)}" data-beg="${l.beginner}">Ask Tilli for a class activity</button></div>`).join('');
 
     return `<div class="dash-wrap section-garden">
@@ -1063,7 +1100,7 @@
           <h1 class="dash-h1">Good morning, ${esc(firstName())} 🌱</h1>
           <p class="dash-sub">Your <b style="color:var(--ink-900)">${esc(sec.name)}</b> garden, week 14.</p>
         </div>
-        <div class="blossom-pill">${sunSmall()} ${blossomed} student${blossomed === 1 ? '' : 's'} reached Expert since baseline</div>
+        <div class="blossom-pill">${sunSmall()} ${blossomed} student${blossomed === 1 ? '' : 's'} reached Blooming since baseline</div>
       </div>
 
       <section class="plant-bed">
@@ -1072,7 +1109,7 @@
       </section>
 
       <section style="margin-top:26px">
-        <h2 class="ui-title mb-3">🌱 ${nTend} student${nTend === 1 ? '' : 's'} at Beginner — start here</h2>
+        <h2 class="ui-title mb-3">🌱 ${nTend} student${nTend === 1 ? '' : 's'} at Sprouting — start here</h2>
         <div class="tend-grid">${tendCards || '<p class="dash-sub">No students need tending right now — lovely. 🌼</p>'}</div>
       </section>
 
@@ -1321,7 +1358,7 @@
     if (!waiting) {
       const sorted = [...stu.skills].sort((a, b) => b.pct - a.pct);
       const top = sorted[0], low = sorted[sorted.length - 1];
-      const mid = sorted.filter((k) => k !== top && k !== low && k.band !== 'Beginner').slice(0, 2);
+      const mid = sorted.filter((k) => k !== top && k !== low && k.band !== 'Sprouting').slice(0, 2);
       summary = `✨ ${esc(name)}&rsquo;s biggest strength is <b>${esc(top.name)}</b> — ${esc(name)} ${esc(SKILL_STRENGTH[top.key] || 'shows real confidence here')}.`
         + (mid.length ? ` ${esc(name)}&rsquo;s ${mid.map((k) => '<b>' + esc(k.name) + '</b>').join(' and ')} ${mid.length > 1 ? 'are' : 'is'} developing well.` : '')
         + ` The area where ${esc(name)} will grow the most with extra support right now is <b>${esc(low.name)}</b> — ${nm(SKILL_GROW[low.key] || 'with gentle, regular practice')}.`;
@@ -1350,9 +1387,9 @@
       </div>
       <p class="pr-p">These three perspectives are combined to give each skill a level. Here&rsquo;s what each level means:</p>
       <div class="pr-3">
-        <div class="pr-card pr-lvcard pr-lvb"><div class="pr-ct">Beginner</div>This skill is emerging. Consistent practice and support will help it grow.</div>
-        <div class="pr-card pr-lvcard pr-lvl"><div class="pr-ct">Learner</div>Developing well. Showing this skill in many situations — keep building!</div>
-        <div class="pr-card pr-lvcard pr-lve"><div class="pr-ct">Expert</div>Strong and consistent — really shining in this area!</div>
+        <div class="pr-card pr-lvcard pr-lvb"><div class="pr-ct">Sprouting</div>This skill is emerging. Consistent practice and support will help it grow.</div>
+        <div class="pr-card pr-lvcard pr-lvl"><div class="pr-ct">Growing</div>Developing well. Showing this skill in many situations — keep building!</div>
+        <div class="pr-card pr-lvcard pr-lve"><div class="pr-ct">Blooming</div>Strong and consistent — really shining in this area!</div>
       </div>
       <hr class="pr-hr">
 
@@ -1523,7 +1560,7 @@
   }
 
   function stuSkills(stu) {
-    const bandName = (v) => (v < 34 ? 'Beginner' : v < 67 ? 'Learner' : 'Expert');
+    const bandName = (v) => (v < 34 ? 'Sprouting' : v < 67 ? 'Growing' : 'Blooming');
     const card = (sk) => {
       const win = (label, val) => `<div class="scw"><div class="scw-col"><div class="scw-bar" style="background:${TP.levelOf(bandName(val)).soft};height:${Math.max(6, Math.round(val * 0.4))}px"></div></div><div class="scw-l">${label}</div><div class="scw-v">${val}</div></div>`;
       return `<div class="skill-card">
@@ -1577,7 +1614,7 @@
   // Earlier school years come from TILLI_SCHOOL.pastClassesFor(adm): per year the
   // class, teacher, windows completed, each skill's [start, end] score and the
   // teacher's handover note. Levels use the same thresholds as this year.
-  const levelName = (v) => (v < 34 ? 'Beginner' : v < 67 ? 'Learner' : 'Expert');
+  const levelName = (v) => (v < 34 ? 'Sprouting' : v < 67 ? 'Growing' : 'Blooming');
   function pastClasses(stu) {
     const TS = window.TILLI_SCHOOL;
     return TS && TS.pastClassesFor && stu.adm ? TS.pastClassesFor(stu.adm) : [];
@@ -1710,7 +1747,9 @@
     inhibition_response: 'Waits for their turn instead of calling out.',
     attention: 'Stays focused through a short group activity.',
   };
-  const STAR_LABELS = ['Emerging', 'Beginner', 'Growing', 'Expert'];
+  // Observation rating scale (4 points). "Seed" appears ONLY here — everywhere else
+  // (lists, Insights, parent report) uses the 3 levels Sprouting / Growing / Blooming.
+  const STAR_LABELS = ['Seed', 'Sprouting', 'Growing', 'Blooming'];
 
   // Merged destination: Observations + Completion are now one "Assess" place
   // with three sub-tabs — To-do (the journey/what's next), Enter (record an
@@ -1836,6 +1875,7 @@
     const stu = (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
     const skills = S.data.skills, sk = skills[e.q], nQ = skills.length;
     const saved = e.justDone ? `<div class="ui-note ok mb-3"><span>✓ ${esc(e.justDone)}&rsquo;s observation is saved — next up: <b>${esc(stu.dispFirst || stu.first)}</b></span></div>` : '';
+    const resumed = e.resumed ? `<div class="ui-note mb-3"><span>↺ Picked up where you left off with <b>${esc(stu.dispFirst || stu.first)}</b> — your earlier answers are kept.</span></div>` : '';
     // Class progress for this window — completed vs still pending.
     const total = sec.students.length, doneN = total - left;
     const progress = `<div class="obs-prog" title="Teacher observations for ${esc(winLabel)} in ${esc(sec.name)}">
@@ -1849,7 +1889,7 @@
       return `<button class="obs-star${picked ? ' on' : ''}" data-star="${i + 1}"><div class="row">${st}</div><div class="lb">${lbl}</div></button>`;
     }).join('');
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
-    return `${saved}<div class="obs-enter">
+    return `${saved}${resumed}<div class="obs-enter">
       <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · ${esc(winLabel)} observation</div></div>${progress}</div>
       <div class="obs-dots">${dots}</div>
       <div class="obs-q">Question ${e.q + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
@@ -1860,11 +1900,27 @@
     </div>${celebrate}`;
   }
 
-  function startEnter(id) { S.assessTab = 'enter'; S.enter = { studentId: id, q: 0, ratings: {}, done: false }; render(); }
+  // Observation state for one child: restores their saved draft (if any) and
+  // opens at the first unanswered question.
+  function enterFor(stuId, wk, extra) {
+    const stu = section().students.find((x) => x.id === stuId) || S.data.sections.flatMap((x) => x.students).find((x) => x.id === stuId);
+    const dr = stu && !teacherDone(stu, wk) ? draftOf(stu, wk) : null;
+    const ratings = dr ? Object.assign({}, dr.ratings) : {};
+    const skills = S.data.skills;
+    const first = skills.findIndex((sk) => !ratings[sk.key]);
+    const q = !dr ? 0 : first < 0 ? skills.length - 1 : first;
+    return Object.assign({ studentId: stuId, q, ratings, done: false, resumed: !!(dr && Object.keys(ratings).length) }, extra || {});
+  }
+  function startEnter(id) { S.assessTab = 'enter'; S.enter = enterFor(id, activeWindowKey() || 'baseline'); render(); }
   function continueAssess() {
     const sec = section(); const wk = activeWindowKey() || 'baseline';
-    const nxt = sec.students.find((s) => !teacherDone(s, wk));
+    const nxt = sec.students.find((s) => !teacherDone(s, wk) && draftOf(s, wk)) || sec.students.find((s) => !teacherDone(s, wk));
     startEnter(nxt ? nxt.id : sec.students[0].id);
+  }
+  // The child currently open in the observation flow.
+  function enterStudent() {
+    const sec = section(), e = S.enter;
+    return (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
   }
   function pendingIn(list, wk) { return list.filter((s) => !teacherDone(s, wk)).length; }
   // Next child still waiting on a teacher observation in this window: the rest of
@@ -1891,6 +1947,7 @@
     const stu = (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
     if (!stu) return;
     markTeacherDone(stu, wk);
+    clearDraft(stu, wk);
     const key = stu.adm || stu.id;
     const obs = Object.assign({}, S.teacher.observations);
     obs[wk] = Object.assign({}, obs[wk], { [key]: { ratings: Object.assign({}, e.ratings), at: new Date().toISOString() } });
@@ -1899,7 +1956,7 @@
     recordTeacherCompletion(stu, wk);
     const who = stu.dispFirst || stu.first;
     const next = nextPending(stu.id, wk);
-    if (next) { S.sectionId = next.sectionId; S.enter = { studentId: next.stu.id, q: 0, ratings: {}, done: false, justDone: who }; }
+    if (next) { S.sectionId = next.sectionId; S.enter = enterFor(next.stu.id, wk, { justDone: who }); }
     else S.enter = { studentId: null, q: 0, ratings: {}, done: false, allDone: true, justDone: who };
     render();
   }
@@ -1994,7 +2051,7 @@
     const rows = sorted.map((st) => {
       const cells = st.assessLog.map((w) => {
         const ss = STATUS_META[w.status];
-        const persp = w.persp.map((p) => `<span title="${esc(p.label + (p.done ? ' · done' : ' · pending'))}" style="opacity:${p.done ? 1 : 0.25}">${p.icon}</span>`).join('');
+        const persp = w.persp.map((p) => `<span title="${esc(p.label + (p.done ? ' · done' : ' · pending'))}" style="opacity:${p.done ? 1 : p.started ? 0.6 : 0.25}">${p.icon}</span>`).join('');
         return `<div class="mtx-cell" style="background:${ss.bg}"><div class="cl" style="color:${ss.fg}">${ss.label}</div><div class="cp">${persp}</div></div>`;
       }).join('');
       return `<button class="mtx-row" data-log-open="${esc(st.id)}"><div class="mtx-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.dispFirst)}</span></div>${cells}</button>`;
@@ -2026,7 +2083,7 @@
       const cells = P.map((p) => {
         const e = lw.persp.find((x) => x.key === p.key) || { doneParts: 0, totalParts: 1, done: false };
         // zero = nothing started yet → muted, so started / finished cells stand out.
-        return `<div class="cr-cell${e.done ? ' done' : e.doneParts ? '' : ' zero'}"><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}</div>`;
+        return `<div class="cr-cell${e.done ? ' done' : (e.doneParts || e.started) ? '' : ' zero'}"${e.started && !e.done ? ' title="Started — not finished yet"' : ''}><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}</div>`;
       }).join('');
       return `<button class="cr-row" data-log-open="${esc(st.id)}"><div class="mtx-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.dispFirst)}</span></div>${cells}</button>`;
     }).join('');
@@ -2120,7 +2177,7 @@
       const pct = Math.round((active.perspDone / 9) * 100);
       const timeline = active.assessLog.map((w) => {
         const ss = STATUS_META[w.status];
-        const persp = w.persp.map((p) => `<div class="tl-persp${p.done ? ' done' : ''}"><span class="ic">${p.icon}</span><div><div class="nm">${esc(p.label)}</div><div class="st">${p.done ? 'Done · ' + w.date : 'Waiting'}</div></div></div>`).join('');
+        const persp = w.persp.map((p) => `<div class="tl-persp${p.done ? ' done' : ''}"><span class="ic">${p.icon}</span><div><div class="nm">${esc(p.label)}</div><div class="st">${p.done ? 'Done · ' + w.date : p.started ? 'In progress' : 'Waiting'}</div></div></div>`).join('');
         return `<div class="tl-row"><div class="tl-dot-wrap"><div class="tl-dot" style="background:${ss.dot};box-shadow:0 0 0 4px ${ss.bg}"></div><div class="tl-line"></div></div>
           <div class="tl-card"><div class="tl-top"><div><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)} · ${esc(w.date)}</div></div><span class="ui-badge ${ss.cls}">${ss.label}${w.status === 'done' ? '' : ' · ' + w.doneCount + '/3'}</span></div>
           <div class="tl-persps">${persp}</div>
@@ -2206,11 +2263,11 @@
     return S.data.skills.map((sk) => {
       const arr = assessed.map((s) => s.skills.find((x) => x.key === sk.key)).filter(Boolean);
       const avg = (f) => Math.round(arr.reduce((a, x) => a + (x[f] || 0), 0) / (arr.length || 1));
-      const counts = { Beginner: 0, Learner: 0, Expert: 0 };
+      const counts = { Sprouting: 0, Growing: 0, Blooming: 0 };
       arr.forEach((x) => { if (counts[x.band] != null) counts[x.band]++; });
       // Plurality band. Ties resolve toward the lower band (→ "A place to focus").
-      let plurality = 'Beginner';
-      ['Beginner', 'Learner', 'Expert'].forEach((b) => { if (counts[b] > counts[plurality]) plurality = b; });
+      let plurality = 'Sprouting';
+      ['Sprouting', 'Growing', 'Blooming'].forEach((b) => { if (counts[b] > counts[plurality]) plurality = b; });
       const teacher = avg('teacher'), parent = avg('parent'), student = avg('student');
       return {
         key: sk.key, name: sk.name, group: sk.group,
@@ -2280,12 +2337,12 @@
   }
 
   // a) Class Skill Overview — per skill, how the class splits across
-  // Beginner / Learner / Expert. The 3 boxes count SKILLS by their largest
+  // Sprouting / Growing / Blooming. The 3 boxes count SKILLS by their largest
   // group; tap a box to filter, tap a skill row for the student breakdown.
   const OV_BANDS = [
-    { band: 'Beginner', label: 'Needs attention', n: 1 },
-    { band: 'Learner', label: 'Developing', n: 2 },
-    { band: 'Expert', label: 'Strong', n: 3 },
+    { band: 'Sprouting', label: 'Sprouting', n: 1 },
+    { band: 'Growing', label: 'Growing', n: 2 },
+    { band: 'Blooming', label: 'Blooming', n: 3 },
   ];
   function classOverviewCard(stats, scope) {
     const N = scope.students.length;
@@ -2297,20 +2354,20 @@
       return `<button class="ov-box ov-l${b.n}${on ? ' on' : ''}${S.ovBand && !on ? ' dim' : ''} focus" data-ov-band="${b.band}" aria-pressed="${on}" title="${on ? 'Show all skills' : 'Show only skills where most students are ' + b.band}">
         <span class="ov-count">${n}</span>
         <span class="ov-title">${b.label}</span>
-        <span class="ov-sub">Most students are ${b.band}</span>
+        <span class="ov-sub">${n === 1 ? 'skill' : 'skills'} where most students are here</span>
       </button>`;
     }).join('');
-    const rank = { Beginner: 0, Learner: 1, Expert: 2 };
+    const rank = { Sprouting: 0, Growing: 1, Blooming: 2 };
     const rows = stats
       .filter((s) => !S.ovBand || s.plurality === S.ovBand)
-      .sort((a, b) => (rank[a.plurality] - rank[b.plurality]) || ((b.counts.Beginner / (b.total || 1)) - (a.counts.Beginner / (a.total || 1))) || ((a.counts.Expert / (a.total || 1)) - (b.counts.Expert / (b.total || 1))))
+      .sort((a, b) => (rank[a.plurality] - rank[b.plurality]) || ((b.counts.Sprouting / (b.total || 1)) - (a.counts.Sprouting / (a.total || 1))) || ((a.counts.Blooming / (a.total || 1)) - (b.counts.Blooming / (b.total || 1))))
       .map((s) => {
         const t = s.total || 1, m = meta(s.plurality), open = S.ovSkill === s.key;
         const seg = (b, n) => s.counts[b] ? `<span class="ov-seg" style="width:${(s.counts[b] / t) * 100}%;background:var(--lvl-${n})" title="${s.counts[b]} ${b}"></span>` : '';
         return `<div class="ov-row${open ? ' open' : ''}">
           <button class="ov-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}">
             <span class="ov-name">${esc(s.name)}</span>
-            <span class="ov-bar">${seg('Beginner', 1)}${seg('Learner', 2)}${seg('Expert', 3)}</span>
+            <span class="ov-bar">${seg('Sprouting', 1)}${seg('Growing', 2)}${seg('Blooming', 3)}</span>
             <span class="ov-status ov-st-l${m.n}"><i></i>${m.label}</span>
             <span class="ov-chev" aria-hidden="true">›</span>
           </button>
@@ -2322,20 +2379,20 @@
         <div>
           <div class="ov-h">Class Skill Overview</div>
           <div class="ov-lead">How your class is doing on each skill</div>
-          <p class="ov-desc">For every skill, we grouped your students into Beginner, Learner, and Expert. The colour is whichever group is largest, so green means most of your class is at Expert, not all of them.</p>
+          <p class="ov-desc">For every skill, we grouped your students into Sprouting, Growing, and Blooming. The colour is whichever group is largest, so green means most of your class is at Blooming, not all of them.</p>
         </div>
         <span class="ov-scope"><i></i>${esc(scope.name)} · ${countNoun(N, 'student', 'students')}</span>
       </div>
       <div class="ov-boxes">${boxes}</div>
       ${notAssessed ? `<div class="ov-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet</div>` : ''}
       <div class="ov-hint">👆 <b>Tap a box</b> to see just those skills · <b>tap a skill</b> for the student breakdown</div>
-      <div class="ui-legend ov-legend"><span><i style="background:var(--lvl-1)"></i>Beginner</span><span><i style="background:var(--lvl-2)"></i>Learner</span><span><i style="background:var(--lvl-3)"></i>Expert</span></div>
+      <div class="ui-legend ov-legend"><span><i style="background:var(--lvl-1)"></i>Sprouting</span><span><i style="background:var(--lvl-2)"></i>Growing</span><span><i style="background:var(--lvl-3)"></i>Blooming</span></div>
       <div class="ov-list">${rows}</div>
     </div>`;
   }
   // Which students sit in each band for one skill (assessed students only).
   function ovBreakdown(stat, scope) {
-    const by = { Beginner: [], Learner: [], Expert: [] };
+    const by = { Sprouting: [], Growing: [], Blooming: [] };
     scope.students.filter((s) => s.state !== 'waiting').forEach((st) => {
       const sk = st.skills.find((x) => x.key === stat.key);
       if (sk && by[sk.band]) by[sk.band].push(st);
@@ -2348,7 +2405,7 @@
         ${list.length ? list.map((st) => `<button class="ov-stu focus" data-open-student="${esc(st.id)}" title="Open ${esc(st.name)}">${esc(st.name)}</button>`).join('') : '<div class="ov-bnone">—</div>'}
       </div>`;
     };
-    return `<div class="ov-break">${col('Beginner')}${col('Learner')}${col('Expert')}
+    return `<div class="ov-break">${col('Sprouting')}${col('Growing')}${col('Blooming')}
       <div class="ov-bfoot"><button class="btn-soft green focus" data-ask="build" data-skill="${esc(stat.name)}" data-band="${stat.plurality}">Ask Tilli how to build ${esc(stat.name)} →</button></div>
     </div>`;
   }
@@ -2390,7 +2447,7 @@
       grid += `<text class="svg-t" x="${g.L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" style="fill:var(--ink-300)" font-weight="600">${v}%</text>`;
     });
     // band names sit in the left gutter of each zone (recessive)
-    [['Beginner', 16], ['Learner', 50], ['Expert', 84]].forEach(([lb, v]) => {
+    [['Sprouting', 16], ['Growing', 50], ['Blooming', 84]].forEach(([lb, v]) => {
       grid += `<text class="svg-t" x="${g.L + 6}" y="${y(v) + 4}" font-size="11" style="fill:var(--ink-300);opacity:.6" font-weight="700" letter-spacing=".04em">${lb.toUpperCase()}</text>`;
     });
     const axis = phases.map((p, i) => {
@@ -2963,23 +3020,23 @@
     if (hit) {
       const sk = S.data.skills.find((x) => x.key === hit[1]);
       const rows = kids.map((st) => ({ st, x: st.skills.find((k) => k.key === sk.key) })).filter((r) => r.x).sort((a, b) => a.x.pct - b.x.pct);
-      const beg = rows.filter((r) => r.x.band === 'Beginner');
+      const beg = rows.filter((r) => r.x.band === 'Sprouting');
       const list = (beg.length ? beg : rows.slice(0, 3)).slice(0, 6).map((r) => `• ${r.st.name} — ${r.x.band} (${r.x.pct}%)`).join('\n');
       const head = beg.length
-        ? `In ${where}, **${countNoun(beg.length, 'student', 'students')}** ${nounFor(beg.length, 'is', 'are')} at Beginner in **${sk.name}**:`
-        : `Nobody in ${where} is at Beginner in **${sk.name}** — these students have the most room to grow:`;
+        ? `In ${where}, **${countNoun(beg.length, 'student', 'students')}** ${nounFor(beg.length, 'is', 'are')} at Sprouting in **${sk.name}**:`
+        : `Nobody in ${where} is at Sprouting in **${sk.name}** — these students have the most room to grow:`;
       return `${head}\n${list}${beg.length > 6 ? `\n…and ${beg.length - 6} more.` : ''}\n\nWant a 10-minute ${sk.name} activity you can run with them this week?`;
     }
     const stats = skillStatsFor(kids).filter((x) => x.total);
     if (!stats.length) return `I couldn't find skill results for ${where} yet.`;
     if (/strength|strong|best|well/.test(t)) {
-      const top = [...stats].sort((a, b) => b.counts.Expert - a.counts.Expert)[0];
-      return `${where}'s biggest strength is **${top.name}** — ${top.counts.Expert} of ${top.total} students are already at Expert. Celebrate it out loud, and use it as a bridge into the skills that are still growing.`;
+      const top = [...stats].sort((a, b) => b.counts.Blooming - a.counts.Blooming)[0];
+      return `${where}'s biggest strength is **${top.name}** — ${top.counts.Blooming} of ${top.total} students are already at Blooming. Celebrate it out loud, and use it as a bridge into the skills that are still growing.`;
     }
     if (/gap|weak|lowest|struggl|focus|need|help|support/.test(t)) {
-      const [a, b] = [...stats].sort((x, y) => y.counts.Beginner - x.counts.Beginner);
-      return `The biggest skill gap in ${where} is **${a.name}** — ${a.counts.Beginner} of ${a.total} students are at Beginner.` +
-        (b ? ` Next is **${b.name}** (${b.counts.Beginner} at Beginner).` : '') +
+      const [a, b] = [...stats].sort((x, y) => y.counts.Sprouting - x.counts.Sprouting);
+      return `The biggest skill gap in ${where} is **${a.name}** — ${a.counts.Sprouting} of ${a.total} students are at Sprouting.` +
+        (b ? ` Next is **${b.name}** (${b.counts.Sprouting} at Sprouting).` : '') +
         `\n\nA small daily routine aimed at ${a.name} will move the most children. Want me to suggest one?`;
     }
     return `Good question. Looking at ${where}, I can tell you which students need support in a skill, where the biggest gaps are, or suggest an activity — try asking about a specific skill like **empathy** or **attention**.`;
@@ -3470,6 +3527,8 @@
     root.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => {
       const sk = S.data.skills[S.enter.q];
       S.enter = Object.assign({}, S.enter, { ratings: Object.assign({}, S.enter.ratings, { [sk.key]: +b.dataset.star }) });
+      const stu = enterStudent();
+      if (stu) saveDraft(stu, activeWindowKey() || 'baseline', S.enter.ratings);
       render();
     }));
     root.querySelectorAll('[data-enter-prev]').forEach((b) => b.addEventListener('click', () => { S.enter = Object.assign({}, S.enter, { q: Math.max(0, S.enter.q - 1), done: false }); render(); }));
@@ -3512,7 +3571,7 @@
     root.querySelectorAll('[data-cmpgrade]').forEach((b) => b.addEventListener('click', () => { S.compareGrade = b.dataset.cmpgrade; render(); }));
     root.querySelectorAll('[data-ask-ins]').forEach((b) => b.addEventListener('click', () => {
       const sec = section();
-      if (b.dataset.askIns === 'grow') openAsk(`${sec.name} · class growth`, `My ${sec.name} class data shows most skills rising since baseline, with a few still at Beginner level. What are 2–3 practical next steps?`);
+      if (b.dataset.askIns === 'grow') openAsk(`${sec.name} · class growth`, `My ${sec.name} class data shows most skills rising since baseline, with a few still at Sprouting level. What are 2–3 practical next steps?`);
       else openAsk(`${sec.name} · perspective gaps`, `My ${sec.name} class shows notable gaps between teacher, parent and student views on some skills. What are 2–3 practical next steps to reconcile these kindly?`);
     }));
 
@@ -3541,7 +3600,7 @@
       else if (b.dataset.ask === 'build') openAsk(`${sec.name} · ${skill}`, `Most of my ${sec.grade} class sit at ${band} level on ${skill}. Give me 2–3 practical, low-prep ways to build this skill across the whole class over the next few weeks.`);
       else if (b.dataset.ask === 'persp') openAsk(`${sec.name} · ${skill} · perspectives`, `On ${skill}, ${PN[b.dataset.hi] || b.dataset.hi} rate my ${sec.grade} class noticeably higher than ${PN[b.dataset.lo] || b.dataset.lo} do. Why might this happen, and what could I try — kindly, without assuming anyone is wrong?`);
       else if (b.dataset.ask === 'cmp') openAsk(`${b.dataset.hi} → ${b.dataset.lo} · ${skill}`, `In my ${sec.grade}, ${b.dataset.hi} is ahead of ${b.dataset.lo} on ${skill}. Give me one activity or routine that might be working in ${b.dataset.hi} that I could bring to ${b.dataset.lo}.`);
-      else openAsk(`${sec.name} · ${skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Beginner level in it.`);
+      else openAsk(`${sec.name} · ${skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Sprouting level in it.`);
     }));
 
     // profile: Teaching Mirror timeline
@@ -3744,7 +3803,7 @@
   .grow-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .grow-row .nm { font-weight: 700; font-size: var(--fs-md); }
   .grow-row .sub { font-size: var(--fs-sm); color: var(--ink-300); }
-  .grow-ask { background: var(--wash-yellow); color: var(--lvl-2-ink); white-space: nowrap; }   /* .btn-soft, Learner-amber variant */
+  .grow-ask { background: var(--wash-yellow); color: var(--lvl-2-ink); white-space: nowrap; }   /* .btn-soft, Growing-amber variant */
 
   /* ask tilli — chat window pinned to the floating bubble (positionAskPop sets
      its left/right/top/bottom + max-height; these are the no-anchor fallbacks). */
@@ -4348,7 +4407,7 @@
   .gr-table td { font-weight: 600; color: var(--ink-900); }   /* .ui-table.compact */
   .gr-table td i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
 
-  /* Insights → Class Skill Overview (level tokens: 1 Beginner · 2 Learner · 3 Expert) */
+  /* Insights → Class Skill Overview (level tokens: 1 Sprouting · 2 Growing · 3 Blooming) */
   .ov-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .ov-h { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); }
   .ov-lead { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-top: 4px; }
@@ -4487,7 +4546,7 @@
   .pr-sk { width: 34%; color: var(--report-purple); font-weight: 600; }
   .pr-lvtbl th:last-child, .pr-lvtbl td:last-child { text-align: center; width: 30%; }
   .pr-lv { font-weight: 700; font-size: var(--fs-xs); }
-  .pr-lv-beginner { color: var(--lvl-1-ink); } .pr-lv-learner { color: var(--lvl-2-ink); } .pr-lv-expert { color: var(--lvl-3-ink); }
+  .pr-lv-sprouting { color: var(--lvl-1-ink); } .pr-lv-growing { color: var(--lvl-2-ink); } .pr-lv-blooming { color: var(--lvl-3-ink); }
   .pr-summary, .pr-note { background: var(--report-yellow); border-left: 3px solid var(--report-yellow-line); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 12px 16px; font-size: var(--fs-sm); line-height: 1.75; page-break-inside: avoid; }
   .pr-tip { border-left: 3px solid var(--report-lav-strong); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 11px 16px 12px; margin-bottom: 9px; page-break-inside: avoid; }
   .pr-tipt { font-weight: 700; font-size: var(--fs-sm); color: var(--report-purple); margin-bottom: 4px; }
