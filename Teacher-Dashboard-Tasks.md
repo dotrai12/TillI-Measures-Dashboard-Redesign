@@ -13,6 +13,7 @@ Fixes for the teacher dashboard (`teacher.html`), taken from the teacher-lens re
 | ⬜ | Not started |
 | 🟡 | In progress |
 | ⏸️ | Waiting on a product decision |
+| ⏭️ | Parked: will be done later |
 | ✅ | Done |
 
 ### Priority key
@@ -24,7 +25,7 @@ Fixes for the teacher dashboard (`teacher.html`), taken from the teacher-lens re
 
 ## ▶ Now working on
 
-> **T3 — Replace hardcoded / sample data with real data [DB]** *(update this line when you move on)*
+> **All active tasks are done.** Left: **T3** and **T4** (parked for later) and **T11** (waiting on Masoomi / Kavi). *(update this line when you move on)*
 
 ---
 
@@ -34,25 +35,25 @@ Fixes for the teacher dashboard (`teacher.html`), taken from the teacher-lens re
 |---|---|---|---|---|
 | T1 | One level scale everywhere | P0 | Product → Mayur | ✅ |
 | T2 | Save progress when a teacher is interrupted mid-child | P0 | Mayur | ✅ |
-| T3 | Replace hardcoded / sample data with real data **[DB]** | P0 | Mayur | ⬜ |
-| T4 | Hide the "Preview state" switcher from teachers | P0 | Mayur | ⏸️ |
-| T5 | Soften child labels and remove the parent email from screens a parent may see | P0 | Product → Mayur | ⏸️ |
-| T6 | One set of window names and week numbers | P1 | Product → Mayur | ⏸️ |
-| T7 | One name for the skill groups | P1 | Product → Mayur | ⏸️ |
-| T8 | Simplify Assess → one "still to do" list | P1 | Product → Mayur | ⏸️ |
-| T9 | Phone nav label, tappable garden, reachable section garden | P1 | Mayur | ⬜ |
-| T10 | Class Skill Overview: make clear the boxes count skills, not children | P1 | Mayur | ⬜ |
-| T11 | Explain what the % numbers mean | P1 | Product → Mayur | ⏸️ |
-| T12 | Plain copy fixes ("Completed rate", "Tracker") | P1 | Mayur | ⬜ |
-| T13 | Faster observations: rate one skill across the class | P1 | Product (research check) | ⏸️ |
-| T14 | Review the extra surveys and check-ins on the To-do vine | P2 | Product | ⏸️ |
-| T15 | Perspectives: demote the radar chart, spell out T/P/S | P2 | Mayur | ⬜ |
-| T16 | Tap instead of hover for tooltips (phone) | P2 | Mayur | ⬜ |
-| T17 | Preview a parent report before downloading | P2 | Mayur | ⬜ |
-| T18 | Show which parents haven't done their part, plus a reminder message to copy | P2 | Product → Mayur | ⏸️ |
-| T19 | Shorter first-time setup | P2 | Product | ⏸️ |
+| T3 | Replace hardcoded / sample data with real data **[DB]** | P0 | Mayur | ⏭️ |
+| T4 | Hide the "Preview state" switcher from teachers | P0 | Mayur | ⏭️ |
+| T5 | Soften child labels on screens a parent may see | P0 | Product → Mayur | ✅ |
+| T6 | One set of window names, dates instead of week numbers | P1 | Product → Mayur | ✅ |
+| T7 | One name for the skill groups | P1 | Product → Mayur | ✅ |
+| T8 | Simplify Assess → one "still to do" list | P1 | Product → Mayur | ✅ |
+| T9 | Phone nav label, tappable garden, reachable section garden | P1 | Mayur | ✅ |
+| T10 | Class Skill Overview: make clear the boxes count skills, not children | P1 | Mayur | ✅ |
+| T11 | Explain what the % numbers mean | P1 | Product → Mayur | 🟡 |
+| T12 | Plain copy fixes ("Completed rate", "Tracker") | P1 | Mayur | ✅ |
+| T13 | Observation in pages (21 questions, 6 per page) | P1 | Product → Mayur | ✅ |
+| T14 | Review the extra surveys and check-ins on the To-do vine | P2 | Product | ✅ |
+| T15 | Perspectives: demote the radar chart, spell out T/P/S | P2 | Mayur | ✅ |
+| T16 | Tap instead of hover for tooltips (phone) | P2 | Mayur | ✅ |
+| T17 | Preview a parent report before downloading | P2 | Mayur | ✅ |
+| T18 | Show which parents haven't done their part, plus a reminder message to copy | P2 | Product → Mayur | ✅ |
+| T19 | Shorter first-time setup | P2 | Product | ✅ |
 
-**Done: 2 / 19**
+**Done: 16 / 19** (T3, T4 parked · T11 waiting on confirmation)
 
 ---
 
@@ -126,7 +127,7 @@ Internal code keys (`beginner`/`learner`/`expert`, `emerging`/`developing`/`secu
 
 **For Mayur (real DB)**
 - [ ] The sample saves drafts in the browser (`TeacherStore` in teacher.js — the swap point). Replace it with an API call per tap (or a short debounce), keyed by teacher + student + window, so it **works on another device**.
-- [ ] Ratings are stored as numbers 1–4 per skill key (Seed = 1 … Blooming = 4).
+- [ ] Ratings are stored as numbers 1–4 per **question id** (Seed = 1 … Blooming = 4). See T13.
 - [ ] When a finished observation is saved, delete that child's draft on the server too.
 - [ ] Report a started-but-unfinished teacher observation as "In Progress" in the admin / CSV completion data.
 
@@ -139,7 +140,9 @@ Internal code keys (`beginner`/`learner`/`expert`, `emerging`/`developing`/`secu
 
 ---
 
-### T3 — Replace hardcoded / sample data with real data **[DB]** ⬜
+### T3 — Replace hardcoded / sample data with real data **[DB]** ⏭️
+> Parked: will be done later.
+
 **Why:** Some values are fixed in the prototype and will be wrong for real teachers. The worst one: every child's History tab shows the same story.
 
 | What | Code |
@@ -158,7 +161,9 @@ Internal code keys (`beginner`/`learner`/`expert`, `emerging`/`developing`/`secu
 
 ---
 
-### T4 — Hide the "Preview state" switcher from teachers ⏸️
+### T4 — Hide the "Preview state" switcher from teachers ⏭️
+> Parked: will be done later.
+
 **Why:** The Baseline / Between / Midline / Endline box shows on every page. A teacher will ask "is this for me?"
 **Note:** This is internal review tooling. **Keep it in the code.** It just shouldn't be visible in the teacher's real view.
 
@@ -174,191 +179,303 @@ Internal code keys (`beginner`/`learner`/`expert`, `emerging`/`developing`/`secu
 
 ---
 
-### T5 — Soften child labels and remove the parent email from screens a parent may see ⏸️
+### T5 — Soften child labels on screens a parent may see ✅
 **Why:** The students list is the screen a teacher will have open on a laptop facing a parent at a parent-teacher meeting.
 
-| What | Code |
-|---|---|
-| Under each child's name: "Beginner — start by focusing on Attention" | [teacher-dashboard.js:236](assets/teacher-dashboard.js:236) (`bandLine`) |
-| Garden hover: "Needs help" | [:862](assets/teacher-dashboard.js:862), [:940](assets/teacher-dashboard.js:940) |
-| Heading: "🌱 3 students at Beginner — start here" | [:1075](assets/teacher-dashboard.js:1075) |
-| Parent email shown under the child's name in the header | [:1417](assets/teacher-dashboard.js:1417) (`stuHead`) |
-
-**Decision needed**
-- [ ] Gentler wording for the roster line and hover (e.g. "Growing in: Attention").
-- [ ] Should the parent email move to an "Edit / contact" area, or be removed from the header entirely?
+**Decision (16 Oct 2026) and what changed**
+| Where | Before | After | Code |
+|---|---|---|---|
+| Students list / garden tooltip line under the name | "Sprouting — start by focusing on Attention" | "Sprouting · Attention next" | [teacher-dashboard.js:236](assets/teacher-dashboard.js:236) (`bandLine`) |
+| Garden hover + class pop-up | "Needs help: Attention" | "Next to practise: Attention" | [:899](assets/teacher-dashboard.js:899), [:977](assets/teacher-dashboard.js:977) |
+| Class garden heading | "🌱 3 students at Sprouting — start here" | "🌱 3 children could use a little extra" | [:1112](assets/teacher-dashboard.js:1112) |
+| Parent email under the child's name | — | **Kept as is** (decision) | — |
 
 **Done when**
-- [ ] No child-level label on the list views reads as a deficit.
-- [ ] The parent email doesn't show on the main student header.
+- [x] No child-level label on the list views reads as a deficit.
+- [x] Parent email decision made (keep).
 
 ---
 
 ## P1 — Weekly friction
 
-### T6 — One set of window names and week numbers ⏸️
-**Why:** The same windows are called Baseline / Mid-year / End of year, Midline / Endline, Pre / Mid / Post, and "Mid-year report". The week numbers contradict each other: mid-year is "Week 8" in the tracker, "week 15" on the landing, and an "18-week check-in" sits on the To-do list.
+### T6 — One set of window names, dates instead of week numbers ✅
+**Why:** The same windows were called Baseline / Mid-year / End of year, Midline / Endline, Pre / Mid / Post and "Mid-year report", and the week numbers contradicted each other (the 36-week check-in fell after the Endline window).
 
-| Where | Code |
-|---|---|
-| Landing hero ("Midline is open", "Endline is open") | [teacher-dashboard.js:172](assets/teacher-dashboard.js:172), [:180](assets/teacher-dashboard.js:180) |
-| To-do vine titles ("Mid-year report", "End-of-year report") | [:1750](assets/teacher-dashboard.js:1750) |
-| Student charts (Pre / Mid / Post) | [:1520](assets/teacher-dashboard.js:1520), [:1531](assets/teacher-dashboard.js:1531), [:1660](assets/teacher-dashboard.js:1660) |
-| Window labels and weeks | [dashboard-data.js:22](assets/dashboard-data.js:22) |
+**Decision (16 Oct 2026)**
+- Window names everywhere: **Baseline / Midline / Endline**. These were already used by the parent page, both admin dashboards and the data layer, so only the teacher dashboard changed.
+- **Dates only, no week numbers** (e.g. "Due Jun 18").
+- **CSV columns use the new names** too, e.g. `Memory Game (Baseline)`, `Memory Game (Midline)`.
 
-**Decision needed**
-- [ ] Pick one set (suggestion: **Baseline / Mid-year / End of year**).
-- [ ] Should the CSV keep `PRE / MID / POST`? (It matches the platform export format, so it probably stays.)
-
-**Done when**
-- [ ] One name per window on every teacher screen.
-- [ ] Week numbers come from one source (see T3) and agree everywhere.
-
----
-
-### T7 — One name for the skill groups ⏸️
-**Why:** It's "Cognitive" on the rating screen and student page, "Executive Function" in Insights, and "Cognitive Skills" on the parent PDF.
-**Code:** [teacher-dashboard.js:1540](assets/teacher-dashboard.js:1540), [:1855](assets/teacher-dashboard.js:1855), [:2200](assets/teacher-dashboard.js:2200), [:1312](assets/teacher-dashboard.js:1312)
-
-**Decision needed**
-- [ ] "Cognitive" or "Executive Function"? (Teachers will find "Thinking skills" or "Cognitive" easier.)
-
-**Done when**
-- [ ] The same group name is used on every screen and on the PDF.
-
----
-
-### T8 — Simplify Assess → one "still to do" list ⏸️
-**Why:** There are roughly six ways to answer "who haven't I done?": the To-do vine, Tracker → By class / By student / List, "See all windows together", and "Your classes at a glance". She wants one list of names with a Start button.
-**Code:** [teacher-dashboard.js:1718](assets/teacher-dashboard.js:1718) (`assessView`), [:1921](assets/teacher-dashboard.js:1921) (`assessCompleted`)
-
-**Decision needed**
-- [ ] Which views stay as the default, and which move behind a "More" option (or are dropped)?
-- [ ] Note: the single-window per-informant view and the CSV download were asked for in the earlier feedback round, so keep them.
-
-**Done when**
-- [ ] Opening Assess shows one list: pending children first, each with Start / Continue.
-- [ ] Other views are one tap away at most, not the first thing she sees.
-
----
-
-### T9 — Phone nav label, tappable garden, reachable section garden ⬜
-**Why:**
-- On a phone, the first tab is labelled **"My"** ([teacher-dashboard.js:135](assets/teacher-dashboard.js:135)).
-- The flowers on the landing look like her children, but tapping them does nothing (the scene is `aria-hidden`, [:604](assets/teacher-dashboard.js:604)).
-- The beds view and section garden are only reached after adding a class ([:2841](assets/teacher-dashboard.js:2841)).
-
-**Done when**
-- [ ] The phone tab reads "Garden" or "Home".
-- [ ] Tapping the landing garden opens the section garden for that class (or the scene clearly reads as decoration).
-- [ ] The section garden is reachable from the landing in one tap.
-
----
-
-### T10 — Class Skill Overview: make clear the boxes count skills, not children ⬜
-**Why:** "4 · Needs attention" reads as four children. The explanation paragraph is a sign the layout itself isn't clear.
-**Code:** [teacher-dashboard.js:2290](assets/teacher-dashboard.js:2290) (`classOverviewCard`)
-
-**Done when**
-- [ ] Box text says "4 **skills**", or similar.
-- [ ] The long explanation paragraph can be shortened or removed.
-
----
-
-### T11 — Explain what the % numbers mean ⏸️
-**Why:** "If a parent asks me what 58% means, I don't know." This applies to Growth over time, student skill cards and Perspectives.
-
-**Decision needed**
-- [ ] A one-line plain-English definition of the score and where it comes from (which informants, and how they're combined).
-
-**Done when**
-- [ ] A small ⓘ next to each score area shows that line.
-- [ ] The wording matches the parent PDF's explanation.
-
----
-
-### T12 — Plain copy fixes ⬜
-| Now | Change to | Code |
+**What changed (teacher dashboard)**
+| Where | Before | After |
 |---|---|---|
-| "Completed rate" | "Done so far" | [teacher-dashboard.js:2041](assets/teacher-dashboard.js:2041) |
-| Tab "Tracker" opens a screen with a different title | Use the same name for the tab and the screen | [:1724](assets/teacher-dashboard.js:1724) |
+| Window list + subtitles ([dashboard-data.js:22](assets/dashboard-data.js:22), [school-data.js:52](assets/school-data.js:52)) | Mid-year · Week 8 / End of year · Week 14 | Midline · Mid year / Endline · End of year |
+| Landing subtitle | "Your Kindergarten A garden · week 14" | "Your Kindergarten A garden" |
+| Landing "resting" caption | "next update at Mid-year" | "next update at Midline (Jun 18)" |
+| Class garden subtitle | "…garden, week 14." | "…garden." |
+| To-do vine | "18-week check-in", "Mid-year report", "36-week check-in", "End-of-year report" | "Check-in before Midline" (due before Jun 18), "Midline observations", "Check-in before Endline" (due before Sep 24), "Endline observations" |
+| Student overview chart | Pre · Mid · Post | Baseline · Midline · Endline |
+| Student skill cards (small bars) | Pre / Mid / Post | Base / Mid / End (short forms of the same names) |
+| Student History rows | Post assessment / Mid assessment / Baseline (Pre) | Endline / Midline / Baseline |
+| Tracker list headers, Insights growth chart + "Every skill" cards | Mid-year / End of year | Midline / Endline |
+| CSV export columns | `(PRE)` / `(MID)` / `(POST)` | `(Baseline)` / `(Midline)` / `(Endline)` |
+
+**For Mayur (real DB)**
+- [ ] Window names and dates come from the school's deployment (one source for every dashboard).
+- [x] ~~Give the two check-ins real dates~~ (check-ins removed in T14).
+- [ ] If anything imports the teacher CSV, update it for the new column names.
 
 **Done when**
-- [ ] Both changes are made.
+- [x] One name per window on every teacher screen.
+- [x] No week numbers left to disagree; dates come from the window list.
 
 ---
 
-### T13 — Faster observations: rate one skill across the class ⏸️
-**Why:** 12 questions × 32 children ≈ 384 taps per window, about 40 minutes uninterrupted. Teachers notice things skill by skill across the class ("who waited their turn today?").
+### T7 — One name for the skill groups ✅
+**Why:** The second skill group was "Cognitive" on the rating screen and student page, "Executive Function" in Insights and school admin, "Cognitive Skills" on the parent PDF and "Cognitive / EF" in platform admin.
 
-**Decision needed (research)**
-- [ ] Is it valid for the Behavioral Report instrument to be filled skill-by-skill across children instead of child-by-child? If not, close this task.
+**Decision (16 Oct 2026):** **Cognitive** on every dashboard. Section headings that read "Cognitive Skills" (parent PDF, platform admin student report) stay, since they sit beside "Social-Emotional Learning".
 
-**Done when** (if approved)
-- [ ] An optional "By skill" mode: one skill, every child's name, tap a rating for each.
-- [ ] It saves into the same per-child record as the current flow.
+**What changed**
+| Where | Before | After |
+|---|---|---|
+| Teacher Insights: growth chart filter + line label, "Every skill" toggle + card tags | Executive Function | Cognitive |
+| School admin skill bucket ([admin.js](assets/admin.js)) | Executive Function | Cognitive |
+| Platform admin region bars + legend ([tilli-admin.js](assets/tilli-admin.js)) | Cognitive / EF | Cognitive |
+
+**Not changed:** the platform admin's teacher assessment list still names an instrument **"EF Observation"** ([tilli-admin.js:1309](assets/tilli-admin.js:1309)). That's the name of the assessment itself, not a group label. Rename it only if the instrument's real name changes.
+
+**Done when**
+- [x] The same group name is used on every screen and on the PDF.
+
+---
+
+### T8 — Simplify Assess → one "still to do" list ✅
+**Why:** There were about six ways to answer "who haven't I done?": the To-do vine, Tracker → By class / By student / List, "See all windows together", and "Your classes at a glance", all nested three levels deep. Two of them were also misleading: the List "Pending" filter counted windows that hadn't opened yet, and the all-windows matrix showed unopened windows as "Not started" while the window cards showed them as locked.
+
+**Decision (16 Oct 2026)**
+- Assess opens on the **journey first**. Tapping the open window's step opens a **who's-still-to-do screen** (not an inline list).
+- **No window open:** one calm line, e.g. "🌿 Nothing to observe right now. Midline opens Jun 18."
+- **Tracker = one screen:** window cards, the per-informant table (Teacher / Parent / Student), History and Download CSV. "Your classes at a glance" only shows with 2+ sections. **Removed:** the By student timeline (the student profile covers it), the List view and the all-windows matrix.
+
+**What changed**
+| Piece | Code |
+|---|---|
+| **Who's still to do** (`pendingView`): tapping the active step ("Continue baseline observations →") opens its own To-do screen with started children first ("Started · 5 of 12" → **Continue**), then "Not started" → **Start**, a "Start with [next] →" shortcut, a search box when there are more than 8 children, and "Done (n)" folded. "← Back to the journey" returns. *(First version put the list inline under the step; changed so a class of 30 doesn't stretch the journey.)* | `pendingView` |
+| Tracker as one screen (`assessCompleted`), "classes at a glance" only for 2+ sections | [teacher-dashboard.js:2027](assets/teacher-dashboard.js:2027) |
+| **Follow-up (16 Oct):** tapping a child's row opens that child's **all-windows timeline** (Teacher / Parent / Student per window, with a "← Back to tracker" link). Windows that haven't opened show "🔒 Not open yet", not "Not started". "Start / Continue [name]'s observation" only appears on the open window | `trackerStudentView` |
+| **Real completion dates:** "Done · 16 Oct" in the timeline and a small date under each ✓ in the table. They come from the saved teacher observation or `TilliAPI.completedAt()`. The old view showed the *window's scheduled date* ("Done · Apr 2") as if it were the completion date; that's gone. No recorded date → just "Done" | `doneDate`, [tilli-api.js](assets/tilli-api.js) `completedAt` |
+| Removed `logsAllWindows`, `logsList` and the By student tab + its search/picker (the timeline itself lives on as the row drill-in) | — |
+
+**For Mayur (real DB)**
+- [ ] Store a completion timestamp for every informant part (teacher, parent, student) and return it with the assessment log, so every "Done" can show its real date.
+
+**Done when**
+- [x] One tap from the open window's step shows pending children first, each with Start / Continue.
+- [x] Other views are one tap away at most (Tracker tab), with no inner tabs.
+
+---
+
+### T9 — Phone nav label, tappable garden, reachable section garden ✅
+**Why:** On a phone the first tab read **"My"**. The landing flowers looked like her children but did nothing when tapped. The class garden (one plant per child) and the all-classes view could only be reached by accident.
+
+**What changed**
+| Where | Change | Code |
+|---|---|---|
+| Phone bottom bar | "My" → **"Garden"** | [teacher-dashboard.js:135](assets/teacher-dashboard.js:135) |
+| Landing garden scene | The whole scene is now a button that opens the class garden, plus a **"See each child's plant →"** link under the caption | [teacher-dashboard.js:761](assets/teacher-dashboard.js:761) |
+| Class garden | "← My garden" used to jump to the all-classes view; it now goes back to the landing ("← My Garden"). **"All my classes →"** appears when she has 2+ sections | `sectionGardenView` |
+| All-classes view | New "← My Garden" link back to the landing (it had no way back except the nav) | `bedsView` |
+
+**Done when**
+- [x] The phone tab reads "Garden".
+- [x] Tapping the landing garden opens the class garden for that class.
+- [x] The class garden is reachable from the landing in one tap.
+
+---
+
+### T10 — Class Skill Overview: make clear the boxes count skills, not children ✅
+**Why:** "4 · Needs attention" read as four children. The long colour explanation showed the boxes didn't explain themselves.
+
+**What changed** (`classOverviewCard` in [teacher-dashboard.js](assets/teacher-dashboard.js))
+| Before | After |
+|---|---|
+| **4** / **Sprouting** / *skills where most students are here* (small grey) | **4 skills** / **Mostly Sprouting** |
+| "For every skill, we grouped your students into Sprouting, Growing, and Blooming. The colour is whichever group is largest, so green means most of your class is at Blooming, not all of them." | "Each skill is coloured by where most of your class sits." |
+
+**Done when**
+- [x] Box text says "4 skills".
+- [x] The long explanation paragraph is shortened.
+
+---
+
+### T11 — Explain what the % numbers mean 🟡
+> Built in the sample with provisional wording. **Waiting on Masoomi / Kavi** to confirm whether we show percentages at all.
+
+**Why:** "If a parent asks me what 58% means, I don't know."
+
+**Decision (16 Oct 2026, provisional)**
+- Score ⓘ: *"A 0–100 score for this skill, combining your observation, the parent's survey and the child's own tasks. Under 34 = Sprouting · 34–66 = Growing · 67+ = Blooming."*
+- Perspectives ⓘ: *"Each view's own 0–100 score for the skill: 👩‍🏫 your observation, 🏠 the parent's survey, 🧒 the child's own tasks. The skill's level combines all three."*
+- The wording deliberately doesn't say how the three views are weighted.
+
+**What changed** — an ⓘ button that opens on **tap** (works on phones), in 5 places:
+| Where | Text |
+|---|---|
+| Insights → Class Skill Overview heading | Score |
+| Insights → Growth over time heading | Score |
+| Insights → Perspectives → "Every skill, three viewpoints" | Perspectives |
+| Child page → Skills tab ("How skills are scored") | Score |
+| Child page → Perspectives tab ("Three perspectives") | Perspectives |
+
+Text lives in `SCORE_INFO` / `PERSP_INFO` in [teacher-dashboard.js](assets/teacher-dashboard.js), so it's a one-line change once confirmed.
+
+**Still open**
+- [ ] **Masoomi / Kavi:** do we show percentages to teachers at all, or only the level (Sprouting / Growing / Blooming)?
+- [ ] Confirm how the three views are combined, so the ⓘ (and the parent report) can say it precisely.
+- [ ] If percentages stay, make sure the parent report's wording matches.
+
+**Done when**
+- [x] A small ⓘ next to each score area shows the explanation.
+- [ ] The wording is confirmed and matches the parent PDF.
+
+---
+
+### T12 — Plain copy fixes ✅
+| Before | After | Code |
+|---|---|---|
+| Table title "Completed rate · Endline — End of year" | "Done so far · Endline — End of year" | `logsSingleWindow` |
+| Assess tab "Tracker" (opened a screen titled "Completed rate") | Tab **"Done so far"**, paired with "To-do", so the tab and the screen use the same words | `assessView` |
+
+**Done when**
+- [x] Both changes are made.
+
+---
+
+### T13 — Observation in pages (21 questions, 6 per page) ✅
+**Why:** One question per screen meant hundreds of taps per window. The questions can't be cut down yet (21 per child, set by the assessment template), so the change is in *how* they're shown.
+
+**Decision (16 Oct 2026)**
+- **21 questions per child**, shown **6 per page** (pages of 6 · 6 · 6 · 3).
+- The 21 in the sample are **demo questions**. The real ones will come from the Teacher assessment template on the Tilli internal platform admin.
+- "Rate one skill across the whole class": **not now**.
+
+**What changed** ([teacher-dashboard.js:1757](assets/teacher-dashboard.js:1757))
+- `OBS_QUESTIONS`: 21 demo questions, each mapped to one of the 12 skills (so the skill name and Social-Emotional / Cognitive group still show). Every read goes through `obsQuestions()`, the single swap point for the template.
+- Each page shows 6 question cards, each with the 4-point Seed → Blooming rating. A card turns green when answered.
+- **"Next page →"** stays disabled until all questions on the page are answered ("2 left on this page"). The last page says "Finish → next child". "← Back" returns to the previous page. Each page change scrolls to the top of the card.
+- One progress dot per question (answered = green, this page = amber), plus "Page 2 of 4 · 9 of 21 answered".
+- Saving and resuming (T2) still works per tap; a resumed child opens on the page with their first unanswered question. The still-to-do list shows "Started · 9 of 21".
+- **`OBS_PAGE_SIZE = 6`** controls the questions per page.
+
+**For Mayur (real DB)**
+- [ ] `obsQuestions()` should return the Teacher template's questions for the open deployment (id, text, skill key), in order.
+- [ ] Ratings are now saved **per question id** (`{ q01: 3, … }`), not per skill. The skill score has to be computed from the questions mapped to each skill.
+
+**Done when**
+- [x] 21 questions per child, 6 per page, can't move on until the page is answered.
+- [x] Resume opens on the right page.
 
 ---
 
 ## P2 — Polish
 
-### T14 — Review the extra surveys and check-ins on the To-do vine ⏸️
-**Why:** The pre-training survey, post-training survey, 18-week check-in and 36-week check-in on top of three observation windows read as extra admin.
-**Code:** [teacher-dashboard.js:1750](assets/teacher-dashboard.js:1750)
+### T14 — Review the extra surveys and check-ins on the To-do vine ✅
+**Why:** The pre-training survey, post-training survey and two check-ins on top of three observation windows read as extra admin. Also, "Start check-in →" actually opened a child observation, because no check-in form existed.
 
-**Decision needed**
-- [ ] Which of these are required, and which are optional? Mark the optional ones visibly.
+**Decision (16 Oct 2026)**
+- **Both check-ins removed** ("Check-in before Midline" / "Check-in before Endline") until a real check-in exists.
+- **Both training surveys stay required** (pre = first-time reflection, post = retake that updates the Teaching Mirror).
 
----
-
-### T15 — Perspectives: demote the radar chart, spell out T/P/S ⬜
-**Why:** The spider chart is hard to read, especially on a phone. "T 62 · P 40 · S 71" is cryptic.
-**Code:** [teacher-dashboard.js:1543](assets/teacher-dashboard.js:1543) (`stuPerspectives`), [:1676](assets/teacher-dashboard.js:1676) (`radarSVG`)
-
-**Done when**
-- [ ] The list of skills with Teacher / Parent / Student values is the main view.
-- [ ] The radar is secondary or removed.
-- [ ] Labels are written out, or shown as the 👩‍🏫 🏠 🧒 icons used elsewhere.
-
----
-
-### T16 — Tap instead of hover for tooltips (phone) ⬜
-**Why:** Teachers mostly use phones, so hover tooltips never appear.
-**Code:** beds tooltip [teacher-dashboard.js:858](assets/teacher-dashboard.js:858), section garden tooltip [:1022](assets/teacher-dashboard.js:1022)
+**What changed** (`obsVine` in [teacher-dashboard.js](assets/teacher-dashboard.js))
+- The journey is now 5 steps: Pre-training survey → Baseline observations → Post-training survey → Midline observations → Endline observations.
+- Between windows, the current step is the post-training survey. Once it's done nothing is active, and the "🌿 Nothing to observe right now. Midline opens Jun 18." line shows.
+- Small wording cleanups so "check-in" no longer means two things: Endline hero "The final check-in…" → "The final window…", and the tracker's child view "3 of 9 check-ins done" → "3 of 9 parts done".
 
 **Done when**
-- [ ] The same information is reachable by tap on touch devices.
+- [x] Every step on the journey is required and leads somewhere real.
 
 ---
 
-### T17 — Preview a parent report before downloading ⬜
-**Code:** [teacher-dashboard.js:1122](assets/teacher-dashboard.js:1122) (`selectBar`), [:1303](assets/teacher-dashboard.js:1303) (`reportHTML`)
+### T15 — Perspectives: demote the radar chart, spell out T/P/S ✅
+**Why:** The spider chart was hard to read, especially on a phone, and "T 62 · P 40 · S 71" was cryptic.
+
+**What changed** (child page → Perspectives tab, `stuPerspectives` in [teacher-dashboard.js](assets/teacher-dashboard.js))
+- **The list is the main view:** all 12 skills (was the top 6), biggest difference first, each showing "👩‍🏫 Teacher **62** · 🏠 Parent **40** · 🧒 Student **71**", with the "Worth a conversation" badge and Ask Tilli button kept.
+- **The radar chart is folded** under "See it as a chart" (closed by default, remembers if opened). It's kept, not deleted.
+- Rows wrap on a phone, so the badge and button drop under the numbers instead of squeezing them.
+- Insights → Perspectives already wrote out Teacher / Parent / Student, so no change there.
 
 **Done when**
-- [ ] Tapping one selected child shows the report on screen before the PDFs are made.
+- [x] The list with Teacher / Parent / Student values is the main view.
+- [x] The radar is secondary.
+- [x] Labels are written out, with the 👩‍🏫 🏠 🧒 icons.
 
 ---
 
-### T18 — Show which parents haven't done their part, plus a reminder message to copy ⏸️
+### T16 — Tap instead of hover for tooltips (phone) ✅
+**Why:** Teachers mostly use phones, so hover-only tooltips never appeared.
+
+**Decision (16 Oct 2026):** hover stays on desktop; on touch devices an **ⓘ** opens the same tooltip by tap. Detection is by device (`@media (hover: none)`), not screen width, so a touchscreen laptop with a mouse still gets hover.
+
+**What changed** ([teacher-dashboard.js](assets/teacher-dashboard.js))
+| Where | Phone behaviour |
+|---|---|
+| Class garden: each child's plant | A small ⓘ above the plant opens the name / level / skill-count card. Tapping the plant itself still opens the child. One card open at a time; tapping anywhere else closes it. |
+| Insights → Growth over time | A row of chips under the chart, "ⓘ Baseline · ⓘ Midline · ⓘ Endline", each opens that window's readout (tap again to close). The Table view toggle still works too. |
+
+**Left as is (the tap already shows the same information)**
+- All-classes garden: tapping a bush opens the class pop-up, which lists every child's "Good at / Next to practise".
+- 🕘 History buttons: tapping opens the history, which shows the last update.
+
+**Done when**
+- [x] The same information is reachable by tap on touch devices.
+
+---
+
+### T17 — Preview a parent report before downloading ✅
+**What changed** (Students → ☑ Parent reports → select children)
+- New **👁 Preview** button in the selection bar opens the selected children's reports on screen, one at a time with **‹ Previous / Next ›**, and **⬇ Download PDFs** from inside the preview.
+- The preview uses the same `reportHTML()` as the PDF, so the content matches. The A4 page is scaled down to fit the window (`fitReportPreview`), so it reads on a phone too.
+- Page breaks only exist in the PDF, so the preview shows the report as one continuous page.
+
+**Done when**
+- [x] The report can be seen on screen before the PDFs are made.
+
+---
+
+### T18 — Show which parents haven't done their part, plus a reminder message to copy ✅
 **Why:** "What I actually need is to know which parents haven't filled theirs so I can message them on the class WhatsApp group."
 
-**Decision needed**
-- [ ] Is the teacher allowed to see parent completion per child? (The tracker already shows it.)
-- [ ] Is a copyable reminder text OK, and who writes it?
+**What changed** (Assess → Done so far, above the table, for the selected window)
+- **"🏠 N parents still to finish · Midline closes Jun 18"**, or "Every parent has finished 🌸".
+- **📋 Copy reminder for the class group**: copies a message with **no children's names**, safe for a group chat:
+  > *Hello parents 🌱 A gentle reminder: the Tilli Midline parent survey for Kindergarten A closes on Jun 18. It helps us see how your child is growing at home. If you've already finished it, thank you! — [teacher name]*
+- **"Who's still to finish (N)"** fold: each child, their parent's progress ("1 of 2 parts") and **Copy message** for a one-to-one DM:
+  > *Hello! A gentle reminder that Anaya's Tilli Midline parent survey closes on Jun 18. It helps us see how Anaya is growing at home. Thank you! — [teacher name]*
+- "Copied ✓" confirms on the button.
+
+**Still open**
+- [ ] Product to review the two reminder texts (drafted, not yet approved).
+- [ ] Once parents have a real link or app to open, add it to both messages.
 
 **Done when**
-- [ ] A filtered list of children whose parent part is pending.
-- [ ] A "Copy reminder" button with ready-to-paste text.
+- [x] A list of children whose parent part is pending.
+- [x] A "Copy reminder" button with ready-to-paste text.
 
 ---
 
-### T19 — Shorter first-time setup ⏸️
-**Why:** There are four demographic steps (all required, including age and gender), a reflection, then adding students, all before the teacher sees anything.
-**Note:** The demographic step and the reflection were requested in the previous feedback round. This task is only about trimming or ordering them, not removing them.
-**Code:** [teacher.js:412](assets/teacher.js:412) (`demoView`)
+### T19 — Shorter first-time setup ✅ (decided: no change)
+**Why it was raised:** Four demographic steps (all required), a reflection, then adding students, all before the teacher sees anything.
 
-**Decision needed**
-- [ ] Which fields can be optional or asked later (e.g. from Profile)?
+**Decision (16 Oct 2026):** **Nothing can be skipped or done later.** Every field and step in the first-time setup stays required.
+
+**Checked in the code ([teacher.js](assets/teacher.js)):** this is already how it works, so no change was needed.
+- Each demographic step's **Next** stays disabled until every field is filled (`demoValid`).
+- Each reflection question must be answered before **Next** (`selfAnswered`), including the written ones.
+- "Enter my garden" stays disabled until the student list is valid.
+
+**Note:** The *post-training* reflection retake (not the first-time setup) has a **"Not now — back to my dashboard"** button. T14 made that survey required, so decide whether "Not now" should stay there.
 
 ---
 
@@ -370,4 +487,21 @@ Record answers here as they're made, so Mayur has one place to look.
 |---|---|---|---|
 | 16 Oct 2026 | T1 | Levels = Sprouting / Growing / Blooming everywhere (all dashboards + parent PDF). Rating stars = Seed / Sprouting / Growing / Blooming (Seed only there). No data = "Not assessed yet". One set of cut-offs: 34 / 67. | Product |
 | 16 Oct 2026 | T2 | Save each rating as a draft on tap; resume at the first unanswered question; Continue prefers the interrupted child; started = "In progress". | Product |
+| 16 Oct 2026 | T3, T4 | Parked: will be done later. | Product |
+| 16 Oct 2026 | T5 | Roster line "Sprouting · [skill] next"; hover "Next to practise"; heading "N children could use a little extra"; parent email stays on the student header. | Product |
+| 16 Oct 2026 | T6 | Windows = Baseline / Midline / Endline everywhere. Dates only, no week numbers. CSV columns use the new names. | Product |
+| 16 Oct 2026 | T7 | Skill group = "Cognitive" on every dashboard (headings may say "Cognitive Skills"). | Product |
+| 16 Oct 2026 | T8 | Assess = journey first + still-to-do list under the open window's step; calm "nothing due" note between windows. Tracker = window cards + per-informant table + CSV (+ classes at a glance for 2+ sections); By student, List and all-windows matrix removed. | Product |
+| 16 Oct 2026 | T8 follow-up | Tracker row → child's all-windows timeline (back to tracker). Show real completion dates (timeline + under each ✓ in the table); never the window's scheduled date. | Product |
+| 16 Oct 2026 | T8 follow-up | Pending children move off the journey into their own To-do screen, opened from "Continue … observations" (scales to 30+ children). | Product |
+| 16 Oct 2026 | T9 | Phone tab "Garden"; landing garden scene + link open the class garden; class garden back → landing, "All my classes →" for 2+ sections. | Product |
+| 16 Oct 2026 | T10 | Overview boxes read "N skills · Mostly [level]"; explanation cut to one line. | Product |
+| 16 Oct 2026 | T11 | Provisional ⓘ score explanations in 5 places. Masoomi / Kavi to confirm whether percentages are shown at all. | Product |
+| 16 Oct 2026 | T12 | "Completed rate" → "Done so far"; Assess tabs = "To-do" / "Done so far". | Product |
+| 16 Oct 2026 | T13 | Keep 21 questions per child (demo set for now; real ones from the platform-admin Teacher template). Show 6 per page; must answer the page to go on. "Rate one skill across the class" not now. | Product |
+| 16 Oct 2026 | T14 | Check-ins removed from the journey until a real check-in exists; pre- and post-training surveys stay required. | Product |
+| 16 Oct 2026 | T15 | Child Perspectives: full list first with Teacher / Parent / Student written out; radar folded under "See it as a chart". | Product |
+| 16 Oct 2026 | T16 | Hover on desktop; ⓘ to tap on touch devices (class-garden plants, growth chart). | Product |
+| 16 Oct 2026 | T17, T18 | Report preview before download. Done so far shows parents still to finish, with a no-names group reminder + per-child DM message (texts drafted, to review). | Product |
+| 16 Oct 2026 | T19 | First-time setup stays fully required: nothing skipped or deferred (already enforced; no change). | Product |
 | | | | |

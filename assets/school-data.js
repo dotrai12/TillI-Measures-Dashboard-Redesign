@@ -51,8 +51,8 @@
 
   const WINDOWS = [
     { key: 'baseline', label: 'Baseline', sub: 'Start of year', date: 'Apr 2' },
-    { key: 'mid',      label: 'Mid-year', sub: 'Week 8',        date: 'Jun 18' },
-    { key: 'post',     label: 'End of year', sub: 'Week 14',    date: 'Sep 24' },
+    { key: 'mid',      label: 'Midline',  sub: 'Mid year',      date: 'Jun 18' },
+    { key: 'post',     label: 'Endline',  sub: 'End of year',   date: 'Sep 24' },
   ];
 
   const PERSPECTIVES = [

@@ -1016,6 +1016,13 @@
     var db = getDB();
     return !!(db.completions[schoolId] && db.completions[schoolId][compKey(phase, audience, studentId, assessId)]);
   }
+  // When a student's lane (e.g. Midline|Parent) was last completed: the latest
+  // timestamp across that lane's items, or null if nothing is recorded.
+  function completedAt(schoolId, phase, audience, studentId){
+    var db = getDB(), all = db.completions[schoolId] || {}, pre = phase + '|' + audience + '|' + up(studentId) + '|', at = null;
+    Object.keys(all).forEach(function(k){ if (k.indexOf(pre) === 0 && all[k].at && (!at || all[k].at > at)) at = all[k].at; });
+    return at;
+  }
   // Completion for a lane, over a given set of student ids (the scope that must
   // respond). expected = students × assessments in the lane.
   function completionStats(schoolId, phase, audience, studentIds){
@@ -1468,6 +1475,7 @@
     deploymentsFor: deploymentsFor,
     markComplete: markComplete,
     isComplete: isComplete,
+    completedAt: completedAt,
     completionStats: completionStats,
     // NEW — prototype SEL outcomes (local, auto-generated) + point lifecycle
     outcomesForSchool: outcomesForSchool,

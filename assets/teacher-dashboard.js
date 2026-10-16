@@ -132,7 +132,7 @@
   // Observations + Completion are now one destination ("Assess"); Analysis is
   // renamed to Insights everywhere.
   const NAV = [
-    { key: 'garden', label: 'My Garden', short: 'My' },
+    { key: 'garden', label: 'My Garden', short: 'Garden' },
     { key: 'students', label: 'Students', short: 'Students' },
     { key: 'ask', label: 'Ask Tilli', short: 'Ask Tilli', center: true },
     { key: 'assess', label: 'Assess', short: 'Assess' },
@@ -155,18 +155,18 @@
   // common state and the one that proves the "calm doorway" concept.
   const LANDING_STATES = {
     baseline: {
-      windowOpen: true, winKey: 'baseline', maturity: 'seedling', week: 'week 1',
+      windowOpen: true, winKey: 'baseline', maturity: 'seedling',
       caption: 'Freshly planted — this is where the year begins.',
       heroTitle: 'Baseline is open',
       heroBlurb: 'Set the starting point for all {N} {kids} — the garden they grow from.',
       deadline: 'Apr 2',
     },
     between: {
-      windowOpen: false, maturity: 'growing', week: 'week 14',
+      windowOpen: false, maturity: 'growing',
       caption: 'Your garden is resting — scores next update at {next}.',
     },
     midline: {
-      windowOpen: true, winKey: 'mid', maturity: 'growing2', week: 'week 15',
+      windowOpen: true, winKey: 'mid', maturity: 'growing2',
       caption: 'Growing season — your garden has moved since baseline.',
       celebrate: '{n} of your plants have grown since baseline.',
       heroTitle: 'Midline is open',
@@ -174,11 +174,11 @@
       deadline: 'Jun 18',
     },
     endline: {
-      windowOpen: true, winKey: 'post', maturity: 'bloom', week: 'week 30',
+      windowOpen: true, winKey: 'post', maturity: 'bloom',
       caption: "Full bloom — the end of this year's journey.",
       celebrate: '{n} plants blossomed across the whole year.',
       heroTitle: 'Endline is open',
-      heroBlurb: 'The final check-in — capture how far every child has travelled.',
+      heroBlurb: 'The final window — capture how far every child has travelled.',
       deadline: 'Sep 24',
     },
   };
@@ -206,6 +206,7 @@
   let suppressPush = false; // true while restoring from popstate — don't re-push
   let popBound = false;
   let floatBound = false;   // Ask-chat ↔ floating-bubble listeners bound (once)
+  let tipBound = false;     // tap-outside closes an open ⓘ tooltip (phone) — bound once
   // Screen-transition gating: only a genuine destination change (not a modal
   // open, sub-tab, or in-place edit) plays the fade+zoom. See render().
   let lastScreenKey = null;
@@ -235,7 +236,7 @@
   const weakOf = (stu) => [...stu.skills].sort((a, b) => a.pct - b.pct)[0].name;
   function bandLine(stu) {
     if (stu.state === 'waiting') return 'Not assessed yet';
-    if (stu.state === 'tending') return 'Sprouting — start by focusing on ' + stu.lowestSkill.name;
+    if (stu.state === 'tending') return 'Sprouting · ' + stu.lowestSkill.name + ' next';
     if (stu.state === 'growing') return 'Growing';
     return 'Blooming';
   }
@@ -344,9 +345,12 @@
       // data to show; the demo dataset opens mid-year ('between'). Dev GUI switch overrides.
       windowState: ctx.data.fresh ? 'baseline' : 'between',
       rosterSearch: '', rosterSort: 'name', studentTab: 'overview',
-      assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
-      logsView: 'class', logsWin: null,   // By class: picked window key | 'all' | null (= default window)
-      logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
+      assessTab: 'todo', enter: { studentId: null, page: 0, ratings: {}, done: false },
+      logsWin: null,   // Tracker: picked window key | null (= default window)
+      trackerStu: null,   // Tracker: child opened from a row (their all-windows timeline) | null
+      todoView: null, todoSearch: '',   // Assess → To-do: 'pending' = who's still to observe (opened from the active step)
+      todoDoneOpen: false,   // …and its "Done (n)" fold
+      perspChartOpen: false,   // Child → Perspectives: "See it as a chart" fold
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       ovBand: null, ovSkill: null,
       growthFilter: 'overview', growthTable: false,   // Insights → Growth over time line chart   // Insights → Class Skill Overview: box filter + expanded skill
@@ -354,6 +358,7 @@
       histOpen: false, histKind: '',   // Students → class change-history modal + its kind filter
       vw: window.innerWidth,
       select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
+      reportPreview: null,   // index into the selected children while the report preview is open
       profileEdit: false, profileDraft: null,
       // Ask Tilli: one live conversation shared by the side panel (floating
       // bubble / in-card prompts) and the full screen (nav). `chats` = history.
@@ -510,6 +515,7 @@
         ${S.ask.open ? askPanel() : ''}
         ${S.classModal ? classModalView() : ''}
         ${S.histOpen ? histModalView() : ''}
+        ${reportPreviewView()}
         ${addModal()}
         ${stateSwitcherGUI()}
       </div>`;
@@ -726,7 +732,8 @@
     const { sec, N } = ld;
     const state = S.windowState;
     const st = LANDING_STATES[state] || LANDING_STATES.between;
-    const nextWindow = (S.data.windows.find((w) => w.key === 'mid') || {}).label || 'Mid-year';
+    const midW = S.data.windows.find((w) => w.key === 'mid') || {};
+    const nextWindow = (midW.label || 'Midline') + (midW.date ? ' (' + midW.date + ')' : '');
 
     // Slot 4 — celebration only when the garden genuinely moved (never fabricated).
     const celebration = (st.celebrate && ld.grown > 0)
@@ -750,13 +757,14 @@
       <div class="mg-greet">
         <div>
           <h1 class="mg-hello">${greetWord()}, ${esc(firstName())} 🌱</h1>
-          <p class="mg-season">Your <b>${esc(sec.name)}</b> garden · ${esc(st.week)}</p>
+          <p class="mg-season">Your <b>${esc(sec.name)}</b> garden</p>
         </div>
         <button class="dash-avatarbtn focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
       </div>
 
-      ${gardenScene(st.maturity)}
+      <button class="mg-scene-btn focus" data-garden-level="section" aria-label="Open your ${esc(sec.name)} garden — one plant per child" title="See each child's plant">${gardenScene(st.maturity)}</button>
       <p class="mg-caption">${esc(fill(st.caption, { next: nextWindow }))}</p>
+      <div class="mg-garden-link"><button class="btn-link focus" data-garden-level="section">See each child&rsquo;s plant →</button></div>
       ${celebration}
       ${bandBlock}
 
@@ -896,7 +904,7 @@
             <div class="nm">${esc(pl.name)}</div>
             <div class="ui-eyebrow bl">${esc(pl.bandLabel)}</div>
             <div class="rw"><b class="td-good">Good at</b> <span>${esc(pl.goodSkill)}</span></div>
-            <div class="rw"><b class="td-help">Needs help</b> <span>${esc(pl.helpSkill)}</span></div>
+            <div class="rw"><b class="td-help">Next to practise</b> <span>${esc(pl.helpSkill)}</span></div>
           </div>
         </div>`).join('');
       return `<button class="bed-wrap" data-open-class="${bd.id}">
@@ -920,6 +928,7 @@
     ].map((k) => `<span>${bloomSVG(k.state, ART.keyBloom, k.size, 5)}<span class="lg-t"><b>${k.title}</b> · ${k.desc}</span></span>`).join('');
 
     return `<div class="dash-wrap garden-beds">
+      <button class="btn-link mb-3 focus" data-garden-level="landing">← My Garden</button>
       <div class="garden-head">
         <div>
           <h1 class="dash-h1" style="color:var(--green-700)">My garden</h1>
@@ -974,7 +983,7 @@
       return `<button class="cm-row" data-open-student="${esc(stu.id)}">
         <span class="cm-bloom">${bloomSVG(st, color, size, (i * 11) % 97)}</span>
         <span class="cm-info"><span class="nm">${esc(stu.name)}</span>
-          <span class="sk"><span><b>Good at</b> ${esc(bestOf(stu))}</span><span class="td-help"><b>Needs help</b> ${esc(weakOf(stu))}</span></span></span>
+          <span class="sk"><span><b>Good at</b> ${esc(bestOf(stu))}</span><span class="td-help"><b>Next to practise</b> ${esc(weakOf(stu))}</span></span></span>
         <span class="cm-band">${label}</span>
       </button>`;
     }).join('');
@@ -1054,8 +1063,9 @@
     const plantCol = (isPhone ? 72 : 94) + 'px';
 
     const bed = sorted.map((st, i) => `
-      <div class="pg-cell" style="transform:translateY(${offs[i % offs.length]})">
+      <div class="pg-cell tip-host" style="transform:translateY(${offs[i % offs.length]})">
         <button class="pg-plant" data-open-student="${esc(st.id)}" title="${esc(st.name)}">${flowerArt(st.state, sizeFor(st.state), i)}</button>
+        <button type="button" class="tip-i focus" data-tip-open aria-expanded="false" aria-label="About ${esc(st.name)}">ⓘ</button>
         <div class="ui-tip pg-tip">
           <div class="nm">${esc(st.name)}</div><div class="sl">${esc(bandLine(st))}</div>
           <div class="ch">${chipHTML(st.chips)}</div>
@@ -1094,11 +1104,14 @@
       <button class="btn-soft grow-ask focus" data-ask="class" data-skill="${esc(l.name)}" data-beg="${l.beginner}">Ask Tilli for a class activity</button></div>`).join('');
 
     return `<div class="dash-wrap section-garden">
-      <button class="btn-link mb-3 focus" data-back-beds>← My garden</button>
+      <div class="sg-nav mb-3">
+        <button class="btn-link focus" data-garden-level="landing">← My Garden</button>
+        ${S.data.sections.length > 1 ? '<button class="btn-link focus" data-garden-level="beds">All my classes →</button>' : ''}
+      </div>
       <div class="garden-head" style="margin-bottom:6px">
         <div>
           <h1 class="dash-h1">Good morning, ${esc(firstName())} 🌱</h1>
-          <p class="dash-sub">Your <b style="color:var(--ink-900)">${esc(sec.name)}</b> garden, week 14.</p>
+          <p class="dash-sub">Your <b style="color:var(--ink-900)">${esc(sec.name)}</b> garden.</p>
         </div>
         <div class="blossom-pill">${sunSmall()} ${blossomed} student${blossomed === 1 ? '' : 's'} reached Blooming since baseline</div>
       </div>
@@ -1109,7 +1122,7 @@
       </section>
 
       <section style="margin-top:26px">
-        <h2 class="ui-title mb-3">🌱 ${nTend} student${nTend === 1 ? '' : 's'} at Sprouting — start here</h2>
+        <h2 class="ui-title mb-3">🌱 ${countNoun(nTend, 'child', 'children')} could use a little extra</h2>
         <div class="tend-grid">${tendCards || '<p class="dash-sub">No students need tending right now — lovely. 🌼</p>'}</div>
       </section>
 
@@ -1168,6 +1181,7 @@
       ${sel.err ? `<span class="sel-err">${esc(sel.err)}</span>` : ''}
       <span class="sel-sp"></span>
       <button class="btn btn-ghost focus" data-sel-cancel>Cancel</button>
+      <button class="btn-line focus" data-sel-preview${n && !sel.busy ? '' : ' disabled'} title="See the report on screen before making the PDFs">👁 Preview</button>
       <button class="btn btn-primary sm focus" data-sel-pdf${n && !sel.busy ? '' : ' disabled'}>${sel.busy ? esc(sel.busy) : `⬇ Download ${n === 1 ? 'PDF' : 'PDFs'}${n ? ' (' + n + ')' : ''}`}</button>
     </div>`;
   }
@@ -1237,6 +1251,41 @@
   function reportFileName(stu) {
     return ((stu.first || '') + '-' + (stu.last || '')).replace(/[^A-Za-z0-9-]+/g, '').replace(/^-|-$/g, '') + '-Tilli-report.pdf';
   }
+  // Preview before download: the selected children's reports on screen, one at a
+  // time (‹ / ›), rendered from the same reportHTML() the PDF uses. The A4 page is
+  // scaled down to fit the modal (fitReportPreview) so it reads on a phone too.
+  function selectedReportList() {
+    const all = S.data.sections.flatMap((x) => x.students);
+    return Object.keys(S.select.ids).map((id) => all.find((st) => st.id === id)).filter(Boolean);
+  }
+  function reportPreviewView() {
+    if (S.reportPreview == null) return '';
+    const list = selectedReportList();
+    if (!list.length) { S.reportPreview = null; return ''; }
+    const i = Math.max(0, Math.min(S.reportPreview, list.length - 1)), stu = list[i], n = list.length;
+    return `<div class="ui-scrim cm-backdrop" data-close-preview>
+      <div class="ui-modal-card cm-card rp-card" role="dialog" aria-label="Parent report preview">
+        <div class="cm-head">
+          <div><div class="cm-title">Parent report · ${esc(stu.name)}</div><div class="cm-sub">${n > 1 ? (i + 1) + ' of ' + n + ' · ' : ''}What this child&rsquo;s family will receive</div></div>
+          <button class="btn-icon" data-close-preview aria-label="Close preview">✕</button>
+        </div>
+        <div class="rp-body"><div class="rp-fit"><div class="pr">${reportHTML(stu)}</div></div></div>
+        <div class="cm-foot rp-foot">
+          ${n > 1 ? `<button class="btn btn-ghost focus" data-rp-step="-1"${i === 0 ? ' disabled' : ''}>‹ Previous</button><button class="btn btn-ghost focus" data-rp-step="1"${i === n - 1 ? ' disabled' : ''}>Next ›</button>` : ''}
+          <span class="sel-sp"></span>
+          <button class="btn btn-primary sm focus" data-rp-download>⬇ Download ${n === 1 ? 'PDF' : 'PDFs (' + n + ')'}</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  function fitReportPreview() {
+    const fit = root.querySelector('.rp-fit'), pr = fit && fit.firstElementChild;
+    if (!pr) return;
+    const k = Math.min(1, fit.clientWidth / pr.offsetWidth);
+    pr.style.transform = 'scale(' + k + ')'; pr.style.transformOrigin = 'top left';
+    fit.style.height = Math.ceil(pr.offsetHeight * k) + 'px';
+  }
+
   async function downloadReports() {
     const all = S.data.sections.flatMap((x) => x.students);
     const list = Object.keys(S.select.ids).map((id) => all.find((st) => st.id === id)).filter(Boolean);
@@ -1554,10 +1603,18 @@
       </div>
       <div class="ui-card mt-4">
         <div style="font-weight:800;font-size:var(--fs-md);margin-bottom:2px">Overall growth</div>
-        <div style="font-size:var(--fs-sm);color:var(--ink-300);margin-bottom:14px">Band across Pre · Mid · Post assessment windows</div>
+        <div style="font-size:var(--fs-sm);color:var(--ink-300);margin-bottom:14px">Band across Baseline · Midline · Endline</div>
         ${trendSVG([stu.overallPre, midAvg, stu.overallPct])}
       </div>`;
   }
+
+  // ⓘ next to a score heading. Tap / click toggles a short explanation underneath
+  // (tap, not hover, so it works on phones). Wording is provisional — whether to
+  // show percentages at all is still to be confirmed (Masoomi / Kavi, T11).
+  const SCORE_INFO = 'A 0–100 score for this skill, combining your observation, the parent’s survey and the child’s own tasks. Under 34 = Sprouting · 34–66 = Growing · 67+ = Blooming.';
+  const PERSP_INFO = 'Each view’s own 0–100 score for the skill: 👩‍🏫 your observation, 🏠 the parent’s survey, 🧒 the child’s own tasks. The skill’s level combines all three.';
+  function infoBtn(id) { return `<button type="button" class="info-tip focus" data-info="${id}" aria-expanded="false" aria-controls="${id}" aria-label="What does this score mean?">ⓘ</button>`; }
+  function infoPop(id, text) { return `<div class="info-pop" id="${id}" hidden>${esc(text)}</div>`; }
 
   function stuSkills(stu) {
     const bandName = (v) => (v < 34 ? 'Sprouting' : v < 67 ? 'Growing' : 'Blooming');
@@ -1565,7 +1622,7 @@
       const win = (label, val) => `<div class="scw"><div class="scw-col"><div class="scw-bar" style="background:${TP.levelOf(bandName(val)).soft};height:${Math.max(6, Math.round(val * 0.4))}px"></div></div><div class="scw-l">${label}</div><div class="scw-v">${val}</div></div>`;
       return `<div class="skill-card">
         <div class="sc-head"><div class="nm">${esc(sk.name)}</div><span class="ui-badge lvl-${TP.levelOf(sk.band).n}">${sk.band}</span></div>
-        <div class="sc-bars">${win('Pre', sk.pre)}${win('Mid', sk.mid)}${win('Post', sk.post)}</div>
+        <div class="sc-bars">${win('Base', sk.pre)}${win('Mid', sk.mid)}${win('End', sk.post)}</div>
         <div class="sc-persp"><span>👩‍🏫 ${sk.teacher}%</span><span>🏠 ${sk.parent}%</span><span>🧒 ${sk.student}%</span></div>
         <button class="btn-soft green sc-full focus" data-ask-skill="${esc(sk.name)}" data-band="${esc(sk.band)}">Ask Tilli about ${esc(sk.name.split(' ')[0])}</button>
       </div>`;
@@ -1574,36 +1631,42 @@
       const cards = stu.skills.filter((sk) => sk.group === grp).map(card).join('');
       return `<div style="margin-bottom:22px"><h3 class="sg-title">${title}</h3><div class="skill-grid">${cards}</div></div>`;
     };
-    return group('sel', 'Social-Emotional') + group('cog', 'Cognitive');
+    return `<div class="info-row">How skills are scored ${infoBtn('info-skills')}</div>${infoPop('info-skills', SCORE_INFO)}`
+      + group('sel', 'Social-Emotional') + group('cog', 'Cognitive');
   }
 
+  // Child → Perspectives: the list is the main view — every skill, biggest
+  // difference first, with Teacher / Parent / Student written out. The radar
+  // chart is still there, folded under "See it as a chart" (hard to read on a phone).
   function stuPerspectives(stu) {
-    const rows = [...stu.skills].sort((a, b) => b.gap - a.gap).slice(0, 6).map((sk) => `
+    const rows = [...stu.skills].sort((a, b) => b.gap - a.gap).map((sk) => `
       <div class="gap-row">
-        <div class="gm"><div class="nm">${esc(sk.name)}</div><div class="sub">T ${sk.teacher} · P ${sk.parent} · S ${sk.student}</div></div>
+        <div class="gm"><div class="nm">${esc(sk.name)}</div>
+          <div class="pv3"><span>👩‍🏫 Teacher <b>${sk.teacher}</b></span><span>🏠 Parent <b>${sk.parent}</b></span><span>🧒 Student <b>${sk.student}</b></span></div></div>
         <div class="gap-right">
           ${sk.gap >= 22 ? '<span class="ui-badge gap-badge">Worth a conversation</span>' : ''}
-          <button class="gap-ask focus" data-ask-skill="${esc(sk.name)}" data-band="${esc(sk.band)}" title="Talk this through with Tilli">${chatIcon('var(--green-500)')}</button>
+          <button class="gap-ask focus" data-ask-skill="${esc(sk.name)}" data-band="${esc(sk.band)}" title="Talk this through with Tilli" aria-label="Ask Tilli about ${esc(sk.name)}">${chatIcon('var(--green-500)')}</button>
         </div>
       </div>`).join('');
     return `
       <div class="persp-note">Different views can mean a skill shows up differently at home and at school. Gaps aren't problems — they're conversations worth having. 🌤️</div>
-      <div class="two-col">
-        <div class="ui-card" style="padding:18px;text-align:center">
-          <div style="font-weight:800;font-size:var(--fs-md);margin-bottom:6px">Three perspectives</div>
-          ${radarSVG(stu)}
+      <div class="ui-card persp-list">
+        <div class="persp-list-h">Three perspectives ${infoBtn('info-persp-stu')}<span class="persp-list-s">Biggest differences first</span></div>${infoPop('info-persp-stu', PERSP_INFO)}
+        ${rows}
+      </div>
+      <details class="persp-chart"${S.perspChartOpen ? ' open' : ''}><summary>See it as a chart</summary>
+        <div class="persp-chart-body">${radarSVG(stu)}
           <div class="ui-legend persp-legend"><span><i class="round" style="background:var(--persp-teacher)"></i>Teacher</span><span><i class="round" style="background:var(--persp-parent)"></i>Parent</span><span><i class="round" style="background:var(--persp-student)"></i>Student</span></div>
         </div>
-        <div class="ui-card" style="padding:6px 8px">${rows}</div>
-      </div>`;
+      </details>`;
   }
 
   function stuHistory(stu) {
     const ST = TP.STATUS;
     const rows = [
-      { title: 'Post assessment', meta: 'Teacher observation · week 14', status: 'In progress', dot: ST.in_progress.dot, color: ST.in_progress.fg },
-      { title: 'Mid assessment', meta: 'Teacher · Parent report · complete', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
-      { title: 'Baseline (Pre)', meta: 'Teacher · Parent · Student-direct', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
+      { title: 'Endline', meta: 'Teacher observation', status: 'In progress', dot: ST.in_progress.dot, color: ST.in_progress.fg },
+      { title: 'Midline', meta: 'Teacher · Parent report · complete', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
+      { title: 'Baseline', meta: 'Teacher · Parent · Student-direct', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
       { title: 'Enrolled', meta: 'Added to ' + stu.section, status: '—', dot: STATE_DOT.waiting, color: 'var(--ink-300)' },
     ].map((h) => `<div class="hist-row"><span class="dot" style="background:${h.dot}"></span><div class="hm"><div class="nm">${esc(h.title)}</div><div class="sub">${esc(h.meta)}</div></div><div class="st" style="color:${h.color}">${esc(h.status)}</div></div>`).join('');
     const past = stuPastHistory(stu, true);
@@ -1694,7 +1757,7 @@
   // ---------------- charts ----------------
   function trendSVG(vals, labels) {
     const W = 520, H = 120, pad = 30;
-    labels = labels || ['Pre', 'Mid', 'Post'];
+    labels = labels || ['Baseline', 'Midline', 'Endline'];
     // Keep the end labels inside the viewBox when they are long (e.g. "Kindergarten").
     const padX = Math.max(pad, Math.max(...labels.map((l) => String(l).length)) * 4.2);
     const xs = vals.map((_, i) => padX + (i * (W - padX * 2)) / Math.max(1, vals.length - 1));
@@ -1733,20 +1796,41 @@
   }
 
   // ================= Observations =================
-  const OBS_ANCHORS = {
-    emotion_awareness: 'Notices and names their own feelings in the moment.',
-    emotion_regulation: 'Calms down and recovers after being upset, with support.',
-    empathy: 'Notices when a classmate is upset and responds kindly.',
-    relationship_skills: 'Joins play and takes turns with peers.',
-    metacognition: 'Talks about how they solved a problem or what was tricky.',
-    critical_thinking: "Asks 'why' and gives reasons for their thinking.",
-    working_memory: 'Follows a two-step instruction without reminders.',
-    planning: 'Gathers what they need before starting a task.',
-    cognitive_flexibility: 'Switches between activities without much fuss.',
-    inhibition_distraction: "Stays with a task when there's noise nearby.",
-    inhibition_response: 'Waits for their turn instead of calling out.',
-    attention: 'Stays focused through a short group activity.',
-  };
+  // Teacher observation questions — DEMO set. The real list comes from the Teacher
+  // assessment template on the Tilli internal platform admin (per deployment), so
+  // keep every read going through obsQuestions(). `skill` maps each question to
+  // one of the 12 skills (name + Social-Emotional / Cognitive group).
+  const OBS_QUESTIONS = [
+    { id: 'q01', skill: 'emotion_awareness',      text: 'Notices and names their own feelings in the moment.' },
+    { id: 'q02', skill: 'emotion_awareness',      text: 'Recognises how a classmate is feeling from their face or voice.' },
+    { id: 'q03', skill: 'emotion_regulation',     text: 'Calms down and recovers after being upset, with support.' },
+    { id: 'q04', skill: 'emotion_regulation',     text: 'Copes with small disappointments (losing a game, waiting) without a big outburst.' },
+    { id: 'q05', skill: 'empathy',                text: 'Notices when a classmate is upset and responds kindly.' },
+    { id: 'q06', skill: 'empathy',                text: 'Offers help or comfort without being asked.' },
+    { id: 'q07', skill: 'relationship_skills',    text: 'Joins play and takes turns with peers.' },
+    { id: 'q08', skill: 'relationship_skills',    text: 'Works out small disagreements with words.' },
+    { id: 'q09', skill: 'metacognition',          text: 'Talks about how they solved a problem or what was tricky.' },
+    { id: 'q10', skill: 'metacognition',          text: 'Notices a mistake and tries a different way.' },
+    { id: 'q11', skill: 'critical_thinking',      text: "Asks 'why' and gives reasons for their thinking." },
+    { id: 'q12', skill: 'critical_thinking',      text: 'Compares two choices and picks one with a reason.' },
+    { id: 'q13', skill: 'working_memory',         text: 'Follows a two-step instruction without reminders.' },
+    { id: 'q14', skill: 'working_memory',         text: 'Remembers what they were doing after a short interruption.' },
+    { id: 'q15', skill: 'planning',               text: 'Gathers what they need before starting a task.' },
+    { id: 'q16', skill: 'planning',               text: 'Breaks a bigger task into steps (first…, then…).' },
+    { id: 'q17', skill: 'cognitive_flexibility',  text: 'Switches between activities without much fuss.' },
+    { id: 'q18', skill: 'inhibition_distraction', text: "Stays with a task when there's noise nearby." },
+    { id: 'q19', skill: 'inhibition_response',    text: 'Waits for their turn instead of calling out.' },
+    { id: 'q20', skill: 'inhibition_response',    text: 'Stops an action when asked to.' },
+    { id: 'q21', skill: 'attention',              text: 'Stays focused through a short group activity.' },
+  ];
+  function obsQuestions() { return OBS_QUESTIONS; }
+  // Questions shown per page in the observation flow (21 → pages of 6, 6, 6, 3).
+  const OBS_PAGE_SIZE = 6;
+  // First unanswered question → its page (all answered → last page).
+  function firstOpenPage(ratings) {
+    const Q = obsQuestions(), i = Q.findIndex((q) => !ratings[q.id]);
+    return Math.floor((i < 0 ? Q.length - 1 : i) / OBS_PAGE_SIZE);
+  }
   // Observation rating scale (4 points). "Seed" appears ONLY here — everywhere else
   // (lists, Insights, parent report) uses the 3 levels Sprouting / Growing / Blooming.
   const STAR_LABELS = ['Seed', 'Sprouting', 'Growing', 'Blooming'];
@@ -1760,11 +1844,12 @@
     // No "Enter" chip: recording an observation opens from To-do (Start / Continue),
     // so To-do stays highlighted while it's open.
     const onTab = tab === 'enter' ? 'todo' : tab;
-    const subTabs = [['todo', 'To-do'], ['completed', 'Tracker']]
+    const subTabs = [['todo', 'To-do'], ['completed', 'Done so far']]
       .map(([k, l]) => `<button class="ui-filterchip dark atab${onTab === k ? ' on' : ''}" data-assesstab="${k}">${l}</button>`).join('');
     let body, subtitle;
     if (tab === 'enter') { body = obsEnter(); subtitle = sec.name + ' · recording an observation'; }
     else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
+    else if (S.todoView === 'pending') { body = pendingView(); subtitle = 'Who still needs a teacher observation in this window.'; }
     else { body = obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
     return `<div class="dash-wrap" style="max-width:1080px">
       <h1 class="dash-h1" style="color:var(--green-700)">Assess</h1>
@@ -1781,8 +1866,11 @@
     // current step is complete, the current one is active, later ones locked.
     // Observation steps (baseline / mid / end) read the class's real teacher
     // progress for that window and show as complete once everyone is observed.
-    const ORDER = ['pre', 'base', 'post', 'm18', 'mid', 'm36', 'end'];
-    const CURRENT = { baseline: 'base', between: 'm18', midline: 'mid', endline: 'end' };
+    // Check-ins (18- / 36-week) were removed until a real check-in exists (T14).
+    // Between windows the current step is the post-training survey; once that's
+    // done nothing is active and the calm "nothing due" line shows instead.
+    const ORDER = ['pre', 'base', 'post', 'mid', 'end'];
+    const CURRENT = { baseline: 'base', between: 'post', midline: 'mid', endline: 'end' };
     const OBS_WIN = { base: 'baseline', mid: 'mid', end: 'post' };
     const cur = ORDER.indexOf(CURRENT[S.windowState] || 'base');
     const win = (k) => (S.data.windows || []).find((w) => w.key === k) || {};
@@ -1790,10 +1878,8 @@
       pre: { title: 'Pre-training survey', done: 'Completed · Apr 2', due: 'Due Apr 2', body: 'Your baseline reflection on the class.' },
       base: { title: 'Baseline observations', done: 'Completed · Apr 18', due: 'Due ' + (win('baseline').date || 'Apr 2') },
       post: { title: 'Post-training survey', done: 'Completed · Apr 25', due: 'Due Apr 25', body: 'Reflect on your class after training' },
-      m18: { title: '18-week check-in', done: 'Completed · Week 18', due: 'Due · Week 18', body: 'A quick check-in on how your class is settling' },
-      mid: { title: 'Mid-year report', done: 'Completed · ' + (win('mid').date || 'Jun 18'), due: 'Due ' + (win('mid').date || 'Jun 18') },
-      m36: { title: '36-week check-in', done: 'Completed · Week 36', due: 'Due · Week 36', body: 'A quick check-in before the year closes' },
-      end: { title: 'End-of-year report', done: 'Completed · ' + (win('post').date || 'Sep 24'), due: 'Due ' + (win('post').date || 'Sep 24') },
+      mid: { title: 'Midline observations', done: 'Completed · ' + (win('mid').date || 'Jun 18'), due: 'Due ' + (win('mid').date || 'Jun 18') },
+      end: { title: 'Endline observations', done: 'Completed · ' + (win('post').date || 'Sep 24'), due: 'Due ' + (win('post').date || 'Sep 24') },
     };
     // Surveys follow the teacher's real reflections: the first Mirror is the
     // pre-training survey; the post-training survey is done only once they've
@@ -1821,16 +1907,25 @@
     const flower = `<svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="12" r="6.4" fill="${ART.blush}"/><circle cx="31.5" cy="19" r="6.4" fill="${ART.blush}"/><circle cx="27.8" cy="30" r="6.4" fill="${ART.blush}"/><circle cx="16.2" cy="30" r="6.4" fill="${ART.blush}"/><circle cx="12.5" cy="19" r="6.4" fill="${ART.blush}"/><circle cx="22" cy="22" r="6.6" fill="${ART.pollen}"/></svg>`;
     const sprout = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 21v-8" stroke="${ART.sproutStem}" stroke-width="2" stroke-linecap="round"/><path d="M12 13C12 9 9 6 5 6c0 4 3 7 7 7Z" fill="${ART.sproutLime}"/><path d="M12 14c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="${ART.green}"/></svg>`;
     const lock = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="${ART.lock}"/><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="${ART.lock}" stroke-width="2"/></svg>`;
+    // No window open → one calm line saying when the next one opens.
+    const openWk = activeWindowKey();
+    let calm = '';
+    if (!openWk) {
+      const unlocked = unlockedWindows(sec);
+      const nextW = (S.data.windows || []).find((w) => !unlocked.has(w.key));
+      calm = `<div class="ui-note mb-4"><span>🌿 Nothing to observe right now.${nextW ? ' ' + esc(nextW.label) + (nextW.date ? ' opens ' + esc(nextW.date) : ' opens next') + '.' : ' Every window this year is done.'}</span></div>`;
+    }
     const nodes = journey.map((j) => {
       const dn = j.st === 'done', active = j.st === 'active';
       const clickable = active || dn;
       const dataAttr = (j.key === 'post' && active) ? 'data-take-reflection="post"'
         : (j.key === 'pre' || j.key === 'post') && dn ? 'data-nav="profile"'
+        : active && j.obs ? 'data-obs-pending="1"'   // → who's still to observe
         : active ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
       const marker = dn ? flower : active ? `<div class="obs-marker active">${sprout}</div>` : `<div class="obs-marker lock">${lock}</div>`;
       const badge = dn ? 'Complete' : active ? 'Active' : 'Locked';
       const what = j.title.replace(/ (observations|report)$/, '').toLowerCase();
-      const cta = active ? (j.obs ? 'Continue ' + what + ' observations →' : j.key.charAt(0) === 'm' ? 'Start check-in →' : 'Start survey →')
+      const cta = active ? (j.obs ? 'Continue ' + what + ' observations →' : 'Start survey →')
         : (dn && j.obs) ? 'See who&rsquo;s complete →'
         : (dn && (j.key === 'pre' || j.key === 'post')) ? 'See my Teaching Mirror →' : '';
       return `<div class="obs-row">
@@ -1843,12 +1938,51 @@
         </button>
       </div>`;
     }).join('');
-    return `<div class="obs-vine">${vineSVG(journey.length)}<div class="obs-nodes">${nodes}</div></div>`;
+    const rowYs = journey.map((_, i) => i * 152 + 30);
+    return `${calm}<div class="obs-vine">${vineSVG(rowYs, 152 * journey.length)}<div class="obs-nodes">${nodes}</div></div>`;
+  }
+  // To-do → "Continue … observations": the children still to observe in the
+  // open window, as its own screen so a class of 30 doesn't stretch the journey.
+  // Interrupted (started) children first, then not started; finished ones fold
+  // into "Done (n)". The top button keeps the one-tap path to the next child.
+  function pendingView() {
+    const sec = section(), wk = activeWindowKey() || 'baseline';
+    const winLabel = ((S.data.windows || []).find((w) => w.key === wk) || {}).label || 'Baseline';
+    const nQ = obsQuestions().length, N = sec.students.length;
+    const pend = sec.students.filter((st) => !teacherDone(st, wk));
+    const ordered = pend.filter((st) => draftOf(st, wk)).concat(pend.filter((st) => !draftOf(st, wk)));
+    const done = sec.students.filter((st) => teacherDone(st, wk));
+    const q = (S.todoSearch || '').trim().toLowerCase();
+    const shown = q ? ordered.filter((st) => st.name.toLowerCase().includes(q)) : ordered;
+    const next = ordered[0];
+    const rows = shown.map((st, i) => {
+      const dr = draftOf(st, wk), n = dr ? obsQuestions().filter((q) => (dr.ratings || {})[q.id]).length : 0;
+      return `<div class="todo-row">
+        <span class="todo-pl">${flowerArt(st.state, 24, i)}</span>
+        <span class="todo-nm">${esc(st.name)}</span>
+        <span class="todo-st${dr ? ' started' : ''}">${dr ? 'Started · ' + n + ' of ' + nQ : 'Not started'}</span>
+        <button class="btn btn-primary sm focus" data-continue-assess="${esc(st.id)}">${dr ? 'Continue' : 'Start'}</button>
+      </div>`;
+    }).join('');
+    const search = ordered.length > 8 ? `<div class="roster-search mb-3">${SEARCH_ICON}<input id="todo-search" value="${esc(S.todoSearch || '')}" placeholder="Find a child…" autocomplete="off"></div>` : '';
+    const doneFold = done.length ? `<details class="todo-done"${S.todoDoneOpen ? ' open' : ''}><summary>Done (${done.length})</summary>
+        <div class="todo-done-list">${done.map((st) => `<span>${esc(st.dispFirst || st.first)}</span>`).join('')}</div></details>` : '';
+    const list = !ordered.length ? `<div class="todo-h">Everyone is observed for ${esc(winLabel)} 🌸</div>`
+      : rows ? `<div class="todo-list">${rows}</div>`
+      : `<p class="dash-sub" style="padding:6px 2px">No child matches “${esc(S.todoSearch)}”.</p>`;
+    return `<button class="btn-link mb-3 focus" data-todo-back>← Back to the journey</button>
+      <div class="todo-head">
+        <div><div class="todo-t">${esc(winLabel)} observations</div>
+          <div class="todo-s"><b>${ordered.length}</b> of ${countNoun(N, 'child', 'children')} still to do</div></div>
+        ${next ? `<button class="btn btn-primary md focus" data-continue-assess="${esc(next.id)}">${draftOf(next, wk) ? 'Continue' : 'Start'} with ${esc(next.dispFirst || next.first)} →</button>` : ''}
+      </div>
+      ${search}
+      <div class="todo">${list}${doneFold}</div>`;
   }
 
-  function vineSVG(n) {
-    const rowH = 152, W = 72, H = rowH * n, cx = 36;
-    const ys = Array.from({ length: n }, (_, i) => i * rowH + 30);
+  // Vine through the step markers. `ys` = each marker's centre, `H` = total height.
+  function vineSVG(ys, H) {
+    const W = 72, cx = 36, n = ys.length;
     let d = 'M ' + cx + ' 0';
     ys.forEach((y, i) => { const p = i === 0 ? 0 : ys[i - 1]; const dir = i % 2 ? -1 : 1; d += ' C ' + (cx + dir * 20) + ' ' + (p + (y - p) * 0.35) + ', ' + (cx + dir * 20) + ' ' + (y - (y - p) * 0.35) + ', ' + cx + ' ' + y; });
     d += ' L ' + cx + ' ' + H;
@@ -1873,7 +2007,12 @@
       </div>`;
     }
     const stu = (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
-    const skills = S.data.skills, sk = skills[e.q], nQ = skills.length;
+    const Q = obsQuestions(), nQ = Q.length, pages = Math.ceil(nQ / OBS_PAGE_SIZE);
+    const page = Math.min(e.page || 0, pages - 1), from = page * OBS_PAGE_SIZE;
+    const onPage = Q.slice(from, from + OBS_PAGE_SIZE);
+    const leftOnPage = onPage.filter((q) => !e.ratings[q.id]).length;
+    const answered = Q.filter((q) => e.ratings[q.id]).length;
+    const skillOf = (key) => S.data.skills.find((x) => x.key === key) || { name: key, group: 'sel' };
     const saved = e.justDone ? `<div class="ui-note ok mb-3"><span>✓ ${esc(e.justDone)}&rsquo;s observation is saved — next up: <b>${esc(stu.dispFirst || stu.first)}</b></span></div>` : '';
     const resumed = e.resumed ? `<div class="ui-note mb-3"><span>↺ Picked up where you left off with <b>${esc(stu.dispFirst || stu.first)}</b> — your earlier answers are kept.</span></div>` : '';
     // Class progress for this window — completed vs still pending.
@@ -1882,21 +2021,35 @@
         <div class="obs-prog-txt"><b>${doneN}</b> out of <b>${total}</b> completed <span class="obs-prog-pend">· ${left} pending</span></div>
         <div class="ui-meter obs-prog-bar"><div style="width:${total ? Math.round((doneN / total) * 100) : 0}%"></div></div>
       </div>`;
-    const dots = skills.map((_, i) => `<div class="obs-dot" style="background:${i < e.q ? 'var(--green-500)' : i === e.q ? 'var(--lvl-2-soft)' : 'var(--line-200)'}"></div>`).join('');
-    const stars = STAR_LABELS.map((lbl, i) => {
-      const picked = e.ratings[sk.key] === i + 1;
-      const st = Array.from({ length: 4 }, (_, j) => `<svg width="15" height="15" viewBox="0 0 24 24" style="fill:${j <= i ? 'var(--lvl-2-soft)' : 'var(--line-200)'}"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z"/></svg>`).join('');
-      return `<button class="obs-star${picked ? ' on' : ''}" data-star="${i + 1}"><div class="row">${st}</div><div class="lb">${lbl}</div></button>`;
+    // One dot per question: answered = green, this page = amber, rest = grey.
+    const dots = Q.map((q, i) => `<div class="obs-dot" style="background:${e.ratings[q.id] ? 'var(--green-500)' : i >= from && i < from + OBS_PAGE_SIZE ? 'var(--lvl-2-soft)' : 'var(--line-200)'}"></div>`).join('');
+    const star = (j, i) => `<svg width="15" height="15" viewBox="0 0 24 24" style="fill:${j <= i ? 'var(--lvl-2-soft)' : 'var(--line-200)'}"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z"/></svg>`;
+    const cards = onPage.map((q, k) => {
+      const sk = skillOf(q.skill);
+      const opts = STAR_LABELS.map((lbl, i) => {
+        const picked = e.ratings[q.id] === i + 1;
+        return `<button class="obs-star${picked ? ' on' : ''}" data-star="${i + 1}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}"><div class="row">${[0, 1, 2, 3].map((j) => star(j, i)).join('')}</div><div class="lb">${lbl}</div></button>`;
+      }).join('');
+      return `<div class="obs-qcard${e.ratings[q.id] ? ' done' : ''}">
+        <div class="obs-q">Question ${from + k + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
+        <div class="obs-skill">${esc(sk.name)}</div>
+        <p class="obs-anchor">${esc(q.text)}</p>
+        <div class="obs-stars" role="radiogroup" aria-label="${esc(sk.name)}">${opts}</div>
+      </div>`;
     }).join('');
+    const last = page >= pages - 1;
+    const nextLbl = last ? (left > 1 ? 'Finish → next child' : 'Finish 🌱') : 'Next page →';
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
     return `${saved}${resumed}<div class="obs-enter">
       <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · ${esc(winLabel)} observation</div></div>${progress}</div>
       <div class="obs-dots">${dots}</div>
-      <div class="obs-q">Question ${e.q + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
-      <div class="obs-skill">${esc(sk.name)}</div>
-      <p class="obs-anchor">${esc(OBS_ANCHORS[sk.key])}</p>
-      <div class="obs-stars">${stars}</div>
-      <div class="obs-nav"><button class="btn-soft focus" data-enter-prev>← Back</button><button class="btn btn-primary md focus" data-enter-next>${e.q >= nQ - 1 ? (left > 1 ? 'Finish → next child' : 'Finish 🌱') : 'Next →'}</button></div>
+      <div class="obs-page">Page ${page + 1} of ${pages} · ${answered} of ${nQ} answered</div>
+      <div class="obs-qcards">${cards}</div>
+      <div class="obs-nav">
+        <button class="btn-soft focus" data-enter-prev${page === 0 ? ' disabled' : ''}>← Back</button>
+        <div class="obs-nav-r">${leftOnPage ? `<span class="obs-need">${leftOnPage} left on this page</span>` : ''}
+          <button class="btn btn-primary md focus" data-enter-next${leftOnPage ? ' disabled' : ''}>${nextLbl}</button></div>
+      </div>
     </div>${celebrate}`;
   }
 
@@ -1906,10 +2059,9 @@
     const stu = section().students.find((x) => x.id === stuId) || S.data.sections.flatMap((x) => x.students).find((x) => x.id === stuId);
     const dr = stu && !teacherDone(stu, wk) ? draftOf(stu, wk) : null;
     const ratings = dr ? Object.assign({}, dr.ratings) : {};
-    const skills = S.data.skills;
-    const first = skills.findIndex((sk) => !ratings[sk.key]);
-    const q = !dr ? 0 : first < 0 ? skills.length - 1 : first;
-    return Object.assign({ studentId: stuId, q, ratings, done: false, resumed: !!(dr && Object.keys(ratings).length) }, extra || {});
+    const page = dr ? firstOpenPage(ratings) : 0;
+    const resumed = obsQuestions().some((q) => ratings[q.id]);
+    return Object.assign({ studentId: stuId, page, ratings, done: false, resumed }, extra || {});
   }
   function startEnter(id) { S.assessTab = 'enter'; S.enter = enterFor(id, activeWindowKey() || 'baseline'); render(); }
   function continueAssess() {
@@ -1957,7 +2109,7 @@
     const who = stu.dispFirst || stu.first;
     const next = nextPending(stu.id, wk);
     if (next) { S.sectionId = next.sectionId; S.enter = enterFor(next.stu.id, wk, { justDone: who }); }
-    else S.enter = { studentId: null, q: 0, ratings: {}, done: false, allDone: true, justDone: who };
+    else S.enter = { studentId: null, page: 0, ratings: {}, done: false, allDone: true, justDone: who };
     render();
   }
   // Mirror the completion into the shared lifecycle store (Teacher lane) so the
@@ -1976,27 +2128,23 @@
   // Body only — the h1/subtitle/sub-tabs now live in assessView(). Keeps its
   // own inner By-class / By-student / List tabs.
   function assessCompleted() {
-    const view = S.logsView;
-    const tabs = [['class', 'By class'], ['student', 'By student'], ['list', 'List']]
-      .map(([k, l]) => `<button class="ui-filterchip dark logtab${view === k ? ' on' : ''}" data-logview="${k}">${l}</button>`).join('');
     const legend = `<div class="ui-legend log-legend">
       <span><i class="round" style="background:${STATUS_META.done.dot}"></i>Complete</span>
       <span><i class="round" style="background:${STATUS_META.in_progress.dot}"></i>In progress</span>
       <span><i class="round" style="background:${STATUS_META.pending.dot}"></i>Not started</span>
       <span style="color:var(--ink-300)">· 👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
-    const body = view === 'class' ? logsByClass() : view === 'student' ? logsByStudent() : logsList();
     // History opens the class change-history modal pre-filtered to assessments;
     // hover shows when this class's assessment activity last changed.
     const HU = window.TilliHistory;
     const tip = HU ? HU.lastUpdatedText(sectionHistory(section(), 'assessment')[0], histOpts()) : '';
     const histBtn = HU ? `<button class="btn-line hist-tip focus" data-assess-hist data-tip="${esc(tip)}" aria-label="Assessment history · ${esc(tip)}">🕘 History</button>` : '';
-    return `<div class="log-tabs-row"><div class="log-tabs">${tabs}</div>
-      <div class="log-actions">${histBtn}
-      <button class="btn-line focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div></div>${legend}${body}`;
+    const one = S.trackerStu ? trackerStudentView() : '';
+    if (one) return legend + one;
+    return `<div class="log-tabs-row end"><div class="log-actions">${histBtn}
+      <button class="btn-line focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div></div>${legend}${logsByClass()}`;
   }
 
-  // ---- By class: pick a window (cards) → that window's Completed rate table.
-  // "See all windows together" swaps the table for the 3-window matrix.
+  // ---- Tracker: pick a window (cards) → that window's Completed rate table.
   // A window is unlocked once it's been deployed: by Tilli (TilliAPI), by the
   // preview state, or because any child already has progress in it.
   const PREVIEW_UNLOCK = { baseline: ['baseline'], between: ['baseline'], midline: ['baseline', 'mid'], endline: ['baseline', 'mid', 'post'] };
@@ -2010,9 +2158,8 @@
     });
     return set;
   }
-  // S.logsWin: a window key, 'all', or null → default (the open window, else the latest unlocked one).
+  // S.logsWin: a window key, or null → default (the open window, else the latest unlocked one).
   function logsWindowKey(unlocked) {
-    if (S.logsWin === 'all') return 'all';
     if (S.logsWin && unlocked.has(S.logsWin)) return S.logsWin;
     const act = activeWindowKey();
     if (act && unlocked.has(act)) return act;
@@ -2037,36 +2184,7 @@
     const sec = section();
     const unlocked = unlockedWindows(sec);
     const cur = logsWindowKey(unlocked);
-    const allOn = cur === 'all';
-    const toggle = `<div class="win-pick-foot"><button class="ui-filterchip dark${allOn ? ' on' : ''}" data-logwin="${allOn ? '' : 'all'}" aria-pressed="${allOn}" title="${allOn ? 'Back to one window at a time' : 'Compare Baseline, Mid-year and End of year side by side'}">⊞ See all windows together</button></div>`;
-    return `<div class="win-cards">${winCardsHTML(sec, unlocked, allOn ? null : cur)}</div>${toggle}` +
-      (allOn ? logsAllWindows(sec) : logsSingleWindow(cur));
-  }
-  // All three windows side by side (the matrix) — behind "See all windows together".
-  function logsAllWindows(sec) {
-    const windows = S.data.windows;
-    const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
-    const head = windows.map((w) => `<div class="mtx-h"><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)}</div></div>`).join('');
-    const sorted = [...sec.students].sort((a, b) => (order[a.state] - order[b.state]) || a.name.localeCompare(b.name));
-    const rows = sorted.map((st) => {
-      const cells = st.assessLog.map((w) => {
-        const ss = STATUS_META[w.status];
-        const persp = w.persp.map((p) => `<span title="${esc(p.label + (p.done ? ' · done' : ' · pending'))}" style="opacity:${p.done ? 1 : p.started ? 0.6 : 0.25}">${p.icon}</span>`).join('');
-        return `<div class="mtx-cell" style="background:${ss.bg}"><div class="cl" style="color:${ss.fg}">${ss.label}</div><div class="cp">${persp}</div></div>`;
-      }).join('');
-      return `<button class="mtx-row" data-log-open="${esc(st.id)}"><div class="mtx-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.dispFirst)}</span></div>${cells}</button>`;
-    }).join('');
-    const strip = S.data.sections.map((s) => {
-      const n = s.students.length;
-      const winDone = s.students.reduce((a, st) => a + st.windowsDone, 0);
-      const fully = s.students.filter((st) => st.windowsDone === 3).length;
-      const pct = Math.round((winDone / (3 * n)) * 100);
-      const on = s.id === S.sectionId;
-      return `<button class="strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} fully assessed</div></button>`;
-    }).join('');
-    return `<div class="mtx-wrap"><div class="mtx"><div class="mtx-head"><div class="ui-eyebrow mtx-corner">Student</div>${head}</div>${rows}</div></div>
-      <div class="ui-eyebrow log-strip-title">Your classes at a glance</div>
-      <div class="strip-grid">${strip}</div>`;
+    return `<div class="win-cards">${winCardsHTML(sec, unlocked, cur)}</div>` + logsSingleWindow(cur);
   }
 
   // One window: each child's completion per informant (Teacher · Parent · Student).
@@ -2083,7 +2201,8 @@
       const cells = P.map((p) => {
         const e = lw.persp.find((x) => x.key === p.key) || { doneParts: 0, totalParts: 1, done: false };
         // zero = nothing started yet → muted, so started / finished cells stand out.
-        return `<div class="cr-cell${e.done ? ' done' : (e.doneParts || e.started) ? '' : ' zero'}"${e.started && !e.done ? ' title="Started — not finished yet"' : ''}><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}</div>`;
+        const dt = e.done ? doneDate(st, wk, p.key) : '';
+        return `<div class="cr-cell${e.done ? ' done' : (e.doneParts || e.started) ? '' : ' zero'}"${e.started && !e.done ? ' title="Started — not finished yet"' : ''}><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}${dt ? `<span class="cr-date">${esc(dt)}</span>` : ''}</div>`;
       }).join('');
       return `<button class="cr-row" data-log-open="${esc(st.id)}"><div class="mtx-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.dispFirst)}</span></div>${cells}</button>`;
     }).join('');
@@ -2094,17 +2213,48 @@
       const on = s.id === S.sectionId;
       return `<button class="strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
     }).join('');
-    return `<div class="cr-wrap">
-        <div class="cr-title">Completed rate <span>· ${esc(w.label)} — ${esc(w.sub)}</span></div>
+    // Parents still to finish this window (T18): a list the teacher can act on,
+    // a no-names reminder for the class group, and a per-child message for a DM.
+    const teacherName = (S.teacher.demo && S.teacher.demo.name) || 'Your class teacher';
+    const closes = w.date ? ' closes on ' + w.date : ' is open now';
+    const parentPending = sorted.filter((st) => { const pe = (logOf(st, wk) || { persp: [] }).persp.find((x) => x.key === 'parent'); return pe && !pe.done; });
+    const groupMsg = `Hello parents 🌱 A gentle reminder: the Tilli ${w.label} parent survey for ${sec.name}${closes}. It helps us see how your child is growing at home. If you've already finished it, thank you! — ${teacherName}`;
+    const oneMsg = (st) => `Hello! A gentle reminder that ${st.first}'s Tilli ${w.label} parent survey${closes}. It helps us see how ${st.first} is growing at home. Thank you! — ${teacherName}`;
+    const remind = !P.some((p) => p.key === 'parent') ? ''
+      : !parentPending.length ? `<div class="par-remind done">🏠 Every parent has finished for ${esc(w.label)} 🌸</div>`
+      : `<div class="par-remind">
+          <div class="par-remind-top">
+            <div><b>🏠 ${countNoun(parentPending.length, 'parent', 'parents')} still to finish</b><span> · ${esc(w.label)}${w.date ? ' closes ' + esc(w.date) : ''}</span></div>
+            <button class="btn-line primary focus" data-copy="${esc(groupMsg)}" title="Copies a reminder with no children's names, ready to paste in the class group">📋 Copy reminder for the class group</button>
+          </div>
+          <details class="par-remind-list"><summary>Who&rsquo;s still to finish (${parentPending.length})</summary>
+            ${parentPending.map((st) => { const pe = logOf(st, wk).persp.find((x) => x.key === 'parent'); return `<div class="par-remind-row"><span class="nm">${esc(st.name)}</span><span class="pt">${pe.doneParts} of ${pe.totalParts} parts</span><button class="btn-link focus" data-copy="${esc(oneMsg(st))}" title="Copies a message for this child's parent">Copy message</button></div>`; }).join('')}
+          </details>
+        </div>`;
+    // "Your classes at a glance" only helps a teacher with 2+ sections.
+    const glance = S.data.sections.length > 1
+      ? `<div class="ui-eyebrow log-strip-title">Your classes at a glance</div><div class="strip-grid">${strip}</div>` : '';
+    return `${remind}<div class="cr-wrap">
+        <div class="cr-title">Done so far <span>· ${esc(w.label)} — ${esc(w.sub)}</span></div>
         <div class="cr"><div class="cr-head"><div class="ui-eyebrow mtx-corner">Student</div>${head}</div>${rows}</div>
-      </div>
-      <div class="ui-eyebrow log-strip-title">Your classes at a glance</div>
-      <div class="strip-grid">${strip}</div>`;
+      </div>${glance}`;
+  }
+
+  // Copy to clipboard (falls back to execCommand where the Clipboard API isn't available).
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise((resolve, reject) => {
+      const t = document.createElement('textarea');
+      t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      try { if (document.execCommand('copy')) resolve(); else reject(new Error('copy failed')); } catch (err) { reject(err); }
+      t.remove();
+    });
   }
 
   // Whole assessment log → CSV, in the platform's "assessment-logs" export
   // format: one row per student, one column per instrument × window
-  // ("Memory Game (PRE)"), values Completed / In Progress / Not Started.
+  // ("Memory Game (Baseline)"), values Completed / In Progress / Not Started.
   // Each informant's parts (INFORMANT_PARTS) map, in order, onto the
   // instruments below — keep the list lengths in step with INFORMANT_PARTS.
   const CSV_INSTRUMENTS = {
@@ -2112,7 +2262,7 @@
     parent: ['Parent Assessment Demographic + Foundational Skills (IND)', 'Parent Behavioral Survey'],
     teacher: ['Behavioral Report'],
   };
-  const CSV_PHASE = { baseline: 'PRE', mid: 'MID', post: 'POST' };
+  const CSV_PHASE = { baseline: 'Baseline', mid: 'Midline', post: 'Endline' };
   function downloadCSV() {
     const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const wins = S.data.windows || [];
@@ -2161,56 +2311,51 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
   }
 
-  function logsByStudent() {
-    const sec = section();
-    const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
-    const sorted = [...sec.students].sort((a, b) => (order[a.state] - order[b.state]) || a.name.localeCompare(b.name));
-    const q = S.logStudentSearch.toLowerCase();
-    const picked = S.logsStudentId && sec.students.find((x) => x.id === S.logsStudentId);
-    const active = picked || sorted[0];
-    const chips = sec.students.filter((st) => st.name.toLowerCase().includes(q)).map((st) => {
-      const on = active && st.id === active.id;
-      return `<button class="ui-filterchip solid${on ? ' on' : ''}" data-log-pick="${esc(st.id)}">${esc(st.dispFirst)}</button>`;
-    }).join('');
-    let detail = '';
-    if (active) {
-      const pct = Math.round((active.perspDone / 9) * 100);
-      const timeline = active.assessLog.map((w) => {
-        const ss = STATUS_META[w.status];
-        const persp = w.persp.map((p) => `<div class="tl-persp${p.done ? ' done' : ''}"><span class="ic">${p.icon}</span><div><div class="nm">${esc(p.label)}</div><div class="st">${p.done ? 'Done · ' + w.date : p.started ? 'In progress' : 'Waiting'}</div></div></div>`).join('');
-        return `<div class="tl-row"><div class="tl-dot-wrap"><div class="tl-dot" style="background:${ss.dot};box-shadow:0 0 0 4px ${ss.bg}"></div><div class="tl-line"></div></div>
-          <div class="tl-card"><div class="tl-top"><div><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)} · ${esc(w.date)}</div></div><span class="ui-badge ${ss.cls}">${ss.label}${w.status === 'done' ? '' : ' · ' + w.doneCount + '/3'}</span></div>
-          <div class="tl-persps">${persp}</div>
-          ${w.status !== 'done' ? `<button class="btn-ask-a inline focus" data-log-continue="${esc(active.id)}">Continue this assessment →</button>` : ''}</div></div>`;
-      }).join('');
-      detail = `<div class="logstu-head"><span class="pl">${flowerArt(active.state, 60, 0)}</span>
-        <div class="m"><h2 class="stu-name" style="font-size:var(--fs-xl)">${esc(active.name)}</h2><div class="stu-sub">${esc(sec.name)} · ${active.perspDone} of 9 check-ins done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
-        <button class="btn-soft green focus" data-open-student="${esc(active.id)}">Open full profile →</button></div>
-        <div class="tl">${timeline}</div>`;
-    }
-    return `<div class="roster-search mb-3">${SEARCH_ICON}<input id="log-stu-search" value="${esc(S.logStudentSearch)}" placeholder="Find a student…" autocomplete="off"></div>
-      <div class="stu-picker">${chips}</div>${detail}`;
+  // Real completion date for one informant lane, or '' when none is recorded.
+  // Teacher → the saved observation's timestamp; Parent / Student → the
+  // completion store (TilliAPI.completedAt). Never falls back to the window's
+  // scheduled date, so a date shown is always when it actually happened.
+  function doneDate(st, wk, key) {
+    let at = null;
+    if (key === 'teacher') { const o = (((S.teacher && S.teacher.observations) || {})[wk] || {})[st.adm || st.id]; at = o && o.at; }
+    const A = window.TilliAPI, sid = schoolId();
+    if (!at && A && A.completedAt && sid && st.adm) at = A.completedAt(sid, PHASE_OF_WIN[wk], key.charAt(0).toUpperCase() + key.slice(1), st.adm);
+    if (!at) return '';
+    const t = new Date(at);
+    return isNaN(t) ? '' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   }
 
-  function logsList() {
+  // Tracker → one child (tap a row): every window with Teacher / Parent /
+  // Student status and the date each part was actually completed.
+  function trackerStudentView() {
     const sec = section();
-    const q = S.logListSearch.toLowerCase();
-    const filter = S.logListFilter;
-    const filters = [['all', 'All'], ['pending', 'Pending'], ['complete', 'Complete']]
-      .map(([k, l]) => `<button class="ui-filterchip dark logfilter${filter === k ? ' on' : ''}" data-logfilter="${k}">${l}</button>`).join('');
-    let rows = sec.students.filter((st) => st.name.toLowerCase().includes(q));
-    if (filter === 'pending') rows = rows.filter((st) => st.windowsDone < 3);
-    else if (filter === 'complete') rows = rows.filter((st) => st.windowsDone === 3);
-    rows.sort((a, b) => a.name.localeCompare(b.name));
-    const body = rows.length ? rows.map((st) => {
-      const cells = st.assessLog.map((w) => { const ss = STATUS_META[w.status]; return `<div><span class="ui-badge ${ss.cls}"><span class="d"></span>${ss.label}</span></div>`; }).join('');
-      const pct = Math.round((st.windowsDone / 3) * 100);
-      return `<button class="list-row" data-log-open="${esc(st.id)}"><div class="list-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.name)}</span></div>${cells}<div class="list-prog"><div class="ui-meter pb"><div style="width:${pct}%"></div></div><span>${st.windowsDone}/3</span></div></button>`;
-    }).join('') : '<div class="ui-empty">No students match that filter 🌱</div>';
-    return `<div class="roster-tools">
-      <div class="roster-search">${SEARCH_ICON}<input id="log-list-search" value="${esc(S.logListSearch)}" placeholder="Search a student…" autocomplete="off"></div>
-      <div class="roster-sort"><span>Show</span>${filters}</div></div>
-      <div class="list-table"><div class="ui-eyebrow dark list-head"><div>Student</div><div>Baseline</div><div>Mid-year</div><div>End of year</div><div class="text-right">Progress</div></div>${body}</div>`;
+    const st = sec.students.find((x) => x.id === S.trackerStu);
+    if (!st) { S.trackerStu = null; return ''; }
+    const unlocked = unlockedWindows(sec), openWk = activeWindowKey();
+    const total = st.assessLog.reduce((a, w) => a + w.persp.length, 0);
+    const pct = total ? Math.round((st.perspDone / total) * 100) : 0;
+    const timeline = st.assessLog.map((w) => {
+      const locked = !unlocked.has(w.key), ss = STATUS_META[w.status];
+      const badge = locked ? '<span class="ui-badge wc-lock">🔒 Not open yet</span>'
+        : `<span class="ui-badge ${ss.cls}">${ss.label}${w.status === 'done' ? '' : ' · ' + w.doneCount + '/' + w.persp.length}</span>`;
+      const persp = w.persp.map((p) => {
+        const dt = p.done ? doneDate(st, w.key, p.key) : '';
+        const txt = locked ? 'Not open yet' : p.done ? 'Done' + (dt ? ' · ' + dt : '') : (p.started || p.doneParts) ? 'In progress' : 'Waiting';
+        return `<div class="tl-persp${p.done ? ' done' : ''}"><span class="ic">${p.icon}</span><div><div class="nm">${esc(p.label)}</div><div class="st">${esc(txt)}</div></div></div>`;
+      }).join('');
+      // Only the open window offers the teacher's own observation.
+      const canGo = !locked && w.key === openWk && !teacherDone(st, w.key);
+      const dot = locked ? 'var(--line-200)' : ss.dot, halo = locked ? 'var(--surface-100)' : ss.bg;
+      return `<div class="tl-row"><div class="tl-dot-wrap"><div class="tl-dot" style="background:${dot};box-shadow:0 0 0 4px ${halo}"></div><div class="tl-line"></div></div>
+        <div class="tl-card${locked ? ' locked' : ''}"><div class="tl-top"><div><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)} · ${esc(w.date)}</div></div>${badge}</div>
+          <div class="tl-persps">${persp}</div>
+          ${canGo ? `<button class="btn-ask-a inline focus" data-continue-assess="${esc(st.id)}">${draftOf(st, w.key) ? 'Continue' : 'Start'} ${esc(st.dispFirst || st.first)}&rsquo;s observation →</button>` : ''}</div></div>`;
+    }).join('');
+    return `<button class="btn-link mb-3 focus" data-tracker-back>← Back to tracker</button>
+      <div class="logstu-head"><span class="pl">${flowerArt(st.state, 60, 0)}</span>
+        <div class="m"><h2 class="stu-name" style="font-size:var(--fs-xl)">${esc(st.name)}</h2><div class="stu-sub">${esc(sec.name)} · ${st.perspDone} of ${total} parts done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
+        <button class="btn-soft green focus" data-open-student="${esc(st.id)}">Open full profile →</button></div>
+      <div class="tl">${timeline}</div>`;
   }
 
   // ================= Insights (teacher planning view) =================
@@ -2238,14 +2383,14 @@
     const w = {}; (S.data.windows || []).forEach((x) => { w[x.key] = x; });
     return [
       { win: 'baseline', field: 'pre',  meta: w.baseline || { label: 'Baseline', date: '' } },
-      { win: 'mid',      field: 'mid',  meta: w.mid || { label: 'Mid-year', date: '' } },
-      { win: 'post',     field: 'post', meta: w.post || { label: 'End of year', date: '' } },
+      { win: 'mid',      field: 'mid',  meta: w.mid || { label: 'Midline', date: '' } },
+      { win: 'post',     field: 'post', meta: w.post || { label: 'Endline', date: '' } },
     ];
   }
   // A phase is "measured" for a group of students when, on average, at least half
   // of each child's three perspectives are in for that window (spec: drive empty
   // states off assessLog, not off placeholder numbers). Baseline & Mid clear this;
-  // the still-open End-of-year window does not, so it honestly reads "not yet".
+  // the still-open Endline window does not, so it honestly reads "not yet".
   function phaseMeasured(winKey, students) {
     const assessed = students.filter((s) => s.state !== 'waiting' && Array.isArray(s.assessLog));
     if (!assessed.length) return false;
@@ -2254,7 +2399,7 @@
     return n > 0 && (sum / n) >= 0.5;
   }
   function measuredMap(students) { const m = {}; phaseMeta().forEach((p) => { m[p.win] = phaseMeasured(p.win, students); }); return m; }
-  function groupLabel(g) { return g === 'cog' ? 'Executive Function' : 'Social-Emotional'; }
+  function groupLabel(g) { return g === 'cog' ? 'Cognitive' : 'Social-Emotional'; }
 
   // Per-skill class stats for a set of students: phase averages, the three
   // perspective averages, and the plurality band (which summary box it lands in).
@@ -2352,9 +2497,8 @@
       const n = stats.filter((s) => s.plurality === b.band).length;
       const on = S.ovBand === b.band;
       return `<button class="ov-box ov-l${b.n}${on ? ' on' : ''}${S.ovBand && !on ? ' dim' : ''} focus" data-ov-band="${b.band}" aria-pressed="${on}" title="${on ? 'Show all skills' : 'Show only skills where most students are ' + b.band}">
-        <span class="ov-count">${n}</span>
-        <span class="ov-title">${b.label}</span>
-        <span class="ov-sub">${n === 1 ? 'skill' : 'skills'} where most students are here</span>
+        <span class="ov-count">${n} <span class="ov-unit">${n === 1 ? 'skill' : 'skills'}</span></span>
+        <span class="ov-title">Mostly ${b.label}</span>
       </button>`;
     }).join('');
     const rank = { Sprouting: 0, Growing: 1, Blooming: 2 };
@@ -2377,9 +2521,9 @@
     return `<div class="ui-card ins-card ov mt-4">
       <div class="ov-headrow">
         <div>
-          <div class="ov-h">Class Skill Overview</div>
+          <div class="ov-h">Class Skill Overview ${infoBtn('info-ov')}</div>${infoPop('info-ov', SCORE_INFO)}
           <div class="ov-lead">How your class is doing on each skill</div>
-          <p class="ov-desc">For every skill, we grouped your students into Sprouting, Growing, and Blooming. The colour is whichever group is largest, so green means most of your class is at Blooming, not all of them.</p>
+          <p class="ov-desc">Each skill is coloured by where most of your class sits.</p>
         </div>
         <span class="ov-scope"><i></i>${esc(scope.name)} · ${countNoun(N, 'student', 'students')}</span>
       </div>
@@ -2433,7 +2577,7 @@
     }
     return [
       { name: 'Social-Emotional', color: GROWTH_COLORS[0], vals: vals((fl) => avg(group('sel'), fl)) },
-      { name: 'Executive Function', color: GROWTH_COLORS[1], vals: vals((fl) => avg(group('cog'), fl)) },
+      { name: 'Cognitive', color: GROWTH_COLORS[1], vals: vals((fl) => avg(group('cog'), fl)) },
     ];
   }
   const GROWTH_GEO = { W: 680, H: 300, L: 46, R: 150, T: 18, B: 46 };
@@ -2502,13 +2646,14 @@
     const note = pending.length
       ? `<div class="ui-note mt-3">🕒 ${pending.map((p) => `${esc(p.meta.label)}${p.meta.date ? ' opens ' + esc(p.meta.date) : ' hasn\'t opened yet'}`).join(' · ')}</div>` : '';
     return `<div class="ui-card ins-card mt-4">
-      <div class="ins-h">Growth over time</div>
-      <div class="ins-sub">Class average per skill at Baseline → Mid-year → End of year. Filter to compare groups or follow one skill.</div>
+      <div class="ins-h">Growth over time ${infoBtn('info-growth')}</div>${infoPop('info-growth', SCORE_INFO)}
+      <div class="ins-sub">Class average per skill at Baseline → Midline → Endline. Filter to compare groups or follow one skill.</div>
       <div class="gr-filters">
-        ${pill('overview', 'Overview')}${pill('sel', 'Social-Emotional')}${pill('cog', 'Executive Function')}${skillSel}
+        ${pill('overview', 'Overview')}${pill('sel', 'Social-Emotional')}${pill('cog', 'Cognitive')}${skillSel}
         <button class="gr-view focus" data-growth-table title="Switch between the chart and a table of the same numbers">${S.growthTable ? '📈 Chart view' : '▦ Table view'}</button>
       </div>
-      ${S.growthTable ? table : `${legend}<div class="gr-wrap" tabindex="0" aria-label="Growth chart — use left and right arrows to read each window">${growthSVG(series, phases, meas, partial)}<div class="ui-tip gr-tip" hidden></div></div>`}
+      ${S.growthTable ? table : `${legend}<div class="gr-wrap" tabindex="0" aria-label="Growth chart — use left and right arrows to read each window">${growthSVG(series, phases, meas, partial)}<div class="ui-tip gr-tip" hidden></div></div>
+        <div class="gr-taps">${phases.map((p, i) => `<button type="button" class="tip-chip focus" data-gr-i="${i}" aria-pressed="false">ⓘ ${esc(p.meta.label)}</button>`).join('')}</div>`}
       ${note}
       <div class="ins-foot"><button class="btn-soft green focus" data-ask-ins="grow">Ask Tilli what to do with this →</button></div>
     </div>`;
@@ -2554,15 +2699,22 @@
       e.preventDefault();
       show(Math.max(0, Math.min(2, +(wrap.dataset.i || 0) + (e.key === 'ArrowRight' ? 1 : -1))));
     });
+    // Phone (no hover): ⓘ chips under the chart open / close one window's readout.
+    root.querySelectorAll('[data-gr-i]').forEach((b) => b.addEventListener('click', () => {
+      const i = +b.dataset.grI, again = !tip.hidden && wrap.dataset.i === String(i);
+      root.querySelectorAll('[data-gr-i]').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+      if (again) { hide(); return; }
+      show(i); b.setAttribute('aria-pressed', 'true');
+    }));
   }
-  function shortWin(label) { return label === 'Mid-year' ? 'Mid' : label === 'End of year' ? 'End' : 'Base'; }
+  function shortWin(label) { return label === 'Midline' ? 'Mid' : label === 'Endline' ? 'End' : 'Base'; }
 
   // c) Detailed skill breakdown — one card per skill, SEL / EF toggle.
   function breakdownCard(stats, meas) {
     const g = S.skillGroup === 'cog' ? 'cog' : 'sel';
     const toggle = `<div class="sb-toggle" role="tablist">
       <button class="ui-filterchip dark${g === 'sel' ? ' on' : ''}" data-skillgroup="sel" role="tab" aria-selected="${g === 'sel'}">Social-Emotional</button>
-      <button class="ui-filterchip dark${g === 'cog' ? ' on' : ''}" data-skillgroup="cog" role="tab" aria-selected="${g === 'cog'}">Executive Function</button></div>`;
+      <button class="ui-filterchip dark${g === 'cog' ? ' on' : ''}" data-skillgroup="cog" role="tab" aria-selected="${g === 'cog'}">Cognitive</button></div>`;
     const phases = phaseMeta();
     const cards = stats.filter((s) => s.group === g).map((s) => {
       const prog = phases.map((p) => meas[p.win]
@@ -2595,7 +2747,7 @@
     return `<div class="persp-note">Teachers, parents and children each see a skill from where they stand. A difference isn't right or wrong — it's a clue about where the skill shows up. 🌤️</div>
       ${prompts}
       <div class="ui-card ins-card mt-4">
-        <div class="ins-h">Every skill, three viewpoints</div>
+        <div class="ins-h">Every skill, three viewpoints ${infoBtn('info-persp')}</div>${infoPop('info-persp', PERSP_INFO)}
         <div class="ins-sub">The same numbers from your skill cards, lined up to compare.</div>
         <div class="pv-grid">${cards}</div>
       </div>`;
@@ -3416,15 +3568,14 @@
       if (k === 'garden') { S.nav = 'garden'; S.gardenLevel = 'landing'; } else S.nav = k;
       if (k !== 'students' && !S.select.busy) S.select = { on: false, ids: {}, busy: '', err: '' };
       if (k !== 'profile') S.profileEdit = false;
-      S.studentId = null; render();
+      S.studentId = null; S.trackerStu = null; S.todoView = null; render();
     }));
     root.querySelectorAll('[data-section]').forEach((b) => b.addEventListener('click', () => { S.sectionId = b.dataset.section; S.studentId = null; render(); }));
     root.querySelectorAll('[data-open-class]').forEach((b) => b.addEventListener('click', () => { S.classModal = b.dataset.openClass; render(); }));
-    root.querySelectorAll('[data-back-beds]').forEach((b) => b.addEventListener('click', () => { S.gardenLevel = 'beds'; render(); }));
     // My Garden landing: dev state switch, hero/tend Ask-Tilli prompts, assess CTA, doorways.
     root.querySelectorAll('[data-window-state]').forEach((b) => b.addEventListener('click', () => {
       S.windowState = b.dataset.windowState;
-      S.enter = { studentId: null, q: 0, ratings: {}, done: false };
+      S.enter = { studentId: null, page: 0, ratings: {}, done: false };
       rebuildData(); render();
     }));
     root.querySelectorAll('[data-ask-prompt]').forEach((b) => b.addEventListener('click', () => openAsk(b.dataset.askCtx || '', b.dataset.askPrompt || '')));
@@ -3468,6 +3619,12 @@
     });
     const selPdf = root.querySelector('[data-sel-pdf]');
     if (selPdf) selPdf.addEventListener('click', () => { downloadReports(); });
+    // Parent report preview (T17)
+    root.querySelectorAll('[data-sel-preview]').forEach((b) => b.addEventListener('click', () => { S.reportPreview = 0; render(); }));
+    root.querySelectorAll('[data-close-preview]').forEach((b) => b.addEventListener('click', (e) => { if (e.target === b) { S.reportPreview = null; render(); } }));
+    root.querySelectorAll('[data-rp-step]').forEach((b) => b.addEventListener('click', () => { S.reportPreview = (S.reportPreview || 0) + (+b.dataset.rpStep); render(); }));
+    root.querySelectorAll('[data-rp-download]').forEach((b) => b.addEventListener('click', () => { S.reportPreview = null; downloadReports(); }));
+    fitReportPreview();
 
     // students: change history — class modal (+ kind filter) and the student's
     // "Last updated" line, which jumps to the History tab where its changes live.
@@ -3520,40 +3677,68 @@
     }));
 
     // assess: sub-tabs + observation flow
-    root.querySelectorAll('[data-assesstab]').forEach((b) => b.addEventListener('click', () => { S.assessTab = b.dataset.assesstab; render(); }));
+    root.querySelectorAll('[data-assesstab]').forEach((b) => b.addEventListener('click', () => { S.assessTab = b.dataset.assesstab; S.trackerStu = null; S.todoView = null; render(); }));
     root.querySelectorAll('[data-obs-back]').forEach((b) => b.addEventListener('click', () => { S.assessTab = 'todo'; render(); }));
     root.querySelectorAll('[data-obs-continue]').forEach((b) => b.addEventListener('click', () => continueAssess()));
     root.querySelectorAll('[data-obs-report]').forEach((b) => b.addEventListener('click', () => { S.assessTab = 'completed'; render(); }));
     root.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => {
-      const sk = S.data.skills[S.enter.q];
-      S.enter = Object.assign({}, S.enter, { ratings: Object.assign({}, S.enter.ratings, { [sk.key]: +b.dataset.star }) });
+      S.enter = Object.assign({}, S.enter, { ratings: Object.assign({}, S.enter.ratings, { [b.dataset.qid]: +b.dataset.star }) });
       const stu = enterStudent();
       if (stu) saveDraft(stu, activeWindowKey() || 'baseline', S.enter.ratings);
       render();
     }));
-    root.querySelectorAll('[data-enter-prev]').forEach((b) => b.addEventListener('click', () => { S.enter = Object.assign({}, S.enter, { q: Math.max(0, S.enter.q - 1), done: false }); render(); }));
-    root.querySelectorAll('[data-enter-next]').forEach((b) => b.addEventListener('click', () => {
-      if (S.enter.q >= S.data.skills.length - 1) { finishObservation(); return; }
-      S.enter = Object.assign({}, S.enter, { q: S.enter.q + 1, done: false });
+    // Observation pages: Back / Next page move a whole page and bring its top into view.
+    const toPage = (p) => {
+      S.enter = Object.assign({}, S.enter, { page: p, done: false, resumed: false, justDone: '' });
       render();
+      const card = root.querySelector('.obs-enter'); if (card) card.scrollIntoView({ block: 'start' });
+    };
+    root.querySelectorAll('[data-enter-prev]').forEach((b) => b.addEventListener('click', () => toPage(Math.max(0, (S.enter.page || 0) - 1))));
+    root.querySelectorAll('[data-enter-next]').forEach((b) => b.addEventListener('click', () => {
+      const pages = Math.ceil(obsQuestions().length / OBS_PAGE_SIZE);
+      if ((S.enter.page || 0) >= pages - 1) { finishObservation(); return; }
+      toPage((S.enter.page || 0) + 1);
     }));
 
-    // logs
-    root.querySelectorAll('[data-logview]').forEach((b) => b.addEventListener('click', () => { S.logsView = b.dataset.logview; render(); }));
-    // By class: window cards (locked ones ignore the click) + "See all windows together" toggle.
+    // Tracker: window cards (locked ones ignore the click); a child's row opens their profile.
     root.querySelectorAll('[data-logwin]').forEach((b) => b.addEventListener('click', () => {
       if (b.getAttribute('aria-disabled') === 'true') return;
       S.logsWin = b.dataset.logwin || null; render();
     }));
-    root.querySelectorAll('[data-log-open]').forEach((b) => b.addEventListener('click', () => { S.logsView = 'student'; S.logsStudentId = b.dataset.logOpen; render(); }));
-    root.querySelectorAll('[data-log-pick]').forEach((b) => b.addEventListener('click', () => { S.logsStudentId = b.dataset.logPick; render(); }));
-    root.querySelectorAll('[data-logfilter]').forEach((b) => b.addEventListener('click', () => { S.logListFilter = b.dataset.logfilter; render(); }));
-    root.querySelectorAll('[data-log-continue]').forEach((b) => b.addEventListener('click', () => { S.nav = 'assess'; startEnter(b.dataset.logContinue); }));
-    const lss = root.querySelector('#log-stu-search');
-    if (lss) lss.addEventListener('input', (e) => { S.logStudentSearch = e.target.value; S._refocus = 'log-stu-search'; render(); });
-    const lls = root.querySelector('#log-list-search');
-    if (lls) lls.addEventListener('input', (e) => { S.logListSearch = e.target.value; S._refocus = 'log-list-search'; render(); });
+    root.querySelectorAll('[data-log-open]').forEach((b) => b.addEventListener('click', () => { S.trackerStu = b.dataset.logOpen; render(); }));
+    // Phone (no hover): ⓘ on a plant toggles its tooltip; only one open at a time.
+    root.querySelectorAll('[data-tip-open]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const host = b.closest('.tip-host'), open = !host.classList.contains('tip-on');
+      root.querySelectorAll('.tip-host.tip-on').forEach((h) => { h.classList.remove('tip-on'); const x = h.querySelector('[data-tip-open]'); if (x) x.setAttribute('aria-expanded', 'false'); });
+      if (open) { host.classList.add('tip-on'); b.setAttribute('aria-expanded', 'true'); }
+    }));
+    if (!tipBound) {
+      tipBound = true;
+      document.addEventListener('click', (e) => {
+        if (!root || e.target.closest('.tip-host')) return;
+        root.querySelectorAll('.tip-host.tip-on').forEach((h) => { h.classList.remove('tip-on'); const x = h.querySelector('[data-tip-open]'); if (x) x.setAttribute('aria-expanded', 'false'); });
+      });
+    }
+    root.querySelectorAll('[data-info]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pop = root.querySelector('#' + b.dataset.info); if (!pop) return;
+      pop.hidden = !pop.hidden; b.setAttribute('aria-expanded', String(!pop.hidden));
+    }));
+    root.querySelectorAll('[data-tracker-back]').forEach((b) => b.addEventListener('click', () => { S.trackerStu = null; render(); }));
+    // To-do: remember whether the "Done (n)" fold is open across re-renders.
+    root.querySelectorAll('.todo-done').forEach((d) => d.addEventListener('toggle', () => { S.todoDoneOpen = d.open; }));
+    root.querySelectorAll('.persp-chart').forEach((d) => d.addEventListener('toggle', () => { S.perspChartOpen = d.open; }));
+    root.querySelectorAll('[data-obs-pending]').forEach((b) => b.addEventListener('click', () => { S.todoView = 'pending'; S.todoSearch = ''; render(); }));
+    root.querySelectorAll('[data-todo-back]').forEach((b) => b.addEventListener('click', () => { S.todoView = null; render(); }));
+    const tds = root.querySelector('#todo-search');
+    if (tds) tds.addEventListener('input', (e) => { S.todoSearch = e.target.value; S._refocus = 'todo-search'; render(); });
 
+    root.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => {
+      const label = b.textContent;
+      copyText(b.dataset.copy).then(() => { b.textContent = 'Copied ✓'; }, () => { b.textContent = 'Couldn’t copy'; })
+        .then(() => setTimeout(() => { b.textContent = label; }, 1800));
+    }));
     const csv = root.querySelector('[data-csv]');
     if (csv) csv.addEventListener('click', downloadCSV);
 
@@ -3696,7 +3881,7 @@
   .dash-header:empty { display: none; }
   .dash-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: none; }
   .dash-chips::-webkit-scrollbar { display: none; }
-  .dash-chips .ui-filterchip, .stu-picker .ui-filterchip { flex: none; }
+  .dash-chips .ui-filterchip { flex: none; }
   .dash-main { flex: 1; padding: 28px 40px; max-width: 1500px; width: 100%; margin: 0 auto; }
   .dash-wrap { max-width: 1180px; margin: 0 auto; width: 100%; }
   .dash-h1 { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); margin: 0; color: var(--ink-900); }
@@ -3774,7 +3959,20 @@
   .pg-plant { background: none; border: none; cursor: pointer; padding: 0; line-height: 0; transition: transform .18s; }
   .pg-plant:hover { transform: translateY(-3px); }
   .pg-tip { position: absolute; bottom: calc(100% - 8px); left: 50%; transform: translateX(-50%); z-index: 20; padding: 12px 14px; width: 186px; opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none; }
-  .pg-cell:hover .pg-tip { opacity: 1; visibility: visible; }
+  .pg-cell:hover .pg-tip, .pg-cell.tip-on .pg-tip { opacity: 1; visibility: visible; }
+  /* Hover devices read tooltips on hover; touch devices (hover: none) get an ⓘ to tap. */
+  .tip-i, .gr-taps { display: none; }
+  .tip-i { position: absolute; top: -4px; right: calc(50% - 30px); z-index: 2; width: 24px; height: 24px; align-items: center; justify-content: center; border: 1px solid var(--line-200); border-radius: 50%; background: var(--white); color: var(--ink-450); font-family: var(--font-body); font-size: var(--fs-xs); font-weight: 700; cursor: pointer; }
+  .tip-host.tip-on .tip-i { background: var(--wash-green); color: var(--green-700); border-color: var(--green-500); }
+  .gr-taps { gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+  .tip-chip { border: 1px solid var(--line-200); background: var(--white); border-radius: var(--radius-pill); padding: 6px 12px; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); cursor: pointer; }
+  .tip-chip[aria-pressed="true"] { background: var(--wash-green); color: var(--green-700); border-color: var(--green-500); }
+  @media (hover: none) {
+    .tip-i { display: inline-flex; }
+    .gr-taps { display: flex; }
+    .pg-cell:hover .pg-tip { opacity: 0; visibility: hidden; }   /* a tap shouldn't leave a sticky hover tip */
+    .pg-cell.tip-on .pg-tip { opacity: 1; visibility: visible; }
+  }
   .pg-tip .nm { margin-bottom: 3px; }
   .pg-tip .sl { font-size: var(--fs-xs); color: var(--ink-300); margin-bottom: 8px; }
   .pg-tip .ch { display: flex; gap: 5px; margin-bottom: 9px; flex-wrap: wrap; }
@@ -3988,10 +4186,21 @@
   .persp-note { background: var(--wash-cyan); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 16px; font-size: var(--fs-md); color: var(--info-ink); line-height: 1.5; }
   .persp-note.green { background: var(--wash-green); color: var(--green-700); }
   .persp-legend { justify-content: center; margin-top: 10px; }
-  .gap-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line-200); }
+  .gap-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line-200); }
+  .gap-row .gm { flex: 1; min-width: 200px; }
   .gap-row:last-child { border-bottom: none; }
   .gap-row .nm { font-weight: 700; font-size: var(--fs-sm); }
   .gap-row .sub { font-size: var(--fs-xs); color: var(--ink-300); }
+  /* Child → Perspectives list (main view) + folded radar chart */
+  .persp-list { padding: 6px 8px; }
+  .persp-list-h { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 10px 12px 6px; font-weight: 800; font-size: var(--fs-md); }
+  .persp-list-s { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
+  .persp-list .info-pop { margin: 0 12px 8px; }
+  .pv3 { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; font-size: var(--fs-xs); color: var(--ink-450); font-weight: 600; }
+  .pv3 b { color: var(--ink-900); font-weight: 800; }
+  .persp-chart { margin-top: 14px; }
+  .persp-chart summary { cursor: pointer; font-weight: 700; font-size: var(--fs-sm); color: var(--green-700); }
+  .persp-chart-body { margin-top: 10px; padding: 18px; text-align: center; border: 1px solid var(--line-200); border-radius: var(--radius-card); max-width: 420px; }
   .gap-right { display: flex; align-items: center; gap: 8px; flex: none; }
   .gap-badge { --badge-bg: var(--wash-cyan); --badge-fg: var(--cyan-700); }
   .gap-ask { background: none; border: none; cursor: pointer; padding: 4px; }
@@ -4048,71 +4257,41 @@
   .obs-body { font-size: var(--fs-md); color: var(--ink-450); margin-top: 8px; }
   .obs-cta { display: inline-flex; margin-top: 12px; background: var(--wash-green); color: var(--green-700); border-radius: var(--radius-md); padding: 9px 16px; font-weight: 700; font-size: var(--fs-sm); }
   .obs-cta.active { background: var(--green-500); color: var(--white); }
-  .obs-enter { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 22px 24px; }
-  .obs-enter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
-  .obs-enter-head .pl { flex: none; }
-  .obs-enter-head .nm { font-weight: 800; font-size: var(--fs-md); }
-  .obs-enter-head .sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
-  .obs-prog { margin-left: auto; min-width: 190px; text-align: right; }
-  .obs-prog-txt { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
-  .obs-prog-txt b { color: var(--ink-900); font-weight: 800; }
-  .obs-prog-pend { color: var(--lvl-2-ink); font-weight: 700; }
-  .obs-prog-bar { margin-top: 6px; }
-  @media (max-width: 640px) { .obs-enter-head { flex-wrap: wrap; } .obs-prog { margin-left: 0; width: 100%; text-align: left; } }
-  .obs-dots { display: flex; gap: 5px; margin: 14px 0 18px; }
-  .obs-dot { flex: 1; height: 5px; border-radius: 3px; }
-  .obs-q { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; margin-bottom: 4px; }
-  .obs-skill { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); margin-bottom: 6px; }
-  .obs-anchor { margin: 0 0 20px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
-  .obs-stars { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; }
-  .obs-star { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: pointer; border: 2px solid var(--line-200); background: var(--white); border-radius: var(--radius-md); padding: 13px 15px; font-family: var(--font-body); color: var(--ink-900); min-height: 58px; }
-  .obs-star .row { display: flex; gap: 2px; }
-  .obs-star .lb { font-weight: 700; font-size: var(--fs-md); }
-  .obs-star.on { border-color: var(--green-500); background: var(--wash-green); }
-  .obs-nav { display: flex; justify-content: space-between; margin-top: 22px; }
-  .obs-celebrate { text-align: center; padding: 26px; margin-top: 16px; background: var(--wash-pink); border-radius: var(--radius-card); }
-  .obs-celebrate .msg { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--pink-600); margin-top: 8px; }
-
-  /* logs */
-  .log-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
-  .log-legend { gap: 10px 20px; margin: 0 0 18px; }
-  .win-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
-  .win-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
-  .win-card .ring { flex: none; }
-  /* Pickable window cards (Assess → Tracker → By class) */
-  .win-card.pick { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
-  .win-card.pick:hover:not(.locked) { border-color: var(--green-500); }
-  .win-card.pick.on { border-color: var(--green-500); box-shadow: 0 0 0 3px var(--wash-green); }
-  .win-card.pick.locked { cursor: not-allowed; background: var(--surface-100); }
-  .win-card.pick.locked .ring, .win-card.pick.locked .wc-label, .win-card.pick.locked .wc-sub { opacity: .5; }
-  .wc-lock { background: var(--white); border: 1px solid var(--line-200); color: var(--ink-450); }
-  .win-pick-foot { display: flex; justify-content: flex-end; margin: -6px 0 16px; }
-  .wc-label { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); }
-  .wc-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin: 2px 0 6px; }
-  .mtx-wrap { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 8px; overflow-x: auto; }
-  .mtx { min-width: 520px; }
-  .mtx-head, .mtx-row { display: grid; grid-template-columns: minmax(116px,1.4fr) repeat(3, minmax(88px,1fr)); gap: 8px; }
-  .mtx-head { padding: 10px 12px 12px; }
-  .mtx-corner { align-self: end; }
-  .mtx-h { text-align: center; } .mtx-h .l { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-700); } .mtx-h .s { font-size: var(--fs-xs); color: var(--ink-300); }
-  .mtx-row { width: 100%; text-align: left; background: none; border: none; border-top: 1px solid var(--line-200); padding: 8px 12px; cursor: pointer; font-family: var(--font-body); align-items: center; }
-  .mtx-row:hover { background: var(--surface-100); }
-  .mtx-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  .mtx-name .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-  .mtx-name span:last-child { font-weight: 700; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mtx-cell { border-radius: var(--radius-md); padding: 8px 10px; }
-  .mtx-cell .cl { font-weight: 800; font-size: var(--fs-xs); margin-bottom: 5px; }
-  .mtx-cell .cp { display: flex; gap: 6px; font-size: var(--fs-sm); line-height: 1; }
-  .log-strip-title { margin: 24px 0 12px; }
-  .strip-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
-  .strip-card { text-align: left; cursor: pointer; border: 1px solid var(--line-200); background: var(--white); border-radius: var(--radius-lg); padding: 16px 18px; font-family: var(--font-body); }
-  .strip-card.on { border: 2px solid var(--green-500); background: var(--wash-green); padding: 15px 17px; }
-  .strip-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
-  .strip-top .nm { font-weight: 800; font-size: var(--fs-md); } .strip-top .pct { font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); }
-  .strip-bar { margin-bottom: 9px; }
-  .strip-cap { font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; }
-  .stu-picker { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 18px; scrollbar-width: none; }
-  .stu-picker::-webkit-scrollbar { display: none; }
+  /* To-do → who's still to observe (opened from the active step) */
+  .todo-head { max-width: 720px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .todo-head ~ .roster-search { max-width: 720px; }
+  .todo-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
+  .todo-s { font-size: var(--fs-sm); color: var(--ink-450); margin-top: 2px; }
+  .todo { max-width: 720px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 12px 14px; }
+  .todo-h { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-700); margin-bottom: 4px; }
+  .todo-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line-200); }
+  .todo-row:first-child { border-top: none; }
+  .todo-pl { flex: none; width: 28px; display: flex; justify-content: center; }
+  .todo-nm { flex: 1; min-width: 0; font-weight: 700; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .todo-st { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); white-space: nowrap; }
+  .todo-st.started { color: var(--lvl-2-ink); }
+  .todo-row .btn { flex: none; }
+  .todo-done { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-200); font-size: var(--fs-sm); color: var(--ink-450); }
+  .todo-done summary { cursor: pointer; font-weight: 700; }
+  .todo-done-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
+  .log-tabs-row.end { justify-content: flex-end; }
+  /* Done so far → parents still to finish (T18) — "par-" so it never mixes with the .pr- report styles */
+  .par-remind { border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 14px 16px; margin-bottom: 16px; background: var(--white); }
+  .par-remind.done { color: var(--green-700); font-weight: 700; font-size: var(--fs-sm); background: var(--wash-green); border-color: var(--lvl-3-wash); }
+  .par-remind-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: var(--fs-sm); }
+  .par-remind-top span { color: var(--ink-300); font-weight: 600; }
+  .par-remind-list { margin-top: 10px; font-size: var(--fs-sm); }
+  .par-remind-list summary { cursor: pointer; font-weight: 700; color: var(--ink-450); }
+  .par-remind-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line-200); }
+  .par-remind-row:first-of-type { margin-top: 6px; }
+  .par-remind-row .nm { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .par-remind-row .pt { color: var(--ink-300); font-weight: 600; white-space: nowrap; }
+  /* Students → parent report preview (T17) */
+  .rp-card { max-width: 900px; width: calc(100vw - 32px); max-height: 92vh; }
+  .rp-body { flex: 1; min-height: 0; overflow-y: auto; background: var(--surface-100); padding: 14px; }
+  .rp-fit { overflow: hidden; background: var(--white); box-shadow: var(--shadow-card); }
+  .rp-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* Tracker → one child: all-windows timeline */
   .logstu-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 20px; margin-bottom: 16px; }
   .logstu-head .m { flex: 1; min-width: 160px; }
   .logstu-bar { max-width: 260px; margin-top: 8px; }
@@ -4131,17 +4310,71 @@
   .tl-persp .ic { font-size: var(--fs-md); }
   .tl-persp .nm { font-weight: 700; font-size: var(--fs-sm); } .tl-persp .st { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
   .tl-persp.done .st { color: var(--green-700); }
-  .list-table { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); overflow: hidden; overflow-x: auto; }
-  .list-table .list-head, .list-row { display: grid; grid-template-columns: 1.8fr 1.1fr 1.1fr 1.1fr 1fr; gap: 10px; min-width: 640px; align-items: center; }
-  .list-table .list-head { padding: 13px 20px; background: var(--surface-100); }
-  .list-row { width: 100%; text-align: left; padding: 12px 20px; border: none; border-top: 1px solid var(--line-200); cursor: pointer; font-family: var(--font-body); background: none; }
-  .list-row:hover { background: var(--surface-100); }
-  .list-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .list-name .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-  .list-name span:last-child { font-weight: 700; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .list-prog { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-  .list-prog .pb { width: 52px; height: 7px; }
-  .list-prog span { font-size: var(--fs-sm); font-weight: 800; color: var(--ink-450); width: 26px; text-align: right; }
+  .tl-card.locked { background: var(--surface-100); }
+  .tl-card.locked .tl-persp { opacity: .6; }
+  .cr-date { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-300); }
+  .obs-enter { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 22px 24px; }
+  .obs-enter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .obs-enter-head .pl { flex: none; }
+  .obs-enter-head .nm { font-weight: 800; font-size: var(--fs-md); }
+  .obs-enter-head .sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .obs-prog { margin-left: auto; min-width: 190px; text-align: right; }
+  .obs-prog-txt { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
+  .obs-prog-txt b { color: var(--ink-900); font-weight: 800; }
+  .obs-prog-pend { color: var(--lvl-2-ink); font-weight: 700; }
+  .obs-prog-bar { margin-top: 6px; }
+  @media (max-width: 640px) { .obs-enter-head { flex-wrap: wrap; } .obs-prog { margin-left: 0; width: 100%; text-align: left; } }
+  .obs-dots { display: flex; gap: 3px; margin: 14px 0 18px; }
+  .obs-dot { flex: 1; height: 5px; border-radius: 3px; }
+  .obs-q { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; margin-bottom: 4px; }
+  .obs-skill { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); margin-bottom: 6px; }
+  .obs-anchor { margin: 0 0 20px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
+  .obs-stars { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; }
+  .obs-star { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: pointer; border: 2px solid var(--line-200); background: var(--white); border-radius: var(--radius-md); padding: 13px 15px; font-family: var(--font-body); color: var(--ink-900); min-height: 58px; }
+  .obs-star .row { display: flex; gap: 2px; }
+  .obs-star .lb { font-weight: 700; font-size: var(--fs-md); }
+  .obs-star.on { border-color: var(--green-500); background: var(--wash-green); }
+  .obs-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 22px; }
+  .obs-nav .btn-soft:disabled { opacity: .45; cursor: default; }
+  .obs-nav-r { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+  .obs-need { font-size: var(--fs-sm); font-weight: 700; color: var(--lvl-2-ink); }
+  /* One page = OBS_PAGE_SIZE question cards stacked */
+  .obs-enter { scroll-margin-top: 90px; }
+  .obs-page { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin: -6px 0 14px; }
+  .obs-qcards { display: flex; flex-direction: column; gap: 14px; }
+  .obs-qcard { border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 16px 18px; }
+  .obs-qcard.done { border-color: var(--lvl-3-wash); background: color-mix(in srgb, var(--wash-green) 45%, transparent); }
+  .obs-qcard .obs-anchor { margin-bottom: 14px; }
+  .obs-celebrate { text-align: center; padding: 26px; margin-top: 16px; background: var(--wash-pink); border-radius: var(--radius-card); }
+  .obs-celebrate .msg { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--pink-600); margin-top: 8px; }
+
+  /* logs */
+  .log-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .log-legend { gap: 10px 20px; margin: 0 0 18px; }
+  .win-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
+  .win-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
+  .win-card .ring { flex: none; }
+  /* Pickable window cards (Assess → Done so far) */
+  .win-card.pick { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
+  .win-card.pick:hover:not(.locked) { border-color: var(--green-500); }
+  .win-card.pick.on { border-color: var(--green-500); box-shadow: 0 0 0 3px var(--wash-green); }
+  .win-card.pick.locked { cursor: not-allowed; background: var(--surface-100); }
+  .win-card.pick.locked .ring, .win-card.pick.locked .wc-label, .win-card.pick.locked .wc-sub { opacity: .5; }
+  .wc-lock { background: var(--white); border: 1px solid var(--line-200); color: var(--ink-450); }
+  .wc-label { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); }
+  .wc-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin: 2px 0 6px; }
+  .mtx-corner { align-self: end; }
+  .mtx-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .mtx-name .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .mtx-name span:last-child { font-weight: 700; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-strip-title { margin: 24px 0 12px; }
+  .strip-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
+  .strip-card { text-align: left; cursor: pointer; border: 1px solid var(--line-200); background: var(--white); border-radius: var(--radius-lg); padding: 16px 18px; font-family: var(--font-body); }
+  .strip-card.on { border: 2px solid var(--green-500); background: var(--wash-green); padding: 15px 17px; }
+  .strip-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+  .strip-top .nm { font-weight: 800; font-size: var(--fs-md); } .strip-top .pct { font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); }
+  .strip-bar { margin-bottom: 9px; }
+  .strip-cap { font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; }
 
   /* insights */
   .ins-h { font-weight: 800; font-size: var(--fs-md); font-family: var(--font-heading); }
@@ -4255,6 +4488,11 @@
   .mg-scene-bloom { background: ${ART.skyBloom}; box-shadow: inset 0 -30px 50px -30px ${ART.skyBloomGlow}; }
 
   /* Slot 3 — caption · Slot 4 — celebration */
+  /* Landing garden scene is a doorway to the class garden (one plant per child) */
+  .mg-scene-btn { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: var(--radius-card); text-align: inherit; }
+  .mg-scene-btn:hover .mg-scene { border-color: var(--green-500); }
+  .mg-garden-link { text-align: center; margin-top: -12px; }
+  .sg-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .mg-caption { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-700); text-align: center; }
   .mg-celebrate { align-self: center; background: var(--wash-pink); color: var(--pink-600); font-weight: 800; font-size: var(--fs-md); padding: 10px 18px; border-radius: var(--radius-pill); }
 
@@ -4424,7 +4662,12 @@
   .ov-l3 { background: var(--lvl-3-wash); border-color: var(--lvl-3); } .ov-l3 .ov-count { color: var(--lvl-3-ink); }
   .ov-count { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.1; }
   .ov-title { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); }
-  .ov-sub { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; }
+  /* ⓘ score explanation (tap to open; T11) */
+  .info-tip { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 4px; vertical-align: middle; border: none; border-radius: 50%; background: var(--surface-100); color: var(--ink-450); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
+  .info-tip:hover, .info-tip[aria-expanded="true"] { background: var(--wash-green); color: var(--green-700); }
+  .info-pop { margin: 8px 0 6px; padding: 10px 12px; max-width: 560px; background: var(--surface-100); border-radius: var(--radius-md); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 500; color: var(--ink-700); line-height: 1.5; text-align: left; }
+  .info-row { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-bottom: 12px; }
+  .ov-unit { font-size: var(--fs-md); font-weight: 700; }   /* "skills" beside the count */
   .ov-note { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; margin-top: 10px; }
   .ov-hint { font-size: var(--fs-sm); color: var(--ink-450); margin-top: 16px; } .ov-hint b { color: var(--ink-900); }
   .ov-legend { gap: 8px 18px; margin: 12px 0 14px; }

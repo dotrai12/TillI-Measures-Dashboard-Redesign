@@ -436,7 +436,7 @@
     function regionAvg(region, key) { var xs = schools.filter(function (s) { return s.region === region && s[key] != null; }); return xs.length ? Math.round(sum(xs, function (s) { return s[key]; }) / xs.length) : 0; }
     var regionCard = ['India', 'Sri Lanka'].map(function (rg) {
       return '<div style="margin-bottom:6px;font-weight:800;font-size:var(--fs-sm);color:var(--ink-700)">' + rg + '</div>' +
-        bar('Social-Emotional', regionAvg(rg, 'sel'), 'sel') + bar('Cognitive / EF', regionAvg(rg, 'cog'), 'cog');
+        bar('Social-Emotional', regionAvg(rg, 'sel'), 'sel') + bar('Cognitive', regionAvg(rg, 'cog'), 'cog');
     }).join('<div style="height:10px"></div>');
     var boards = {}; schools.forEach(function (s) { boards[s.board] = (boards[s.board] || 0) + 1; });
     var boardMax = Math.max.apply(null, Object.keys(boards).map(function (k) { return boards[k]; })) || 1;
@@ -451,7 +451,7 @@
     body.innerHTML = screenHead('Analytics', 'Rollups across the whole portfolio — outcomes, engagement and rollout.') +
       '<div class="tl-grid two">' +
         '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Outcomes by region</h3><p class="ui-mod-note">Average band across schools with results.</p></div></div>' + regionCard +
-          '<div class="ui-legend"><span><i style="background:var(--green-500)"></i>Social-Emotional</span><span><i style="background:var(--cyan-500)"></i>Cognitive / EF</span></div></div>' +
+          '<div class="ui-legend"><span><i style="background:var(--green-500)"></i>Social-Emotional</span><span><i style="background:var(--cyan-500)"></i>Cognitive</span></div></div>' +
         '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Board mix</h3><p class="ui-mod-note">Partner schools by curriculum board.</p></div></div>' + boardRows + '</div>' +
       '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Completion ranking</h3><p class="ui-mod-note">Assessment completion, highest first.</p></div></div>' +

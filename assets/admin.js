@@ -589,7 +589,7 @@
   //  1) OVERVIEW  (spec §5.1)
   // ========================================================
   // Skill band distribution body — where children sit across bands per skill,
-  // split into Social-Emotional / Executive Function buckets. Shared: the
+  // split into Social-Emotional / Cognitive buckets. Shared: the
   // Overview renders it whole-school; kept as a plain helper so scope/point
   // are passed in rather than closed over.
   function skillBandDistBody(students, point, gradeBand) {
@@ -612,7 +612,7 @@
     }
     return '<div class="mb-3">' + bandLegend() + '</div>' +
       distBucket('Social-Emotional', 'sel') +
-      distBucket('Executive Function', 'cog');
+      distBucket('Cognitive', 'cog');
   }
 
   // Verdict banner (feedback §1/§2/§3) — the answer before the evidence.
