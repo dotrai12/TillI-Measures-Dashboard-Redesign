@@ -321,7 +321,8 @@
       profileEdit: false, profileDraft: null,
       // Ask Tilli: one live conversation shared by the side panel (floating
       // bubble / in-card prompts) and the full screen (nav). `chats` = history.
-      ask: { open: false, context: '', prompt: '', thread: [], thinking: false, chatId: null, scope: 'all', histOpen: false },
+      ask: { open: false, context: '', prompt: '', thread: [], thinking: false, chatId: null, scope: 'all', histOpen: false,
+        histCollapsed: !!loadAskHist().collapsed, histW: loadAskHist().w || null },   // full-screen history column: hidden? / dragged width
       chats: [], askReturn: 'garden',
       gardener: (ctx.teacher && ctx.teacher.demo && ctx.teacher.demo.gender === 'Male') ? 'm' : 'f',
     };
@@ -2859,6 +2860,12 @@
   // (S.chats, localStorage) that the full screen lists, reopens and deletes.
   // Replies are demo answers computed from the class data in scope.
   const CHATS_KEY = 'tilliMeasures.askChats';
+  // Chat-history column: width (drag the right edge) + collapsed state, remembered per browser.
+  const ASK_HIST_KEY = 'tilliMeasures.askHistPanel';
+  const ASKX_HIST_MIN = 220;   // narrowest the history column can be dragged (px)
+  const ASKX_HIST_MAX = 480;   // widest the history column can be dragged (px)
+  function loadAskHist() { try { const v = JSON.parse(localStorage.getItem(ASK_HIST_KEY) || 'null'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
+  function saveAskHist() { try { localStorage.setItem(ASK_HIST_KEY, JSON.stringify({ w: S.ask.histW || null, collapsed: !!S.ask.histCollapsed })); } catch (e) { /* private mode — just won't persist */ } }
   const ASK_TRY = [
     'Which students need help with empathy?',
     "What's the biggest skill gap in my class?",
@@ -2980,6 +2987,21 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  // Small confirm under the Export button: names the chat, then Download / Cancel.
+  const EXPORT_TITLE_MAX = 60;   // longer chat titles are cut with "…" in the confirm (the file keeps the full title)
+  function exportConfirmPop() {
+    const c = S.chats.find((x) => x.id === S.ask.chatId);
+    const t = c ? c.title : 'this chat';
+    const short = t.length > EXPORT_TITLE_MAX ? t.slice(0, EXPORT_TITLE_MAX - 1).trimEnd() + '…' : t;
+    return `<div class="askx-pop" role="dialog" aria-label="Export chat">
+      <p>This will download the whole chat <b title="${esc(t)}">“${esc(short)}”</b> as a text file.</p>
+      <div class="askx-pop-act">
+        <button class="btn btn-ghost btn-sm focus" data-askx-export-cancel>Cancel</button>
+        <button class="btn btn-primary btn-sm focus" data-askx-export-go>Download</button>
+      </div>
+    </div>`;
+  }
+
   // ---------------- Ask Tilli: full screen (nav destination) ----------------
   function askCrumbs() {
     return `<nav class="askx-crumbs" aria-label="Breadcrumb"><button class="focus" data-nav="garden">Home</button><span aria-hidden="true">›</span><b>Ask Tilli</b></nav>`;
@@ -3004,25 +3026,36 @@
             ${ASK_TRY.map((q) => `<button class="askx-sug focus" data-askx-try="${esc(q)}">${esc(q)}</button>`).join('')}
           </div>
         </div>`;
-    return `<div class="askx${a.histOpen ? ' hist-open' : ''}">
+    // History column: « hides it (desktop) / closes the drawer (narrow); the
+    // header's panel button brings it back. Its right edge drags to resize.
+    const histW = a.histW ? Math.max(ASKX_HIST_MIN, Math.min(ASKX_HIST_MAX, a.histW)) : null;
+    const collapseIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>';
+    return `<div class="askx${a.histOpen ? ' hist-open' : ''}${a.histCollapsed ? ' collapsed' : ''}"${histW ? ` style="--askx-hist-w:${histW}px"` : ''}>
       <aside class="askx-hist" aria-label="Chat history">
-        <button class="btn btn-primary block askx-new focus" data-askx-new>${LU.plus} New Chat</button>
+        <div class="askx-hist-top">
+          <button class="btn btn-primary block askx-new focus" data-askx-new>${LU.plus} New Chat</button>
+          <button class="askx-tool askx-collapse focus" data-askx-collapse aria-label="Hide chat history" title="Hide chat history">${collapseIcon}</button>
+        </div>
         <div class="askx-list">${S.chats.length ? group('This week', recent) + group('Earlier', older) : '<div class="askx-none">No chats yet — ask your first question.</div>'}</div>
         ${S.chats.length ? `<button class="askx-clear focus" data-askx-clear>${LU.trash} Clear all history</button>` : ''}
+        <div class="askx-resize focus" role="separator" aria-orientation="vertical" aria-label="Resize chat history" tabindex="0"
+          aria-valuemin="${ASKX_HIST_MIN}" aria-valuemax="${ASKX_HIST_MAX}"${histW ? ` aria-valuenow="${histW}"` : ''} title="Drag to resize · double-click to reset"></div>
       </aside>
       <button class="askx-scrim" data-askx-hist aria-label="Close chat history"></button>
       <section class="askx-main">
-        <div class="askx-head">
-          <button class="askx-tool askx-histbtn focus" data-askx-hist aria-label="Chat history" title="Chat history">${LU.panel}</button>
-          <span class="askx-ava">${LU.spark}</span>
-          <div class="askx-hmeta"><div class="askx-t">Ask Tilli</div><div class="askx-s">Your AI teaching assistant</div></div>
+        <!-- One toolbar row: show-history · scope picker · minimise / export -->
+        <div class="askx-scope">
+          <button class="askx-tool askx-histbtn focus" data-askx-hist aria-label="Show chat history" aria-expanded="${!a.histCollapsed}" title="Show chat history">${LU.panel}</button>
+          <label class="askx-scope-l" for="askx-scope-sel" title="Answering about">${LU.pin}<span>Answering about</span></label>
+          <select id="askx-scope-sel" class="askx-select focus" data-askx-scope title="Tilli's answers only use data from the classes picked here">${opts}</select>
           <div class="askx-tools">
             <button class="askx-tool focus" data-askx-min title="Minimise to side panel" aria-label="Minimise to side panel">${LU.min}</button>
-            <button class="askx-tool focus" data-askx-export title="Export this chat" aria-label="Export this chat"${a.thread.length ? '' : ' disabled'}>${LU.share}</button>
+            <div class="askx-export-wrap">
+              <button class="askx-tool focus" data-askx-export title="Export this chat" aria-label="Export this chat" aria-haspopup="dialog" aria-expanded="${!!a.exportConfirm}"${a.thread.length ? '' : ' disabled'}>${LU.share}</button>
+              ${a.exportConfirm ? exportConfirmPop() : ''}
+            </div>
           </div>
         </div>
-        <div class="askx-scope"><label class="askx-scope-l" for="askx-scope-sel">${LU.pin} Answering about</label>
-          <select id="askx-scope-sel" class="askx-select focus" data-askx-scope title="Tilli's answers only use data from the classes picked here">${opts}</select></div>
         <div class="askx-body">${body}</div>
         <div class="askx-foot">
           <form class="askx-compose" data-askx-form>
@@ -3054,8 +3087,55 @@
       render();
     }, 'change');
     on('[data-askx-min]', () => { S.nav = S.askReturn || 'garden'; S.ask.open = true; render(); });
-    on('[data-askx-export]', exportChat);
-    on('[data-askx-hist]', () => { S.ask.histOpen = !S.ask.histOpen; render(); });
+    // Export → confirm popover (toggle) → Download runs exportChat. Esc / outside click closes.
+    const closeExport = () => { if (S.ask.exportConfirm) { S.ask.exportConfirm = false; render(); } };
+    on('[data-askx-export]', () => { S.ask.exportConfirm = !S.ask.exportConfirm; render(); });
+    on('[data-askx-export-cancel]', closeExport);
+    on('[data-askx-export-go]', () => { S.ask.exportConfirm = false; exportChat(); render(); });
+    if (S.ask.exportConfirm) {
+      const go = ax.querySelector('[data-askx-export-go]'); if (go) go.focus();
+      ax.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeExport(); });
+      ax.addEventListener('click', (e) => { if (!e.target.closest('.askx-export-wrap')) closeExport(); });
+    }
+    // Narrow screens: the history is a drawer (histOpen). Desktop: a column that
+    // can be hidden (histCollapsed, remembered) and resized by its right edge.
+    const narrow = () => window.innerWidth <= 760;
+    on('[data-askx-hist]', () => {
+      if (narrow()) S.ask.histOpen = !S.ask.histOpen;
+      else { S.ask.histCollapsed = false; saveAskHist(); }
+      render();
+    });
+    on('[data-askx-collapse]', () => {
+      if (narrow()) S.ask.histOpen = false;
+      else { S.ask.histCollapsed = true; saveAskHist(); }
+      render();
+    });
+    const hz = ax.querySelector('.askx-resize'), aside = ax.querySelector('.askx-hist');
+    if (hz && aside) {
+      // Live-resize by writing the CSS var straight onto .askx (no re-render mid-drag).
+      const setW = (w) => {
+        w = Math.round(Math.max(ASKX_HIST_MIN, Math.min(ASKX_HIST_MAX, w)));
+        S.ask.histW = w; ax.style.setProperty('--askx-hist-w', w + 'px'); hz.setAttribute('aria-valuenow', w);
+      };
+      hz.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        const left = aside.getBoundingClientRect().left;
+        hz.setPointerCapture(e.pointerId); hz.classList.add('dragging'); document.body.style.userSelect = 'none';
+        const move = (ev) => setW(ev.clientX - left);
+        const up = () => {
+          hz.removeEventListener('pointermove', move); hz.removeEventListener('pointerup', up); hz.removeEventListener('pointercancel', up);
+          hz.classList.remove('dragging'); document.body.style.userSelect = ''; saveAskHist();
+        };
+        hz.addEventListener('pointermove', move); hz.addEventListener('pointerup', up); hz.addEventListener('pointercancel', up);
+      });
+      hz.addEventListener('dblclick', () => { S.ask.histW = null; ax.style.removeProperty('--askx-hist-w'); hz.removeAttribute('aria-valuenow'); saveAskHist(); });
+      hz.addEventListener('keydown', (e) => {   // ←/→ resize (Shift = bigger steps)
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        const step = e.shiftKey ? 48 : 16;
+        setW(aside.getBoundingClientRect().width + (e.key === 'ArrowRight' ? step : -step)); saveAskHist();
+      });
+    }
     const bd = ax.querySelector('.askx-body'); bd.scrollTop = bd.scrollHeight;
     if (!bp().isPhone) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   }
@@ -3659,7 +3739,19 @@
   .askx-hist { width: var(--askx-hist-w); flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line-200); background: var(--surface-100); }
   /* .askx-hist prefix outranks tilli.css's .btn.block { width:100% }, which with the
      16px margins pushed the button 32px past the column into the chat header. */
-  .askx-hist .askx-new { margin: 16px; width: auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .askx-hist .askx-new { margin: 0; width: auto; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .askx-hist { position: relative; }
+  .askx-hist-top { display: flex; align-items: center; gap: 8px; padding: 16px; }
+  .askx-collapse { color: var(--ink-450); }
+  /* Drag handle on the column's right edge: an 8px hit area, a 2px green line on hover / drag / focus. */
+  .askx-resize { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; z-index: 3; cursor: col-resize; touch-action: none; }
+  .askx-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
+  .askx-resize:hover::after, .askx-resize.dragging::after, .askx-resize:focus-visible::after { background: var(--green-500); }
+  .askx-resize:focus-visible { outline: none; }
+  @media (min-width: 761px) {
+    .askx.collapsed .askx-hist { display: none; }
+    .askx.collapsed .askx-histbtn { display: grid; }
+  }
   .askx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; border-top: 1px solid var(--line-200); }
   .askx-gh { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
   .askx-item { display: flex; align-items: center; border-radius: var(--radius-md); }
@@ -3680,12 +3772,13 @@
   .askx-clear:hover { color: var(--danger-700); }
   .askx-scrim { display: none; }
   .askx-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-  .askx-head { display: flex; align-items: center; gap: 14px; padding: 18px 24px; border-bottom: 1px solid var(--line-200); }
-  .askx-ava { width: 46px; height: 46px; flex: none; border-radius: 50%; background: var(--green-500); color: var(--white); display: grid; place-items: center; }
-  .askx-hmeta { min-width: 0; }
-  .askx-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1.2; color: var(--ink-900); }
-  .askx-s { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
-  .askx-tools { margin-left: auto; display: flex; gap: 8px; }
+  .askx-tools { margin-left: auto; flex: none; display: flex; gap: 8px; }   /* minimise + export, pushed to the right of the scope row */
+  /* Export confirm popover — hangs under the Export button, right-aligned. */
+  .askx-export-wrap { position: relative; }
+  .askx-pop { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 270px; max-width: calc(100vw - 32px); background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); box-shadow: 0 10px 28px rgba(20, 20, 20, .14); padding: 14px 14px 12px; }
+  .askx-pop p { margin: 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-700); overflow-wrap: anywhere; }
+  .askx-pop p b { color: var(--ink-900); font-weight: 700; }
+  .askx-pop-act { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
   .askx-tool { width: 42px; height: 42px; flex: none; display: grid; place-items: center; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); color: var(--ink-700); cursor: pointer; }
   .askx-tool:hover:not(:disabled) { background: var(--surface-100); }
   .askx-tool:disabled { opacity: .4; cursor: default; }
@@ -3727,10 +3820,9 @@
     .askx.hist-open .askx-hist { transform: none; }
     .askx.hist-open .askx-scrim { display: block; position: absolute; inset: 0; z-index: 4; border: none; background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
     .askx-histbtn { display: grid; }
-    .askx-head { padding: 12px 14px; gap: 10px; }
-    .askx-ava { width: 38px; height: 38px; }
-    .askx-t { font-size: var(--fs-lg); }
-    .askx-scope { padding: 8px 14px; }
+    .askx-resize { display: none; }   /* drawer width is fixed on narrow screens */
+    .askx-scope { padding: 8px 14px; gap: 8px; }
+    .askx-scope-l span { display: none; }   /* phones: just the pin, so picker + tools fit one row */
     .askx-body { padding: 16px 14px; }
     .askx-foot { padding: 10px var(--askx-foot-pr) 8px 14px; }
     .askx-try { margin-top: 22px; }
