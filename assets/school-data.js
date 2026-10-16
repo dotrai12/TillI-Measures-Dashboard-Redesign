@@ -187,6 +187,15 @@
       title: 'Programme Coordinator',
     },
     {
+      // View-only school leadership (spec §2): sees aggregates + counts, no names
+      // in completion lists, no roster / history / invites.
+      id: 'a-principal',
+      name: 'A. Wanigasuriya',
+      email: 'principal@littlesprouts.edu',
+      role: 'principal',
+      title: 'Principal',
+    },
+    {
       // Tilli's own team — internal staff who log in to view a partner school.
       // Full (coordinator-level) access; the admin dashboard treats 'tilli'
       // like a coordinator but shows a "Tilli Team" badge.

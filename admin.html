@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261016zp">
+<link rel="stylesheet" href="assets/tilli.css?v=20261016zx">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -29,8 +29,9 @@
     --ad-header-h: 66px;
     --ad-gap: var(--page-gap);   /* alias kept for any old references */
     --ad-maxw: 1180px;
+    --ov-num-size: 48px;   /* Overview hero number (the one thing to look at) */
   }
-  body { background: var(--surface-100); }
+  body { background: var(--white); }   /* pure white, same as the teacher dashboard — cards keep their 1px border */
 
   /* ---- App grid: sidebar + (header / main) ---- */
   /* minmax(0,…) lets the content track shrink below its min-content, so a wide
@@ -98,7 +99,6 @@
   .ad-skillname { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
   .ad-skillname small { display: block; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-300); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
   .ad-interp { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); line-height: 1.5; margin: 6px 0 0; }
-  .ad-interp.placeholder { color: var(--warn-700); background: var(--warn-wash); border-radius: var(--radius-sm); padding: 8px 10px; display: inline-block; }
 
   /* ---- Collapsible skill buckets (Social-Emotional / Cognitive) ---- */
   .ad-bucket { border: 1px solid var(--line-200); border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden; background: var(--white); }
@@ -126,7 +126,6 @@
   /* ---- Filters bar ---- */
   .ad-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: var(--page-gap); }
   .ad-filters .select-wrap { min-width: 150px; }
-  .ad-refresh { margin-left: auto; }
 
   /* ---- States ---- */
   .ad-err { text-align: center; padding: 24px; color: var(--danger-700); font-weight: 700; font-size: var(--fs-sm); }
@@ -198,8 +197,6 @@
      Mockup-inspired additive modules (same DS tokens/colours).
      ============================================================ */
 
-  /* ---- Meta chip row (Overview quick counts; chips are .ui-metachip) ---- */
-  .ad-chiprow { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: var(--page-gap); }
 
   /* ---- Grade / section navigator cards (Outcomes drill) ---- */
   .ad-navcards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--page-gap); }
@@ -243,8 +240,6 @@
   .ad-gs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); }
   .ad-gs li .p { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-450); }
   /* Overview growth/strength header: scope pill + drill-in link */
-  .ad-gs-head { display: flex; align-items: center; gap: 12px; }
-  .ad-scopepill { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); background: var(--surface-100); border: 1.5px solid var(--line-200); border-radius: var(--radius-pill); padding: 6px 14px; }
 
   /* ---- Compare two classes (Outcomes) — two full section reads, side by side ---- */
   .cmp-head { margin-bottom: 18px; }
@@ -265,14 +260,13 @@
   .cmp-sk-bar { min-width: 0; }
   .cmp-sk-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: var(--fs-sm); white-space: nowrap; justify-self: end; }
   .cmp-sk-status i { width: 8px; height: 8px; border-radius: var(--radius-pill); flex: none; }
-  .cmp-radar { margin-top: 2px; }
+  .cmp-views { margin-top: 14px; }
   @media (max-width: 860px) { .cmp-cols { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 560px) { .cmp-gs { grid-template-columns: minmax(0, 1fr); } }
 
-  /* ---- Multi-perspective radar (legend is .ui-legend) ---- */
-  .ad-radar-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-  .ad-radar-wrap svg { width: 100%; max-width: 380px; height: auto; }
-  .ad-radar-wrap .ui-legend { justify-content: center; margin-top: 0; }
+  /* ---- Where views differ (teacher / parent / child) ---- */
+  .ad-views td.name { font-weight: 700; }
+  .ad-views-note { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-300); margin: 8px 2px 0; }
 
   /* ---- Mobile bottom tab bar (.ui-bottomnav) — shown ≤860px only ---- */
   .ui-bottomnav { display: none; }
@@ -315,7 +309,6 @@
     /* Filters go full-width and stack cleanly; hide the decorative divider span. */
     .ad-filters .select-wrap { min-width: 0; flex: 1 1 46%; }
     .ad-filters .input { flex: 1 1 100%; max-width: none !important; }
-    .ad-filters .ad-refresh { margin-left: 0; flex: 1 1 100%; }
     .ad-filters > span[style] { display: none; }
     .ui-bottomnav button { letter-spacing: -0.01em; gap: 2px; }
   }
@@ -324,15 +317,76 @@
      Verdict banner (feedback §1/§3) — the one-line answer at the top
      of Overview. Lead with the conclusion; evidence sits below it.
      ============================================================ */
-  .ad-verdict { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
-  .ad-verdict.good { border-left-color: var(--green-500); }
-  .ad-verdict.watch { border-left-color: var(--warn-500); }
-  .ad-verdict-main { flex: 1 1 300px; min-width: 260px; }
-  .ad-verdict-head { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); line-height: 1.35; }
-  .ad-verdict-sub { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); margin-top: 7px; line-height: 1.55; }
-  .ad-verdict-right { flex: 1 1 240px; min-width: 220px; }
-  .ad-verdict-tgt { font-weight: 700; font-size: var(--fs-xs); color: var(--ink-600); margin: 9px 0; display: inline-flex; align-items: center; gap: 6px; }
-  .ad-verdict-tgt .tk { display: inline-block; width: 2px; height: 12px; background: var(--ink-700); border-radius: 2px; }
+
+  /* n = … children, and the small-group caution (< 10 children) */
+  .ad-n { font-weight: 700; color: var(--ink-450); white-space: nowrap; }
+  .ad-small { display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 9px; border-radius: var(--radius-pill); background: var(--warn-wash); color: var(--warn-700); font-size: var(--fs-xs); font-weight: 700; }
+  .ad-scope-n { font-size: var(--fs-sm); }
+
+  /* "Since your last visit" strip */
+  .ad-since { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius-md); background: var(--white); border: 1px solid var(--line-200); font-size: var(--fs-sm); font-weight: 600; color: var(--ink-600); }
+  .ad-since-h { font-weight: 800; color: var(--accent-ink); margin-right: 4px; }
+  .ad-since .sep { color: var(--ink-300); }
+
+  /* ============================================================
+     OVERVIEW — one hero (like the teacher garden), then a quiet row.
+     Type ramp on this screen: 32 greeting · 48 hero number ·
+     18 card titles · 15 body · 13 meta. Secondary text = --ink-450.
+     ============================================================ */
+  .ov-hello { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); color: var(--green-700); margin: 6px 0 2px; }
+  .ov-sub { font-weight: 600; font-size: var(--fs-md); color: var(--ink-450); margin: 0 0 var(--page-gap); }
+  .ov-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr); gap: 12px 32px; align-items: center;
+    background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: clamp(20px, 3vw, 28px); }
+  .ov-kicker { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
+  .ov-numrow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .ov-num { font-family: var(--font-heading); font-weight: 700; font-size: var(--ov-num-size); line-height: 1; color: var(--ink-900); letter-spacing: -.01em; }
+  .ov-numlbl { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-700); }
+  .ov-big { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); margin-top: 4px; }
+  .ov-line { margin: 10px 0 0; font-weight: 600; font-size: var(--fs-md); color: var(--ink-600); line-height: 1.5; }
+  .ov-line.up { color: var(--green-700); }
+  .ov-line.down { color: var(--warn-700); }
+  .ov-legend { margin-top: 10px; }
+  .ov-hero-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    border-top: 1px solid var(--line-200); padding-top: 14px; margin-top: 6px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
+  .ov-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--page-gap); margin-top: var(--page-gap); align-items: start; }
+  .ov-row.one { grid-template-columns: minmax(0, 1fr); }
+  .ov-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 18px 20px; }
+  .ov-card-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); margin: 0; }
+  .ov-card-t.mt { margin-top: 16px; }
+  .ov-card-line { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
+  .ov-card-note { margin: 14px 0 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
+  .ov-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .ov-list li { display: flex; align-items: center; gap: 10px; font-size: var(--fs-md); font-weight: 600; color: var(--ink-700); }
+  .ov-list i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .ov-list span { flex: 1; min-width: 0; }
+  .ov-list b { font-weight: 700; color: var(--ink-450); font-size: var(--fs-sm); }
+  .ov-prep { margin-top: 12px; }
+  .ov-prep summary { cursor: pointer; font-weight: 700; font-size: var(--fs-sm); color: var(--accent-ink); list-style: none; }
+  .ov-prep summary::-webkit-details-marker { display: none; }
+  .ov-prep summary::after { content: ' ▾'; }
+  .ov-prep[open] summary::after { content: ' ▴'; }
+  .ov-prep ul { margin: 10px 0 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-600); }
+  .ov-progress { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
+  .ov-progress li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto; gap: 12px; align-items: center; padding: 9px 6px; border-top: 1px solid var(--line-200); border-radius: var(--radius-sm); }
+  .ov-progress li.clickable { cursor: pointer; }
+  .ov-progress li.clickable:hover { background: var(--surface-100); }
+  .ov-progress .nm { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); min-width: 0; }
+  .ov-progress .nm small { display: block; font-weight: 600; color: var(--ink-450); font-size: var(--fs-sm); }
+  .ov-progress .ui-meter { height: 8px; }
+  .ov-progress b { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); white-space: nowrap; }
+  /* Admin-wide: secondary notes at --ink-450 (--ink-300 fails contrast on white). */
+  .ad-main .ui-mod-note { color: var(--ink-450); }
+  @media (max-width: 760px) {
+    .ov-hero { grid-template-columns: minmax(0, 1fr); }
+    .ov-row { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* Roster: quiet year-end row + neutral user actions */
+  .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
+  .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }
+  .ad-yearend span { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; }
+  .ad-useracts .btn-link.muted { color: var(--ink-450); }
+  .ad-useracts .ad-revoke:hover { color: var(--pink-600); }
 
   /* ---- Band-bar target marker (feedback §2) — "compared to what?" ----
      Secure is the right-most segment, so a target of N% Secure sits at
@@ -351,6 +405,15 @@
      Lift them above the mobile bottom nav. */
   @media (max-width: 860px) { :root { --tf-bottom: 78px; --tf-right: 14px; } }
 
+  /* Ask Tilli full screen — same .askx layout as the teacher view (tilli.css).
+     The page header is hidden and the main column goes full height. */
+  .ad-app.ask-mode .ad-col { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
+  .ad-app.ask-mode .ui-header { display: none; }
+  .ad-app.ask-mode .ad-main { flex: 1; min-height: 0; padding: 0; display: flex; }
+  .ad-app.ask-mode .ad-wrap { max-width: none; margin: 0; flex: 1; min-height: 0; display: flex; }
+  .ad-app.ask-mode #ad-main-body { flex: 1; min-width: 0; min-height: 0; display: flex; }
+  .askx-thread .ask-msg.me { font-weight: 600; }
+  @media (max-width: 860px) { .ad-app.ask-mode .ad-col { height: calc(100dvh - 64px); } }
   .ask-panel {
     position: fixed; right: 22px; bottom: 22px; z-index: 60;
     width: min(384px, calc(100vw - 28px)); height: min(564px, calc(100dvh - 40px));
@@ -372,6 +435,8 @@
   .ask-msg.tilli { background: var(--white); border: 1px solid var(--line-200); color: var(--ink-700); align-self: flex-start; border-bottom-left-radius: 5px; }
   .ask-msg.me { background: var(--green-600); color: var(--white); align-self: flex-end; border-bottom-right-radius: 5px; }
   .ask-msg b { font-weight: 800; }
+  .ask-src { margin-top: 8px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
+  .ask-quote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface-100); border-radius: var(--radius-sm); font-weight: 600; color: var(--ink-700); }
   .ask-sugs { display: flex; flex-wrap: wrap; gap: 7px; align-self: flex-start; }
   .ask-foot { display: flex; gap: 8px; padding: 11px; border-top: 1px solid var(--line-200); background: var(--white); }
   .ask-input { flex: 1; border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 10px 15px; font-family: var(--font-body); font-size: var(--fs-sm); color: var(--ink-900); outline: none; }
@@ -380,9 +445,6 @@
   .ask-send:hover { background: var(--green-700); }
 
   /* Ask Tilli full screen (nav destination) — same engine, roomier shell. */
-  .ask-screen { max-width: 720px; }
-  .ask-shell { display: flex; flex-direction: column; height: min(62dvh, 560px); border: 1px solid var(--line-200); border-radius: var(--radius-card); overflow: hidden; background: var(--white); }
-  .ask-shell .ask-body { background: var(--surface-100); }
 
   /* ---- Preview-stage panel (demo tooling; remove to ship) ----
      Look comes from .ui-devpanel (tilli.css). Docked in the sidebar on desktop;
@@ -399,12 +461,12 @@
 <div id="ad-modal-root"></div>
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261016zp"></script>
-<script src="assets/tilli-api.js?v=20261016zp"></script>
-<script src="assets/tilli-history.js?v=20261016zp"></script>
-<script src="assets/created-school-bridge.js?v=20261016zp"></script>
-<script src="assets/admin-data.js?v=20261016zp"></script>
-<script src="assets/float-help.js?v=20261016zp"></script>
-<script src="assets/admin.js?v=20261016zp"></script>
+<script src="assets/school-data.js?v=20261016zx"></script>
+<script src="assets/tilli-api.js?v=20261016zx"></script>
+<script src="assets/tilli-history.js?v=20261016zx"></script>
+<script src="assets/created-school-bridge.js?v=20261016zx"></script>
+<script src="assets/admin-data.js?v=20261016zx"></script>
+<script src="assets/float-help.js?v=20261016zx"></script>
+<script src="assets/admin.js?v=20261016zx"></script>
 </body>
 </html>

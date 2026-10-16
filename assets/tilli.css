@@ -574,7 +574,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 .ui-devpanel-body { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-top: 1px solid var(--line-200); }
 .ui-devpanel.collapsed .ui-devpanel-body { display: none; }
 .ui-devpanel-btn {
-  flex: 1 1 calc(50% - 3px); min-width: 0; display: flex; align-items: center; gap: 7px;
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 7px;   /* short labels pair up; long ones take their own row */
   padding: 7px 9px; border: 1px solid var(--line-200); border-radius: 9px; background: var(--white);
   cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; color: var(--ink-600);
   white-space: nowrap; transition: border-color .12s, background .12s;
@@ -1049,3 +1049,106 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 }
 .hist-tip[data-tip]:hover::after, .hist-tip[data-tip]:focus-visible::after { opacity: 1; transform: none; }
 @media (hover: none) { .hist-tip[data-tip]::after { display: none; } }   /* touch: the tap opens History instead */
+
+/* ============================================================
+   Ask Tilli — full-screen chat (.askx-*), shared by the teacher and
+   school admin dashboards so both look identical.
+   ============================================================ */
+.askx {
+  /* --- tunable visual parameters --- */
+  --askx-hist-w: 300px;     /* width of the chat-history column */
+  --askx-max: 760px;        /* max width of the thread, suggestions and composer */
+  --askx-foot-pr: 84px;     /* composer right padding — keeps Send clear of the Need-help bubble */
+  flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; background: var(--white);
+}
+.askx-hist { width: var(--askx-hist-w); flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line-200); background: var(--surface-100); }
+/* .askx-hist prefix outranks tilli.css's .btn.block { width:100% }, which with the
+   16px margins pushed the button 32px past the column into the chat header. */
+.askx-hist .askx-new { margin: 0; width: auto; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.askx-hist { position: relative; }
+.askx-hist-top { display: flex; align-items: center; gap: 8px; padding: 16px; }
+.askx-collapse { color: var(--ink-450); }
+/* Drag handle on the column's right edge: an 8px hit area, a 2px green line on hover / drag / focus. */
+.askx-resize { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; z-index: 3; cursor: col-resize; touch-action: none; }
+.askx-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
+.askx-resize:hover::after, .askx-resize.dragging::after, .askx-resize:focus-visible::after { background: var(--green-500); }
+.askx-resize:focus-visible { outline: none; }
+@media (min-width: 761px) {
+  .askx.collapsed .askx-hist { display: none; }
+  .askx.collapsed .askx-histbtn { display: grid; }
+}
+.askx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; border-top: 1px solid var(--line-200); }
+.askx-gh { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
+.askx-item { display: flex; align-items: center; border-radius: var(--radius-md); }
+.askx-item:hover { background: var(--white); }
+.askx-item.on { background: var(--white); box-shadow: inset 3px 0 0 var(--green-500); }
+.askx-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 11px 8px 11px 10px; background: none; border: none; cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); text-align: left; }
+.askx-open svg { flex: none; color: var(--ink-450); }
+.askx-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.askx-del { flex: none; display: grid; place-items: center; padding: 8px; margin-right: 4px; background: none; border: none; cursor: pointer; color: var(--ink-300); border-radius: var(--radius-xs); }
+.askx-del:hover { color: var(--danger-700); background: var(--danger-wash); }
+/* Delete appears on the row you're pointing at (or the open chat) — a column of
+   bins on every row read as noise and invited mis-taps. Always shown on touch. */
+.askx-del { opacity: 0; transition: opacity .12s; }
+.askx-item:hover .askx-del, .askx-item.on .askx-del, .askx-del:focus-visible { opacity: 1; }
+@media (hover: none) { .askx-del { opacity: 1; } }
+.askx-none { padding: 18px 8px; font-size: var(--fs-sm); color: var(--ink-300); }
+.askx-clear { display: flex; align-items: center; gap: 9px; padding: 14px 20px; background: none; border: none; border-top: 1px solid var(--line-200); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); text-align: left; }
+.askx-clear:hover { color: var(--danger-700); }
+.askx-scrim { display: none; }
+.askx-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.askx-tools { margin-left: auto; flex: none; display: flex; gap: 8px; }   /* minimise + export, pushed to the right of the scope row */
+/* Export confirm popover — hangs under the Export button, right-aligned. */
+.askx-export-wrap { position: relative; }
+.askx-pop { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 270px; max-width: calc(100vw - 32px); background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); box-shadow: 0 10px 28px rgba(20, 20, 20, .14); padding: 14px 14px 12px; }
+.askx-pop p { margin: 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-700); overflow-wrap: anywhere; }
+.askx-pop p b { color: var(--ink-900); font-weight: 700; }
+.askx-pop-act { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.askx-tool { width: 42px; height: 42px; flex: none; display: grid; place-items: center; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); color: var(--ink-700); cursor: pointer; }
+.askx-tool:hover:not(:disabled) { background: var(--surface-100); }
+.askx-tool:disabled { opacity: .4; cursor: default; }
+.askx-histbtn { display: none; }
+/* Scope: one row — label + picker (the old "Currently scoped to" line only repeated the picker). */
+.askx-scope { display: flex; align-items: center; gap: 10px; padding: 10px 24px; border-bottom: 1px solid var(--line-200); }
+.askx-scope-l { flex: none; display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
+.askx-select {
+  flex: 1; min-width: 0; max-width: 340px; appearance: none; -webkit-appearance: none; cursor: pointer;
+  border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 11px 40px 11px 14px;
+  font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900);
+  background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6170' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px;
+}
+.askx-select:focus { outline: none; border-color: var(--focus); }
+.askx-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; background: var(--surface-100); }
+.askx-thread { width: 100%; max-width: var(--askx-max); margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.askx-thread .ask-msg { font-size: var(--fs-md); line-height: 1.55; }
+.askx-thread .ask-msg.tilli { background: var(--white); border: 1px solid var(--line-200); }
+.askx-empty { margin: auto; width: 100%; max-width: var(--askx-max); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.askx-spark { width: 92px; height: 92px; border-radius: 50%; background: var(--wash-green); color: var(--green-600); display: grid; place-items: center; margin-bottom: 18px; }
+.askx-empty h2 { margin: 0; font-family: var(--font-heading); font-size: var(--fs-xl); color: var(--ink-900); }
+.askx-empty p { margin: 10px 0 0; max-width: 520px; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-450); }
+.askx-try { width: 100%; margin-top: 34px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.askx-try-h { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-bottom: 2px; }
+.askx-sug { text-align: left; padding: 12px 16px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); }
+.askx-sug:hover { border-color: var(--green-500); background: var(--wash-green); }
+.askx-foot { padding: 14px var(--askx-foot-pr) 10px 24px; border-top: 1px solid var(--line-200); background: var(--white); }
+.askx-compose { max-width: var(--askx-max); margin: 0 auto; display: flex; gap: 10px; }
+.askx-input { flex: 1; min-width: 0; padding: 13px 16px; border: 1.5px solid var(--line-200); border-radius: var(--radius-md); outline: none; background: var(--white); font: inherit; font-size: var(--fs-md); color: var(--ink-900); }
+.askx-input:focus { border-color: var(--green-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-500) 18%, transparent); }
+.askx-send { width: 50px; flex: none; display: grid; place-items: center; border: none; border-radius: var(--radius-md); background: var(--green-500); color: var(--white); cursor: pointer; }
+.askx-send:hover:not(:disabled) { background: var(--green-600); }
+.askx-send:disabled { opacity: .5; cursor: default; }
+.askx-note { max-width: var(--askx-max); margin: 8px auto 0; text-align: center; font-size: var(--fs-xs); line-height: 1.4; color: var(--ink-300); }
+@media (max-width: 1023px) { .askx { --askx-hist-w: 250px; } }
+/* Narrow: history becomes a slide-in drawer behind the header button. */
+@media (max-width: 760px) {
+  .askx-hist { position: absolute; z-index: 5; top: 0; bottom: 0; left: 0; width: min(300px, 86%); transform: translateX(-102%); transition: transform .2s var(--ease); box-shadow: var(--shadow-modal); }
+  .askx.hist-open .askx-hist { transform: none; }
+  .askx.hist-open .askx-scrim { display: block; position: absolute; inset: 0; z-index: 4; border: none; background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
+  .askx-histbtn { display: grid; }
+  .askx-resize { display: none; }   /* drawer width is fixed on narrow screens */
+  .askx-scope { padding: 8px 14px; gap: 8px; }
+  .askx-scope-l span { display: none; }   /* phones: just the pin, so picker + tools fit one row */
+  .askx-body { padding: 16px 14px; }
+  .askx-foot { padding: 10px var(--askx-foot-pr) 8px 14px; }
+  .askx-try { margin-top: 22px; }
+}

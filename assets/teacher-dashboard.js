@@ -36,8 +36,6 @@
     green: '#56C02B', shirtSeam: '#49A524', yellow: '#FCC30B', brim: '#E8B96F', hatBand: '#E8912D', cyan: '#26BDE2',
     // sprout (sidebar logo + journey marker), journey vine, lock
     sproutStem: '#348C11', sproutLime: '#9BDE1D', vineStem: '#8FB37E', vineLeaf: '#A9C79A', lock: '#B0A794',
-    // add-student pot
-    potSprout: '#8FB57E', potSeedShade: 'rgba(0,0,0,.06)', clayRim: '#C77E4E', clayBody: '#B96E42',
     // garden scene backdrops (CSS template)
     bedGround: 'linear-gradient(180deg,#EAF1E4 0%,#DCE8D4 62%,#D6E2CD 100%)',
     sky: 'linear-gradient(180deg, #E6F4F8 0%, #EAF5EC 52%, #F1FFEC 100%)',
@@ -354,7 +352,7 @@
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       ovBand: null, ovSkill: null,
       growthFilter: 'overview', growthTable: false,   // Insights → Growth over time line chart   // Insights → Class Skill Overview: box filter + expanded skill
-      add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
+      add: { active: false, step: 'method', sectionId: null, full: false, rows: [], issues: {}, csvMsg: '', csvErr: '', picMsg: '', results: [] },
       histOpen: false, histKind: '',   // Students → class change-history modal + its kind filter
       vw: window.innerWidth,
       select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
@@ -2510,14 +2508,15 @@
     const N = scope.students.length;
     const notAssessed = scope.students.filter((s) => s.state === 'waiting').length;
     const meta = (b) => OV_BANDS.find((x) => x.band === b) || OV_BANDS[1];
-    const boxes = OV_BANDS.map((b) => {
-      const n = stats.filter((s) => s.plurality === b.band).length;
-      const on = S.ovBand === b.band;
-      return `<button class="ov-box ov-l${b.n}${on ? ' on' : ''}${S.ovBand && !on ? ' dim' : ''} focus" data-ov-band="${b.band}" aria-pressed="${on}" title="${on ? 'Show all skills' : 'Show only skills where most students are ' + b.band}">
-        <span class="ov-count">${n} <span class="ov-unit">${n === 1 ? 'skill' : 'skills'}</span></span>
-        <span class="ov-title">Mostly ${b.label}</span>
-      </button>`;
-    }).join('');
+    // One chip row = legend + filter (replaces the three big boxes, the legend
+    // line and the "tap a box" hint). Counts are SKILLS by their largest group.
+    const chip = (band, label, n, lvl) => {
+      const on = (S.ovBand || '') === band;
+      return `<button class="ov-chip${on ? ' on' : ''} focus" data-ov-band="${band}" aria-pressed="${on}"${n || !band ? '' : ' disabled'}
+        title="${band ? `Show only skills where most of the class is ${band}` : 'Show every skill'}">${lvl ? `<i style="background:var(--lvl-${lvl})"></i>` : ''}${label}<b>${n}</b></button>`;
+    };
+    const chips = chip('', 'All skills', stats.length, 0) + OV_BANDS.map((b) =>
+      chip(b.band, 'Mostly ' + b.label, stats.filter((s) => s.plurality === b.band).length, b.n)).join('');
     const rank = { Sprouting: 0, Growing: 1, Blooming: 2 };
     const rows = stats
       .filter((s) => !S.ovBand || s.plurality === S.ovBand)
@@ -2526,28 +2525,19 @@
         const t = s.total || 1, m = meta(s.plurality), open = S.ovSkill === s.key;
         const seg = (b, n) => s.counts[b] ? `<span class="ov-seg" style="width:${(s.counts[b] / t) * 100}%;background:var(--lvl-${n})" title="${s.counts[b]} ${b}"></span>` : '';
         return `<div class="ov-row${open ? ' open' : ''}">
-          <button class="ov-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}">
+          <button class="ov-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}" title="${open ? 'Hide' : 'See'} which children are where">
             <span class="ov-name">${esc(s.name)}</span>
             <span class="ov-bar">${seg('Sprouting', 1)}${seg('Growing', 2)}${seg('Blooming', 3)}</span>
-            <span class="ov-status ov-st-l${m.n}"><i></i>${m.label}</span>
+            <span class="ov-status ov-st-l${m.n}">${m.label}</span>
             <span class="ov-chev" aria-hidden="true">›</span>
           </button>
           ${open ? ovBreakdown(s, scope) : ''}
         </div>`;
       }).join('') || '<div class="ui-empty">No skills in this group right now.</div>';
     return `<div class="ui-card ins-card ov mt-4">
-      <div class="ov-headrow">
-        <div>
-          <div class="ov-h">Class Skill Overview ${infoBtn('info-ov')}</div>${infoPop('info-ov', SCORE_INFO)}
-          <div class="ov-lead">How your class is doing on each skill</div>
-          <p class="ov-desc">Each skill is coloured by where most of your class sits.</p>
-        </div>
-        <span class="ov-scope"><i></i>${esc(scope.name)} · ${countNoun(N, 'student', 'students')}</span>
-      </div>
-      <div class="ov-boxes">${boxes}</div>
-      ${notAssessed ? `<div class="ov-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet</div>` : ''}
-      <div class="ov-hint">👆 <b>Tap a box</b> to see just those skills · <b>tap a skill</b> for the student breakdown</div>
-      <div class="ui-legend ov-legend"><span><i style="background:var(--lvl-1)"></i>Sprouting</span><span><i style="background:var(--lvl-2)"></i>Growing</span><span><i style="background:var(--lvl-3)"></i>Blooming</span></div>
+      <div class="ov-h">Class Skill Overview ${infoBtn('info-ov')}</div>${infoPop('info-ov', SCORE_INFO)}
+      <p class="ov-desc">Where most of ${esc(scope.name)}&rsquo;s ${countNoun(N, 'student', 'students')} sit on each skill. Tap a skill to see who&rsquo;s where.${notAssessed ? ` <span class="ov-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet.</span>` : ''}</p>
+      <div class="ov-chips" role="group" aria-label="Filter skills">${chips}</div>
       <div class="ov-list">${rows}</div>
     </div>`;
   }
@@ -2567,7 +2557,7 @@
       </div>`;
     };
     return `<div class="ov-break">${col('Sprouting')}${col('Growing')}${col('Blooming')}
-      <div class="ov-bfoot"><button class="btn-soft green focus" data-ask="build" data-skill="${esc(stat.name)}" data-band="${stat.plurality}">Ask Tilli how to build ${esc(stat.name)} →</button></div>
+      <div class="ov-bfoot"><button class="btn-link focus" data-ask="build" data-skill="${esc(stat.name)}" data-band="${stat.plurality}">Ask Tilli how to build ${esc(stat.name)} →</button></div>
     </div>`;
   }
 
@@ -2874,13 +2864,23 @@
   }
 
   // ================= Add student flow =================
+  // Same three ways in as onboarding's "Add your students": type them in (an
+  // editable sheet), upload a CSV, or upload / take a picture of the register.
   // Grade · section is chosen once for the whole batch (an existing section, or
   // a new one). Every planted child lands in it — in the dashboard right away
   // and in the teacher's saved roster (TilliOnboarding.appendStudents).
+  // The card can be expanded to full screen; that choice is remembered.
+  const ADD_FULL_KEY = 'tilliMeasures.addStudentsFull';
+  const addBlankRow = () => ({ first: '', last: '', adm: '' });
+  const addRowComplete = (r) => !!(r.first.trim() && r.last.trim() && r.adm.trim());
+  const addRowEmpty = (r) => !(r.first.trim() || r.last.trim() || r.adm.trim());
   function openAddFlow() {
     const secs = S.baseData.sections;
     const sid = (S.sectionId && S.sectionId !== 'all' && secs.some((x) => x.id === S.sectionId)) ? S.sectionId : ((secs[0] || {}).id || 'new');
-    S.add = { active: true, step: 'count', from: S.nav, sectionId: sid, newGrade: '', newSection: '', count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] };
+    let full = false;
+    try { full = localStorage.getItem(ADD_FULL_KEY) === '1'; } catch (e) {}
+    S.add = { active: true, step: 'method', from: S.nav, sectionId: sid, newGrade: '', newSection: '', full,
+      rows: [addBlankRow()], issues: {}, csvMsg: '', csvErr: '', picMsg: '', results: [] };
     render();
   }
   // The base-data section this batch goes into; creates it for "+ New".
@@ -2897,13 +2897,12 @@
     return sec;
   }
   function addSectionOK() { const a = S.add; return a.sectionId !== 'new' || !!(a.newGrade || '').trim(); }
-  // Persist one planted student through the dedupe guard (spec A4). Records the
-  // outcome (created / merged / review) so the finish screen can summarise it and
-  // show the parent verification codes for the new children.
-  function persistPlantedStudent() {
+  function addSheetValid() { return addSectionOK() && S.add.rows.some(addRowComplete); }
+  // Persist one sheet row through the dedupe guard (spec A4). Returns the guard's
+  // result; created / merged children are planted in the section right away.
+  function plantRow(row) {
     const a = S.add;
-    const first = (a.first || '').trim(), last = (a.last || '').trim();
-    const adm = (a.adm || '').trim() || ('TMP-' + Date.now());
+    const first = row.first.trim(), last = row.last.trim(), adm = row.adm.trim();
     const name = (first + ' ' + last).trim();
     const sec = ensureAddSection();
     let res = null;
@@ -2913,17 +2912,17 @@
       const scope = window.TilliAPI.ensureTeacherScope(S.teacher.email, S.teacher.school, sec.grade, sec.section);
       res = window.TilliAPI.addStudent({
         actorEmail: S.teacher.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
-        student_id: adm, first, last, grade: sec.grade, section: sec.section, source: 'manual',
+        student_id: adm, first, last, grade: sec.grade, section: sec.section, source: 'manual', force: row.force || null,
       });
     }
-    const result = (res && res.ok) ? res.result : 'created';
+    const result = (res && res.ok) ? res.result : (res && res.result) || 'created';
+    if (result === 'name_dup' || result === 'id_conflict') return { result, res };
     const rec = (res && res.student) || {};
     const uid = rec.uid || null;
-    a.results.push({ name, result, uid, matched: res && res.matched && res.matched.name });
-    // Same name / taken admission number → the guard didn't create a record; don't plant.
-    if (result !== 'created' && result !== 'merged') return;
+    a.results.push({ name, result, uid });
+    if (result !== 'created' && result !== 'merged') return { result, res };   // 'review' → flagged for the admin, not planted
     const id = rec.student_id || adm;
-    if (S.baseData.sections.some((x) => x.students.some((st) => st.id === id))) return;
+    if (S.baseData.sections.some((x) => x.students.some((st) => st.id === id))) return { result, res };
     const D = window.TilliDashData;
     if (D) {
       sec.students.push(D.buildFreshStudent(sec, { first, last, adm: id, uid }));
@@ -2935,60 +2934,155 @@
     if (window.TilliOnboarding && window.TilliOnboarding.appendStudents) {
       window.TilliOnboarding.appendStudents([{ first, last, adm: id, grade: sec.grade, section: sec.section, uid }]);
     }
+    return { result, res };
+  }
+  // "Plant" the sheet: planted rows leave the sheet; rows the guard bounces (same
+  // name / taken admission #) or half-filled rows stay, flagged, for the teacher.
+  function commitAddSheet() {
+    const a = S.add;
+    if (!addSheetValid()) return;
+    const keep = [], issues = {};
+    a.rows.forEach((row) => {
+      if (addRowEmpty(row)) return;
+      if (!addRowComplete(row)) {
+        keep.push(row); issues[keep.length - 1] = { kind: 'incomplete', text: 'Add a first name, last name and admission number.' };
+        return;
+      }
+      const out = plantRow(row);
+      if (out.result === 'name_dup') {
+        keep.push(row);
+        issues[keep.length - 1] = { kind: 'name_dup', text: `“${row.first.trim()} ${row.last.trim()}” has the same name as a student already on file (#${out.res.matched.student_id}).` };
+      } else if (out.result === 'id_conflict') {
+        keep.push(row);
+        issues[keep.length - 1] = { kind: 'id_conflict', text: `#${row.adm.trim()} already belongs to ${out.res.existing.name}. Two children can’t share an admission number — use a different one.` };
+      }
+    });
     rebuildData();
+    if (keep.length) S.add = Object.assign({}, a, { rows: keep, issues });
+    else S.add = Object.assign({}, a, { step: 'done', rows: [addBlankRow()], issues: {} });
+    render();
+  }
+  // CSV → sheet rows for review (nothing is planted until "Plant students").
+  // Columns are matched by header (first / last / admission); without a header
+  // the order is first name, last name, admission #. A single "name" column is split.
+  function parseRosterCSV(text) {
+    const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+    const cells = (line) => {
+      const out = []; let cur = '', q = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+        else if (c === ',' && !q) { out.push(cur.trim()); cur = ''; }
+        else cur += c;
+      }
+      out.push(cur.trim());
+      return out;
+    };
+    if (!lines.length) return [];
+    const head = cells(lines[0]).map((h) => h.toLowerCase());
+    const find = (re) => head.findIndex((h) => re.test(h));
+    const hasHead = head.some((h) => /first|last|surname|name|admission|adm|roll/.test(h));
+    let fi = 0, li = 1, ai = 2, ni = -1;
+    if (hasHead) {
+      fi = find(/first|given/); li = find(/last|surname|family/); ai = find(/adm|admission|roll|student.?id|number/);
+      if (fi < 0 && li < 0) ni = find(/name/);
+    }
+    return lines.slice(hasHead ? 1 : 0).map((line) => {
+      const c = cells(line);
+      let first = fi >= 0 ? c[fi] || '' : '', last = li >= 0 ? c[li] || '' : '';
+      if (ni >= 0) { const parts = (c[ni] || '').split(/\s+/); first = parts.shift() || ''; last = parts.join(' '); }
+      return { first, last, adm: ai >= 0 ? c[ai] || '' : '' };
+    }).filter((r) => !addRowEmpty(r));
   }
   function addGradeName() {
     const a = S.add;
     if (a.sectionId === 'new') return ((a.newGrade || '').trim() + ' ' + (a.newSection || '').trim().toUpperCase()).trim() || 'a new section';
     const s = S.baseData.sections.find((x) => x.id === a.sectionId); return s ? s.name : 'your class';
   }
-  function potHTML(done) {
-    const sprouts = Array.from({ length: Math.min(done, 14) }, (_, i) => `<span class="pot-sprout" style="height:${14 + (i % 4) * 7}px;background:${i % 2 ? ART.potSprout : ART.green}"></span>`).join('');
-    const seed = done > 0 ? '<span class="pot-seed"></span>' : '';
-    return `<div class="pot">${seed}<div class="pot-bed">${sprouts}</div><div class="pot-rim"></div><div class="pot-body"></div></div>`;
-  }
+  const ADD_ICON_EXPAND = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+  const ADD_ICON_SHRINK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>';
   function addModal() {
     if (!S.add.active) return '';
     const a = S.add;
-    let step = '';
-    if (a.step === 'count') {
-      const canNext = !!a.count && parseInt(a.count, 10) >= 1 && addSectionOK();
-      const secChips = S.baseData.sections.map((x) =>
-        `<button class="ui-filterchip focus${a.sectionId === x.id ? ' on' : ''}" data-add-sec="${esc(x.id)}">${esc(x.name)}</button>`).join('');
-      const secPick = `<div class="add-secpick">
-          <div class="ui-eyebrow mb-2">Grade · section</div>
-          <div class="add-secchips">${secChips}<button class="ui-filterchip focus${a.sectionId === 'new' ? ' on' : ''}" data-add-sec="new">+ New</button></div>
-          ${a.sectionId === 'new' ? `<div class="add-newsec"><input id="add-new-grade" class="input td-in" value="${esc(a.newGrade)}" placeholder="Grade (e.g. Grade 1)"><input id="add-new-section" class="input td-in" value="${esc(a.newSection)}" placeholder="Section (e.g. A)" maxlength="3"></div>` : ''}
-        </div>`;
-      step = `${secPick}<div class="add-center">
-        <div class="add-title">How many students are you adding to<br>${esc(addGradeName())}?</div>
-        <div class="add-pot">${potHTML(a.done)}</div>
-        <input id="add-count" class="add-count" value="${esc(a.count)}" inputmode="numeric" placeholder="Type a number…">
-        <div class="mt-5"><button class="btn btn-primary focus" data-add-to-entry ${canNext ? '' : 'disabled'}>Start planting →</button></div>
+    const secChips = S.baseData.sections.map((x) =>
+      `<button class="ui-filterchip focus${a.sectionId === x.id ? ' on' : ''}" data-add-sec="${esc(x.id)}">${esc(x.name)}</button>`).join('');
+    const secPick = `<div class="add-secpick">
+        <div class="ui-eyebrow mb-2">Grade · section</div>
+        <div class="add-secchips">${secChips}<button class="ui-filterchip focus${a.sectionId === 'new' ? ' on' : ''}" data-add-sec="new">+ New</button></div>
+        ${a.sectionId === 'new' ? `<div class="add-newsec"><input id="add-new-grade" class="input td-in" value="${esc(a.newGrade)}" placeholder="Grade (e.g. Grade 1)"><input id="add-new-section" class="input td-in" value="${esc(a.newSection)}" placeholder="Section (e.g. A)" maxlength="3"></div>` : ''}
       </div>`;
-    } else if (a.step === 'entry') {
-      const pct = a.total ? Math.round((a.done / a.total) * 100) : 0;
-      const canPlant = !!a.first.trim();
-      step = `<div class="add-progress">${a.done} / ${a.total} completed</div>
-        <div class="ui-meter add-pbar"><div style="width:${pct}%"></div></div>
-        <div class="add-pot">${potHTML(a.done)}</div>
-        <div class="add-fields">
-          <div class="add-names"><input id="add-first" class="input td-in" value="${esc(a.first)}" placeholder="First name"><input id="add-last" class="input td-in" value="${esc(a.last)}" placeholder="Last name"></div>
-          <input id="add-adm" class="input td-in" value="${esc(a.adm)}" placeholder="Admission number">
+    const title = (sub) => `<h2 class="add-title">Add your students</h2>${sub ? `<p class="add-sub">${sub}</p>` : ''}`;
+    let step = '';
+    if (a.step === 'method') {
+      step = `${title('')}${secPick}
+        <div class="onb-methods add-methods">
+          <button class="onb-method focus" data-add-method="sheet"><span class="ic">🌱</span><span class="lb">Type them in</span></button>
+          <button class="onb-method focus" data-add-method="csv"><span class="ic">📄</span><span class="lb">Upload a CSV</span></button>
+          <button class="onb-method focus" data-add-method="pic"><span class="ic">📷</span><span class="lb">Upload a picture</span></button>
+        </div>`;
+    } else if (a.step === 'csv') {
+      step = `${title(`Students are added to <b class="add-target">${esc(addGradeName())}</b>.`)}${secPick}
+        <label class="onb-drop">
+          <input type="file" accept=".csv,text/csv" data-add-csv class="hidden">
+          <div class="onb-drop-ic">📄</div>
+          <div class="onb-drop-t">Upload a CSV</div>
+          <div class="onb-drop-s">Columns: first name, last name, admission number</div>
+        </label>
+        ${a.csvErr ? `<div class="ui-note warn mt-3">${esc(a.csvErr)}</div>` : ''}
+        <p class="add-hint">You&rsquo;ll check the names before anything is planted.</p>`;
+    } else if (a.step === 'pic') {
+      step = `${title(`Students are added to <b class="add-target">${esc(addGradeName())}</b>.`)}${secPick}
+        <div class="onb-grid2">
+          <label class="onb-drop compact">
+            <input type="file" accept="image/*" data-add-pic class="hidden">
+            <div class="onb-drop-ic">🖼️</div>
+            <div class="onb-drop-t">Upload a picture</div>
+          </label>
+          <label class="onb-drop compact">
+            <input type="file" accept="image/*" capture="environment" data-add-pic class="hidden">
+            <div class="onb-drop-ic">📷</div>
+            <div class="onb-drop-t">Take a picture</div>
+          </label>
         </div>
-        <div class="mt-5"><button class="btn btn-primary block focus" data-add-plant ${canPlant ? '' : 'disabled'}>${a.done + 1 >= a.total ? 'Plant last seed 🌱' : 'Plant seed → next'}</button></div>`;
+        <p class="add-hint">Snap your class register — we&rsquo;ll read the names for you.</p>
+        ${a.picMsg ? `<div class="ui-note ok mt-3">${esc(a.picMsg)}</div>` : ''}
+        <div class="add-actions">
+          <button class="btn btn-ghost focus" data-add-method="sheet">Type them in instead</button>
+          <button class="btn btn-primary focus" data-add-close${a.picMsg ? '' : ' disabled'}>Done</button>
+        </div>`;
+    } else if (a.step === 'sheet') {
+      const issues = a.issues || {};
+      const n = a.rows.filter(addRowComplete).length;
+      const rowsHTML = a.rows.map((row, i) => {
+        const iss = issues[i];
+        const note = iss ? `<div class="roster-issue">${esc(iss.text)}${iss.kind === 'name_dup'
+          ? ` <button class="roster-issue-btn focus" data-add-rowforce="${i}">Different child — add anyway</button>` : ''}</div>` : '';
+        return `<div class="roster-sheet-row${iss ? ' has-issue' : ''}">
+          <input class="input focus" data-add-rowk="first" data-add-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
+          <input class="input focus" data-add-rowk="last" data-add-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
+          <input class="input focus" data-rowk="adm" data-add-rowk="adm" data-add-rowi="${i}" value="${esc(row.adm)}" placeholder="Admission #" aria-label="Admission number, student ${i + 1}">
+          <button class="btn-icon bare roster-del focus" data-add-rowdel="${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
+        </div>${note}`;
+      }).join('');
+      step = `${title(a.csvMsg ? '' : `Students are added to <b class="add-target">${esc(addGradeName())}</b>.`)}${secPick}
+        ${a.csvMsg ? `<div class="ui-note ok mb-3">${esc(a.csvMsg)}</div>` : ''}
+        ${Object.keys(issues).length ? '<div class="ui-note warn mb-3">A few students need a quick check before we can plant them — see the highlighted rows.</div>' : ''}
+        <section class="roster-group">
+          <div class="roster-group-head"><span class="add-group-name">${esc(addGradeName())}</span><span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span></div>
+          <div class="roster-sheet"><div class="roster-head"><span>First name</span><span>Last name</span><span>Admission #</span><span></span></div>${rowsHTML}</div>
+          <button class="btn-dashed mt-2 focus" data-add-rowadd>+ Add student</button>
+        </section>
+        <div class="add-actions"><button class="btn btn-primary focus" data-add-commit${addSheetValid() ? '' : ' disabled'}>Plant ${n || ''} ${n === 1 ? 'student' : 'students'} &#8594;</button></div>`;
     } else {
       const results = a.results || [];
       const created = results.filter((r) => r.result === 'created');
       const merged = results.filter((r) => r.result === 'merged');
       const review = results.filter((r) => r.result === 'review');
-      const clash = results.filter((r) => r.result === 'name_dup' || r.result === 'id_conflict');
       // Dedupe outcome — surfaced so the teacher sees duplicates were prevented.
-      const dedupeNote = (merged.length || review.length || clash.length) ? `
+      const dedupeNote = (merged.length || review.length) ? `
         <div class="ui-note info add-note">
           ${merged.length ? `${merged.length} admission number${merged.length === 1 ? ' was' : 's were'} already on the roster — merged instead of duplicated.` : ''}
           ${review.length ? ` ${review.length} entr${review.length === 1 ? 'y looks' : 'ies look'} like an existing student — flagged for your admin to review.` : ''}
-          ${clash.length ? ` ${clash.length} not added (${clash.map((r) => esc(r.name)).join(', ')}) — same name or admission number as a student already on file.` : ''}
         </div>` : '';
       // Student UIDs for the newly planted children.
       const codes = created.concat(merged).filter((r) => r.uid).map((r) =>
@@ -3009,59 +3103,108 @@
         <button class="btn btn-primary focus" data-add-finish>${a.from === 'students' ? 'Back to students →' : 'Go to my garden →'}</button>
       </div>`;
     }
-    return `<div class="ui-scrim add-backdrop">
-      <div class="ui-modal-card add-card">
-        <div class="add-top"><button class="btn-soft focus" data-add-back>← Back</button><button class="btn-icon bare focus" data-add-close>×</button></div>
-        <div class="add-eyebrow">Adding flowers</div>
-        ${step}
+    return `<div class="ui-scrim add-backdrop${a.full ? ' full' : ''}">
+      <div class="ui-modal-card add-card${a.full ? ' full' : ''}" role="dialog" aria-label="Add students">
+        <div class="add-top">
+          ${a.step === 'done' ? '<span></span>' : '<button class="btn-soft focus" data-add-back>← Back</button>'}
+          <div class="add-top-r">
+            <button class="btn-icon bare focus" data-add-full title="${a.full ? 'Exit full screen' : 'Expand to full screen'}" aria-label="${a.full ? 'Exit full screen' : 'Expand to full screen'}" aria-pressed="${a.full}">${a.full ? ADD_ICON_SHRINK : ADD_ICON_EXPAND}</button>
+            <button class="btn-icon bare focus" data-add-close aria-label="Close">×</button>
+          </div>
+        </div>
+        <div class="add-body">
+          <div class="add-eyebrow">Adding flowers</div>
+          ${step}
+        </div>
       </div>
     </div>`;
   }
 
   function wireAddFlow() {
     if (!S.add.active) return;
-    // count input: sanitize + toggle Start button without re-render (keep caret)
-    const syncStart = () => { const btn = root.querySelector('[data-add-to-entry]'); if (btn) btn.disabled = !(S.add.count && parseInt(S.add.count, 10) >= 1 && addSectionOK()); };
-    const cnt = root.querySelector('#add-count');
-    if (cnt) cnt.addEventListener('input', (e) => {
-      const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
-      S.add.count = v; e.target.value = v;
-      syncStart();
-    });
+    // Sheet + section fields patch state in place (no re-render) so carets survive typing.
+    const syncCommit = () => {
+      const btn = root.querySelector('[data-add-commit]'); if (!btn) return;
+      const n = S.add.rows.filter(addRowComplete).length;
+      btn.disabled = !addSheetValid();
+      btn.innerHTML = `Plant ${n || ''} ${n === 1 ? 'student' : 'students'} &#8594;`;
+      const cnt = root.querySelector('.add-card .roster-group-n'); if (cnt) cnt.textContent = n + (n === 1 ? ' student' : ' students');
+    };
     root.querySelectorAll('[data-add-sec]').forEach((b) => b.addEventListener('click', () => { S.add.sectionId = b.dataset.addSec; render(); }));
     [['add-new-grade', 'newGrade'], ['add-new-section', 'newSection']].forEach(([id, key]) => {
       const el = root.querySelector('#' + id);
-      if (el) el.addEventListener('input', (e) => { S.add[key] = e.target.value; syncStart(); });
-    });
-    // entry text fields: patch in place
-    [['add-first', 'first'], ['add-last', 'last'], ['add-adm', 'adm']].forEach(([id, key]) => {
-      const el = root.querySelector('#' + id);
       if (el) el.addEventListener('input', (e) => {
         S.add[key] = e.target.value;
-        if (key === 'first') { const btn = root.querySelector('[data-add-plant]'); if (btn) btn.disabled = !S.add.first.trim(); }
+        root.querySelectorAll('.add-target, .add-group-name').forEach((t) => { t.textContent = addGradeName(); });
+        syncCommit();
       });
     });
-    const toEntry = root.querySelector('[data-add-to-entry]');
-    if (toEntry) toEntry.addEventListener('click', () => {
-      const n = parseInt(S.add.count, 10) || 0; if (n < 1 || !addSectionOK()) return;
-      S.add = Object.assign({}, S.add, { step: 'entry', total: n, done: 0, first: '', last: '', adm: '' }); render();
+    root.querySelectorAll('[data-add-method]').forEach((b) => b.addEventListener('click', () => {
+      S.add = Object.assign({}, S.add, { step: b.dataset.addMethod, csvErr: '', picMsg: '' }); render();
+    }));
+    root.querySelectorAll('[data-add-rowk]').forEach((el) => el.addEventListener('input', (e) => {
+      const row = S.add.rows[+el.dataset.addRowi]; if (!row) return;
+      row[el.dataset.addRowk] = e.target.value;
+      delete row.force;                             // edited → re-check on commit
+      syncCommit();
+    }));
+    const rowAdd = root.querySelector('[data-add-rowadd]');
+    if (rowAdd) rowAdd.addEventListener('click', () => {
+      S.add.rows.push(addBlankRow()); render();
+      const ins = root.querySelectorAll('[data-add-rowk="first"]');
+      if (ins.length) ins[ins.length - 1].focus();
     });
-    const plant = root.querySelector('[data-add-plant]');
-    if (plant) plant.addEventListener('click', () => {
-      if (!S.add.first.trim()) return;
-      persistPlantedStudent();                 // dedupe guard runs here (spec A4)
-      const nd = S.add.done + 1;
-      if (nd >= S.add.total) S.add = Object.assign({}, S.add, { done: nd, step: 'done' });
-      else S.add = Object.assign({}, S.add, { done: nd, first: '', last: '', adm: '' });
+    root.querySelectorAll('[data-add-rowdel]').forEach((b) => b.addEventListener('click', () => {
+      const i = +b.dataset.addRowdel;
+      S.add.rows.splice(i, 1);
+      if (!S.add.rows.length) S.add.rows.push(addBlankRow());
+      S.add.issues = {};
+      render();
+    }));
+    root.querySelectorAll('[data-add-rowforce]').forEach((b) => b.addEventListener('click', () => {
+      const i = +b.dataset.addRowforce, row = S.add.rows[i];
+      if (row) row.force = 'name';
+      delete S.add.issues[i];
+      render();
+    }));
+    const commit = root.querySelector('[data-add-commit]');
+    if (commit) commit.addEventListener('click', commitAddSheet);
+    const csv = root.querySelector('[data-add-csv]');
+    if (csv) csv.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        const rows = parseRosterCSV(rd.result);
+        if (!rows.length) { S.add = Object.assign({}, S.add, { csvErr: `We couldn’t find any students in ${f.name}. Check it has first name, last name and admission number columns.` }); render(); return; }
+        S.add = Object.assign({}, S.add, { step: 'sheet', rows, issues: {}, csvErr: '',
+          csvMsg: `✓ ${f.name} — ${rows.length} ${rows.length === 1 ? 'student' : 'students'} found. Check them, then plant.` });
+        render();
+      };
+      rd.readAsText(f);
+    });
+    root.querySelectorAll('[data-add-pic]').forEach((pic) => pic.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      S.add = Object.assign({}, S.add, { picMsg: `✓ Picture received — we’ll read the names and plant them in ${addGradeName()}.` });
+      render();
+    }));
+    const full = root.querySelector('[data-add-full]');
+    if (full) full.addEventListener('click', () => {
+      S.add.full = !S.add.full;
+      try { localStorage.setItem(ADD_FULL_KEY, S.add.full ? '1' : '0'); } catch (e) {}
       render();
     });
     const back = root.querySelector('[data-add-back]');
     if (back) back.addEventListener('click', () => {
-      if (S.add.step === 'entry') S.add = Object.assign({}, S.add, { step: 'count' });
-      else S.add = Object.assign({}, S.add, { active: false });
+      // Method screens → back to the chooser; the chooser closes the flow.
+      if (S.add.step === 'method') S.add = Object.assign({}, S.add, { active: false });
+      else S.add = Object.assign({}, S.add, { step: 'method', issues: {}, csvMsg: '', csvErr: '', picMsg: '' });
       render();
     });
-    root.querySelectorAll('[data-add-close]').forEach((b) => b.addEventListener('click', () => { S.add = Object.assign({}, S.add, { active: false }); render(); }));
+    root.querySelectorAll('[data-add-close]').forEach((b) => b.addEventListener('click', () => {
+      if (b.disabled) return;
+      if (S.add.results.length) rebuildData();
+      S.add = Object.assign({}, S.add, { active: false }); render();
+    }));
     const fin = root.querySelector('[data-add-finish]');
     if (fin) fin.addEventListener('click', () => {
       S.sectionId = S.add.sectionId || S.sectionId;
@@ -4057,104 +4200,7 @@
   /* ask tilli (full screen — nav destination) */
   .dash-col.ask-mode { height: 100vh; height: 100dvh; }
   .dash-main.ask-mode { padding: 0; max-width: none; display: flex; min-height: 0; }
-  .askx {
-    /* --- tunable visual parameters --- */
-    --askx-hist-w: 300px;     /* width of the chat-history column */
-    --askx-max: 760px;        /* max width of the thread, suggestions and composer */
-    --askx-foot-pr: 84px;     /* composer right padding — keeps Send clear of the Need-help bubble */
-    flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; background: var(--white);
-  }
-  .askx-hist { width: var(--askx-hist-w); flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line-200); background: var(--surface-100); }
-  /* .askx-hist prefix outranks tilli.css's .btn.block { width:100% }, which with the
-     16px margins pushed the button 32px past the column into the chat header. */
-  .askx-hist .askx-new { margin: 0; width: auto; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
-  .askx-hist { position: relative; }
-  .askx-hist-top { display: flex; align-items: center; gap: 8px; padding: 16px; }
-  .askx-collapse { color: var(--ink-450); }
-  /* Drag handle on the column's right edge: an 8px hit area, a 2px green line on hover / drag / focus. */
-  .askx-resize { position: absolute; top: 0; bottom: 0; right: -4px; width: 8px; z-index: 3; cursor: col-resize; touch-action: none; }
-  .askx-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
-  .askx-resize:hover::after, .askx-resize.dragging::after, .askx-resize:focus-visible::after { background: var(--green-500); }
-  .askx-resize:focus-visible { outline: none; }
-  @media (min-width: 761px) {
-    .askx.collapsed .askx-hist { display: none; }
-    .askx.collapsed .askx-histbtn { display: grid; }
-  }
-  .askx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; border-top: 1px solid var(--line-200); }
-  .askx-gh { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
-  .askx-item { display: flex; align-items: center; border-radius: var(--radius-md); }
-  .askx-item:hover { background: var(--white); }
-  .askx-item.on { background: var(--white); box-shadow: inset 3px 0 0 var(--green-500); }
-  .askx-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 11px 8px 11px 10px; background: none; border: none; cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); text-align: left; }
-  .askx-open svg { flex: none; color: var(--ink-450); }
-  .askx-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .askx-del { flex: none; display: grid; place-items: center; padding: 8px; margin-right: 4px; background: none; border: none; cursor: pointer; color: var(--ink-300); border-radius: var(--radius-xs); }
-  .askx-del:hover { color: var(--danger-700); background: var(--danger-wash); }
-  /* Delete appears on the row you're pointing at (or the open chat) — a column of
-     bins on every row read as noise and invited mis-taps. Always shown on touch. */
-  .askx-del { opacity: 0; transition: opacity .12s; }
-  .askx-item:hover .askx-del, .askx-item.on .askx-del, .askx-del:focus-visible { opacity: 1; }
-  @media (hover: none) { .askx-del { opacity: 1; } }
-  .askx-none { padding: 18px 8px; font-size: var(--fs-sm); color: var(--ink-300); }
-  .askx-clear { display: flex; align-items: center; gap: 9px; padding: 14px 20px; background: none; border: none; border-top: 1px solid var(--line-200); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); text-align: left; }
-  .askx-clear:hover { color: var(--danger-700); }
-  .askx-scrim { display: none; }
-  .askx-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-  .askx-tools { margin-left: auto; flex: none; display: flex; gap: 8px; }   /* minimise + export, pushed to the right of the scope row */
-  /* Export confirm popover — hangs under the Export button, right-aligned. */
-  .askx-export-wrap { position: relative; }
-  .askx-pop { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 270px; max-width: calc(100vw - 32px); background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); box-shadow: 0 10px 28px rgba(20, 20, 20, .14); padding: 14px 14px 12px; }
-  .askx-pop p { margin: 0; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-700); overflow-wrap: anywhere; }
-  .askx-pop p b { color: var(--ink-900); font-weight: 700; }
-  .askx-pop-act { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-  .askx-tool { width: 42px; height: 42px; flex: none; display: grid; place-items: center; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); color: var(--ink-700); cursor: pointer; }
-  .askx-tool:hover:not(:disabled) { background: var(--surface-100); }
-  .askx-tool:disabled { opacity: .4; cursor: default; }
-  .askx-histbtn { display: none; }
-  /* Scope: one row — label + picker (the old "Currently scoped to" line only repeated the picker). */
-  .askx-scope { display: flex; align-items: center; gap: 10px; padding: 10px 24px; border-bottom: 1px solid var(--line-200); }
-  .askx-scope-l { flex: none; display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
-  .askx-select {
-    flex: 1; min-width: 0; max-width: 340px; appearance: none; -webkit-appearance: none; cursor: pointer;
-    border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 11px 40px 11px 14px;
-    font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900);
-    background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6170' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px;
-  }
-  .askx-select:focus { outline: none; border-color: var(--focus); }
-  .askx-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; background: var(--surface-100); }
-  .askx-thread { width: 100%; max-width: var(--askx-max); margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-  .askx-thread .ask-msg { font-size: var(--fs-md); line-height: 1.55; }
-  .askx-thread .ask-msg.tilli { background: var(--white); border: 1px solid var(--line-200); }
-  .askx-empty { margin: auto; width: 100%; max-width: var(--askx-max); display: flex; flex-direction: column; align-items: center; text-align: center; }
-  .askx-spark { width: 92px; height: 92px; border-radius: 50%; background: var(--wash-green); color: var(--green-600); display: grid; place-items: center; margin-bottom: 18px; }
-  .askx-empty h2 { margin: 0; font-family: var(--font-heading); font-size: var(--fs-xl); color: var(--ink-900); }
-  .askx-empty p { margin: 10px 0 0; max-width: 520px; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-450); }
-  .askx-try { width: 100%; margin-top: 34px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
-  .askx-try-h { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-bottom: 2px; }
-  .askx-sug { text-align: left; padding: 12px 16px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900); }
-  .askx-sug:hover { border-color: var(--green-500); background: var(--wash-green); }
-  .askx-foot { padding: 14px var(--askx-foot-pr) 10px 24px; border-top: 1px solid var(--line-200); background: var(--white); }
-  .askx-compose { max-width: var(--askx-max); margin: 0 auto; display: flex; gap: 10px; }
-  .askx-input { flex: 1; min-width: 0; padding: 13px 16px; border: 1.5px solid var(--line-200); border-radius: var(--radius-md); outline: none; background: var(--white); font: inherit; font-size: var(--fs-md); color: var(--ink-900); }
-  .askx-input:focus { border-color: var(--green-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-500) 18%, transparent); }
-  .askx-send { width: 50px; flex: none; display: grid; place-items: center; border: none; border-radius: var(--radius-md); background: var(--green-500); color: var(--white); cursor: pointer; }
-  .askx-send:hover:not(:disabled) { background: var(--green-600); }
-  .askx-send:disabled { opacity: .5; cursor: default; }
-  .askx-note { max-width: var(--askx-max); margin: 8px auto 0; text-align: center; font-size: var(--fs-xs); line-height: 1.4; color: var(--ink-300); }
-  @media (max-width: 1023px) { .askx { --askx-hist-w: 250px; } }
-  /* Narrow: history becomes a slide-in drawer behind the header button. */
-  @media (max-width: 760px) {
-    .askx-hist { position: absolute; z-index: 5; top: 0; bottom: 0; left: 0; width: min(300px, 86%); transform: translateX(-102%); transition: transform .2s var(--ease); box-shadow: var(--shadow-modal); }
-    .askx.hist-open .askx-hist { transform: none; }
-    .askx.hist-open .askx-scrim { display: block; position: absolute; inset: 0; z-index: 4; border: none; background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
-    .askx-histbtn { display: grid; }
-    .askx-resize { display: none; }   /* drawer width is fixed on narrow screens */
-    .askx-scope { padding: 8px 14px; gap: 8px; }
-    .askx-scope-l span { display: none; }   /* phones: just the pin, so picker + tools fit one row */
-    .askx-body { padding: 16px 14px; }
-    .askx-foot { padding: 10px var(--askx-foot-pr) 8px 14px; }
-    .askx-try { margin-top: 22px; }
-  }
+  /* Ask Tilli full screen (.askx-*) — shared with the school admin dashboard; styles live in tilli.css. */
   @media (max-width: 639px) {
     .dash-main.ask-mode { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
     .askx { --askx-foot-pr: 66px; }
@@ -4446,21 +4492,26 @@
   .cmp2-mini { flex: 1; height: 12px; }
   .cmp2-cell span { font-size: var(--fs-xs); font-weight: 800; color: var(--ink-450); width: 34px; text-align: right; }
 
-  /* add student modal (ui-scrim + ui-modal-card; sits above the Ask panel) */
+  /* add student modal (ui-scrim + ui-modal-card; sits above the Ask panel).
+     Method cards / drop zones / sheet rows reuse onboarding's classes (teacher.html). */
   .add-backdrop { z-index: 70; }
-  .add-card { max-width: 520px; }
+  .add-card { max-width: 680px; }
   .add-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .add-top-r { display: flex; align-items: center; gap: 4px; }
   .add-eyebrow { text-align: center; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--green-700); }
+  .add-title { text-align: center; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1.3; margin: 6px 0 4px; }
+  .add-sub { text-align: center; margin: 0 0 14px; font-size: var(--fs-md); color: var(--ink-450); }
+  .add-target { color: var(--ink-900); }
+  .add-secpick { margin-bottom: 16px; }
+  .add-group-name { font-weight: 800; font-size: var(--fs-md); color: var(--ink-700); flex: 1; min-width: 0; }
+  .add-methods { margin-top: 4px; }
+  .add-hint { text-align: center; font-size: var(--fs-sm); color: var(--ink-300); margin: 10px 0 0; }
+  .add-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
   .add-center { text-align: center; margin-top: 18px; }
-  .add-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1.3; margin-bottom: 20px; }
-  .add-pot { display: flex; justify-content: center; margin: 8px 0; }
-  .add-count { width: 220px; text-align: center; border: 2px solid var(--line-200); border-radius: var(--radius-md); padding: 13px 16px; font-size: var(--fs-md); font-weight: 700; font-family: var(--font-body); color: var(--ink-900); outline: none; background: var(--surface-100); }
-  .add-count:focus { border-color: var(--focus); }
-  .add-progress { text-align: center; font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; margin-top: 4px; }
-  .add-pbar { max-width: 260px; margin: 8px auto 0; }
-  .add-fields { display: flex; flex-direction: column; gap: 10px; }
-  .add-names { display: flex; gap: 10px; flex-wrap: wrap; }
-  .add-names .input { flex: 1; min-width: 130px; }
+  /* Full screen (toggle in the card's top bar; remembered per browser). */
+  .add-backdrop.full { padding: 0; }
+  .add-card.full { max-width: none; width: 100%; height: 100dvh; max-height: none; border-radius: 0; }
+  .add-card.full .add-body { max-width: 880px; margin: 0 auto; }
   .add-done-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--green-700); }
   .add-done-sub { margin: 8px 0 20px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
   .add-note { margin: 0 auto 12px; max-width: 340px; }
@@ -4468,12 +4519,6 @@
   .add-uids-h { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-450); margin-bottom: 6px; }
   .add-uid-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-200); }
   .add-uid-row > span:first-child { font-weight: 700; color: var(--ink-700); }
-  .pot { position: relative; width: 150px; height: 134px; }
-  .pot-seed { position: absolute; left: 50%; top: 2px; margin-left: -8px; width: 16px; height: 21px; border-radius: 50%; background: ${ART.pollen}; box-shadow: inset -2px -2px 0 ${ART.potSeedShade}; }
-  .pot-bed { position: absolute; left: 0; right: 0; bottom: 60px; display: flex; justify-content: center; gap: 4px; height: 48px; align-items: end; }
-  .pot-sprout { width: 6px; border-radius: var(--radius-xs) var(--radius-xs) 0 0; align-self: end; }
-  .pot-rim { position: absolute; left: 50%; bottom: 46px; margin-left: -52px; width: 104px; height: 20px; border-radius: var(--radius-xs); background: ${ART.clayRim}; }
-  .pot-body { position: absolute; left: 50%; bottom: 4px; margin-left: -49px; width: 98px; height: 50px; background: ${ART.clayBody}; clip-path: polygon(4% 0, 96% 0, 84% 100%, 16% 100%); }
 
   /* bottom nav (mobile) — four quiet tabs + raised Ask Tilli in the centre */
   @media (max-width: 639px) { :root { --tf-bottom: 82px; } }   /* lift floating Need-help bubble above it */
@@ -4659,56 +4704,49 @@
   .gr-table td i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
 
   /* Insights → Class Skill Overview (level tokens: 1 Sprouting · 2 Growing · 3 Blooming) */
-  .ov-headrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
   .ov-h { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); }
-  .ov-lead { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-top: 4px; }
-  .ov-desc { font-size: var(--fs-sm); color: var(--ink-450); margin: 4px 0 0; max-width: 620px; line-height: 1.5; }
-  .ov-scope { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 8px 14px; font-size: var(--fs-sm); font-weight: 700; color: var(--ink-900); background: var(--white); white-space: nowrap; }
-  .ov-scope i { width: 9px; height: 9px; border-radius: 50%; background: var(--cyan-500); }
-  .ov-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
-  .ov-box { text-align: left; border-radius: var(--radius-md); padding: 16px 18px; cursor: pointer; font-family: var(--font-body); border: 2px solid; display: flex; flex-direction: column; gap: 2px; transition: box-shadow .15s, opacity .15s; }
-  .ov-box:hover { box-shadow: var(--shadow-hover); }
-  .ov-box.on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-900) 12%, transparent); }
-  .ov-box.dim { opacity: .5; }
-  .ov-l1 { background: var(--lvl-1-wash); border-color: var(--lvl-1); } .ov-l1 .ov-count { color: var(--lvl-1-ink); }
-  .ov-l2 { background: var(--lvl-2-wash); border-color: var(--lvl-2); } .ov-l2 .ov-count { color: var(--lvl-2-ink); }
-  .ov-l3 { background: var(--lvl-3-wash); border-color: var(--lvl-3); } .ov-l3 .ov-count { color: var(--lvl-3-ink); }
-  .ov-count { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.1; }
-  .ov-title { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); }
+  .ov-desc { font-size: var(--fs-sm); color: var(--ink-450); margin: 4px 0 0; max-width: 640px; line-height: 1.5; }
+  /* Filter chips double as the legend: dot = band colour, bold number = skills in it. */
+  .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 14px; }
+  .ov-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border: 1px solid var(--line-200); border-radius: var(--radius-pill); background: var(--white); cursor: pointer; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; color: var(--ink-600); transition: border-color .15s, background .15s; }
+  .ov-chip i { width: 9px; height: 9px; border-radius: 50%; }
+  .ov-chip b { font-weight: 800; color: var(--ink-900); }
+  .ov-chip:hover:not(:disabled) { border-color: var(--ink-300); }
+  .ov-chip.on { background: var(--ink-900); border-color: var(--ink-900); color: var(--white); }
+  .ov-chip.on b { color: var(--white); }
+  .ov-chip:disabled { opacity: .45; cursor: default; }
   /* ⓘ score explanation (tap to open; T11) */
   .info-tip { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 4px; vertical-align: middle; border: none; border-radius: 50%; background: var(--surface-100); color: var(--ink-450); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
   .info-tip:hover, .info-tip[aria-expanded="true"] { background: var(--wash-green); color: var(--green-700); }
   .info-pop { margin: 8px 0 6px; padding: 10px 12px; max-width: 560px; background: var(--surface-100); border-radius: var(--radius-md); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 500; color: var(--ink-700); line-height: 1.5; text-align: left; }
   .info-row { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-bottom: 12px; }
-  .ov-unit { font-size: var(--fs-md); font-weight: 700; }   /* "skills" beside the count */
-  .ov-note { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; margin-top: 10px; }
-  .ov-hint { font-size: var(--fs-sm); color: var(--ink-450); margin-top: 16px; } .ov-hint b { color: var(--ink-900); }
-  .ov-legend { gap: 8px 18px; margin: 12px 0 14px; }
-  .ov-legend i, .ov-bh i { width: 12px; height: 12px; border-radius: 3px; }
-  .ov-list { border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 4px 10px; }
+  .ov-note { font-weight: 700; color: var(--ink-600); }
+  .ov-bh i { width: 9px; height: 9px; border-radius: 50%; }
+  .ov-list { border-top: 1px solid var(--line-200); }
   .ov-row + .ov-row { border-top: 1px solid var(--line-200); }
-  .ov-rowbtn { width: 100%; display: grid; grid-template-columns: minmax(150px, 220px) 1fr 130px 16px; gap: 16px; align-items: center; background: none; border: none; cursor: pointer; padding: 13px 8px; font-family: var(--font-body); text-align: left; border-radius: var(--radius-sm); }
+  .ov-rowbtn { width: 100%; display: grid; grid-template-columns: minmax(150px, 220px) 1fr 84px 16px; gap: 16px; align-items: center; background: none; border: none; cursor: pointer; padding: 12px 8px; font-family: var(--font-body); text-align: left; border-radius: var(--radius-sm); }
   .ov-rowbtn:hover { background: var(--surface-100); }
   .ov-name { font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
-  .ov-bar { display: flex; height: 24px; border-radius: var(--radius-xs); overflow: hidden; background: var(--surface-100); }
+  .ov-bar { display: flex; height: 10px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-100); }
   .ov-seg { height: 100%; }
-  .ov-status { justify-self: end; display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-sm); font-weight: 700; }
-  .ov-status i { width: 9px; height: 9px; border-radius: 50%; }
-  .ov-st-l1 { color: var(--lvl-1-ink); } .ov-st-l1 i { background: var(--lvl-1); }
-  .ov-st-l2 { color: var(--lvl-2-ink); } .ov-st-l2 i { background: var(--lvl-2); }
-  .ov-st-l3 { color: var(--lvl-3-ink); } .ov-st-l3 i { background: var(--lvl-3); }
+  .ov-status { justify-self: end; font-size: var(--fs-sm); font-weight: 700; }
+  .ov-st-l1 { color: var(--lvl-1-ink); }
+  .ov-st-l2 { color: var(--lvl-2-ink); }
+  .ov-st-l3 { color: var(--lvl-3-ink); }
   .ov-chev { color: var(--ink-300); font-size: var(--fs-lg); line-height: 1; transition: transform .15s; }
   .ov-row.open .ov-chev { transform: rotate(90deg); }
-  .ov-break { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 4px 8px 16px; }
-  .ov-bcol { background: var(--surface-100); border-radius: var(--radius-md); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-  .ov-bh { display: flex; align-items: center; gap: 7px; font-size: var(--fs-sm); font-weight: 800; color: var(--ink-700); margin-bottom: 2px; }
+  .ov-row.open { background: var(--surface-100); border-radius: var(--radius-md); }
+  .ov-break { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 2px 8px 12px; }
+  .ov-bcol { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+  .ov-bh { flex-basis: 100%; }
+  .ov-bh { display: flex; align-items: center; gap: 7px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-450); margin-bottom: 2px; }
   .ov-bh span { color: var(--ink-300); }
   .ov-stu { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 4px 11px; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 600; color: var(--ink-700); cursor: pointer; }
   .ov-stu:hover { border-color: var(--green-500); color: var(--green-700); }
   .ov-bnone { color: var(--ink-300); font-size: var(--fs-sm); }
   .ov-bfoot { grid-column: 1 / -1; }
   @media (max-width: 760px) {
-    .ov-boxes, .ov-break { grid-template-columns: 1fr; }
+    .ov-break { grid-template-columns: 1fr; }
     .ov-rowbtn { grid-template-columns: 1fr auto 16px; gap: 8px 10px; }
     .ov-bar { grid-column: 1 / -1; grid-row: 2; }
   }

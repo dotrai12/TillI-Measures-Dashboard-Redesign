@@ -26,10 +26,6 @@
   function mulberry32(a) { return function () { a |= 0; a = (a + 0x6d2b79f5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   var clamp = function (v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
 
-  // "Today" for the demo — matches the project's current date so relative
-  // ("4 days ago") and countdown ("opens in 68 days") labels read sensibly.
-  var TODAY = new Date('2026-08-18T09:00:00');
-
   // ---------------------------------------------------------------
   //  Band vocabulary — the ONE site-wide scale (Sprouting / Growing /
   //  Blooming), same words and same 34 / 67 cut-offs as the teacher and
@@ -54,19 +50,46 @@
   function bandMeta(key) { return BANDS.find(function (b) { return b.key === key; }); }
 
   // ---------------------------------------------------------------
-  //  Assessment points (periodic). Named markers only — never dated
-  //  ticks, never "Term 1/2/3" (spec §3). Baseline + Midline are
-  //  complete (so band distribution + movement have real data);
-  //  Endline is the window that's OPEN right now (continuous
-  //  completion is live, but no bands exist for it yet).
+  //  Assessment points (periodic). Named markers — never "Term 1/2/3"
+  //  (spec §3). Their DATES are not hard-coded: the Tilli team sets each
+  //  window's start/end in the platform planner (tilli.html), which writes
+  //  them to the shared TilliAPI deployments; readPointDates() picks them
+  //  up here. No dates set → labels show the point name only.
   // ---------------------------------------------------------------
   var POINTS = [
-    { key: 'baseline', label: 'Baseline', month: 'April 2026',     scoreField: 'baseline', status: 'upcoming' },
-    { key: 'midline',  label: 'Midline',  month: 'July 2026',      scoreField: 'mid',      status: 'upcoming' },
-    { key: 'endline',  label: 'Endline',  month: 'September 2026', scoreField: 'post',     status: 'upcoming' },
+    { key: 'baseline', label: 'Baseline', scoreField: 'baseline', status: 'upcoming', start: '', end: '' },
+    { key: 'midline',  label: 'Midline',  scoreField: 'mid',      status: 'upcoming', start: '', end: '' },
+    { key: 'endline',  label: 'Endline',  scoreField: 'post',     status: 'upcoming', start: '', end: '' },
   ];
-  var ENDLINE_CLOSES = 'Sep 24, 2026';
-  var ENDLINE_OPENS_IN_DAYS = 6; // for the Overview status line countdown
+  var SCHOOL_ID = (window.TILLI_CREATED && window.TILLI_CREATED.schoolId) || (TS.school && TS.school.id) || null;
+  function readPointDates() {
+    var API = window.TilliAPI;
+    if (!API || !API.getDeployments || !SCHOOL_ID) return;
+    var deps = [];
+    try { deps = API.getDeployments(SCHOOL_ID) || []; } catch (e) {}
+    POINTS.forEach(function (p) {
+      var d = deps.find(function (x) { return String(x.phase || '').toLowerCase() === p.key && (x.start || x.end); });
+      p.start = d ? d.start || '' : ''; p.end = d ? d.end || '' : '';
+    });
+  }
+  readPointDates();
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function parseISO(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function fmtDay(d, withYear) { return d.getDate() + ' ' + MON[d.getMonth()] + (withYear ? ' ' + d.getFullYear() : ''); }
+  // "4 Jul – 18 Jul 2026" (or just "from 4 Jul 2026" / "" when not scheduled).
+  function pointRange(pt) {
+    var a = parseISO(pt && pt.start), b = parseISO(pt && pt.end);
+    if (a && b) return fmtDay(a, a.getFullYear() !== b.getFullYear()) + ' – ' + fmtDay(b, true);
+    if (a) return 'from ' + fmtDay(a, true);
+    if (b) return 'until ' + fmtDay(b, true);
+    return '';
+  }
+  // Whole days until the window's end date (null when no end date is set).
+  function daysLeft(pt) {
+    var b = parseISO(pt && pt.end); if (!b) return null;
+    var now = new Date(); now.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((b - now) / 86400000));
+  }
 
   // ---------------------------------------------------------------
   //  LIFECYCLE STATES  (preview / demo tooling — NOT shipped state).
@@ -80,15 +103,15 @@
   //    status per point:  upcoming | open | complete
   // ---------------------------------------------------------------
   var LIFECYCLE_STATES = [
-    { key: 'nodata',   label: 'No data',    hint: 'Programme just started. The Baseline window is open; nothing has been measured yet, so every outcome view is empty.',
+    { key: 'nodata',   label: 'Baseline open', hint: 'Programme just started. The Baseline window is open; nothing has been measured yet, so every outcome view is empty.',
       status: { baseline: 'open',     midline: 'upcoming', endline: 'upcoming' } },
-    { key: 'baseline', label: 'Baseline',   hint: 'Baseline is complete. The first skill bands appear; movement still waits on a second point.',
+    { key: 'baseline', label: 'Baseline done', hint: 'Baseline is complete. The first skill bands appear; movement still waits on a second point.',
       status: { baseline: 'complete', midline: 'upcoming', endline: 'upcoming' } },
-    { key: 'between',  label: 'In between', hint: 'The Midline window is open and collecting. Baseline results stay visible alongside a live completion count.',
+    { key: 'between',  label: 'Midline open',  hint: 'The Midline window is open and collecting. Baseline results stay visible alongside a live completion count.',
       status: { baseline: 'complete', midline: 'open',     endline: 'upcoming' } },
-    { key: 'midline',  label: 'Midline',    hint: 'Baseline + Midline complete. Movement since Baseline and target-vs-actual now populate.',
+    { key: 'midline',  label: 'Midline done',  hint: 'Baseline + Midline complete. Movement since Baseline now populates.',
       status: { baseline: 'complete', midline: 'complete', endline: 'upcoming' } },
-    { key: 'endline',  label: 'Endline',    hint: 'All three points complete. The full-year arc is filled in and no window is open.',
+    { key: 'endline',  label: 'Endline done',  hint: 'All three points complete. The full-year arc is filled in and no window is open.',
       status: { baseline: 'complete', midline: 'complete', endline: 'complete' } },
   ];
   var LIFECYCLE_DEFAULT = 'endline';
@@ -164,68 +187,51 @@
   // ---------------------------------------------------------------
   //  PERIODIC: net band movement Baseline → latest complete point,
   //  per skill, for a set of students. Band movement, not score
-  //  deltas (spec §5.3.3).
+  //  deltas (spec §5.3.3). Zero movement while Baseline is the latest.
   // ---------------------------------------------------------------
   var BAND_INDEX = { emerging: 0, developing: 1, secure: 2 };
-  function movement(students, skillKey) {
+  function movement(students, skillKey, pointKey) {
     var up = 0, same = 0, down = 0;
+    var toPt = (pointKey && POINTS.find(function (p) { return p.key === pointKey; })) || LATEST_COMPLETE || POINTS[0];
+    var toField = toPt.scoreField;
     students.forEach(function (st) {
       var sk = st.skills.find(function (x) { return x.key === skillKey; });
       if (!sk) return;
       var a = BAND_INDEX[bandOf(sk.baseline)];
-      var b = BAND_INDEX[bandOf(sk.mid)];
+      var b = BAND_INDEX[bandOf(sk[toField])];
       if (b > a) up++; else if (b < a) down++; else same++;
     });
     return { up: up, same: same, down: down, n: students.length, net: up - down };
   }
 
   // ---------------------------------------------------------------
-  //  CONTINUOUS: per-section activity. Seeded so the demo is stable.
-  //  One section is deliberately Quiet (>21d) and one Slowing, so the
-  //  Overview "Quiet sections" module (the most important one) has
-  //  something real to show.
+  //  ASSESSMENT WINDOW PROGRESS — per section, how many students are
+  //  done for the window that's open. The only "is it happening?" signal
+  //  Tilli Measures really has (there is no day-to-day activity data).
+  //  Created schools read real completion from TilliAPI; the demo school
+  //  uses a stable seeded count.
   // ---------------------------------------------------------------
-  var QUIET_THRESHOLD_DAYS = 21;   // configurable per school (spec §5.1.2)
-  var SLOWING_THRESHOLD_DAYS = 7;
-
-  // Hand-tuned last-activity per section id so the states are legible.
-  var LAST_ACTIVITY_DAYS = { kg_a: 2, kg_b: 11, g1_a: 4, g1_b: 28 };
-
-  function sectionActivity(secDef) {
-    var rnd = mulberry32(hashStr(secDef.id + ':activity'));
+  function sectionProgress(secDef) {
     var students = studentsInSection(secDef);
-    var days = LAST_ACTIVITY_DAYS[secDef.id] != null ? LAST_ACTIVITY_DAYS[secDef.id] : Math.floor(rnd() * 30);
-    // 12 weeks of Ask Tilli sessions; quieter sections trail off at the end.
-    var weeks = [];
-    var baseVol = 6 + Math.floor(rnd() * 8);
-    for (var w = 0; w < 12; w++) {
-      var decay = days > QUIET_THRESHOLD_DAYS && w > 8 ? 0.15 : days > SLOWING_THRESHOLD_DAYS && w > 9 ? 0.5 : 1;
-      weeks.push(Math.max(0, Math.round((baseVol + (rnd() - 0.5) * 6) * decay)));
+    var total = students.length, done = 0;
+    var API = window.TilliAPI;
+    if (window.TILLI_CREATED && OPEN_POINT && API && API.completionStats) {
+      var ids = students.map(function (s) { return s.adm; });
+      var c = API.completionStats(SCHOOL_ID, OPEN_POINT.label, 'Teacher', ids);
+      done = Math.round((c.pct / 100) * total);
+    } else {
+      var rnd = mulberry32(hashStr(secDef.id + ':' + (OPEN_POINT ? OPEN_POINT.key : '') + ':progress'));
+      done = Math.round(total * (0.3 + rnd() * 0.7));
     }
-    var sessions30 = weeks.slice(8).reduce(function (a, b) { return a + b; }, 0);
-    var supportAnswered = Math.round(sessions30 * (0.6 + rnd() * 0.3));
-    // Endline (open window) completion — how many of this section's students done.
-    var done = Math.round(students.length * (days > QUIET_THRESHOLD_DAYS ? 0.25 : days > SLOWING_THRESHOLD_DAYS ? 0.6 : 0.9 - rnd() * 0.15));
-    var status = days >= QUIET_THRESHOLD_DAYS ? 'quiet' : days >= SLOWING_THRESHOLD_DAYS ? 'slowing' : 'active';
     return {
       id: secDef.id, name: secDef.name, grade: secDef.grade, section: secDef.section,
-      teacher: teacherFor(secDef), n: students.length,
-      lastActivityDays: days, weeks: weeks, sessions30: sessions30,
-      supportAnswered: supportAnswered,
-      completion: { done: Math.min(done, students.length), total: students.length },
-      status: status,
+      teacher: teacherFor(secDef), n: total,
+      completion: { done: Math.min(done, total), total: total },
     };
   }
-  var ACTIVITY = SECTIONS.map(sectionActivity);
-  var activityFor = function (id) { return ACTIVITY.find(function (a) { return a.id === id; }); };
-
-  // Endline (open window) completion across the school.
-  function windowCompletion() {
-    var done = ACTIVITY.reduce(function (a, s) { return a + s.completion.done; }, 0);
-    var total = ACTIVITY.reduce(function (a, s) { return a + s.completion.total; }, 0);
-    var sectionsComplete = ACTIVITY.filter(function (s) { return s.completion.done >= s.completion.total; }).length;
-    return { students: { done: done, total: total }, sections: { done: sectionsComplete, total: ACTIVITY.length } };
-  }
+  // Recomputed per call so it always follows the open window.
+  function windowProgress() { return OPEN_POINT ? SECTIONS.map(sectionProgress) : []; }
+  function progressFor(id) { return windowProgress().find(function (a) { return a.id === id; }); }
 
   // ---------------------------------------------------------------
   //  CONTINUOUS: teacher-raised concerns queue (spec §6.4).
@@ -262,9 +268,11 @@
   }
 
   // ---------------------------------------------------------------
-  //  PERIODIC: targets (spec §6.3). Set per grade × skill at Baseline,
-  //  for Endline. Optional — present here so Target-vs-actual renders.
-  //  Target = lift the Baseline distribution toward Secure.
+  //  PERIODIC: targets (spec §6.3). Meant to be SET by the coordinator per
+  //  grade × skill at Baseline, for Endline — no "Set targets" flow exists yet.
+  //  These values are a PLACEHOLDER FORMULA (Baseline Blooming + 18 pts), not
+  //  school-set goals, so they stay OFF (TARGETS_SET=false) until a real source
+  //  exists. With the flag off every target module is absent (spec §6.3.5).
   // ---------------------------------------------------------------
   function buildTargets() {
     var t = {};
@@ -281,7 +289,7 @@
     return t;
   }
   var TARGETS = buildTargets();
-  var TARGETS_SET = true; // flip to false to exercise the "no targets" absent-module path
+  var TARGETS_SET = false; // true = show the placeholder targets above (demo only — not real goals)
 
   // ---------------------------------------------------------------
   //  Interpretation copy (spec §5.3.2 / §9). Content, not code —
@@ -357,25 +365,17 @@
     };
   }
 
-  // MOCK: three assessment perspectives (Teacher / Parent / Student-Direct)
-  // per skill, for a scope. The real product carries three streams; the
-  // prototype has a single (student) reading, so we synthesise three
-  // deterministically around it — students self-rate highest, parents
-  // next, teachers most conservative. Swap for the real per-perspective
-  // API when it exists.
-  function perspectiveRadar(students, pointKey) {
-    var pt = POINTS.find(function (p) { return p.key === pointKey; }) || LATEST_COMPLETE;
-    var field = pt.scoreField;
+  // Teacher / parent / child (self) ratings per skill for a scope, from the
+  // real per-student perspective scores. Sorted by the widest gap first —
+  // where the three views disagree most is the useful part.
+  function perspectiveGaps(students) {
+    var avg = function (sk, f) { var s = 0, n = 0; students.forEach(function (st) { var x = st.skills.find(function (y) { return y.key === sk.key; }); if (x && x[f] != null) { s += x[f]; n++; } }); return n ? Math.round(s / n) : null; };
     return SKILLS.map(function (sk) {
-      var base = avgScore(students, sk.key, field);
-      var j = mulberry32(hashStr(sk.key + ':persp'));
-      return {
-        key: sk.key, name: sk.name,
-        studentDirect: clamp(Math.round(base + 6 + j() * 8), 0, 100),
-        parent: clamp(Math.round(base + 2 + j() * 6), 0, 100),
-        teacher: clamp(Math.round(base - 4 - j() * 6), 0, 100),
-      };
-    });
+      var t = avg(sk, 'teacher'), p = avg(sk, 'parent'), c = avg(sk, 'student');
+      var vals = [t, p, c].filter(function (v) { return v != null; });
+      return { key: sk.key, name: sk.name, teacher: t, parent: p, child: c,
+        gap: vals.length > 1 ? Math.max.apply(null, vals) - Math.min.apply(null, vals) : 0 };
+    }).sort(function (a, b) { return b.gap - a.gap; });
   }
 
   // A single child's overall developmental stage = band of their mean
@@ -412,22 +412,6 @@
         stage: LATEST_COMPLETE ? studentStage(s, LATEST_COMPLETE.key) : null,
       };
     });
-  }
-
-  // ---------------------------------------------------------------
-  //  Overview status line — one sentence, "generated server-side"
-  //  (spec §5.1.1). No metaphor, no encouragement, no exclamation.
-  // ---------------------------------------------------------------
-  function statusLine() {
-    var active = ACTIVITY.filter(function (a) { return a.status !== 'quiet'; }).length;
-    var quiet = ACTIVITY.length - active;
-    var parts = [active + ' of ' + ACTIVITY.length + ' sections are active.'];
-    if (quiet > 0) {
-      var quietMax = Math.max.apply(null, ACTIVITY.filter(function (a) { return a.status === 'quiet'; }).map(function (a) { return a.lastActivityDays; }));
-      parts.push(quiet + ' section' + (quiet === 1 ? ' has' : 's have') + ' had no activity in ' + quietMax + '+ days.');
-    }
-    parts.push('Endline assessment closes in ' + ENDLINE_OPENS_IN_DAYS + ' days.');
-    return parts.join(' ');
   }
 
   // ---------------------------------------------------------------
@@ -471,10 +455,8 @@
     return cnt ? Math.round(sum / cnt) : 0;
   }
   function leadershipVerdict() {
-    var sectionsActive = ACTIVITY.filter(function (a) { return a.status !== 'quiet'; }).length;
     var v = {
-      sectionsActive: sectionsActive, sectionsTotal: ACTIVITY.length,
-      openPoint: OPEN_POINT, endlineInDays: ENDLINE_OPENS_IN_DAYS,
+      openPoint: OPEN_POINT, openDaysLeft: OPEN_POINT ? daysLeft(OPEN_POINT) : null, n: STUDENTS.length,
       hasOutcomes: !!LATEST_COMPLETE, point: LATEST_COMPLETE,
       pctSecure: null, targetSecure: null, deltaSecure: null,
       childrenUp: 0, childrenDown: 0, childrenN: 0, movementAvail: false,
@@ -495,13 +477,12 @@
   var ACADEMIC_YEARS = ['2026–27'];
 
   window.ADMIN_DATA = {
-    today: TODAY,
-    school: TS.school,
+    school: TS.school, schoolId: SCHOOL_ID,
     academicYears: ACADEMIC_YEARS,
     bands: BANDS, bandOf: bandOf, bandMeta: bandMeta,
     bandThresholds: { emergingMax: BAND_EMERGING_MAX, developingMax: BAND_DEVELOPING_MAX },
     points: POINTS, completedPoints: COMPLETED_POINTS, latestComplete: LATEST_COMPLETE,
-    openPoint: OPEN_POINT, endlineCloses: ENDLINE_CLOSES,
+    openPoint: OPEN_POINT, pointRange: pointRange, daysLeft: daysLeft,
     // lifecycle preview state (demo tooling; see LIFECYCLE_STATES above)
     lifecycleStates: LIFECYCLE_STATES, lifecycleState: ACTIVE_LIFECYCLE,
     setLifecycleState: function (key) {
@@ -514,7 +495,6 @@
       return ACTIVE_LIFECYCLE;
     },
     skills: SKILLS, sections: SECTIONS, grades: GRADES, teachers: TEACHERS, students: STUDENTS,
-    quietThresholdDays: QUIET_THRESHOLD_DAYS,
     // Per-school flag (spec §2). Default false; toggled by Tilli staff only.
     // The UI it unlocks is deferred (§11/§12); real enforcement + the access
     // log live server-side and cannot be represented in this static prototype.
@@ -537,11 +517,11 @@
     overallBandMovement: overallBandMovement,
     // mockup-inspired derived reads
     schoolSkillGroups: schoolSkillGroups, growthStrength: growthStrength,
-    perspectiveRadar: perspectiveRadar, studentStage: studentStage,
-    // continuous
-    activity: ACTIVITY, activityFor: activityFor, windowCompletion: windowCompletion,
+    perspectiveGaps: perspectiveGaps, studentStage: studentStage,
+    // assessment window progress (only while a window is open)
+    windowProgress: windowProgress, progressFor: progressFor,
     concerns: CONCERNS, concernCounts: concernCounts,
-    // roster / overview
-    rosterRows: rosterRows, statusLine: statusLine,
+    // roster
+    rosterRows: rosterRows,
   };
 })();

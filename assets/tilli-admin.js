@@ -1396,9 +1396,9 @@
         });
       });
       byS[phase] = { start: '', end: '', sched: { school: '', home: '' }, deployed: false, byId: byId, order: order };
-      // Hydrate from the shared store so a created school's deployed phases
-      // survive a reload (the planner's own state is in-session only).
-      if (s.created && window.TilliAPI) {
+      // Hydrate from the shared store so a created (or the live demo) school's
+      // deployed phases survive a reload (the planner's own state is in-session only).
+      if ((s.created || s.live) && window.TilliAPI) {
         var deps = window.TilliAPI.getDeployments(s.id).filter(function (x) { return x.phase === phase; });
         if (deps.length) {
           var rec = byS[phase];
@@ -1426,10 +1426,11 @@
 
   // Persist a phase's running assessments into the shared TilliAPI store, per
   // audience, so the teacher & parent apps surface exactly what's deployed here.
-  // Only created schools have a real roster in that store.
+  // Created schools + the live demo school (Little Sprouts) have a real roster
+  // there; their window dates also feed the school admin dashboard's labels.
   var TL_AUD_LABEL = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct Assessment' };
   function tlPersistDeploy(s, phase) {
-    if (!(s.created && window.TilliAPI)) return;
+    if (!((s.created || s.live) && window.TilliAPI)) return;
     var p = tlPlan(s, phase), running = p.order.school.concat(p.order.home), byAud = {};
     running.forEach(function (id) { var it = p.byId[id]; (byAud[it.aud] = byAud[it.aud] || []).push({ id: it.id, name: it.name }); });
     Object.keys(TL_AUD_LABEL).forEach(function (k) {
@@ -1438,7 +1439,7 @@
     });
   }
   function tlPersistUndeploy(s, phase) {
-    if (!(s.created && window.TilliAPI)) return;
+    if (!((s.created || s.live) && window.TilliAPI)) return;
     Object.keys(TL_AUD_LABEL).forEach(function (k) { window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]); });
   }
   // Aggregate real completion for a deployed phase across all audiences.

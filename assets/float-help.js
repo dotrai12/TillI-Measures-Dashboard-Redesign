@@ -152,7 +152,7 @@
       '<p class="tf-pop-sub">Questions about the dashboard, or something not working? The Tilli team is happy to help.</p>' +
       '<a class="tf-pop-item" href="' + mailto('Tilli Measures — help') + '">' + ICON.mail + '<span><b>Email the Tilli team</b><small>' + HELP_EMAIL + '</small></span></a>' +
       '<a class="tf-pop-item" href="' + mailto('Tilli Measures — problem report') + '">' + ICON.flag + '<span><b>Report a problem</b><small>Tell us what happened and where</small></span></a>' +
-      (opts.ask ? '<button class="tf-pop-item" data-tf-ask>' + ICON.chat + '<span><b>Ask Tilli</b><small>Quick answers about your class and data</small></span></button>' : '') +
+      (opts.ask ? '<button class="tf-pop-item" data-tf-ask>' + ICON.chat + '<span><b>Ask Tilli</b><small>' + String(opts.askSub || 'Quick answers about your class and data').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }) + '</small></span></button>' : '') +
     '</div>';
   }
 
@@ -197,6 +197,7 @@
     o = o || {};
     if ('role' in o) opts.role = o.role;
     if ('ask' in o) opts.ask = typeof o.ask === 'function' ? o.ask : null;
+    if ('askSub' in o) opts.askSub = o.askSub;   // subtitle under "Ask Tilli" (role-specific wording)
     if (document.body) build();
     else document.addEventListener('DOMContentLoaded', build, { once: true });
   }

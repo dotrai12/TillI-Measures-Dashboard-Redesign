@@ -277,8 +277,8 @@
         ? window.TilliAPI.resolveSchool(state.school) : null;
       if (created && created.source === 'created') {
         const role = window.TilliAPI.roleOf(state.email, created.school_id);
-        if (role === 'admin') {
-          setSession('coordinator', state.email);
+        if (role === 'admin' || role === 'principal_view') {
+          setSession(role === 'admin' ? 'coordinator' : 'principal', state.email);
           window.location.href = 'admin.html?school=' + encodeURIComponent(created.school_id)
             + '&email=' + encodeURIComponent(state.email) + '&from=login';
           return;
