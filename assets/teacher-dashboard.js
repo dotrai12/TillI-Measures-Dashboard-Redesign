@@ -2351,7 +2351,7 @@
           <div class="tl-persps">${persp}</div>
           ${canGo ? `<button class="btn-ask-a inline focus" data-continue-assess="${esc(st.id)}">${draftOf(st, w.key) ? 'Continue' : 'Start'} ${esc(st.dispFirst || st.first)}&rsquo;s observation →</button>` : ''}</div></div>`;
     }).join('');
-    return `<button class="btn-link mb-3 focus" data-tracker-back>← Back to tracker</button>
+    return `<button class="btn-link mb-3 focus" data-tracker-back>← Back to Done so far</button>
       <div class="logstu-head"><span class="pl">${flowerArt(st.state, 60, 0)}</span>
         <div class="m"><h2 class="stu-name" style="font-size:var(--fs-xl)">${esc(st.name)}</h2><div class="stu-sub">${esc(sec.name)} · ${st.perspDone} of ${total} parts done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
         <button class="btn-soft green focus" data-open-student="${esc(st.id)}">Open full profile →</button></div>
@@ -2679,8 +2679,10 @@
       });
       tip.hidden = false;
       const box = svg.getBoundingClientRect(), scale = box.width / GROWTH_GEO.W;
-      const left = xs * scale + 14;
-      tip.style.left = (left + tip.offsetWidth > box.width ? xs * scale - tip.offsetWidth - 14 : left) + 'px';
+      const right = xs * scale + 14, flipped = xs * scale - tip.offsetWidth - 14;
+      const want = right + tip.offsetWidth > box.width ? flipped : right;
+      // Clamp inside the chart so the readout never opens off-screen on a phone.
+      tip.style.left = Math.max(0, Math.min(box.width - tip.offsetWidth, want)) + 'px';
       tip.style.top = '8px';
       wrap.dataset.i = i;
     };
@@ -3953,7 +3955,7 @@
 
   /* section garden */
   .blossom-pill { display: flex; align-items: center; gap: 9px; background: var(--wash-yellow); color: var(--lvl-2-ink); padding: 9px 15px; border-radius: var(--radius-md); font-weight: 600; font-size: var(--fs-sm); }
-  .plant-bed { position: relative; margin: 18px 0 8px; padding: 26px 20px 30px; border-radius: var(--radius-card); background: ${ART.bedGround}; overflow: hidden; }
+  .plant-bed { position: relative; margin: 18px 0 8px; padding: 26px 20px 30px; border-radius: var(--radius-card); background: ${ART.bedGround}; overflow: visible; }   /* visible so a top-row plant's card isn't clipped */
   .pg-grid { display: grid; gap: 2px 4px; align-items: end; position: relative; z-index: 1; }
   .pg-cell { position: relative; display: flex; flex-direction: column; align-items: center; }
   .pg-plant { background: none; border: none; cursor: pointer; padding: 0; line-height: 0; transition: transform .18s; }
@@ -4345,6 +4347,12 @@
   .obs-qcard { border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 16px 18px; }
   .obs-qcard.done { border-color: var(--lvl-3-wash); background: color-mix(in srgb, var(--wash-green) 45%, transparent); }
   .obs-qcard .obs-anchor { margin-bottom: 14px; }
+  /* Phone: the 4 rating options sit 2 × 2 so a page of 6 questions isn't 24 stacked buttons */
+  @media (max-width: 640px) {
+    .obs-stars { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .obs-star { padding: 10px 12px; }
+    .obs-qcard { padding: 14px; }
+  }
   .obs-celebrate { text-align: center; padding: 26px; margin-top: 16px; background: var(--wash-pink); border-radius: var(--radius-card); }
   .obs-celebrate .msg { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--pink-600); margin-top: 8px; }
 
