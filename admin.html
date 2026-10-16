@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261012y">
+<link rel="stylesheet" href="assets/tilli.css?v=20261016h">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -51,6 +51,10 @@
     border: 1px solid var(--line-200); border-radius: var(--radius-pill);
     padding: 6px 12px; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600);
   }
+  /* "Updated 2 h ago by …" header chip → History screen */
+  .ad-updated { display: inline-flex; align-items: center; border: none; background: none; padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer; font: inherit; }
+  .ad-updated:hover { background: var(--surface-100); }
+  .ad-updated:hover .hist-last { color: var(--green-700); }
   /* Account dropdown — .ui-menu supplies the look; this only positions it. */
   .ad-acct-menu { position: absolute; top: calc(var(--ad-header-h) - 8px); right: clamp(16px, 3vw, 32px); z-index: 40; min-width: 220px; }
 
@@ -411,11 +415,12 @@
 <div id="ad-modal-root"></div>
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261012y"></script>
-<script src="assets/tilli-api.js?v=20261012y"></script>
-<script src="assets/created-school-bridge.js?v=20261012y"></script>
-<script src="assets/admin-data.js?v=20261012y"></script>
-<script src="assets/float-help.js?v=20261012y"></script>
-<script src="assets/admin.js?v=20261012y"></script>
+<script src="assets/school-data.js?v=20261016h"></script>
+<script src="assets/tilli-api.js?v=20261016h"></script>
+<script src="assets/tilli-history.js?v=20261016h"></script>
+<script src="assets/created-school-bridge.js?v=20261016h"></script>
+<script src="assets/admin-data.js?v=20261016h"></script>
+<script src="assets/float-help.js?v=20261016h"></script>
+<script src="assets/admin.js?v=20261016h"></script>
 </body>
 </html>

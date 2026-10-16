@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261012y">
+<link rel="stylesheet" href="assets/tilli.css?v=20261016h">
 <style>
   /* ============================================================
      Tilli Measures — INTERNAL managing platform chrome.
@@ -218,6 +218,13 @@
   /* ---- School Detail Hub ---- */
   .tl-hub-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .tl-hub-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* change history: hub "Last updated" line, history school filter, group mode */
+  .tl-hub-last { display: inline-flex; margin-top: 6px; padding: 0; border: none; background: none; font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-xs); }
+  div.tl-hub-last { cursor: default; }
+  button.tl-hub-last:hover .hist-last { color: var(--green-700); text-decoration: underline; }
+  .tl-hist-school { width: auto; max-width: 240px; }
+  .tl-lastcell { white-space: nowrap; font-size: var(--fs-sm); }
+  .tl-group-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); background: none; border-color: transparent; padding-left: 4px; }
   .tl-tree { display: flex; flex-direction: column; gap: 8px; }
   .tl-tree-grade { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .tl-tree-grade > b { min-width: 120px; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
@@ -489,10 +496,11 @@
 <div id="tl-modal-root"></div>
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261012y"></script>
-<script src="assets/tilli-api.js?v=20261012y"></script>
-<script src="assets/tilli-org-data.js?v=20261012y"></script>
-<script src="assets/float-help.js?v=20261012y"></script>
-<script src="assets/tilli-admin.js?v=20261012y"></script>
+<script src="assets/school-data.js?v=20261016h"></script>
+<script src="assets/tilli-api.js?v=20261016h"></script>
+<script src="assets/tilli-history.js?v=20261016h"></script>
+<script src="assets/tilli-org-data.js?v=20261016h"></script>
+<script src="assets/float-help.js?v=20261016h"></script>
+<script src="assets/tilli-admin.js?v=20261016h"></script>
 </body>
 </html>

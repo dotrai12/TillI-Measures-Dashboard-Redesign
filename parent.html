@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261012y">
+<link rel="stylesheet" href="assets/tilli.css?v=20261016h">
 <style>
   /* ---- Parent-flow layout ---- */
   .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
@@ -316,9 +316,9 @@
 
 <div id="app"></div>
 
-<script src="assets/school-data.js?v=20261012y"></script>
-<script src="assets/tilli-api.js?v=20261012y"></script>
-<script src="assets/float-help.js?v=20261012y"></script>
+<script src="assets/school-data.js?v=20261016h"></script>
+<script src="assets/tilli-api.js?v=20261016h"></script>
+<script src="assets/float-help.js?v=20261016h"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
 (function () {
@@ -490,6 +490,8 @@
     try { return JSON.parse(localStorage.getItem('tilliMeasures.session') || '{}') || {}; } catch (e) { return {}; }
   }
   const PARENT_EMAIL = (readSession().email) || 'priya.menon@example.com'; // demo fallback
+  // Completions this parent marks show up in the school's change history under their name.
+  if (window.TilliAPI && window.TilliAPI.setHistoryActor) window.TilliAPI.setHistoryActor({ email: PARENT_EMAIL, role: 'parent' });
   const links = (window.TilliAPI && window.TilliAPI.childrenForParent)
     ? window.TilliAPI.childrenForParent(PARENT_EMAIL) : [];
   let children;

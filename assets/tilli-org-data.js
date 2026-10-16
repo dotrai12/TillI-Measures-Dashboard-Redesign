@@ -222,11 +222,12 @@
       return { grade: g.grade, students: 0, sections: g.sections.map(function (sec) { return { name: sec.name, students: sec.students }; }) };
     });
     var coord = st.coordinator ? { name: st.coordinator.name, email: st.coordinator.email } : { name: '—', email: '' };
+    var grp = (api.group_id && GROUPS.find(function (g) { return g.id === api.group_id; })) || GROUPS[0];
     return {
       id: api.school_id, live: true, created: true, code: api.code || api.school_id,
       name: api.name, type: 'Independent school',
       city: api.city || '', country: api.country || '', region: api.country || '',
-      board: api.board || 'Other', groupId: 'g-none', groupName: 'No group',
+      board: api.board || 'Other', groupId: grp.id, groupName: grp.name,
       students: st.students, staff: st.staff, coordinator: coord,
       joinCode: api.joinCode || '',
       joined: 'Sep 2025', stage: 'baseline', status: 'active',
@@ -721,6 +722,7 @@
       var res = window.TilliAPI.createSchoolFull({
         name: input.name, board: input.board, city: input.city, country: input.country,
         grades: input.grades, admin: input.admin,
+        groupId: input.groupId && input.groupId !== 'g-none' ? input.groupId : null,
       });
       if (res && res.ok) {
         var api = window.TilliAPI.resolveSchool(res.school_id);
@@ -828,7 +830,11 @@
   }
   function deleteGroup(id) {
     if (id === 'g-none') return;
-    SCHOOLS.forEach(function (s) { if (s.groupId === id) { s.groupId = 'g-none'; s.groupName = 'No group'; } });
+    SCHOOLS.forEach(function (s) {
+      if (s.groupId !== id) return;
+      s.groupId = 'g-none'; s.groupName = 'No group';
+      if (s.created && window.TilliAPI && window.TilliAPI.setSchoolGroup) window.TilliAPI.setSchoolGroup(s.id, null);
+    });
     var i = GROUPS.findIndex(function (g) { return g.id === id; }); if (i >= 0) GROUPS.splice(i, 1);
   }
   // Permanently remove a school. Guarded: only an already-archived school can
@@ -846,7 +852,10 @@
   function updateSchool(id, patch) {
     var s = byId(id); if (!s) return null;
     ['name', 'type', 'city', 'country', 'region'].forEach(function (k) { if (patch[k] != null) s[k] = patch[k]; });
-    if (patch.groupId != null) { s.groupId = patch.groupId; s.groupName = (GROUPS.find(function (g) { return g.id === patch.groupId; }) || GROUPS[0]).name; }
+    if (patch.groupId != null) {
+      s.groupId = patch.groupId; s.groupName = (GROUPS.find(function (g) { return g.id === patch.groupId; }) || GROUPS[0]).name;
+      if (s.created && window.TilliAPI && window.TilliAPI.setSchoolGroup) window.TilliAPI.setSchoolGroup(s.id, patch.groupId);
+    }
     return s;
   }
   function setUserRole(email, role) { var u = USERS.find(function (x) { return x.email === email; }); if (u) u.role = role; return u; }
@@ -874,6 +883,75 @@
     if (patch.questions != null) g.questions = patch.questions;
     return g;
   }
+
+  // ============================================================
+  //  CHANGE HISTORY (portfolio view — Tilli team + School Group Admin)
+  //  Live schools (the demo + wizard-created) keep a real log in TilliAPI.
+  //  Portfolio-only schools have no store, so they get a small deterministic
+  //  sample (roster import, deploys, completions, an edit) plus any gated
+  //  student / deployment actions from the audit trail. Never carries scores.
+  // ============================================================
+  var PORTFOLIO_HISTORY = null;   // built lazily on first read
+  var HISTORY_PHASES = ['baseline', 'midline', 'endline'];
+  var AUDIT_HISTORY_KIND = { student: 'student', deployment: 'assessment', phase: 'assessment' };
+  function buildPortfolioHistory() {
+    var out = [], now = Date.now(), DAY_MS = 86400000;
+    var team = { email: 'team@tilli.org', name: 'Tilli Team', role: 'tilli' };
+    SCHOOLS.forEach(function (s, i) {
+      if (s.live || s.archived || !s.students) return;
+      var r = rng(7000 + i);
+      var coord = { email: s.coordinator.email, name: s.coordinator.name, role: 'admin' };
+      var teacher = { email: '', name: pick(r, COORD_FIRST) + ' ' + pick(r, COORD_LAST), role: 'teacher' };
+      var g0 = s.structure.grades[0], sec0 = g0 && g0.sections[0];
+      var secName = g0 ? g0.grade + (sec0 ? ' ' + sec0.name : '') : '';
+      var stage = STAGE_ORDER.indexOf(s.stage);
+      var ev = function (daysAgo, e) {
+        e.id = 'ph-' + s.id + '-' + out.length; e.at = now - Math.round(daysAgo * DAY_MS); e.school_id = s.id;
+        e.section_id = null; e.section_name = e.section_name || ''; e.students = []; e.changes = e.changes || []; e.items = e.items || [];
+        out.push(e);
+      };
+      ev(between(r, 40, 60), { kind: 'student', action: 'student.add', count: s.students, label: 'imported the roster · ' + s.students.toLocaleString() + ' students', actor: coord });
+      HISTORY_PHASES.forEach(function (ph, k) {
+        if (stage < STAGE_ORDER.indexOf(ph)) return;
+        var P = ph.charAt(0).toUpperCase() + ph.slice(1), base = 36 - k * 12;
+        ev(base + r() * 2, { kind: 'assessment', action: 'phase.deploy', phase: P, audience: 'Teacher', actor: team, changes: [{ label: 'Assessments', from: '', to: 'Teacher observation' }] });
+        ev(base - 4 - r() * 3, { kind: 'assessment', action: 'assessment.complete', phase: P, audience: 'Teacher', section_name: secName, items: ['Teacher observation'], actor: teacher,
+          count: Math.max(1, Math.round(s.students * (0.2 + r() * 0.5) / Math.max(1, s.sectionCount))) });
+      });
+      if (r() < 0.6 && g0 && g0.sections.length > 1) ev(0.5 + r() * 9, { kind: 'student', action: 'student.edit', label: 'moved a student between sections', section_name: g0.grade, actor: coord,
+        changes: [{ label: 'Section', from: g0.grade + ' ' + g0.sections[0].name, to: g0.grade + ' ' + g0.sections[1].name }] });
+    });
+    return out;
+  }
+  // Gated student / deployment actions from the audit trail, as history rows.
+  function auditAsHistory() {
+    return AUDIT.filter(function (e) { return e.schoolId && AUDIT_HISTORY_KIND[e.entityType]; }).map(function (e, i) {
+      return { id: 'au-' + i + '-' + e.at, at: e.at, school_id: e.schoolId, section_id: null, section_name: '', students: [], changes: [], items: [],
+        kind: AUDIT_HISTORY_KIND[e.entityType], action: e.action, label: actionLabel(e.action) + ' · ' + e.entity,
+        actor: { email: '', name: e.actor, role: /system/i.test(e.actor) ? 'system' : 'tilli' } };
+    });
+  }
+  // History across a set of schools, newest first (the §4.2-style server view).
+  // filter: { kind, q, student_id, limit }
+  function historyAcrossSchools(schoolIds, filter) {
+    var f = filter || {}, ids = {}, live = [];
+    (schoolIds || []).forEach(function (id) { ids[id] = 1; });
+    var liveIds = (schoolIds || []).filter(function (id) { var s = byId(id); return s && s.live; });
+    if (liveIds.length && window.TilliAPI && window.TilliAPI.historyAcross)
+      live = window.TilliAPI.historyAcross(liveIds, { kind: f.kind, q: f.q, student_id: f.student_id });
+    if (!PORTFOLIO_HISTORY) PORTFOLIO_HISTORY = buildPortfolioHistory();
+    var q = normName(f.q);
+    var mock = f.student_id ? [] : PORTFOLIO_HISTORY.concat(auditAsHistory()).filter(function (e) {
+      var s = byId(e.school_id);
+      if (!ids[e.school_id] || !s || s.live) return false;
+      if (f.kind && e.kind !== f.kind) return false;
+      if (q && normName([e.label, e.actor.name, e.section_name, e.phase, e.audience, s.name].join(' ')).indexOf(q) < 0) return false;
+      return true;
+    });
+    var all = live.concat(mock).sort(function (a, b) { return b.at - a.at; });
+    return f.limit ? all.slice(0, f.limit) : all;
+  }
+  function lastChange(schoolId) { return historyAcrossSchools([schoolId], { limit: 1 })[0] || null; }
 
   // ---- People roster (backward-compat for the carried-over Access screen) ----
   function people() {
@@ -907,6 +985,7 @@
       studentDirectory: studentDirectory,
       recentActivity: recentActivity,
       logAudit: logAudit,
+      history: historyAcrossSchools, lastChange: lastChange,
       // §9 write helpers (gated in the client, computed here)
       createGroup: createGroup, createSchool: createSchool,
       createTemplate: createTemplate, publishTemplate: publishTemplate, deleteTemplate: deleteTemplate,

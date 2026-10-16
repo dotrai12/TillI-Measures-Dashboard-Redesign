@@ -13,6 +13,7 @@
 - Point out potential future issues if you think there could be any. When pointing out potential future issues, highlight the text when writing them. Explain the circumstance that would trigger them, and mention a potential fix in a concise manner
 - When adding any new Variables which control visual parameters, list them out along with what they control in a table format
 - Try to keep your messages concise, don't spend too many tokens on the message, I would rather you focus on the code output 
+- If you are confused or unsure about something, reach out and ask me before proceeding instead of guessing.
 
 ## Workflow
 

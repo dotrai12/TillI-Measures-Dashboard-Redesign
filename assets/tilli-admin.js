@@ -35,6 +35,22 @@
   var email = qp.get('email') || (session && session.email) || 'team@tilli.org';
   var me = { name: 'Tilli Team', email: email, role: 'Super Admin' };
 
+  // ---------- School Group Admin mode ----------
+  // tilli.html?group=<id> renders this same app scoped to one group's schools:
+  // Group Overview + Change History + a read-only school drill-in. A Super
+  // Admin can preview it (&from=tilli) and keeps their own identity.
+  var GROUP = (function () {
+    var id = qp.get('group'), g = id && ORG.groupById(id);
+    return g && g.id === id && id !== 'g-none' ? g : null;
+  })();
+  var groupPreview = !!GROUP && qp.get('from') === 'tilli';
+  if (GROUP && !groupPreview) {
+    var gAcct = (window.TilliAPI && window.TilliAPI.getAccount) ? window.TilliAPI.getAccount(email) : null;
+    me = { name: (gAcct && gAcct.name) || GROUP.name + ' admin', email: email, role: 'School Group Admin' };
+  }
+  // Every change made from this console is logged under this person.
+  if (window.TilliAPI && window.TilliAPI.setHistoryActor) window.TilliAPI.setHistoryActor({ email: me.email, name: me.name, role: GROUP && !groupPreview ? 'group' : 'tilli' });
+
   // ---------- provisioning hierarchy (who can add whom) ----------
   // Single source of truth for the onboarding flow: set up school → assign
   // school admin → school admin adds teachers/students → teachers self-join
@@ -87,6 +103,7 @@
     health: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg>',
     ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><line x1="12" y1="3" x2="12" y2="7"/><circle cx="9" cy="13" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1.2" fill="currentColor" stroke="none"/></svg>',
     search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>',
+    history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>',
   };
 
   // ---------- navigation (grouped sections) ----------
@@ -94,7 +111,7 @@
   var NAV = [
     { icon: 'controlroom', items: [{ key: 'controlroom', label: 'Control Room' }] },
     { icon: 'analytics',   items: [{ key: 'analytics', label: 'Analytics' }] },
-    { icon: 'schools', title: 'Schools', items: [{ key: 'schools', label: 'All Schools' }] },
+    { icon: 'schools', title: 'Schools', items: [{ key: 'schools', label: 'All Schools' }, { key: 'history', label: 'Change History' }] },
     // Students (Directory / Add / Merge) are no longer a global section — they
     // live inside each School Hub → Students tab, scoped to that school.
     // Observation Form is no longer its own surface — it's an Observation-audience
@@ -124,6 +141,17 @@
     { key: 'issues', label: 'Issues', icon: 'health' },
     { key: 'users', label: 'People', icon: 'people' },
   ];
+  // Group mode: a deliberately small surface — overview, history, school drill-in.
+  var GROUP_NAV = [
+    { icon: 'controlroom', items: [{ key: 'groupoverview', label: 'Group Overview' }] },
+    { icon: 'history', items: [{ key: 'history', label: 'Change History' }] },
+  ];
+  var GROUP_BOTTOM = [
+    { key: 'groupoverview', label: 'Overview', icon: 'controlroom' },
+    { key: 'history', label: 'History', icon: 'history' },
+  ];
+  var GROUP_SCREENS = { groupoverview: 1, gschool: 1, history: 1 };
+  var HOME = GROUP ? 'groupoverview' : 'controlroom';
 
   // ---------- router ----------
   function buildHash(screen, params) {
@@ -134,10 +162,12 @@
   function currentRoute() {
     var h = location.hash.replace(/^#\/?/, '');
     var qi = h.indexOf('?');
-    var screen = (qi < 0 ? h : h.slice(0, qi)) || 'controlroom';
+    var screen = (qi < 0 ? h : h.slice(0, qi)) || HOME;
     var params = {};
     if (qi >= 0) h.slice(qi + 1).split('&').forEach(function (kv) { if (!kv) return; var i = kv.indexOf('='); var k = decodeURIComponent(i < 0 ? kv : kv.slice(0, i)); params[k] = decodeURIComponent(i < 0 ? '' : kv.slice(i + 1)); });
-    if (!SCREEN[screen]) screen = 'controlroom';
+    if (!SCREEN[screen]) screen = HOME;
+    // Group mode only reaches its own screens; the Super Admin console never shows the group ones.
+    if (GROUP ? !GROUP_SCREENS[screen] : (screen === 'groupoverview' || screen === 'gschool')) screen = HOME;
     return { screen: screen, params: params };
   }
   function go(screen, params) { location.hash = buildHash(screen, params); }
@@ -146,12 +176,12 @@
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
   var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
-    observation: 'templates', results: 'deployments', 'master-links': 'deployments' };
+    observation: 'templates', results: 'deployments', 'master-links': 'deployments', gschool: 'groupoverview' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
   function chrome(r) {
     var active = navKeyFor(r.screen);
-    var nav = NAV.map(function (sec) {
+    var nav = (GROUP ? GROUP_NAV : NAV).map(function (sec) {
       var items = sec.items.map(function (n) {
         var badge = navBadge(n.key);
         return '<button class="ui-nav-item' + (n.key === active ? ' on' : '') + (sec.title ? ' sub' : '') + '" data-nav="' + n.key + '">' +
@@ -165,18 +195,22 @@
 
     var side = '<aside class="ui-side tl-side">' +
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
-      '<span class="ui-tag green tl-badge-int">Platform Admin</span>' +
+      '<span class="ui-tag green tl-badge-int">' + (GROUP ? esc(GROUP.name) : 'Platform Admin') + '</span>' +
       '<nav class="ui-nav">' + nav + '</nav>' +
-      '<div class="ui-side-foot">Tilli Team · internal platform admin. The layer above school admins.</div></aside>';
+      '<div class="ui-side-foot">' + (GROUP
+        ? 'School Group Admin · every school in ' + esc(GROUP.name) + '.' + (groupPreview ? ' Previewing as Tilli Team.' : '')
+        : 'Tilli Team · internal platform admin. The layer above school admins.') + '</div></aside>';
 
+    // Group mode drops the portfolio-wide search (it would reach other groups' schools).
     var header = '<header class="ui-header tl-header">' +
-      '<form class="tl-search" id="tl-search"><span class="ic">' + ICONS.search + '</span>' +
-        '<input id="tl-search-in" placeholder="Search schools, students, users, invitations, deployments…" autocomplete="off"></form>' +
+      (GROUP ? '<div class="tl-search tl-group-title">' + esc(GROUP.name) + '</div>'
+        : '<form class="tl-search" id="tl-search"><span class="ic">' + ICONS.search + '</span>' +
+          '<input id="tl-search-in" placeholder="Search schools, students, users, invitations, deployments…" autocomplete="off"></form>') +
       '<div class="tl-h-actions">' +
-        '<span class="ui-rolebadge desk-only">Super Admin</span>' +
+        '<span class="ui-rolebadge desk-only">' + (GROUP ? 'School Group Admin' + (groupPreview ? ' · preview' : '') : 'Super Admin') + '</span>' +
         '<button class="ui-avatar" id="tl-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
-    var bottom = '<nav class="ui-bottomnav tl-bottomnav">' + BOTTOM.map(function (n) {
+    var bottom = '<nav class="ui-bottomnav tl-bottomnav">' + (GROUP ? GROUP_BOTTOM : BOTTOM).map(function (n) {
       return '<button class="' + (n.key === active ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.icon] + '<span>' + esc(n.label) + '</span></button>';
     }).join('') + '</nav>';
 
@@ -208,8 +242,10 @@
     var m = document.createElement('div');
     m.className = 'ui-menu tl-acct-menu';
     m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span></div>' +
+      (groupPreview ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
     anchor.parentNode.appendChild(m);
+    if (groupPreview) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email) + '#/group?id=' + encodeURIComponent(GROUP.id); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
     setTimeout(function () { document.addEventListener('click', function close(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } }); }, 0);
   }
@@ -534,6 +570,7 @@
 
     body.innerHTML = crumbs([{ label: 'All Schools', screen: 'schools' }, { label: g.name }]) +
       screenHead(g.name, counts.active + ' school' + (counts.active === 1 ? '' : 's') + ' in this group.',
+        '<a class="btn btn-outline btn-sm" href="tilli.html?group=' + encodeURIComponent(g.id) + '&from=tilli&email=' + encodeURIComponent(me.email) + '" style="text-decoration:none" title="Open the School Group Admin view of this group — what its group admin sees">Group admin view →</a>' +
         '<button class="btn btn-outline btn-sm" id="grp-dl-assess" title="Assessment completion log for every school in this group — responses vs expected per teacher / parent / student assessment.">↓ Assessments CSV</button>' +
         '<button class="btn btn-outline btn-sm" id="grp-dl-staff" title="Every staff member across this group — name, email, role and sections.">↓ Staff CSV</button>' +
         '<button class="btn btn-primary btn-sm" id="grp-add">+ Add School</button>') +
@@ -1020,7 +1057,7 @@
   var HUB_TABS = [
     { key: 'overview', label: 'Overview' }, { key: 'students', label: 'Students' },
     { key: 'staff', label: 'Staff & Access' }, { key: 'assessments', label: 'Assessments' },
-    { key: 'issues', label: 'Issues & Logs' }, { key: 'settings', label: 'Settings' },
+    { key: 'issues', label: 'Issues & Logs' }, { key: 'history', label: 'History' }, { key: 'settings', label: 'Settings' },
   ];
   SCREEN.school = function (params, body) {
     var sum0 = ORG.server.schoolSummary(params.id);
@@ -1034,7 +1071,8 @@
     var header = crumbs(crumbParts) +
       '<div class="tl-hub-head">' +
         '<div><h1 class="ui-screen-title" style="margin-bottom:4px">' + esc(s.name) + (s.archived ? ' <span class="ui-chip">Archived</span>' : '') + '</h1>' +
-        '<p class="ui-screen-sub m-0">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + ' · ' + esc(s.city + ', ' + s.country) + '</p></div>' +
+        '<p class="ui-screen-sub m-0">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + ' · ' + esc(s.city + ', ' + s.country) + '</p>' +
+        '<button class="tl-hub-last" data-hubtab="history" title="Open this school\'s change history">' + lastLine(s.id) + '</button></div>' +
         '<div class="tl-hub-actions"><button class="btn btn-outline btn-sm" data-hub-edit>Edit</button>' +
           '<button class="btn btn-outline btn-sm" data-hub-archive>' + (s.archived ? 'Un-archive' : 'Archive') + '</button>' +
           (s.archived ? '<button class="btn btn-danger btn-sm" data-hub-delete>Delete</button>' : '') +
@@ -1098,8 +1136,25 @@
       onConfirm: function () { s.archived = true; toast(s.name + ' archived.'); go('schools', {}); } });
   }
 
+  // Baseline / Midline / Endline cards from a school summary (hub + group drill-in).
+  function phaseProgressHtml(d) {
+    return '<div class="tl-phases">' + d.assessment_progress.map(function (p) {
+      var tone = !p.deployed ? 'muted' : (p.status === 'Live' ? 'live' : (p.status === 'Ended' ? 'done' : 'sched'));
+      return '<div class="tl-phase ' + tone + '"><div class="tp-name">' + esc(p.phase) + '</div>' +
+        '<div class="tp-state">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</div>' +
+        (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp">' + (p.completion != null ? pct(p.completion) + '% complete' : '') + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+
   // ---- Hub tabs ----
   var HUB = {};
+  HUB.history = function (d, el) {
+    var s = d.school;
+    el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3>' +
+        '<p class="ui-mod-note">Student records and assessments at this school — who changed what, and when.</p></div>' +
+        '<a class="btn-link" href="' + href('history', { school: s.id }) + '">Filter &amp; search →</a></div>' +
+      histList(ORG.server.history([s.id], { limit: 40 }), { showSchool: false, empty: 'No changes recorded for this school yet.' }) + '</div>';
+  };
   HUB.overview = function (d, el) {
     var s = d.school;
     var structure = d.structure.grades.length
@@ -1111,12 +1166,7 @@
         }).join('') + '</div>'
       : '<div class="ui-empty">No grades/sections yet.</div>';
 
-    var progress = '<div class="tl-phases">' + d.assessment_progress.map(function (p) {
-      var tone = !p.deployed ? 'muted' : (p.status === 'Live' ? 'live' : (p.status === 'Ended' ? 'done' : 'sched'));
-      return '<div class="tl-phase ' + tone + '"><div class="tp-name">' + esc(p.phase) + '</div>' +
-        '<div class="tp-state">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</div>' +
-        (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp">' + (p.completion != null ? pct(p.completion) + '% complete' : '') + '</div>' : '') + '</div>';
-    }).join('') + '</div>';
+    var progress = phaseProgressHtml(d);
 
     var flags = d.flags.length ? '<div class="tl-flagrow">' + d.flags.map(function (f) { return '<span class="ui-chip warn lg">⚠ ' + esc(f.label) + '</span>'; }).join('') + '</div>' : '<div class="tl-ok">On track — no onboarding flags. 🌱</div>';
 
@@ -1979,18 +2029,24 @@
     var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
     var invRoles = ORG.roles.filter(function (r) { return r !== 'none'; });
     var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '">' + esc(r) + '</option>'; }).join('');
+    var groupOpts = '<option value="">— Select group —</option>' + ORG.groups.filter(function (g) { return g.id !== 'g-none'; })
+      .map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('');
     openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
       '<label class="field">Recipient email<input class="input" id="iv-email" type="email" placeholder="name@school.edu"></label>' +
       '<label class="field">Role<select class="select" id="iv-role">' + roleOpts + '</select>' +
         '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(invRoles[0])) + '</span></label>' +
-      '<label class="field">School<select class="select" id="iv-school">' + schoolOpts + '</select></label>' +
+      '<label class="field" id="iv-school-f">School<select class="select" id="iv-school">' + schoolOpts + '</select></label>' +
+      '<label class="field" id="iv-group-f" style="display:none">School group<select class="select" id="iv-group">' + groupOpts + '</select></label>' +
       '</div>', function (close) {
         var em = (document.getElementById('iv-email').value || '').trim();
         if (!em) { toast('Recipient email is required.'); return false; }
         var role = document.getElementById('iv-role').value;
-        var schId = document.getElementById('iv-school').value || null;
+        var isGroup = role === 'School Group Admin';
+        var schId = isGroup ? null : (document.getElementById('iv-school').value || null);
+        var grpId = isGroup ? (document.getElementById('iv-group').value || null) : null;
+        if (isGroup && !grpId) { toast('Pick the group this admin manages.'); return false; }
         var res = window.TilliAPI
-          ? window.TilliAPI.createInvite({ email: em, role: role, school_id: schId, invitedBy: me.email })
+          ? window.TilliAPI.createInvite({ email: em, role: role, school_id: schId, group_id: grpId, invitedBy: me.email })
           : { ok: false };
         if (!res.ok) { toast('Could not create the invitation.'); return false; }
         // Surface it in the Invitations table (live + persisted via TilliAPI).
@@ -2003,7 +2059,13 @@
     // Reflect what the chosen role can do, live, so the provisioning
     // hierarchy is visible before the invite goes out.
     var ivRole = document.getElementById('iv-role'), ivCap = document.getElementById('iv-rolecap');
-    if (ivRole && ivCap) ivRole.addEventListener('change', function () { ivCap.textContent = roleCap(ivRole.value); });
+    if (ivRole && ivCap) ivRole.addEventListener('change', function () {
+      ivCap.textContent = roleCap(ivRole.value);
+      // A group admin belongs to a group, not a school.
+      var g = ivRole.value === 'School Group Admin';
+      document.getElementById('iv-school-f').style.display = g ? 'none' : '';
+      document.getElementById('iv-group-f').style.display = g ? '' : 'none';
+    });
   }
 
   // Click a row's recipient to inspect the invite: role, school, status, dates
@@ -2228,6 +2290,118 @@
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Deleted at</th><th>Student</th><th>Grade/Section</th><th>School</th><th>Deleted by</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     wireCrumbs(body);
     var qi = body.querySelector('#del-q'); if (qi) qi.addEventListener('input', function () { var pos = qi.selectionStart; SCREEN.deletion({ q: qi.value }, body); var nq = body.querySelector('#del-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
+  };
+
+  // ============================================================
+  //  CHANGE HISTORY — student records + assessments, across every
+  //  school the viewer can see (all of them, or one group's).
+  //  Data: ORG.server.history (live TilliAPI log + portfolio rows).
+  // ============================================================
+  var HU = window.TilliHistory;
+  var HIST_PAGE = 50;   // rows shown per "Show more" step
+  var histState = { kind: '', q: '', school: '', shown: HIST_PAGE };
+  function scopeSchoolIds() {
+    return (GROUP ? ORG.schools.filter(function (s) { return s.groupId === GROUP.id; }) : ORG.schools).map(function (s) { return s.id; });
+  }
+  function schoolNameOf(id) { var s = ORG.byId(id); return s ? s.name : ''; }
+  function histList(events, extra) {
+    return HU ? HU.listHTML(events, Object.assign({ me: me.email, showSchool: true, schoolName: schoolNameOf }, extra || {})) : '';
+  }
+  function lastLine(schoolId) { return HU ? HU.lastUpdatedHTML(ORG.server.lastChange(schoolId), { me: me.email }) : ''; }
+
+  SCREEN.history = function (params, body) {
+    if (!HU) { body.innerHTML = '<div class="ui-empty">Change history is unavailable.</div>'; return; }
+    var ids = scopeSchoolIds();
+    histState.school = params.school && ids.indexOf(params.school) >= 0 ? params.school : '';
+    var schools = ids.map(ORG.byId).filter(Boolean).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var opts = '<option value="">All schools (' + schools.length + ')</option>' + schools.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === histState.school ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    }).join('');
+    body.innerHTML = screenHead('Change History', GROUP
+        ? 'Every change to student records and assessments across ' + GROUP.name + ' — who made it, when, and what changed.'
+        : 'Every change to student records and assessments across the portfolio — by teachers, school admins, parents and the Tilli team.') +
+      '<div class="ui-card"><div class="hist-tools">' + HU.kindChipsHTML(histState.kind) +
+        '<select class="select tl-hist-school" id="hist-school" aria-label="Filter by school">' + opts + '</select>' +
+        '<input class="input hist-q" id="hist-q" placeholder="Search a student, person or section…" value="' + esc(histState.q) + '" aria-label="Search history">' +
+        '<span class="hist-count" id="hist-count"></span></div><div id="hist-list"></div></div>';
+
+    var listEl = body.querySelector('#hist-list'), countEl = body.querySelector('#hist-count');
+    function drawList() {
+      var all = ORG.server.history(histState.school ? [histState.school] : ids, { kind: histState.kind, q: histState.q });
+      var more = all.length - histState.shown;
+      listEl.innerHTML = histList(all.slice(0, histState.shown), { showSchool: !histState.school,
+          empty: histState.q ? 'No changes match “' + histState.q + '”.' : 'No changes recorded yet.' }) +
+        (more > 0 ? '<button class="btn btn-outline btn-sm hist-morebtn" id="hist-more">Show ' + Math.min(HIST_PAGE, more) + ' more</button>' : '');
+      countEl.textContent = all.length.toLocaleString() + ' change' + (all.length === 1 ? '' : 's');
+      var mb = listEl.querySelector('#hist-more');
+      if (mb) mb.addEventListener('click', function () { histState.shown += HIST_PAGE; drawList(); });
+    }
+    body.querySelectorAll('[data-hist-kind]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        histState.kind = b.dataset.histKind; histState.shown = HIST_PAGE;
+        body.querySelectorAll('[data-hist-kind]').forEach(function (c) { var on = c === b; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+        drawList();
+      });
+    });
+    // School filter lives in the URL so hub / drill-in links land pre-filtered.
+    body.querySelector('#hist-school').addEventListener('change', function (ev) {
+      histState.school = ev.target.value; histState.shown = HIST_PAGE;
+      history.replaceState(null, '', buildHash('history', { school: histState.school }));
+      drawList();
+    });
+    body.querySelector('#hist-q').addEventListener('input', function (ev) { histState.q = ev.target.value; histState.shown = HIST_PAGE; drawList(); });
+    drawList();
+  };
+
+  // ============================================================
+  //  GROUP MODE — School Group Admin overview + school drill-in
+  // ============================================================
+  SCREEN.groupoverview = function (params, body) {
+    var schools = ORG.schools.filter(function (s) { return s.groupId === GROUP.id && !s.archived; });
+    var withComp = schools.filter(function (s) { return s.completion > 0; });
+    var avg = withComp.length ? Math.round(sum(withComp, function (s) { return s.completion; }) / withComp.length) : 0;
+    var rows = schools.map(function (s) {
+      var last = ORG.server.lastChange(s.id);
+      var lastCell = last && HU
+        ? '<span title="' + esc(HU.fullDate(last.at)) + '">' + esc(HU.timeAgo(last.at)) + '</span> <span class="text-muted">· ' + esc(last.actor.name) + '</span>'
+        : '<span class="text-muted">—</span>';
+      return '<tr class="clickable" data-gopen="' + esc(s.id) + '"><td class="name">' + esc(s.name) + '<small>' + esc(s.city + ', ' + s.country) + '</small></td>' +
+        '<td>' + stageChip(s.stage) + '</td><td>' + statusChip(s.status) + '</td>' +
+        '<td class="tl-num">' + s.students.toLocaleString() + '</td><td class="tl-num">' + (s.completion ? pct(s.completion) + '%' : '—') + '</td>' +
+        '<td class="tl-lastcell">' + lastCell + '</td><td class="r text-muted">›</td></tr>';
+    }).join('');
+    body.innerHTML = screenHead(GROUP.name, schools.length + ' school' + (schools.length === 1 ? '' : 's') + ' in your group — what\'s happening, and what changed.') +
+      '<div class="tl-kpis four">' + kpi(schools.length, 'Schools') + kpi(sum(schools, function (s) { return s.students; }).toLocaleString(), 'Students') +
+        kpi(sum(schools, function (s) { return s.staff; }).toLocaleString(), 'Staff') + kpi(avg + '%', 'Avg. completion') + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Schools</h3><p class="ui-mod-note">Open a school to see its assessment progress and change history.</p></div></div>' +
+        (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Stage</th><th>Status</th><th>Students</th><th>Completion</th><th>Last updated</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+              : '<div class="ui-empty">No schools in this group yet.</div>') + '</div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent changes</h3><p class="ui-mod-note">Latest student-record and assessment changes across the group.</p></div>' +
+        '<a class="btn-link" href="' + href('history', {}) + '">View all →</a></div>' +
+        histList(ORG.server.history(scopeSchoolIds(), { limit: 8 }), { empty: 'No changes recorded in this group yet.' }) + '</div>';
+    body.querySelectorAll('[data-gopen]').forEach(function (tr) { tr.addEventListener('click', function () { go('gschool', { id: tr.dataset.gopen }); }); });
+  };
+
+  // Read-only drill-in. Live schools link through to their leadership dashboard.
+  SCREEN.gschool = function (params, body) {
+    var s = ORG.byId(params.id);
+    if (!s || s.groupId !== GROUP.id) { go('groupoverview', {}); return; }
+    var d = ORG.server.schoolSummary(s.id);
+    var dash = s.live
+      ? '<a class="btn btn-primary btn-sm" style="text-decoration:none" href="admin.html?school=' + encodeURIComponent(s.created ? s.id : s.name) +
+        '&email=' + encodeURIComponent(s.coordinator && s.coordinator.email ? s.coordinator.email : me.email) + '&from=group&group=' + encodeURIComponent(GROUP.id) + '">School dashboard →</a>'
+      : '';
+    body.innerHTML = crumbs([{ label: GROUP.name, screen: 'groupoverview' }, { label: s.name }]) +
+      '<div class="tl-hub-head"><div><h1 class="ui-screen-title" style="margin-bottom:4px">' + esc(s.name) + '</h1>' +
+        '<p class="ui-screen-sub m-0">' + esc(s.type) + ' · ' + esc(s.city + ', ' + s.country) + '</p>' +
+        '<div class="tl-hub-last">' + lastLine(s.id) + '</div></div>' +
+        (dash ? '<div class="tl-hub-actions">' + dash + '</div>' : '') + '</div>' +
+      '<div class="tl-kpis four mt-3">' + kpi(s.gradeCount, 'Grades') + kpi(s.sectionCount, 'Sections') + kpi(s.students.toLocaleString(), 'Students') + kpi(s.staff, 'Staff') + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + phaseProgressHtml(d) + '</div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3><p class="ui-mod-note">Who changed what at this school, newest first.</p></div>' +
+        '<a class="btn-link" href="' + href('history', { school: s.id }) + '">Filter &amp; search →</a></div>' +
+        histList(ORG.server.history([s.id], { limit: 30 }), { showSchool: false, empty: 'No changes recorded for this school yet.' }) + '</div>';
+    wireCrumbs(body);
   };
 
   // Audit Trail (spec §8.4)
@@ -2751,9 +2925,18 @@
       '<div class="tl-fieldrow"><label class="field flex-1">Grade<input class="input" id="st-grade" value="' + esc(st.grade) + '"></label>' +
       '<label class="field flex-1">Section<input class="input" id="st-sec" value="' + esc(st.section) + '"></label></div>' +
       '</div>', function (close) {
+        var before = { first: st.first, last: st.last, adm: st.adm, grade: st.grade, section: st.section };
         st.first = document.getElementById('st-first').value; st.last = document.getElementById('st-last').value;
         st.adm = document.getElementById('st-adm').value; st.grade = document.getElementById('st-grade').value; st.section = document.getElementById('st-sec').value;
         ORG.server.logAudit(me.name, 'student.edit', st.first + ' ' + st.last, 'student', schoolId);
+        // Field-level change record for the shared history (this demo roster isn't a guarded write yet).
+        var changes = [['first', 'First name'], ['last', 'Last name'], ['adm', 'Admission #'], ['grade', 'Grade'], ['section', 'Section']]
+          .filter(function (f) { return String(before[f[0]] || '').trim() !== String(st[f[0]] || '').trim(); })
+          .map(function (f) { return { label: f[1], from: before[f[0]], to: st[f[0]] }; });
+        if (changes.length && window.TilliAPI && window.TilliAPI.recordChange) {
+          window.TilliAPI.recordChange({ school_id: schoolId, kind: 'student', action: 'student.edit', section_name: (st.grade + ' ' + st.section).trim(),
+            students: [{ id: st.adm, name: (st.first + ' ' + st.last).trim() }], changes: changes });
+        }
         close(); toast('Student updated.'); if (after) after();
       }, 'Save changes');
   }
@@ -2847,8 +3030,9 @@
   // ---------- boot ----------
   // Floating Ask Tilli + Need help bubbles (assets/float-help.js). Ask Tilli
   // routes to its nav destination — there's no platform-level chat yet.
-  if (window.TilliFloat) TilliFloat.mount({ role: 'Platform admin', ask: function () { go('ask-tilli', {}); } });
+  // Group mode has no Ask Tilli destination, so it gets the Need-help bubble only.
+  if (window.TilliFloat) TilliFloat.mount(GROUP ? { role: 'School group admin' } : { role: 'Platform admin', ask: function () { go('ask-tilli', {}); } });
   window.addEventListener('hashchange', render);
-  if (!location.hash) location.replace('#/controlroom');
+  if (!location.hash) location.replace('#/' + HOME);
   render();
 })();

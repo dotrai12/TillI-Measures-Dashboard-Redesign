@@ -923,3 +923,68 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 @media (hover: none) { .tf-label { display: none; } }
 @media (prefers-reduced-motion: reduce) { .tf-bubble, .tf-label { transition: none; } .tf-bubble:hover, .tf-bubble:active { transform: none; } }
 @media print { .tf-stack { display: none !important; } }
+
+/* ============================================================
+   CHANGE HISTORY (.hist-*) — shared by teacher, school-admin and
+   platform / group-admin apps. Markup: assets/tilli-history.js.
+   ============================================================ */
+:root {
+  --hist-dot-student: var(--cyan-500);      /* dot colour · student-record changes */
+  --hist-dot-assessment: var(--green-500);  /* dot colour · assessment activity */
+  --hist-rail: var(--line-200);             /* vertical timeline line between rows */
+  --hist-dot-size: 10px;                    /* timeline dot diameter */
+}
+.hist-day { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-300); margin: 18px 0 6px; }
+.hist-day:first-child { margin-top: 2px; }
+.hist-list { display: flex; flex-direction: column; }
+.hist-item { position: relative; display: flex; gap: 12px; padding: 10px 0 12px; }
+.hist-item + .hist-item { border-top: 1px solid var(--line-200); }
+.hist-item::before { content: ''; position: absolute; left: calc(var(--hist-dot-size) / 2 - 1px); top: 0; bottom: 0; width: 2px; background: var(--hist-rail); }
+.hist-list .hist-item:first-child::before { top: 16px; }
+.hist-list .hist-item:last-child::before { bottom: calc(100% - 16px); }
+.hist-dot { position: relative; z-index: 1; flex: none; width: var(--hist-dot-size); height: var(--hist-dot-size); margin-top: 5px; border-radius: 50%; background: var(--hist-dot-student); box-shadow: 0 0 0 3px var(--white); }
+.hist-item.k-asm .hist-dot { background: var(--hist-dot-assessment); }
+.hist-body { flex: 1; min-width: 0; }
+.hist-line { font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-700); }
+.hist-line b { color: var(--ink-900); font-weight: 700; }
+.hist-who { font-weight: 800 !important; }
+.hist-changes { list-style: none; margin: 6px 0 0; padding: 7px 10px; background: var(--surface-100); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 3px; }
+.hist-changes li { font-size: var(--fs-sm); line-height: 1.4; color: var(--ink-700); overflow-wrap: anywhere; }
+.hist-k { display: inline-block; min-width: 96px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-450); }
+.hist-from { color: var(--ink-300); }
+.hist-to { color: var(--ink-900); font-weight: 700; }
+.hist-arw { color: var(--ink-300); margin: 0 2px; }
+.hist-set { color: var(--ink-450); font-style: italic; }
+.hist-names { margin-top: 5px; font-size: var(--fs-sm); color: var(--ink-450); line-height: 1.45; }
+.hist-more { font-weight: 700; color: var(--ink-600); }
+.hist-meta { margin-top: 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-300); }
+.hist-meta time { cursor: help; }
+.hist-sep { margin: 0 6px; }
+.hist-empty { padding: 18px 4px; font-size: var(--fs-sm); color: var(--ink-450); text-align: center; }
+.hist-last { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; }
+.hist-last b { color: var(--ink-700); font-weight: 700; }
+.hist-last.none { color: var(--ink-300); }
+.hist-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.hist-tools .hist-q { flex: 1 1 220px; max-width: 320px; }
+.hist-tools .hist-count { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
+.hist-morebtn { display: block; margin: 12px auto 0; }
+@media (max-width: 640px) { .hist-k { min-width: 0; display: block; } .hist-tools .hist-count { margin-left: 0; width: 100%; } }
+
+/* Small History button + hover/focus tooltip carrying "Last updated … by …".
+   .hist-tip works on any button with data-tip; the bubble opens below, right-aligned. */
+:root {
+  --hist-peek-size: 36px;   /* round History icon button (student header) */
+}
+.hist-peek { width: var(--hist-peek-size); height: var(--hist-peek-size); flex: none; display: grid; place-items: center; padding: 0; border: 1px solid var(--line-200); border-radius: 50%; background: var(--white); color: var(--ink-450); cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+.hist-peek svg { width: 17px; height: 17px; }
+.hist-peek:hover { color: var(--green-700); border-color: var(--green-500); background: var(--wash-green); }
+.hist-tip { position: relative; }
+.hist-tip[data-tip]::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+  width: max-content; max-width: 260px; white-space: normal; text-align: left;
+  background: var(--ink-900); color: var(--white); font-family: var(--font-body); font-size: var(--fs-xs); font-weight: 600; line-height: 1.4;
+  padding: 6px 10px; border-radius: var(--radius-sm); box-shadow: 0 6px 18px rgba(20, 20, 20, .16);
+  opacity: 0; transform: translateY(-3px); pointer-events: none; transition: opacity .15s, transform .15s;
+}
+.hist-tip[data-tip]:hover::after, .hist-tip[data-tip]:focus-visible::after { opacity: 1; transform: none; }
+@media (hover: none) { .hist-tip[data-tip]::after { display: none; } }   /* touch: the tap opens History instead */

@@ -224,10 +224,10 @@
       db.sections[s.id] = { section_id:s.id, school_id:sc.id, grade:s.grade, section:s.section, name:s.name, teacherId:s.teacherId };
     });
 
-    // Teacher memberships — each seeded teacher is scoped to THEIR section only (spec A3).
+    // Teacher memberships — each seeded teacher is scoped to THEIR sections only (spec A3).
     (SRC.teachers||[]).forEach(function(t){
-      var sec = (SRC.sections||[]).find(function(s){ return s.teacherId===t.id; });
-      db.teacherMemberships.push({ user_id: low(t.email), school_id: sc.id, section_ids: sec?[sec.id]:[], status:'active' });
+      var secs = (SRC.sections||[]).filter(function(s){ return s.teacherId===t.id; });
+      db.teacherMemberships.push({ user_id: low(t.email), school_id: sc.id, section_ids: secs.map(function(s){ return s.id; }), status:'active' });
     });
 
     // Mock Admin + Principal so the Flow-C guards are testable in the data layer.
@@ -279,6 +279,10 @@
     }
     if (!db.config){ db.config = {}; }
     if (!db.config.reflection){ db.config.reflection = clone(DEFAULT_REFLECTION); write(db); }
+    // Change history arrived later: add it (plus the demo school's sample
+    // events) without bumping SEED_VER. Same pass backfills the demo school's
+    // real staff memberships so history (and every role check) can scope them.
+    if (!db.history){ backfillSeedMemberships(db); seedHistory(db); write(db); }
     return db;
   }
 
@@ -398,11 +402,14 @@
       // (a) Same number AND same name -> the same child re-entered (idempotent);
       //     fill any blanks. Same path the teacher takes after choosing REPLACE.
       if (input.force==='replace' || sameName(ex)){
+        var before = Object.assign({}, ex);
         if (input.force==='replace'){ ex.first = norm(input.first); ex.last = norm(input.last); }
         ['first','last','dob','gender','parentName','parentEmail','section_id','grade','section'].forEach(function(f){
           if (!norm(ex[f]) && norm(input[f])) ex[f] = input[f];
         });
         ex.name = norm(ex.first)+' '+norm(ex.last);
+        var filled = diffFields(before, ex, STUDENT_FIELDS);
+        if (filled.length) logHistory(db, studentEvent(db, ex, 'student.edit', actor, { changes: filled }));
         write(db);
         return { ok:true, result:'merged', student:Object.assign({}, ex) };
       }
@@ -440,7 +447,9 @@
       parentName: norm(input.parentName), parentEmail: low(input.parentEmail),
       status:'active', source: input.source||'manual', createdAt: Date.now(),
     };
-    db.students[k] = rec; write(db);
+    db.students[k] = rec;
+    logHistory(db, studentEvent(db, rec, 'student.add', actor, { source: rec.source }));
+    write(db);
     return { ok:true, result:'created', student:Object.assign({}, rec) };
   }
 
@@ -534,8 +543,10 @@
     if (!stu || stu.status==='left') return { ok:false, error:'unavailable' };
     var e = low(parentEmail);
     var existing = db.parentLinks.find(function(l){ return l.parent_user_id===e && l.school_id===tk.school_id && l.student_id===tk.student_id; });
+    var wasActive = !!(existing && existing.status==='active');
     if (existing){ existing.status='active'; existing.verified_at = existing.verified_at||Date.now(); }
     else db.parentLinks.push({ parent_user_id:e, school_id:tk.school_id, student_id:tk.student_id, status:'active', verified_at:Date.now() });
+    if (!wasActive) logHistory(db, studentEvent(db, stu, 'parent.link', e, { changes: [{ label:'Parent', from:'', to:e }] }));
     delete db.claimTokens[claimToken];
     write(db);
     return { ok:true, linked:{ student_id:stu.student_id, name:stu.name, grade:stu.grade, section:stu.section } };
@@ -563,8 +574,12 @@
     if (roleOf(db, actorEmail, schoolId) !== 'admin') return { ok:false, error:'not-authorized' };
     var s = db.students[keyOf(schoolId, studentId)];
     if (!s) return { ok:false, error:'not-found' };
+    var wasStatus = s.status, revoked = 0;
     s.status = 'left';
-    db.parentLinks.forEach(function(l){ if (l.school_id===schoolId && l.student_id===up(studentId)) l.status='revoked'; });
+    db.parentLinks.forEach(function(l){ if (l.school_id===schoolId && l.student_id===up(studentId) && l.status!=='revoked'){ l.status='revoked'; revoked++; } });
+    var ch = [{ label:'Status', from: wasStatus==='left' ? 'Left' : 'Active', to:'Left' }];
+    if (revoked) ch.push({ label:'Parent links', from: revoked + ' active', to:'revoked' });
+    logHistory(db, studentEvent(db, s, 'student.offboard', actorEmail, { changes: ch }));
     write(db);
     return { ok:true, student_id:s.student_id, status:'left' };
   }
@@ -575,7 +590,10 @@
     if (roleOf(db, actorEmail, schoolId) !== 'admin') return { ok:false, error:'not-authorized' };
     var l = db.parentLinks.find(function(x){ return x.school_id===schoolId && x.student_id===up(studentId) && x.parent_user_id===low(parentEmail) && x.status==='active'; });
     if (!l) return { ok:false, error:'not-found' };
-    l.status = 'revoked'; write(db);
+    l.status = 'revoked';
+    var stu = db.students[keyOf(schoolId, studentId)];
+    if (stu) logHistory(db, studentEvent(db, stu, 'parent.unlink', actorEmail, { changes: [{ label:'Parent', from:l.parent_user_id, to:'' }] }));
+    write(db);
     return { ok:true };
   }
 
@@ -591,6 +609,12 @@
     var move = (sectionIds && sectionIds.length) ? sectionIds : from.section_ids.slice();
     move.forEach(function(id){ if (to.section_ids.indexOf(id)<0) to.section_ids.push(id); var i=from.section_ids.indexOf(id); if(i>=0) from.section_ids.splice(i,1); });
     if (from.section_ids.length===0) from.status='revoked';   // departed teacher's access revoked
+    move.forEach(function(id){
+      var sec = db.sections[id];
+      logHistory(db, { school_id:schoolId, section_id:id, section_name: sec ? sec.name : '', kind:'student', action:'teacher.reassign',
+        actor: actorFor(db, actorEmail, schoolId),
+        changes:[{ label:'Teacher', from: nameFor(db, fromEmail, schoolId), to: nameFor(db, toEmail, schoolId) }] });
+    });
     write(db);
     return { ok:true, from:from.section_ids, to:to.section_ids };
   }
@@ -674,6 +698,7 @@
     var temp = makeTempPassword();
     var acct = {
       email: email, role: input.role || 'Super Admin', school_id: input.school_id || null,
+      group_id: input.group_id || null,   // School Group Admin → which group's view they open
       tempPassword: temp, password: null, mustReset: true, status: 'invited',
       invitedBy: low(input.invitedBy) || null, createdAt: Date.now(), activatedAt: null,
       // Optional roster metadata carried by teacher invites (grade/section/board),
@@ -728,7 +753,7 @@
   // Teacher edits a child's name and/or UID. The UID must stay unique across
   // every school (compared case-insensitively against stored + derived UIDs).
   var UID_RE = /^[A-Z0-9][A-Z0-9-]{2,19}$/;
-  function updateStudent(schoolId, studentId, patch){
+  function updateStudent(schoolId, studentId, patch, actorEmail){
     var db = getDB(); var k = keyOf(schoolId, studentId); var rec = db.students[k];
     if (!rec) return { ok:false, reason:'not_found' };
     patch = patch || {};
@@ -742,7 +767,10 @@
       var s = db.students[x]; return up(s.uid || makeUid(s.school_id, s.student_id)) === uid;
     });
     if (clash) return { ok:false, reason:'uid_taken' };
+    var before = pubStudent(rec);
     rec.first = first; rec.last = last; rec.name = (first+' '+last).trim(); rec.uid = uid;
+    var changes = diffFields(before, rec, STUDENT_FIELDS);
+    if (changes.length) logHistory(db, studentEvent(db, rec, 'student.edit', actorEmail, { changes: changes }));
     write(db);
     return { ok:true, student: pubStudent(rec) };
   }
@@ -791,6 +819,7 @@
       city:input.city||'', country:input.country||'',
       verified:true, status:'active', claimMethod:'code',
       joinCode:joinCode, code:code, source:'created', createdAt:Date.now(),
+      group_id: input.groupId || null,   // persisted so the school stays in its group after a reload
     };
     db.staff[id] = [];
 
@@ -865,6 +894,13 @@
     return { ok:true, school:Object.assign({}, sc) };
   }
   function listSchools(){ var db=getDB(); return Object.keys(db.schools).map(function(k){ return Object.assign({}, db.schools[k]); }); }
+  // Platform Admin moves a created school between groups (null / 'g-none' = no group).
+  function setSchoolGroup(schoolId, groupId){
+    var db = getDB(); var sc = db.schools[schoolId];
+    if (!sc) return false;
+    sc.group_id = (groupId && groupId !== 'g-none') ? groupId : null; write(db);
+    return true;
+  }
   function staffFor(schoolId){ var db=getDB(); return (db.staff[schoolId]||[]).slice(); }
   // Unscoped roster for portfolio / coordinator DISPLAY (not a security path —
   // parent claim + teacher scope still go through the guarded functions above).
@@ -916,12 +952,20 @@
     var db = getDB(); opts = opts||{};
     if (!db.deployments[schoolId]) db.deployments[schoolId] = {};
     var k = depKey(phase, audience);
+    var prev = db.deployments[schoolId][k];
     db.deployments[schoolId][k] = {
       phase:phase, audience:audience, deployed:true, status:'Live',
       window:opts.window||'', start:opts.start||'', end:opts.end||'',
       assessments:(opts.assessments||[]).slice(),
       deployedAt:Date.now(), endedAt:null,
     };
+    // The planner re-saves every lane on each deploy, so only log real changes.
+    var cur = db.deployments[schoolId][k], names = function(d){ return (d.assessments||[]).map(function(a){ return a.name||a.id; }).join(', '); };
+    var ch = [];
+    if (!prev || prev.window !== cur.window) ch.push({ label:'Window', from: prev ? prev.window : '', to: cur.window });
+    if (!prev || names(prev) !== names(cur)) ch.push({ label:'Assessments', from: prev ? names(prev) : '', to: names(cur) });
+    if (prev && prev.status !== 'Live') ch.push({ label:'Status', from: prev.status, to:'Live' });
+    if (ch.length) logHistory(db, phaseEvent(db, schoolId, prev && prev.status === 'Live' ? 'phase.update' : 'phase.deploy', phase, audience, ch));
     write(db);
     return Object.assign({}, db.deployments[schoolId][k]);
   }
@@ -929,12 +973,16 @@
     var db = getDB(); var k = depKey(phase, audience);
     var d = db.deployments[schoolId] && db.deployments[schoolId][k];
     if (!d) return null;
+    if (d.status !== 'Ended') logHistory(db, phaseEvent(db, schoolId, 'phase.end', phase, audience, [{ label:'Status', from:d.status, to:'Ended' }]));
     d.status = 'Ended'; d.endedAt = Date.now(); write(db);
     return Object.assign({}, d);
   }
   function undeployPhase(schoolId, phase, audience){
     var db = getDB(); var k = depKey(phase, audience);
-    if (db.deployments[schoolId]) { delete db.deployments[schoolId][k]; write(db); }
+    if (db.deployments[schoolId] && db.deployments[schoolId][k]) {
+      logHistory(db, phaseEvent(db, schoolId, 'phase.undeploy', phase, audience, [{ label:'Status', from:db.deployments[schoolId][k].status, to:'Not deployed' }]));
+      delete db.deployments[schoolId][k]; write(db);
+    }
     return true;
   }
   function getDeployments(schoolId){
@@ -953,7 +1001,14 @@
   function markComplete(schoolId, phase, audience, studentId, assessId, byEmail){
     var db = getDB();
     if (!db.completions[schoolId]) db.completions[schoolId] = {};
-    db.completions[schoolId][compKey(phase, audience, studentId, assessId)] = { by:low(byEmail||''), at:Date.now() };
+    var ck = compKey(phase, audience, studentId, assessId), already = !!db.completions[schoolId][ck];
+    db.completions[schoolId][ck] = { by:low(byEmail||''), at:Date.now() };
+    var stu = db.students[keyOf(schoolId, studentId)];
+    if (!already && stu){
+      var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+      var a = dep && (dep.assessments||[]).find(function(x){ return x.id===assessId; });
+      logHistory(db, studentEvent(db, stu, 'assessment.complete', byEmail, { kind:'assessment', phase:phase, audience:audience, items:[ (a && a.name) || assessId ] }));
+    }
     write(db);
     return true;
   }
@@ -1079,6 +1134,279 @@
   }
   function resetReflectionConfig(){ var db=getDB(); db.config.reflection = clone(DEFAULT_REFLECTION); write(db); return clone(db.config.reflection); }
 
+  /* ======================================================================
+     CHANGE HISTORY — append-only log of student-record + assessment events
+     ----------------------------------------------------------------------
+     Every guarded write above records one event: who did it, when, to which
+     student(s) / section, and a field-level list of what changed (old → new).
+     Teachers, school admins, group admins and the Tilli team all read the
+     same log, each through a scoped reader (historyFor / historyAcross).
+
+     Event shape:
+       { id, at, school_id, section_id, section_name,
+         students:[{id,name}],            // [] for school-wide events
+         kind:'student'|'assessment', action, phase?, audience?,
+         changes:[{label,from,to}], items:[string],
+         actor:{email,name,role} }        // role: teacher|admin|principal|parent|tilli|group|system
+
+     NEVER put scores / SEL levels in an event: leadership reads this log and
+     must only ever see WHO, not HOW (admin spec §2).
+     ====================================================================== */
+  var HISTORY_CAP = 1500;                  // oldest events drop off past this many (keeps localStorage small)
+  var HISTORY_COALESCE_MS = 2 * 60 * 1000; // same person repeating the same add / completion in one section within this window → one row
+  var STUDENT_FIELDS = [
+    ['first','First name'], ['last','Last name'], ['uid','Student UID'], ['grade','Grade'], ['section','Section'],
+    ['parentName','Parent name'], ['parentEmail','Parent email'], ['dob','Date of birth'], ['gender','Gender'],
+  ];
+
+  // The signed-in user for this page. Each app sets it once at boot; it wins
+  // over the actorEmail a call passes (e.g. a Tilli CSV import runs under the
+  // coordinator's email to pass the guard, but Tilli Team did it).
+  // SERVER-SIDE: the real actor comes from the authenticated session.
+  var historyActor = null;
+  function setHistoryActor(a){ historyActor = (a && a.email) ? { email:low(a.email), name:norm(a.name), role:a.role||'' } : null; }
+
+  function nameFor(db, email, schoolId){
+    var e = low(email); if (!e) return '';
+    var st = (db.staff[schoolId]||[]).find(function(x){ return low(x.email)===e; });
+    if (st && st.name) return st.name;
+    var am = db.adminMemberships.find(function(m){ return m.user_id===e && m.name; });
+    if (am) return am.name;
+    var SRC = window.TILLI_SCHOOL;
+    if (SRC){
+      var p = [].concat(SRC.teachers||[], SRC.admins||[], SRC.parents||[]).find(function(x){ return low(x.email)===e; });
+      if (p && p.name) return p.name;
+    }
+    var acct = db.accounts[e]; if (acct && acct.name) return acct.name;
+    var kid = Object.keys(db.students).map(function(k){ return db.students[k]; }).find(function(s){ return s.parentEmail===e && s.parentName; });
+    if (kid) return kid.parentName;
+    return e.split('@')[0];
+  }
+  function roleKeyFor(db, email, schoolId){
+    var e = low(email), r = roleOf(db, e, schoolId);
+    if (r==='admin') return 'admin';
+    if (r==='principal_view') return 'principal';
+    if (r) return r;
+    var lbl = low(db.accounts[e] && db.accounts[e].role);
+    if (lbl.indexOf('group')>=0) return 'group';
+    if (lbl.indexOf('super')>=0 || /@tilli\.org$/.test(e)) return 'tilli';
+    if (lbl.indexOf('teacher')>=0) return 'teacher';
+    if (lbl.indexOf('admin')>=0) return 'admin';
+    return '';
+  }
+  function actorFor(db, email, schoolId){
+    var h = historyActor, e = low((h && h.email) || email);
+    if (!e) return { email:'', name:'System', role:'system' };
+    return { email:e, name:(h && h.name) || nameFor(db, e, schoolId), role:(h && h.role) || roleKeyFor(db, e, schoolId) };
+  }
+  // Field-level diff of two student records → [{label, from, to}].
+  function diffFields(before, after, fields){
+    var out = [];
+    fields.forEach(function(f){
+      var a = norm(before[f[0]]), b = norm(after[f[0]]);
+      if (a !== b) out.push({ label:f[1], from:a, to:b });
+    });
+    return out;
+  }
+  function studentEvent(db, rec, action, actorEmail, extra){
+    var sec = rec.section_id && db.sections[rec.section_id];
+    return Object.assign({
+      school_id: rec.school_id, section_id: rec.section_id || null,
+      section_name: sec ? sec.name : norm((rec.grade||'')+' '+(rec.section||'')),
+      students: [{ id: up(rec.student_id), name: rec.name || fullName(rec) }],
+      kind: 'student', action: action, actor: actorFor(db, actorEmail, rec.school_id),
+    }, extra || {});
+  }
+  function phaseEvent(db, schoolId, action, phase, audience, changes){
+    return { school_id:schoolId, section_id:null, section_name:'', students:[], kind:'assessment',
+      action:action, phase:phase, audience:audience, changes:changes||[], actor:actorFor(db, null, schoolId) };
+  }
+
+  // Bulk adds and back-to-back completions fold into one row instead of
+  // flooding the log with one line per child.
+  function coalesceKey(e){
+    if (e.action==='assessment.complete') return [e.action, e.actor.email, e.school_id, e.section_id||'', e.phase, e.audience].join('|');
+    if (e.action==='student.add') return [e.action, e.actor.email, e.school_id, e.section_id||''].join('|');
+    return null;
+  }
+  function logHistory(db, e){
+    if (!db.history) db.history = [];
+    e.at = e.at || Date.now();
+    e.students = e.students || []; e.changes = e.changes || []; e.items = e.items || [];
+    var key = coalesceKey(e);
+    if (key){
+      for (var i = db.history.length - 1; i >= 0; i--){
+        var p = db.history[i];
+        if (e.at - p.at > HISTORY_COALESCE_MS) break;
+        if (coalesceKey(p) !== key) continue;
+        e.students.forEach(function(s){ if (!p.students.some(function(x){ return x.id===s.id; })) p.students.push(s); });
+        e.items.forEach(function(it){ if (p.items.indexOf(it) < 0) p.items.push(it); });
+        p.at = e.at;
+        db.history.splice(i, 1); db.history.push(p);   // keep it the newest row
+        return p;
+      }
+    }
+    e.id = newId('h');
+    db.history.push(e);
+    if (db.history.length > HISTORY_CAP) db.history.splice(0, db.history.length - HISTORY_CAP);
+    return e;
+  }
+  // For UI-side edits that don't go through a guarded write yet (e.g. the
+  // leadership roster's teacher reassignment, the demo roster editor).
+  // SERVER-SIDE: these become real writes that log for themselves.
+  function recordChange(evt){
+    if (!evt || !evt.school_id) return null;
+    var db = getDB(), e = clone(evt);
+    e.actor = actorFor(db, e.actorEmail, e.school_id); delete e.actorEmail;
+    e.kind = e.kind || 'student';
+    e.students = (e.students||[]).map(function(s){ return { id:up(s.id), name:norm(s.name) }; });
+    // Pin a student event to the child's section so teacher scoping applies.
+    if (!e.section_id && e.students.length){
+      var rec = db.students[keyOf(e.school_id, e.students[0].id)];
+      if (rec && rec.section_id){ e.section_id = rec.section_id; e.section_name = e.section_name || (db.sections[rec.section_id]||{}).name || ''; }
+    }
+    var out = logHistory(db, e); write(db);
+    return clone(out);
+  }
+
+  function historyMatches(e, f){
+    if (f.kind && e.kind !== f.kind) return false;
+    if (f.student_id){ var id = up(f.student_id); if (!(e.students||[]).some(function(s){ return s.id===id; })) return false; }
+    if (f.section_id && e.section_id !== f.section_id) return false;
+    if (f.since && e.at < f.since) return false;
+    if (f.q){
+      var hay = low([ (e.students||[]).map(function(s){ return s.name+' '+s.id; }).join(' '),
+        e.actor && e.actor.name, e.actor && e.actor.email, e.section_name, e.phase, e.audience,
+        (e.items||[]).join(' '), (e.changes||[]).map(function(c){ return c.from+' '+c.to; }).join(' ') ].join(' '));
+      if (hay.indexOf(low(f.q)) < 0) return false;
+    }
+    return true;
+  }
+  function historyPage(list, f){
+    var out = list.filter(function(e){ return historyMatches(e, f); }).sort(function(a, b){ return b.at - a.at; });
+    if (f.limit) out = out.slice(0, f.limit);
+    return out.map(clone);
+  }
+  // One school's history, scoped by the caller's role there (spec §7):
+  // admin / principal → whole school; teacher → their sections + school-wide
+  // assessment events. Returns null when the caller has no role at the school.
+  // filter: { kind, student_id, section_id, since, q, limit }
+  // SERVER-SIDE: scope comes from the session, never from the client.
+  function historyFor(actorEmail, schoolId, filter){
+    var db = getDB(), f = filter || {};
+    var all = (db.history||[]).filter(function(e){ return e.school_id===schoolId; });
+    var role = roleOf(db, actorEmail, schoolId);
+    if (role==='admin' || role==='principal_view') return historyPage(all, f);
+    if (role==='teacher'){
+      var mine = teacherScope(db, actorEmail, schoolId);
+      var myKids = Object.keys(db.students).map(function(k){ return db.students[k]; })
+        .filter(function(s){ return s.school_id===schoolId && mine.indexOf(s.section_id) >= 0; }).map(function(s){ return up(s.student_id); });
+      return historyPage(all.filter(function(e){
+        if (e.section_id) return mine.indexOf(e.section_id) >= 0;
+        var stu = e.students || [];   // no section: school-wide, or one of their own children
+        return !stu.length || stu.some(function(s){ return myKids.indexOf(s.id) >= 0; });
+      }), f);
+    }
+    // DEMO ONLY: a sample-class teacher with no membership row (e.g.
+    // teacher@tilli.edu) is scoped to the students/sections their dashboard
+    // was built from (f.students / f.sections). A real server never trusts this.
+    if (f.students && f.students.length){
+      var ids = f.students.map(up), names = (f.sections||[]).map(low);
+      return historyPage(all.filter(function(e){
+        var stu = e.students || [];
+        if (!e.section_id && !stu.length) return true;
+        return stu.some(function(s){ return ids.indexOf(s.id) >= 0; }) || (e.section_name && names.indexOf(low(e.section_name)) >= 0);
+      }), f);
+    }
+    return null;
+  }
+  // Several schools at once — Tilli team (all) and School Group Admin (their
+  // group's schools). SERVER-SIDE: the platform layer checks the caller's role
+  // and group before passing schoolIds.
+  function historyAcross(schoolIds, filter){
+    var ids = {}; (schoolIds||[]).forEach(function(id){ ids[id] = 1; });
+    return historyPage((getDB().history||[]).filter(function(e){ return ids[e.school_id]; }), filter || {});
+  }
+
+  // One-time: give the demo school's real staff (TILLI_SCHOOL) the memberships
+  // their dashboards assume — the coordinator wasn't seeded and teachers only
+  // got their first section — so role checks resolve for them.
+  function backfillSeedMemberships(db){
+    var SRC = window.TILLI_SCHOOL;
+    if (!SRC || !SRC.school || !db.schools[SRC.school.id]) return;
+    var sid = SRC.school.id;
+    (SRC.teachers||[]).forEach(function(t){
+      var e = low(t.email);
+      var secIds = Object.keys(db.sections).filter(function(k){ return db.sections[k].school_id===sid && db.sections[k].teacherId===t.id; });
+      var m = db.teacherMemberships.find(function(x){ return x.user_id===e && x.school_id===sid; });
+      if (!m){ m = { user_id:e, school_id:sid, section_ids:[], status:'active' }; db.teacherMemberships.push(m); }
+      secIds.forEach(function(id){ if (m.section_ids.indexOf(id) < 0) m.section_ids.push(id); });
+    });
+    (SRC.admins||[]).forEach(function(a){
+      var e = low(a.email);
+      if (db.adminMemberships.some(function(m){ return m.user_id===e && m.school_id===sid; })) return;
+      db.adminMemberships.push({ user_id:e, school_id:sid, role: a.role==='principal' ? 'principal_view' : 'admin', name:a.name, status:'active' });
+    });
+  }
+  // Sample history for the demo school so every role has something to read on
+  // first open: roster import, Baseline deploy, a few edits, parent links and
+  // completions, spread over the last five weeks. Never contains scores.
+  function seedHistory(db){
+    db.history = [];
+    var SRC = window.TILLI_SCHOOL;
+    if (!SRC || !SRC.school || !db.schools[SRC.school.id]) return;
+    var sid = SRC.school.id, now = Date.now(), DAY = 86400000;
+    var person = function(p, role){ return p ? { email:low(p.email), name:p.name, role:role } : { email:'', name:'System', role:'system' }; };
+    var coord = person((SRC.admins||[]).find(function(a){ return a.role==='coordinator'; }), 'admin');
+    var team = { email:'team@tilli.org', name:'Tilli Team', role:'tilli' };
+    var teacherOf = function(sec){ return person((SRC.teachers||[]).find(function(t){ return t.id===sec.teacherId; }), 'teacher'); };
+    var studs = Object.keys(db.students).map(function(k){ return db.students[k]; }).filter(function(s){ return s.school_id===sid; });
+    var secs = Object.keys(db.sections).map(function(k){ return db.sections[k]; }).filter(function(s){ return s.school_id===sid; });
+    var inSec = function(sec){ return studs.filter(function(s){ return s.section_id===sec.section_id; }); };
+    var ref = function(s){ return { id:up(s.student_id), name:s.name }; };
+    var onSec = function(sec, e){ e.section_id = sec.section_id; e.section_name = sec.name; return e; };
+    var add = function(daysAgo, e){
+      e.id = 'h_seed_' + db.history.length; e.at = now - Math.round(daysAgo * DAY); e.school_id = sid;
+      e.section_id = e.section_id || null; e.section_name = e.section_name || '';
+      e.students = e.students || []; e.changes = e.changes || []; e.items = e.items || [];
+      db.history.push(e);
+    };
+
+    secs.forEach(function(sec){
+      var list = inSec(sec);
+      if (list.length) add(34, onSec(sec, { kind:'student', action:'student.add', source:'csv', students:list.map(ref), actor:coord }));
+    });
+    add(28.2, { kind:'assessment', action:'phase.deploy', phase:'Baseline', audience:'Teacher', actor:team, changes:[{ label:'Assessments', from:'', to:'Teacher observation' }] });
+    add(28.2, { kind:'assessment', action:'phase.deploy', phase:'Baseline', audience:'Parent', actor:team, changes:[{ label:'Assessments', from:'', to:'Parent report' }] });
+
+    var s0 = secs[0], s1 = secs[1], s2 = secs[2] || secs[secs.length - 1];
+    var a = s0 && inSec(s0)[0];
+    if (a && a.parentEmail) add(24.6, onSec(s0, { kind:'student', action:'student.edit', students:[ref(a)], actor:teacherOf(s0), changes:[{ label:'Parent email', from:'', to:a.parentEmail }] }));
+    (SRC.parents||[]).forEach(function(p){
+      (p.children||[]).forEach(function(adm, i){
+        var s = db.students[keyOf(sid, adm)]; if (!s) return;
+        var sec = db.sections[s.section_id];
+        add(20.3 - i * 0.01, { kind:'student', action:'parent.link', section_id:s.section_id, section_name:sec ? sec.name : '',
+          students:[ref(s)], actor:person(p, 'parent'), changes:[{ label:'Parent', from:'', to:low(p.email) }] });
+      });
+    });
+    if (s0) add(13.8, onSec(s0, { kind:'assessment', action:'assessment.complete', phase:'Baseline', audience:'Teacher', students:inSec(s0).slice(0, 4).map(ref), items:['Teacher observation'], actor:teacherOf(s0) }));
+    if (s2 && s2 !== s0) add(11.5, onSec(s2, { kind:'assessment', action:'assessment.complete', phase:'Baseline', audience:'Teacher', students:inSec(s2).slice(0, 3).map(ref), items:['Teacher observation'], actor:teacherOf(s2) }));
+    var parent = (SRC.parents||[])[0], pc = parent && db.students[keyOf(sid, (parent.children||[])[0])];
+    if (pc) add(8.9, { kind:'assessment', action:'assessment.complete', phase:'Baseline', audience:'Parent', section_id:pc.section_id,
+      section_name:(db.sections[pc.section_id]||{}).name || '', students:[ref(pc)], items:['Parent report'], actor:person(parent, 'parent') });
+    var b = s2 && inSec(s2)[1];
+    if (b) add(5.7, onSec(s2, { kind:'student', action:'student.edit', students:[ref(b)], actor:teacherOf(s2),
+      changes:[{ label:'Student UID', from:'TM-' + up(b.student_id).replace(/[^A-Z0-9]/g, '').slice(-4), to:b.uid || makeUid(sid, b.student_id) }] }));
+    var c = s1 && inSec(s1)[2];
+    if (c && c.last && c.last.length > 3){
+      var m = Math.ceil(c.last.length / 2);
+      add(1.2, onSec(s1, { kind:'student', action:'student.edit', students:[ref(c)], actor:coord,
+        changes:[{ label:'Last name', from:c.last.slice(0, m) + c.last.charAt(m - 1) + c.last.slice(m), to:c.last }] }));
+    }
+    db.history.sort(function(x, y){ return x.at - y.at; });
+  }
+
   /* ---------- dev utilities ---------- */
   function reset(){ try{ localStorage.removeItem(STORE_KEY); }catch(e){} return seedFromSchool(); }
   function _dump(){ return getDB(); }
@@ -1144,6 +1472,12 @@
     // NEW — prototype SEL outcomes (local, auto-generated) + point lifecycle
     outcomesForSchool: outcomesForSchool,
     pointStatusFor: pointStatusFor,
+    // NEW — change history (who changed what, when) + group membership
+    setHistoryActor: setHistoryActor,
+    recordChange: recordChange,
+    historyFor: historyFor,
+    historyAcross: historyAcross,
+    setSchoolGroup: setSchoolGroup,
     // dev
     reset: reset,
     _dump: _dump,

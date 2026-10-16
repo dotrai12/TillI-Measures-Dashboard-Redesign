@@ -123,6 +123,8 @@
   // the bloom-petal art colour; the rest are UI tokens (tending = Beginner level).
   const STATE_DOT = { blossoming: ART.blush, growing: 'var(--green-500)', tending: 'var(--lvl-1-soft)', waiting: 'var(--ink-300)' };
   const SEARCH_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  // Clock-with-arrow (change history) — the student header's small History button.
+  const HIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>';
 
   // One source of truth for both nav surfaces (desktop side rail + mobile
   // bottom bar). `short` is the compact label the bottom bar shows; `center`
@@ -307,11 +309,13 @@
       windowState: ctx.data.fresh ? 'baseline' : 'between',
       rosterSearch: '', rosterSort: 'state', studentTab: 'overview',
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
-      logsView: 'class', logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
+      logsView: 'class', logsWin: null,   // By class: picked window key | 'all' | null (= default window)
+      logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       ovBand: null, ovSkill: null,
       growthFilter: 'overview', growthTable: false,   // Insights → Growth over time line chart   // Insights → Class Skill Overview: box filter + expanded skill
       add: { active: false, step: 'count', sectionId: null, count: '', total: 0, done: 0, first: '', last: '', adm: '', results: [] },
+      histOpen: false, histKind: '',   // Students → class change-history modal + its kind filter
       vw: window.innerWidth,
       select: { on: false, ids: {}, busy: '', err: '' },     // Students → multi-select for parent PDFs
       profileEdit: false, profileDraft: null,
@@ -323,6 +327,10 @@
     };
     rebuildData();
     S.chats = loadChats() || seedChats();
+    // Every change this teacher makes is logged under their name (change history).
+    if (window.TilliAPI && window.TilliAPI.setHistoryActor && S.teacher.email) {
+      window.TilliAPI.setHistoryActor({ email: S.teacher.email, name: (S.teacher.demo && S.teacher.demo.name) || '', role: 'teacher' });
+    }
     injectCSS();
     // Floating Ask Tilli bubble joins the Need-help bubble teacher.html mounted.
     if (window.TilliFloat) TilliFloat.mount({ ask: () => openAsk('', '') });
@@ -455,6 +463,7 @@
         ${bottomNav}
         ${S.ask.open ? askPanel() : ''}
         ${S.classModal ? classModalView() : ''}
+        ${S.histOpen ? histModalView() : ''}
         ${addModal()}
         ${stateSwitcherGUI()}
       </div>`;
@@ -925,6 +934,59 @@
     </div>`;
   }
 
+  // ---------------- change history ----------------
+  // Reads go through TilliAPI.historyFor, which scopes to this teacher's
+  // sections. The student/section hints only matter for the demo fallback (a
+  // sample-class login with no membership row) and are ignored otherwise.
+  function teacherHistory(filter) {
+    const A = window.TilliAPI, sid = schoolId();
+    if (!A || !A.historyFor || !sid) return [];
+    const secs = S.baseData.sections || [];
+    const hints = { students: secs.flatMap((x) => x.students).map((st) => st.adm).filter(Boolean), sections: secs.map((x) => x.name) };
+    return A.historyFor(S.teacher.email, sid, Object.assign(hints, filter || {})) || [];
+  }
+  // An event belongs to a dashboard section if it names one of its children,
+  // carries its section name, or is school-wide (e.g. a phase being deployed).
+  function inSection(e, sec) {
+    const stu = e.students || [];
+    if (!e.section_id && !stu.length) return true;
+    const adms = new Set(sec.students.map((st) => String(st.adm || '').toUpperCase()));
+    return stu.some((s) => adms.has(s.id)) || (!!e.section_name && e.section_name.toLowerCase() === String(sec.name).toLowerCase());
+  }
+  function sectionHistory(sec, kind) {
+    const list = teacherHistory(kind ? { kind } : {});
+    return sec.id === 'all' ? list : list.filter((e) => inSection(e, sec));
+  }
+  function studentHistory(stu) { return stu && stu.adm ? teacherHistory({ student_id: stu.adm }) : []; }
+  function histOpts(extra) { return Object.assign({ me: S.teacher.email }, extra || {}); }
+
+  // "Record changes" card on a student's page — every edit / link / completion.
+  function stuChangesCard(stu) {
+    const HU = window.TilliHistory; if (!HU) return '';
+    return `<div class="ui-card mt-4 stu-changes">
+      <div class="stu-changes-h"><div style="font-weight:800;font-size:var(--fs-md)">Record changes</div>
+        <span class="dash-sub">Who changed ${esc(stu.dispFirst || stu.first)}'s record, and what changed.</span></div>
+      ${HU.listHTML(studentHistory(stu), histOpts({ hideStudent: true, showSection: false, empty: 'No changes recorded for ' + (stu.dispFirst || stu.first) + ' yet.' }))}
+    </div>`;
+  }
+
+  // Class history modal (Students → "History"): the open section, or all of them.
+  function histModalView() {
+    const HU = window.TilliHistory; if (!HU) return '';
+    const sec = section();
+    const list = sectionHistory(sec, S.histKind);
+    return `<div class="ui-scrim cm-backdrop" data-close-hist>
+      <div class="ui-modal-card cm-card hist-card" data-stop role="dialog" aria-label="Change history">
+        <div class="cm-head">
+          <div><div class="cm-title">Change history</div><div class="cm-sub">${esc(sec.name)} · student records and assessments, newest first</div></div>
+          <button class="btn-icon" data-close-hist aria-label="Close">✕</button>
+        </div>
+        <div class="hist-tools">${HU.kindChipsHTML(S.histKind, 'dark')}<span class="hist-count">${countNoun(list.length, 'change', 'changes')}</span></div>
+        <div class="hist-scroll">${HU.listHTML(list, histOpts({ showSection: sec.id === 'all', empty: 'Nothing has changed in ' + sec.name + ' yet.' }))}</div>
+      </div>
+    </div>`;
+  }
+
   // ---------------- My Garden: section view ----------------
   function sectionGardenView() {
     const sec = section();
@@ -1058,6 +1120,8 @@
     const sec = section();
     const sortTabs = [['state', 'State'], ['name', 'Name'], ['growth', 'Growth']]
       .map(([k, l]) => `<button class="ui-filterchip dark rsort${S.rosterSort === k ? ' on' : ''}" data-sort="${k}">${l}</button>`).join('');
+    const HU = window.TilliHistory;
+    const tip = HU ? HU.lastUpdatedText(sectionHistory(sec)[0], histOpts()) : '';
     return `<div class="dash-wrap" style="max-width:900px">
       <div class="roster-titlebar">
         <div>
@@ -1065,6 +1129,7 @@
           <p class="dash-sub">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
         </div>
         <div class="roster-actions">
+          ${HU ? `<button class="btn-line hist-tip focus" data-class-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">🕘 History</button>` : ''}
           ${S.select.on ? '' : '<button class="btn-line focus" data-sel-start title="Select students and download a PDF report for each, ready to share with parents">☑ Parent reports</button>'}
           <button class="btn-line primary focus" data-add-students title="Add students to one of your grades · sections">+ Add students</button>
         </div>
@@ -1321,6 +1386,11 @@
         </div>
       </div>`;
     }
+    // "Last updated …" stays out of the way: a small clock that shows it on
+    // hover / focus and, on tap, jumps to the History tab's Record changes.
+    const HU = window.TilliHistory;
+    const tip = HU ? HU.lastUpdatedText(studentHistory(stu)[0], histOpts()) : '';
+    const histBtn = HU ? `<button class="hist-peek hist-tip focus" data-stu-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">${HIST_ICON}</button>` : '';
     return `<div class="stu-head">
       <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
       <div class="stu-meta">
@@ -1329,7 +1399,10 @@
         ${uidLine(stu)}
         ${extra || ''}
       </div>
-      <button class="btn-line stu-editbtn focus" data-stu-editstart title="Edit this student's name and UID">✎ Edit</button>
+      <div class="stu-headbtns">
+        ${histBtn}
+        <button class="btn-line stu-editbtn focus" data-stu-editstart title="Edit this student's name and UID">✎ Edit</button>
+      </div>
     </div>`;
   }
   const UID_ERR = {
@@ -1349,7 +1422,7 @@
     if (!base) return '';
     const A = window.TilliAPI, sid = schoolId();
     if (A && A.updateStudent && sid && base.adm) {
-      const res = A.updateStudent(sid, base.adm, { first, last, uid });
+      const res = A.updateStudent(sid, base.adm, { first, last, uid }, S.teacher.email);
       if (!res.ok && res.reason !== 'not_found') return UID_ERR[res.reason] || 'Could not save — try again.';
     } else if (S.baseData.sections.some((x) => x.students.some((o) => o.id !== base.id && String(o.uid || '').toUpperCase() === uid))) {
       return UID_ERR.uid_taken;
@@ -1385,6 +1458,7 @@
           <p class="ui-empty-b">Once you complete ${esc(stu.dispFirst)}'s baseline, their skills, growth and perspectives will grow in here.</p>
           <div class="actions"><button class="btn btn-primary md focus" data-continue-assess="${esc(stu.id)}">Start baseline for ${esc(stu.dispFirst)} →</button></div>
         </div>
+        ${stuChangesCard(stu)}
         ${stuPastHistory(stu, false)}
       </div>`;
     }
@@ -1477,7 +1551,7 @@
       { title: 'Enrolled', meta: 'Added to ' + stu.section, status: '—', dot: STATE_DOT.waiting, color: 'var(--ink-300)' },
     ].map((h) => `<div class="hist-row"><span class="dot" style="background:${h.dot}"></span><div class="hm"><div class="nm">${esc(h.title)}</div><div class="sub">${esc(h.meta)}</div></div><div class="st" style="color:${h.color}">${esc(h.status)}</div></div>`).join('');
     const past = stuPastHistory(stu, true);
-    return past + (past ? `<h3 class="ui-title hist-sec-h">This year · ${esc(stu.section)}</h3>` : '') + `<div class="ui-card td-rows">${rows}</div>`;
+    return past + (past ? `<h3 class="ui-title hist-sec-h">This year · ${esc(stu.section)}</h3>` : '') + `<div class="ui-card td-rows">${rows}</div>` + stuChangesCard(stu);
   }
 
   // ---------------- Students: previous classes (multi-year history) ----------------
@@ -1832,24 +1906,67 @@
       <span><i class="round" style="background:${STATUS_META.pending.dot}"></i>Not started</span>
       <span style="color:var(--ink-300)">· 👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
     const body = view === 'class' ? logsByClass() : view === 'student' ? logsByStudent() : logsList();
+    // History opens the class change-history modal pre-filtered to assessments;
+    // hover shows when this class's assessment activity last changed.
+    const HU = window.TilliHistory;
+    const tip = HU ? HU.lastUpdatedText(sectionHistory(section(), 'assessment')[0], histOpts()) : '';
+    const histBtn = HU ? `<button class="btn-line hist-tip focus" data-assess-hist data-tip="${esc(tip)}" aria-label="Assessment history · ${esc(tip)}">🕘 History</button>` : '';
     return `<div class="log-tabs-row"><div class="log-tabs">${tabs}</div>
-      <button class="btn-line focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div>${legend}${body}`;
+      <div class="log-actions">${histBtn}
+      <button class="btn-line focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div></div>${legend}${body}`;
   }
 
-  // Only one window open (baseline / midline / endline) → show just that window,
-  // with each child's completion per informant (Teacher · Parent · Student).
+  // ---- By class: pick a window (cards) → that window's Completed rate table.
+  // "See all windows together" swaps the table for the 3-window matrix.
+  // A window is unlocked once it's been deployed: by Tilli (TilliAPI), by the
+  // preview state, or because any child already has progress in it.
+  const PREVIEW_UNLOCK = { baseline: ['baseline'], between: ['baseline'], midline: ['baseline', 'mid'], endline: ['baseline', 'mid', 'post'] };
+  const WIN_OF_PHASE = { Baseline: 'baseline', Midline: 'mid', Endline: 'post' };
+  function unlockedWindows(sec) {
+    const set = new Set(PREVIEW_UNLOCK[S.windowState] || ['baseline']);
+    const A = window.TilliAPI, sid = schoolId();
+    if (A && A.getDeployments && sid) A.getDeployments(sid).forEach((d) => { if (WIN_OF_PHASE[d.phase]) set.add(WIN_OF_PHASE[d.phase]); });
+    (S.data.windows || []).forEach((w, wi) => {
+      if (sec.students.some((st) => ((st.assessLog[wi] || {}).persp || []).some((p) => p.done || p.doneParts > 0))) set.add(w.key);
+    });
+    return set;
+  }
+  // S.logsWin: a window key, 'all', or null → default (the open window, else the latest unlocked one).
+  function logsWindowKey(unlocked) {
+    if (S.logsWin === 'all') return 'all';
+    if (S.logsWin && unlocked.has(S.logsWin)) return S.logsWin;
+    const act = activeWindowKey();
+    if (act && unlocked.has(act)) return act;
+    const keys = (S.data.windows || []).map((w) => w.key).filter((k) => unlocked.has(k));
+    return keys[keys.length - 1] || 'baseline';
+  }
+  function winCardsHTML(sec, unlocked, cur) {
+    return (S.data.windows || []).map((w, wi) => {
+      const total = sec.students.length;
+      const done = sec.students.filter((st) => (st.assessLog[wi] || {}).status === 'done').length;
+      const locked = !unlocked.has(w.key), on = cur === w.key;
+      const all = total > 0 && done === total;
+      const badge = locked ? '<span class="ui-badge wc-lock">🔒 Not deployed yet</span>'
+        : `<span class="ui-badge ${all ? 'done' : 'prog'}">${all ? 'All complete 🌸' : (total - done) + ' still to go'}</span>`;
+      const tip = locked ? w.label + ' opens here once Tilli deploys it.' : 'Show each child’s ' + w.label + ' completion';
+      return `<button class="win-card pick${on ? ' on' : ''}${locked ? ' locked' : ''}" data-logwin="${w.key}" aria-pressed="${on}"${locked ? ' aria-disabled="true"' : ''} title="${esc(tip)}">
+        <div class="ring">${ringSVG(locked ? 0 : done, total)}</div>
+        <div class="wc-meta"><div class="wc-label">${esc(w.label)}</div><div class="wc-sub">${esc(w.sub)} · ${esc(w.date)}</div>${badge}</div></button>`;
+    }).join('');
+  }
   function logsByClass() {
-    const wk = activeWindowKey();
-    if (wk) return logsSingleWindow(wk);
     const sec = section();
+    const unlocked = unlockedWindows(sec);
+    const cur = logsWindowKey(unlocked);
+    const allOn = cur === 'all';
+    const toggle = `<div class="win-pick-foot"><button class="ui-filterchip dark${allOn ? ' on' : ''}" data-logwin="${allOn ? '' : 'all'}" aria-pressed="${allOn}" title="${allOn ? 'Back to one window at a time' : 'Compare Baseline, Mid-year and End of year side by side'}">⊞ See all windows together</button></div>`;
+    return `<div class="win-cards">${winCardsHTML(sec, unlocked, allOn ? null : cur)}</div>${toggle}` +
+      (allOn ? logsAllWindows(sec) : logsSingleWindow(cur));
+  }
+  // All three windows side by side (the matrix) — behind "See all windows together".
+  function logsAllWindows(sec) {
     const windows = S.data.windows;
     const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
-    const cards = windows.map((w, wi) => {
-      const done = sec.students.filter((st) => st.assessLog[wi].status === 'done').length;
-      const total = sec.students.length;
-      const all = done === total;
-      return `<div class="win-card"><div class="ring">${ringSVG(done, total)}</div><div class="wc-meta"><div class="wc-label">${esc(w.label)}</div><div class="wc-sub">${esc(w.sub)} · ${esc(w.date)}</div><span class="ui-badge ${all ? 'done' : 'prog'}">${all ? 'All complete 🌸' : (total - done) + ' still to go'}</span></div></div>`;
-    }).join('');
     const head = windows.map((w) => `<div class="mtx-h"><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)}</div></div>`).join('');
     const sorted = [...sec.students].sort((a, b) => (order[a.state] - order[b.state]) || a.name.localeCompare(b.name));
     const rows = sorted.map((st) => {
@@ -1868,19 +1985,15 @@
       const on = s.id === S.sectionId;
       return `<button class="strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} fully assessed</div></button>`;
     }).join('');
-    return `<div class="win-cards">${cards}</div>
-      <div class="mtx-wrap"><div class="mtx"><div class="mtx-head"><div class="ui-eyebrow mtx-corner">Student</div>${head}</div>${rows}</div></div>
+    return `<div class="mtx-wrap"><div class="mtx"><div class="mtx-head"><div class="ui-eyebrow mtx-corner">Student</div>${head}</div>${rows}</div></div>
       <div class="ui-eyebrow log-strip-title">Your classes at a glance</div>
       <div class="strip-grid">${strip}</div>`;
   }
 
+  // One window: each child's completion per informant (Teacher · Parent · Student).
   function logsSingleWindow(wk) {
     const sec = section();
     const w = (S.data.windows || []).find((x) => x.key === wk) || { label: wk, sub: '', date: '' };
-    const total = sec.students.length;
-    const done = sec.students.filter((st) => (logOf(st, wk) || {}).status === 'done').length;
-    const all = done === total;
-    const card = `<div class="win-card"><div class="ring">${ringSVG(done, total)}</div><div class="wc-meta"><div class="wc-label">${esc(w.label)}</div><div class="wc-sub">${esc(w.sub)} · ${esc(w.date)}</div><span class="ui-badge ${all ? 'done' : 'prog'}">${all ? 'All complete 🌸' : (total - done) + ' still to go'}</span></div></div>`;
     const P = S.data.perspectives || [];
     const tick = '<svg class="cr-tick" width="20" height="20" viewBox="0 0 24 24" aria-label="Complete"><circle cx="12" cy="12" r="11" style="fill:var(--green-500)"/><path d="M7 12.5l3.2 3.2L17 9" style="stroke:var(--white)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const head = P.map((p) => `<div class="cr-h" title="${esc(p.label === 'Parent' ? 'Parent questionnaires (home)' : p.label === 'Student' ? 'Student direct tasks' : 'Teacher observation')}"><span class="ic">${p.icon}</span><span class="ui-eyebrow lb">${esc(p.label === 'Parent' ? 'Parent (Home)' : p.label)}</span></div>`).join('');
@@ -1890,7 +2003,8 @@
       const lw = logOf(st, wk) || { persp: [] };
       const cells = P.map((p) => {
         const e = lw.persp.find((x) => x.key === p.key) || { doneParts: 0, totalParts: 1, done: false };
-        return `<div class="cr-cell${e.done ? ' done' : ''}"><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}</div>`;
+        // zero = nothing started yet → muted, so started / finished cells stand out.
+        return `<div class="cr-cell${e.done ? ' done' : e.doneParts ? '' : ' zero'}"><b>${e.doneParts}/${e.totalParts}</b>${e.done ? tick : ''}</div>`;
       }).join('');
       return `<button class="cr-row" data-log-open="${esc(st.id)}"><div class="mtx-name"><span class="dot" style="background:${STATE_DOT[st.state]}"></span><span>${esc(st.dispFirst)}</span></div>${cells}</button>`;
     }).join('');
@@ -1901,8 +2015,7 @@
       const on = s.id === S.sectionId;
       return `<button class="strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
     }).join('');
-    return `<div class="win-cards">${card}</div>
-      <div class="cr-wrap">
+    return `<div class="cr-wrap">
         <div class="cr-title">Completed rate <span>· ${esc(w.label)} — ${esc(w.sub)}</span></div>
         <div class="cr"><div class="cr-head"><div class="ui-eyebrow mtx-corner">Student</div>${head}</div>${rows}</div>
       </div>
@@ -2908,8 +3021,8 @@
             <button class="askx-tool focus" data-askx-export title="Export this chat" aria-label="Export this chat"${a.thread.length ? '' : ' disabled'}>${LU.share}</button>
           </div>
         </div>
-        <div class="askx-scope"><select class="askx-select focus" data-askx-scope aria-label="Which classes Tilli answers about">${opts}</select></div>
-        <div class="askx-scoped">${LU.pin} Currently scoped to: <b>${esc(scopeName(a.scope))}</b></div>
+        <div class="askx-scope"><label class="askx-scope-l" for="askx-scope-sel">${LU.pin} Answering about</label>
+          <select id="askx-scope-sel" class="askx-select focus" data-askx-scope title="Tilli's answers only use data from the classes picked here">${opts}</select></div>
         <div class="askx-body">${body}</div>
         <div class="askx-foot">
           <form class="askx-compose" data-askx-form>
@@ -3181,6 +3294,17 @@
     const selPdf = root.querySelector('[data-sel-pdf]');
     if (selPdf) selPdf.addEventListener('click', () => { downloadReports(); });
 
+    // students: change history — class modal (+ kind filter) and the student's
+    // "Last updated" line, which jumps to the History tab where its changes live.
+    root.querySelectorAll('[data-class-hist]').forEach((b) => b.addEventListener('click', () => { S.histKind = ''; S.histOpen = true; render(); }));
+    root.querySelectorAll('[data-assess-hist]').forEach((b) => b.addEventListener('click', () => { S.histKind = 'assessment'; S.histOpen = true; render(); }));
+    root.querySelectorAll('[data-close-hist]').forEach((b) => b.addEventListener('click', (e) => { if (e.target === b) { S.histOpen = false; render(); } }));
+    root.querySelectorAll('[data-hist-kind]').forEach((b) => b.addEventListener('click', () => { S.histKind = b.dataset.histKind; render(); }));
+    root.querySelectorAll('[data-stu-hist]').forEach((b) => b.addEventListener('click', () => {
+      S.studentTab = 'history'; render();
+      const card = root.querySelector('.stu-changes'); if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+
     // students: detail tabs, back, and ask buttons
     root.querySelectorAll('[data-stab]').forEach((b) => b.addEventListener('click', () => { S.studentTab = b.dataset.stab; render(); }));
     root.querySelectorAll('[data-back-roster]').forEach((b) => b.addEventListener('click', () => { S.studentId = null; S.stuEdit = null; render(); }));
@@ -3239,6 +3363,11 @@
 
     // logs
     root.querySelectorAll('[data-logview]').forEach((b) => b.addEventListener('click', () => { S.logsView = b.dataset.logview; render(); }));
+    // By class: window cards (locked ones ignore the click) + "See all windows together" toggle.
+    root.querySelectorAll('[data-logwin]').forEach((b) => b.addEventListener('click', () => {
+      if (b.getAttribute('aria-disabled') === 'true') return;
+      S.logsWin = b.dataset.logwin || null; render();
+    }));
     root.querySelectorAll('[data-log-open]').forEach((b) => b.addEventListener('click', () => { S.logsView = 'student'; S.logsStudentId = b.dataset.logOpen; render(); }));
     root.querySelectorAll('[data-log-pick]').forEach((b) => b.addEventListener('click', () => { S.logsStudentId = b.dataset.logPick; render(); }));
     root.querySelectorAll('[data-logfilter]').forEach((b) => b.addEventListener('click', () => { S.logListFilter = b.dataset.logfilter; render(); }));
@@ -3442,6 +3571,12 @@
   .cm-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); }
   .cm-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin-top: 3px; }
   .cm-list { overflow: auto; padding: 8px 10px 4px; }
+  /* change history: class modal, "Last updated" line, student "Record changes" card */
+  .hist-card .hist-tools { padding: 14px 24px 0; margin-bottom: 4px; }
+  .hist-scroll { overflow: auto; padding: 4px 24px 20px; }
+  .stu-headbtns { align-self: flex-start; display: flex; align-items: center; gap: 8px; }
+  .log-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .stu-changes-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; }
   .cm-row { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: none; border: none; border-radius: var(--radius-md); padding: 11px 14px; cursor: pointer; font-family: var(--font-body); }
   .cm-row:hover { background: var(--surface-100); }
   .cm-bloom { flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--wash-green); display: flex; align-items: center; justify-content: center; }
@@ -3522,7 +3657,9 @@
     flex: 1; min-width: 0; min-height: 0; display: flex; position: relative; background: var(--white);
   }
   .askx-hist { width: var(--askx-hist-w); flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line-200); background: var(--surface-100); }
-  .askx-new { margin: 16px; width: auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  /* .askx-hist prefix outranks tilli.css's .btn.block { width:100% }, which with the
+     16px margins pushed the button 32px past the column into the chat header. */
+  .askx-hist .askx-new { margin: 16px; width: auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
   .askx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; border-top: 1px solid var(--line-200); }
   .askx-gh { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
   .askx-item { display: flex; align-items: center; border-radius: var(--radius-md); }
@@ -3533,6 +3670,11 @@
   .askx-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .askx-del { flex: none; display: grid; place-items: center; padding: 8px; margin-right: 4px; background: none; border: none; cursor: pointer; color: var(--ink-300); border-radius: var(--radius-xs); }
   .askx-del:hover { color: var(--danger-700); background: var(--danger-wash); }
+  /* Delete appears on the row you're pointing at (or the open chat) — a column of
+     bins on every row read as noise and invited mis-taps. Always shown on touch. */
+  .askx-del { opacity: 0; transition: opacity .12s; }
+  .askx-item:hover .askx-del, .askx-item.on .askx-del, .askx-del:focus-visible { opacity: 1; }
+  @media (hover: none) { .askx-del { opacity: 1; } }
   .askx-none { padding: 18px 8px; font-size: var(--fs-sm); color: var(--ink-300); }
   .askx-clear { display: flex; align-items: center; gap: 9px; padding: 14px 20px; background: none; border: none; border-top: 1px solid var(--line-200); cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); text-align: left; }
   .askx-clear:hover { color: var(--danger-700); }
@@ -3548,16 +3690,16 @@
   .askx-tool:hover:not(:disabled) { background: var(--surface-100); }
   .askx-tool:disabled { opacity: .4; cursor: default; }
   .askx-histbtn { display: none; }
-  .askx-scope { padding: 12px 24px 0; }
+  /* Scope: one row — label + picker (the old "Currently scoped to" line only repeated the picker). */
+  .askx-scope { display: flex; align-items: center; gap: 10px; padding: 10px 24px; border-bottom: 1px solid var(--line-200); }
+  .askx-scope-l { flex: none; display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
   .askx-select {
-    width: 100%; appearance: none; -webkit-appearance: none; cursor: pointer;
+    flex: 1; min-width: 0; max-width: 340px; appearance: none; -webkit-appearance: none; cursor: pointer;
     border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 11px 40px 11px 14px;
     font: inherit; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-900);
     background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6170' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center / 16px;
   }
   .askx-select:focus { outline: none; border-color: var(--focus); }
-  .askx-scoped { display: flex; align-items: center; gap: 7px; padding: 9px 24px 12px; border-bottom: 1px solid var(--line-200); font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
-  .askx-scoped b { color: var(--ink-700); }
   .askx-body { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; background: var(--surface-100); }
   .askx-thread { width: 100%; max-width: var(--askx-max); margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
   .askx-thread .ask-msg { font-size: var(--fs-md); line-height: 1.55; }
@@ -3588,8 +3730,7 @@
     .askx-head { padding: 12px 14px; gap: 10px; }
     .askx-ava { width: 38px; height: 38px; }
     .askx-t { font-size: var(--fs-lg); }
-    .askx-scope { padding: 10px 14px 0; }
-    .askx-scoped { padding: 8px 14px 10px; }
+    .askx-scope { padding: 8px 14px; }
     .askx-body { padding: 16px 14px; }
     .askx-foot { padding: 10px var(--askx-foot-pr) 8px 14px; }
     .askx-try { margin-top: 22px; }
@@ -3733,6 +3874,14 @@
   .win-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
   .win-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
   .win-card .ring { flex: none; }
+  /* Pickable window cards (Assess → Completed → By class) */
+  .win-card.pick { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
+  .win-card.pick:hover:not(.locked) { border-color: var(--green-500); }
+  .win-card.pick.on { border-color: var(--green-500); box-shadow: 0 0 0 3px var(--wash-green); }
+  .win-card.pick.locked { cursor: not-allowed; background: var(--surface-100); }
+  .win-card.pick.locked .ring, .win-card.pick.locked .wc-label, .win-card.pick.locked .wc-sub { opacity: .5; }
+  .wc-lock { background: var(--white); border: 1px solid var(--line-200); color: var(--ink-450); }
+  .win-pick-foot { display: flex; justify-content: flex-end; margin: -6px 0 16px; }
   .wc-label { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); }
   .wc-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin: 2px 0 6px; }
   .mtx-wrap { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 8px; overflow-x: auto; }
@@ -3964,7 +4113,8 @@
   .empty-badge { margin: 0 auto 14px; width: 64px; height: 64px; border-radius: 50%; background: var(--wash-green); display: flex; align-items: center; justify-content: center; }
 
   /* Dev-only landing-state switch (scaffold; not teacher-facing) */
-  .mg-gui { position: fixed; right: 16px; bottom: 16px; z-index: 45; background: rgba(20,28,20,.9); color: #fff;
+  /* Top-right so it clears the floating Ask Tilli / Need help bubbles (bottom-right). */
+  .mg-gui { position: fixed; right: 16px; top: 12px; z-index: 45; background: rgba(20,28,20,.9); color: #fff;
     border-radius: 14px; padding: 10px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); backdrop-filter: blur(4px); font-family: 'Montserrat',sans-serif; }
   .mg-gui-h { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #B9E8A6; margin-bottom: 7px; }
   .mg-gui-star { color: var(--yellow-500); }
@@ -3976,7 +4126,7 @@
 
   @media (max-width: 640px) {
     .mg-tend-grid { grid-template-columns: 1fr; }
-    .mg-gui { right: 10px; bottom: calc(78px + env(safe-area-inset-bottom)); left: 10px; }
+    .mg-gui { right: 10px; top: calc(8px + env(safe-area-inset-top)); left: 10px; }
     .mg-gui-opts { flex-wrap: wrap; }
     .mg-gui-opt { flex: 1; }
   }
@@ -4016,19 +4166,22 @@
   .log-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
   .log-tabs-row > .log-tabs { margin: 0; }
   .cr-wrap { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 8px; overflow-x: auto; }
-  .cr-title { text-align: center; font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); padding: 12px 0 4px; }
-  .cr-title span { font-weight: 600; color: var(--ink-300); font-size: var(--fs-sm); }
+  /* Lighter type throughout: one bold-ish title, quiet headers, regular-weight figures. */
+  .cr-title { text-align: left; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); padding: 14px 12px 2px; }
+  .cr-title span { font-weight: 500; color: var(--ink-300); font-size: var(--fs-sm); }
   .cr { min-width: 420px; }
   .cr-head, .cr-row { display: grid; grid-template-columns: minmax(120px,1.6fr) repeat(3, minmax(84px,1fr)); }
   .cr-head { padding: 10px 12px; align-items: end; }
   .cr-h { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .cr-h .ic { font-size: var(--fs-2xl); line-height: 1; }
+  .cr-h .ic { font-size: var(--fs-lg); line-height: 1; }
+  .cr-h .lb, .cr .mtx-corner { font-weight: 600; letter-spacing: .06em; color: var(--ink-300); }
   .cr-row { width: 100%; background: none; border: none; border-top: 1px solid var(--line-200); padding: 10px 12px; cursor: pointer; text-align: left; font-family: var(--font-body); align-items: center; }
   .cr-row:hover { background: var(--surface-100); }
   .cr-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; justify-content: center; }
-  .cr-cell + .cr-cell { border-left: 2px solid var(--ink-900); }
-  .cr-cell b { font-size: var(--fs-md); font-weight: 800; color: var(--ink-900); }
+  .cr-cell b { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-700); font-variant-numeric: tabular-nums; }
+  .cr-cell.zero b { font-weight: 500; color: var(--ink-300); }
   .cr-cell.done b { color: var(--green-700); }
+  .cr-row .mtx-name span:last-child { font-weight: 600; color: var(--ink-700); }
 
   /* Insights → Growth over time (line chart) */
   .gr-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }

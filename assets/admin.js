@@ -30,6 +30,13 @@
   var role = (session && session.role) || (me && me.role) || 'coordinator';
   var isCoordinator = role !== 'principal';   // coordinator = full; principal = view-only
   var isPrincipal = role === 'principal';
+  // Changes made here are logged under whoever is signed in. A Tilli / group
+  // admin who drilled in keeps their own name, not the coordinator's.
+  if (window.TilliAPI && window.TilliAPI.setHistoryActor) {
+    var viaPlatform = session && (session.role === 'tilli' || session.role === 'group') && session.email;
+    window.TilliAPI.setHistoryActor({ email: viaPlatform || email, name: viaPlatform ? '' : (me && me.name) || '',
+      role: role === 'tilli' ? 'tilli' : role === 'group' ? 'group' : isPrincipal ? 'principal' : 'admin' });
+  }
 
   var app = document.getElementById('ad-app');
   var modalRoot = document.getElementById('ad-modal-root');
@@ -42,7 +49,7 @@
   function initials(name) { var p = String(name || '').trim().split(/\s+/); return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || ''); }
   function relDays(d) { return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d + ' days ago'; }
   function plural(n, s) { return n + ' ' + s + (n === 1 ? '' : 's'); }
-  var SCREENS = ['overview', 'implementation', 'outcomes', 'roster', 'reports', 'asktilli'];
+  var SCREENS = ['overview', 'implementation', 'outcomes', 'roster', 'history', 'reports', 'asktilli'];
 
   var toastTimer;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2200); }
@@ -468,19 +475,24 @@
     implementation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>',
     outcomes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
     roster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+    history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>',
     reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
   };
   var NAV = [
     { key: 'overview', label: 'Overview' },
     { key: 'outcomes', label: 'Outcomes' },
     { key: 'roster', label: 'Roster' },      // absent for principal
+    { key: 'history', label: 'History' },    // absent for principal — names + identity edits, same rule as Roster
     { key: 'reports', label: 'Reports' },
     { key: 'asktilli', label: 'Ask Tilli' }, // live assistant — also reachable via the floating button
   ];
-  function navItems() { return NAV.filter(function (n) { return !(n.key === 'roster' && isPrincipal); }); }
+  function navItems() { return NAV.filter(function (n) { return !((n.key === 'roster' || n.key === 'history') && isPrincipal); }); }
 
   function chromeHTML(r) {
-    var roleLabel = isPrincipal ? 'Principal' : (role === 'tilli' ? 'Tilli Team' : 'Coordinator');
+    var roleLabel = isPrincipal ? 'Principal' : (role === 'tilli' ? 'Tilli Team' : role === 'group' ? 'Group Admin' : 'Coordinator');
+    // "Updated 2 h ago by …" — the newest change anywhere in the school; opens History.
+    var lastChip = (isCoordinator && window.TilliHistory)
+      ? '<button class="ad-updated desk-only" data-nav="history">' + TilliHistory.lastUpdatedHTML(schoolHistory({ limit: 1 })[0], { me: email, prefix: 'Updated' }) + '</button>' : '';
     var yr = AD.academicYears;
     var yearCtrl = yr.length > 1
       ? '<span class="ad-year">' + esc(yr[yr.length - 1]) + ' ▾</span>'   // selector only when >1 year (spec §10.3)
@@ -495,7 +507,7 @@
 
     var header = '<header class="ui-header dash-header">' +
       '<div><div class="ui-h-title">' + esc(AD.school.name) + '</div><div class="ui-h-sub desk-only">' + esc(AD.school.city + ', ' + AD.school.country) + '</div></div>' +
-      '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' + yearCtrl +
+      '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' + lastChip + yearCtrl +
       '<span class="ui-rolebadge">' + esc(roleLabel) + '</span>' +
       '<button class="ui-avatar" id="ad-acct-btn" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
@@ -519,12 +531,15 @@
     m.className = 'ui-menu ad-acct-menu'; m.id = 'ad-acct-menu';
     // Tilli Team drilled in from the internal platform — offer a way back to it.
     var fromTilli = qp.get('from') === 'tilli' || role === 'tilli';
+    var fromGroup = qp.get('from') === 'group' && qp.get('group');
     m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span></div>' +
       (fromTilli ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
+      (fromGroup ? '<button class="ui-menu-item" data-am="group">← Group view</button>' : '') +
       '<button class="ui-menu-item" data-am="switch">Switch school year</button>' +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
     document.querySelector('.ui-header').parentNode.appendChild(m);
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
+    if (fromGroup) m.querySelector('[data-am="group"]').addEventListener('click', function () { location.href = 'tilli.html?group=' + encodeURIComponent(qp.get('group')); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
     m.querySelector('[data-am="switch"]').addEventListener('click', function () { toast('Only one academic year of data exists yet.'); closeAcctMenu(); });
     setTimeout(function () { document.addEventListener('click', closeAcctMenu, { once: true }); }, 0);
@@ -537,7 +552,7 @@
   function render() {
     lastHash = location.hash;
     var r = currentRoute();
-    if (r.screen === 'roster' && !isCoordinator) { go('overview', {}, { replace: true }); return; }
+    if ((r.screen === 'roster' || r.screen === 'history') && !isCoordinator) { go('overview', {}, { replace: true }); return; }
     if (r.screen === 'implementation') { go('overview', {}, { replace: true }); return; }   // Implementation removed from nav
     closeAcctMenu();
     app.innerHTML = chromeHTML(r);
@@ -1040,6 +1055,55 @@
     body.querySelectorAll('[data-userdetail]').forEach(function (b) { b.addEventListener('click', function () { showUserDetail(users[+b.dataset.userdetail]); }); });
   };
 
+  // ========================================================
+  //  4b) HISTORY — coordinator only. Every change to student
+  //  records and assessments: who, when, what changed. No
+  //  scores ever appear (the log never carries them).
+  // ========================================================
+  var HIST_PAGE = 60;   // rows shown per "Show more" step
+  var histState = { kind: '', q: '', shown: HIST_PAGE };
+  SCREEN.history = function (params, body) {
+    var HU = window.TilliHistory;
+    if (!HU) { body.innerHTML = stError('History'); return; }
+    body.innerHTML = screenHead('History', 'Every change to student records and assessments at ' + AD.school.name + ' — who made it, when, and what changed.') +
+      card('', '',
+        '<div class="hist-tools">' + HU.kindChipsHTML(histState.kind) +
+          '<input class="input hist-q" id="hist-q" placeholder="Search a student, staff member or section…" value="' + esc(histState.q) + '" aria-label="Search history">' +
+          '<span class="hist-count" id="hist-count"></span></div>' +
+        '<div id="hist-list"></div>');
+
+    var listEl = body.querySelector('#hist-list'), countEl = body.querySelector('#hist-count');
+    function drawList() {
+      var all = schoolHistory({ kind: histState.kind, q: histState.q });
+      var more = all.length - histState.shown;
+      listEl.innerHTML = HU.listHTML(all.slice(0, histState.shown), { me: email,
+          empty: histState.q ? 'No changes match “' + histState.q + '”.' : 'No changes recorded yet.' }) +
+        (more > 0 ? '<button class="btn btn-outline btn-sm hist-morebtn" id="hist-more">Show ' + Math.min(HIST_PAGE, more) + ' more</button>' : '');
+      countEl.textContent = countNoun(all.length, 'change', 'changes');
+      var mb = listEl.querySelector('#hist-more');
+      if (mb) mb.addEventListener('click', function () { histState.shown += HIST_PAGE; drawList(); });
+    }
+    body.querySelectorAll('[data-hist-kind]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        histState.kind = b.dataset.histKind; histState.shown = HIST_PAGE;
+        body.querySelectorAll('[data-hist-kind]').forEach(function (c) { var on = c === b; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); });
+        drawList();
+      });
+    });
+    body.querySelector('#hist-q').addEventListener('input', function (ev) { histState.q = ev.target.value; histState.shown = HIST_PAGE; drawList(); });
+    drawList();
+  };
+
+  // This school's change history for the signed-in viewer. A Tilli / group
+  // admin who drilled in without a school membership reads it platform-scoped.
+  function schoolHistory(filter) {
+    var A = window.TilliAPI, sid = currentSchoolId();
+    if (!A || !A.historyFor || !sid) return [];
+    var list = A.historyFor(email, sid, filter || {});
+    if (list == null && (role === 'tilli' || role === 'group') && A.historyAcross) list = A.historyAcross([sid], filter || {});
+    return list || [];
+  }
+
   // Re-reveal one invited teacher's still-valid temporary password (relayable
   // until they set their own). Mirrors the platform-admin invitation receipt.
   function showInvitePassword(u) {
@@ -1170,7 +1234,13 @@
     modalRoot.querySelectorAll('[data-grteacher]').forEach(function (sel) {
       sel.addEventListener('change', function () {
         var sec = AD.sections.find(function (x) { return x.id === sel.dataset.grteacher; });
+        var prevId = sec && sec.teacherId;
         if (sec) sec.teacherId = sel.value;
+        if (sec && prevId !== sel.value && window.TilliAPI && TilliAPI.recordChange) {
+          var tName = function (id) { var t = AD.teachers.find(function (x) { return x.id === id; }); return t ? t.name : '—'; };
+          TilliAPI.recordChange({ school_id: currentSchoolId(), section_id: sec.id, section_name: sec.name || (sec.grade + ' ' + sec.section),
+            kind: 'student', action: 'teacher.reassign', actorEmail: email, changes: [{ label: 'Teacher', from: tName(prevId), to: tName(sel.value) }] });
+        }
         toast('Teacher reassigned. Section history is unchanged.');
       });
     });
@@ -1205,12 +1275,20 @@
         return row({ cls: y.grade + ' ' + y.section, year: y.year, teacher: y.teacher, done: y.windowsDone + ' of 3 assessments completed', note: y.note });
       })).join('');
 
+    // Record changes — every edit, parent link and completion for this child.
+    var HU = window.TilliHistory, stuHist = HU ? schoolHistory({ student_id: adm }) : [];
+    var changesBlock = HU
+      ? '<div class="row wrap mt-4 mb-2" style="justify-content:space-between;gap:4px 12px"><div class="ui-eyebrow dark">Record changes</div>' + HU.lastUpdatedHTML(stuHist[0], { me: email }) + '</div>' +
+        '<div class="ui-card sm">' + HU.listHTML(stuHist, { me: email, hideStudent: true, showSection: false, empty: 'No changes recorded for ' + (r.first || r.name) + ' yet.' }) + '</div>'
+      : '';
+
     openModal(modalHead(r.name) +
       '<p class="ui-mod-note mb-3">' + esc(r.adm) + ' · ' + esc(r.grade + ' ' + r.section) + ' · ' + plural(past.length + 1, 'year') + ' at ' + esc(AD.school.name) + '</p>' +
       '<button type="button" class="btn-link mb-3" id="hist-back">← Back to ' + esc(grade) + ' roster</button>' +
       '<div class="ui-eyebrow dark mb-2">Class history</div>' +
       '<div class="ui-card sm">' + rows + '</div>' +
       (past.length ? '' : '<p class="ui-mod-note mt-3">No earlier classes on Tilli for this child.</p>') +
+      changesBlock +
       '<div class="ui-note mt-3"><span aria-hidden="true">🔒</span><span>Skill levels and scores are visible to the class teacher only. Leadership sees class history and completion, never an individual child\'s results.</span></div>');
     document.getElementById('hist-back').addEventListener('click', function () { openGradeRoster(grade); });
   }

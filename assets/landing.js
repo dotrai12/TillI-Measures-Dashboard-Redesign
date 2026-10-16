@@ -209,6 +209,9 @@
   // the "School" role card is shared with teachers; the email decides which
   // dashboard opens (spec: "Route by email/account", like the teacher path).
   const admin = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.findAdmin) ? window.TILLI_SCHOOL.findAdmin : () => null;
+  // Demo School Group Admin logins → group id ('*' = anyone else). Invited group
+  // admins carry their own group_id on the account instead.
+  const DEMO_GROUP_ADMINS = { 'group@vidyatrust.org': 'g-vidya', 'group@lankalearning.lk': 'g-lanka', '*': 'g-vidya' };
 
   function go() {
     // "New" = the teacher is activating an account: a fresh signup (create
@@ -220,6 +223,15 @@
     if (state.role === 'tilli') {
       setSession('tilli', state.email);
       window.location.href = 'tilli.html?email=' + encodeURIComponent(state.email);
+      return;
+    }
+    // School Group Admin → the group view of the platform console. The group
+    // comes from their invitation; demo emails (and any other) fall back to Vidya Trust.
+    if (state.role === 'group') {
+      const acct = invitedAccount(state.email);
+      const gid = (acct && acct.group_id) || DEMO_GROUP_ADMINS[state.email.toLowerCase()] || DEMO_GROUP_ADMINS['*'];
+      setSession('group', state.email);
+      window.location.href = 'tilli.html?group=' + encodeURIComponent(gid) + '&email=' + encodeURIComponent(state.email);
       return;
     }
     if (state.role === 'teacher') {
@@ -422,6 +434,7 @@
       <div class="stack">
         ${card('var(--yellow-500)', 'family.png', 'Parent / Home', "Follow your child's assessments", 'parent')}
         ${card('var(--cyan-500)', 'graduation-cap.png', 'School', 'See your whole class garden', 'teacher')}
+        ${card('var(--pink-400)', 'people.png', 'School Group', 'Every school in your group', 'group')}
         ${card('var(--green-500)', 'sparkle.png', 'Tilli Team', 'Internal view across the school', 'tilli')}
       </div>`;
   }
@@ -462,12 +475,14 @@
   }
 
   function emailView() {
-    const isTilli = state.role === 'tilli';
+    const isTilli = state.role === 'tilli', isGroup = state.role === 'group';
     const pill = isTilli
       ? `<span class="pill-info">Tilli Team &#183; internal</span>`
+      : isGroup ? `<span class="pill-info">School group</span>`
       : `<span class="pill-info">${esc(state.school)}</span>`;
     const hint = isTilli
       ? 'Demo: use team@tilli.org to sign in to the internal platform.'
+      : isGroup ? 'Demo: use group@vidyatrust.org (Vidya Trust) or group@lankalearning.lk (Lanka Learning Network).'
       : state.role === 'teacher'
         ? 'Demo: use teacher@tilli.edu to sign in, or any new email to sign up (Little Sprouts school code: LSPR-2210).'
         : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
@@ -722,8 +737,9 @@
         const role = b.dataset.role;
         // Tilli Team is internal — it doesn't belong to a school, so skip the
         // school picker and go straight to the email/password step.
-        if (role === 'tilli') {
-          set({ step: 'email', role, school: 'Tilli Internal', schoolQuery: '', schoolListOpen: false, email: '', password: '' });
+        // Same for a School Group Admin: their scope is a group, not one school.
+        if (role === 'tilli' || role === 'group') {
+          set({ step: 'email', role, school: role === 'tilli' ? 'Tilli Internal' : 'School group', schoolQuery: '', schoolListOpen: false, email: '', password: '' });
           return;
         }
         set({ step: 'school', role, school: '', schoolQuery: '', schoolListOpen: false });
@@ -992,7 +1008,7 @@
     const s = state.step;
     if (s === 'school') set({ step: 'role' });
     // Tilli Team skipped the school step, so its email screen goes back to role.
-    else if (s === 'email') set({ step: state.role === 'tilli' ? 'role' : 'school' });
+    else if (s === 'email') set({ step: state.role === 'tilli' || state.role === 'group' ? 'role' : 'school' });
     // School sign-up: password → confirm school → code → email.
     else if (s === 'signup' && state.role === 'teacher') set({ step: 'confirmschool', password: '' });
     else if (s === 'confirmschool') set({ step: 'schoolcode', errs: {} });
