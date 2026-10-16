@@ -308,7 +308,7 @@
       // A first-time class (built from onboarding) opens on Baseline — no prior
       // data to show; the demo dataset opens mid-year ('between'). Dev GUI switch overrides.
       windowState: ctx.data.fresh ? 'baseline' : 'between',
-      rosterSearch: '', rosterSort: 'state', studentTab: 'overview',
+      rosterSearch: '', rosterSort: 'name', studentTab: 'overview',
       assessTab: 'todo', enter: { studentId: null, q: 0, ratings: {}, done: false },
       logsView: 'class', logsWin: null,   // By class: picked window key | 'all' | null (= default window)
       logsStudentId: null, logStudentSearch: '', logListSearch: '', logListFilter: 'all',
@@ -468,7 +468,7 @@
       <div class="dash">
         ${sidebar}
         <div class="dash-col${S.nav === 'ask' ? ' ask-mode' : ''}">
-          <header class="dash-header">${S.nav === 'ask' ? askCrumbs() : chips}</header>
+          ${S.nav === 'ask' ? '' : `<header class="dash-header">${chips}</header>`}
           <main class="dash-main${S.nav === 'ask' ? ' ask-mode' : ''}">${mainView()}</main>
         </div>
         ${bottomNav}
@@ -1718,8 +1718,11 @@
   function assessView() {
     const sec = section();
     const tab = S.assessTab || 'todo';
-    const subTabs = [['todo', 'To-do'], ['enter', 'Enter'], ['completed', 'Completed']]
-      .map(([k, l]) => `<button class="ui-filterchip dark atab${tab === k ? ' on' : ''}" data-assesstab="${k}">${l}</button>`).join('');
+    // No "Enter" chip: recording an observation opens from To-do (Start / Continue),
+    // so To-do stays highlighted while it's open.
+    const onTab = tab === 'enter' ? 'todo' : tab;
+    const subTabs = [['todo', 'To-do'], ['completed', 'Tracker']]
+      .map(([k, l]) => `<button class="ui-filterchip dark atab${onTab === k ? ' on' : ''}" data-assesstab="${k}">${l}</button>`).join('');
     let body, subtitle;
     if (tab === 'enter') { body = obsEnter(); subtitle = sec.name + ' · recording an observation'; }
     else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
@@ -3041,9 +3044,6 @@
   }
 
   // ---------------- Ask Tilli: full screen (nav destination) ----------------
-  function askCrumbs() {
-    return `<nav class="askx-crumbs" aria-label="Breadcrumb"><button class="focus" data-nav="garden">Home</button><span aria-hidden="true">›</span><b>Ask Tilli</b></nav>`;
-  }
   function askScreenView() {
     const a = S.ask, weekAgo = Date.now() - 7 * 864e5;
     const item = (c) => `<div class="askx-item${c.id === a.chatId ? ' on' : ''}">
@@ -3783,11 +3783,6 @@
   /* ask tilli (full screen — nav destination) */
   .dash-col.ask-mode { height: 100vh; height: 100dvh; }
   .dash-main.ask-mode { padding: 0; max-width: none; display: flex; min-height: 0; }
-  .askx-crumbs { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; font-size: var(--fs-md); }
-  .askx-crumbs button { background: none; border: none; padding: 2px 4px; font: inherit; color: var(--ink-450); cursor: pointer; border-radius: var(--radius-xs); }
-  .askx-crumbs button:hover { color: var(--ink-900); }
-  .askx-crumbs span { color: var(--ink-300); }
-  .askx-crumbs b { font-weight: 700; color: var(--ink-900); }
   .askx {
     /* --- tunable visual parameters --- */
     --askx-hist-w: 300px;     /* width of the chat-history column */
@@ -4025,7 +4020,7 @@
   .win-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
   .win-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
   .win-card .ring { flex: none; }
-  /* Pickable window cards (Assess → Completed → By class) */
+  /* Pickable window cards (Assess → Tracker → By class) */
   .win-card.pick { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
   .win-card.pick:hover:not(.locked) { border-color: var(--green-500); }
   .win-card.pick.on { border-color: var(--green-500); box-shadow: 0 0 0 3px var(--wash-green); }
