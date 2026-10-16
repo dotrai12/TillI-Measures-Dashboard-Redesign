@@ -205,6 +205,7 @@
   let historyReady = false;
   let suppressPush = false; // true while restoring from popstate — don't re-push
   let popBound = false;
+  let floatBound = false;   // Ask-chat ↔ floating-bubble listeners bound (once)
   // Screen-transition gating: only a genuine destination change (not a modal
   // open, sub-tab, or in-place edit) plays the fade+zoom. See render().
   let lastScreenKey = null;
@@ -334,7 +335,15 @@
     }
     injectCSS();
     // Floating Ask Tilli bubble joins the Need-help bubble teacher.html mounted.
-    if (window.TilliFloat) TilliFloat.mount({ ask: () => openAsk('', '') });
+    // The Ask bubble toggles the chat window (it shows × while open).
+    if (window.TilliFloat) TilliFloat.mount({ ask: () => { if (S.ask.open) { S.ask.open = false; render(); } else openAsk('', ''); } });
+    if (!floatBound) {   // mount can run more than once; bind these once
+      floatBound = true;
+      // The chat is pinned to the bubble — follow it while it's dragged / snapped.
+      window.addEventListener('tillifloat:move', (e) => { if (S && S.ask.open) positionAskPop(e.detail && e.detail.dragging); });
+      window.addEventListener('resize', () => { if (S && S.ask.open) positionAskPop(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S && S.ask.open && S.nav !== 'ask') { S.ask.open = false; render(); } });
+    }
     let rt;
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { S.vw = window.innerWidth; render(); }, 120); });
     bindBackButton();
@@ -454,6 +463,7 @@
       return `<button class="ui-filterchip solid${on ? ' on' : ''}" data-section="${sec.id}">${esc(sec.name)}</button>`;
     }).join('')}</div>` : '';
 
+    const askHadFocus = !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('ask-input'));
     root.innerHTML = `
       <div class="dash">
         ${sidebar}
@@ -470,11 +480,19 @@
       </div>`;
     // Phone: the bottom nav's raised centre button already is Ask Tilli.
     if (window.TilliFloat) {
-      TilliFloat.hideAsk(S.ask.open || isPhone || S.nav === 'ask');
+      TilliFloat.hideAsk(isPhone || S.nav === 'ask');
+      TilliFloat.setAskOpen(S.ask.open && !isPhone && S.nav !== 'ask');
       // #dash-root is position:fixed (its own stacking context), so the stack must
       // live inside it to sit *under* the Ask panel / modals rather than over them.
       TilliFloat.attach(root);
     }
+    if (S.ask.open) {
+      positionAskPop();
+      const ab = root.querySelector('.ask-body'); if (ab) ab.scrollTop = ab.scrollHeight;   // newest message in view
+      const ai = root.querySelector('.ask-input');
+      if (ai && (S.ask._popIn || askHadFocus)) { ai.focus(); const n = ai.value.length; try { ai.setSelectionRange(n, n); } catch (e) {} }
+    }
+    S.ask._popIn = false;   // the grow-from-the-bubble animation plays once per open
     wire();
   }
 
@@ -2831,28 +2849,48 @@
     // so the assistant reads as considering the question, not answering instantly.
     const typing = a.thinking ? `<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>` : '';
     const empty = a.thread.length === 0 && !a.thinking ? `<div class="ask-empty">${flowerArt('growing', 76, 0)}<div>Edit the prompt below and send — I’ll suggest something you can use today.</div></div>` : '';
+    // Chat window that grows out of the floating Ask bubble and stays pinned
+    // to it (positionAskPop). Phones keep a bottom sheet over a scrim.
     return `<div class="ui-scrim ask-scrim" data-close-ask></div>
-      <div class="ask-panel">
+      <div class="ask-panel${a._popIn ? ' pop-in' : ''}" role="dialog" aria-label="Ask Tilli">
         <div class="ask-head">
           <span class="ask-ic">${chatIcon('var(--green-700)')}</span>
           <div class="ask-hmeta"><div class="t">Ask Tilli</div><div class="s">Your teaching assistant</div></div>
           <button class="btn-icon" data-ask-expand title="Open full screen" aria-label="Open Ask Tilli full screen">${LU.max}</button>
-          <button class="btn-icon" data-close-ask>×</button>
+          <button class="btn-icon" data-close-ask aria-label="Close Ask Tilli">×</button>
         </div>
         <div class="ask-body">
           ${a.context ? `<div class="ui-badge ask-ctx">From: ${esc(a.context)}</div>` : ''}
           ${thread}${typing}${empty}
         </div>
         <div class="ask-foot">
-          <textarea class="ask-input" rows="4" placeholder="Ask me anything about your class or a student…">${esc(a.prompt)}</textarea>
-          <button class="btn btn-primary block focus" data-send-ask>Send to Tilli 🌿</button>
+          <div class="ask-compose">
+            <textarea class="ask-input" rows="1" placeholder="Ask about your class or a student…" aria-label="Message Ask Tilli">${esc(a.prompt)}</textarea>
+            <button class="ask-sendbtn focus" data-send-ask aria-label="Send to Tilli" title="Send (Enter)"${a.thinking ? ' disabled' : ''}>${LU.send}</button>
+          </div>
         </div>
       </div>`;
+  }
+  // Pin the chat window to the bubble's corner: above the bubbles in a bottom
+  // corner, below them in a top one, lined up with their outer edge.
+  const ASK_POP_GAP = 14;   // px between the chat window and the bubbles
+  const ASK_INPUT_MAX = 120;   // px the composer can grow to before it scrolls
+  function positionAskPop(dragging) {
+    const p = root && root.querySelector('.ask-panel'); if (!p) return;
+    const A = window.TilliFloat && TilliFloat.anchor ? TilliFloat.anchor() : null;
+    if (bp().isPhone || !A) { p.style.cssText = ''; p.dataset.from = 'br'; return; }
+    const c = A.corner, box = A.box, W = window.innerWidth, H = window.innerHeight, st = p.style;
+    p.classList.toggle('following', !!dragging);   // no easing while it tracks a drag
+    st.left = c[1] === 'l' ? Math.max(8, box.l) + 'px' : 'auto';
+    st.right = c[1] === 'r' ? Math.max(8, W - box.r) + 'px' : 'auto';
+    if (c[0] === 'b') { st.top = 'auto'; st.bottom = (H - box.t + ASK_POP_GAP) + 'px'; st.maxHeight = Math.max(240, box.t - ASK_POP_GAP - 16) + 'px'; }
+    else { st.bottom = 'auto'; st.top = (box.b + ASK_POP_GAP) + 'px'; st.maxHeight = Math.max(240, H - box.b - ASK_POP_GAP - 16) + 'px'; }
+    p.dataset.from = c;
   }
   // Side panel (floating bubble + every in-card "Ask Tilli…" button): always a fresh chat.
   function openAsk(context, prompt) {
     newChat();
-    Object.assign(S.ask, { open: true, context: context || '', prompt: prompt || '', scope: S.sectionId || 'all' });
+    Object.assign(S.ask, { open: true, _popIn: true, context: context || '', prompt: prompt || '', scope: S.sectionId || 'all' });
     render();
   }
   // ---------------- Ask Tilli: shared chat engine ----------------
@@ -3484,7 +3522,10 @@
     // ask tilli
     root.querySelectorAll('[data-close-ask]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; render(); }));
     const ai = root.querySelector('.ask-input');
-    if (ai) ai.addEventListener('input', (e) => { S.ask.prompt = e.target.value; });
+    if (ai) ai.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAsk(S.ask.prompt); } });   // Shift+Enter = new line
+    // Composer grows with its text, up to ASK_INPUT_MAX px, then scrolls.
+    const fitAi = () => { if (!ai) return; ai.style.height = 'auto'; ai.style.height = Math.min(ai.scrollHeight, ASK_INPUT_MAX) + 'px'; };
+    if (ai) { fitAi(); ai.addEventListener('input', (e) => { S.ask.prompt = e.target.value; fitAi(); }); }
     const send = root.querySelector('[data-send-ask]');
     if (send) send.addEventListener('click', () => sendAsk(S.ask.prompt));
     root.querySelectorAll('[data-ask-expand]').forEach((b) => b.addEventListener('click', () => {
@@ -3705,10 +3746,25 @@
   .grow-row .sub { font-size: var(--fs-sm); color: var(--ink-300); }
   .grow-ask { background: var(--wash-yellow); color: var(--lvl-2-ink); white-space: nowrap; }   /* .btn-soft, Learner-amber variant */
 
-  /* ask tilli (side panel) */
-  .ask-scrim { background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
-  .ask-panel { position: fixed; z-index: 61; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: var(--white); display: flex; flex-direction: column; box-shadow: var(--shadow-modal); }
-  .ask-head { display: flex; align-items: center; gap: 10px; padding: 18px 20px; border-bottom: 1px solid var(--line-200); }
+  /* ask tilli — chat window pinned to the floating bubble (positionAskPop sets
+     its left/right/top/bottom + max-height; these are the no-anchor fallbacks). */
+  .ask-panel {
+    --ask-pop-w: 380px;   /* chat window width */
+    --ask-pop-h: 560px;   /* chat window height (capped by the space beside the bubble) */
+    position: fixed; z-index: 61; right: 22px; bottom: 104px; width: var(--ask-pop-w); max-width: calc(100vw - 16px); height: var(--ask-pop-h);
+    background: var(--white); display: flex; flex-direction: column; overflow: hidden;
+    border: 1px solid var(--line-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-modal);
+    transition: left .42s cubic-bezier(.22, 1.12, .36, 1), right .42s cubic-bezier(.22, 1.12, .36, 1), top .42s cubic-bezier(.22, 1.12, .36, 1), bottom .42s cubic-bezier(.22, 1.12, .36, 1);
+  }
+  .ask-panel.following { transition: none; }   /* tracking a drag 1:1 */
+  /* Grows out of the bubble: origin is the corner the bubble sits in. */
+  .ask-panel[data-from="br"] { transform-origin: bottom right; } .ask-panel[data-from="bl"] { transform-origin: bottom left; }
+  .ask-panel[data-from="tr"] { transform-origin: top right; }    .ask-panel[data-from="tl"] { transform-origin: top left; }
+  .ask-panel.pop-in { animation: askPopIn .26s cubic-bezier(.22, 1.12, .36, 1) both; }
+  @keyframes askPopIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .ask-panel { transition: none; } .ask-panel.pop-in { animation: none; } }
+  .ask-scrim { display: none; }   /* desktop/tablet: no dimming — it's a chat, not a modal */
+  .ask-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--line-200); }
   .ask-ic { width: 34px; height: 34px; border-radius: var(--radius-md); background: var(--wash-green); display: flex; align-items: center; justify-content: center; flex: none; }
   .ask-hmeta { flex: 1; } .ask-hmeta .t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); } .ask-hmeta .s { font-size: var(--fs-xs); color: var(--ink-300); }
   .ask-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -3717,10 +3773,13 @@
   .ask-msg.user { align-self: flex-end; background: var(--green-500); color: var(--white); border-radius: 14px 14px 4px 14px; }
   .ask-msg.tilli { align-self: flex-start; background: var(--surface-100); color: var(--ink-700); border-radius: 14px 14px 14px 4px; }
   .ask-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: auto 0; text-align: center; color: var(--ink-300); font-size: var(--fs-sm); max-width: 240px; align-self: center; line-height: 1.5; }
-  .ask-foot { padding: 14px 18px 18px; border-top: 1px solid var(--line-200); }
-  .ask-input { width: 100%; border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 12px 14px; font-size: var(--fs-sm); color: var(--ink-900); resize: none; outline: none; background: var(--white); line-height: 1.45; font-family: var(--font-body); }
+  .ask-foot { padding: 10px 12px 12px; border-top: 1px solid var(--line-200); }
+  .ask-compose { display: flex; align-items: flex-end; gap: 8px; }
+  .ask-input { flex: 1; min-width: 0; border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 10px 12px; font-size: var(--fs-sm); color: var(--ink-900); resize: none; outline: none; background: var(--white); line-height: 1.45; font-family: var(--font-body); }
   .ask-input:focus { border-color: var(--focus); }
-  .ask-foot .btn { margin-top: 10px; }
+  .ask-sendbtn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: none; border-radius: var(--radius-md); background: var(--green-500); color: var(--white); cursor: pointer; }
+  .ask-sendbtn:hover:not(:disabled) { background: var(--green-600); }
+  .ask-sendbtn:disabled { opacity: .5; cursor: default; }
   /* ask tilli (full screen — nav destination) */
   .dash-col.ask-mode { height: 100vh; height: 100dvh; }
   .dash-main.ask-mode { padding: 0; max-width: none; display: flex; min-height: 0; }
@@ -4447,7 +4506,9 @@
     .dash-main { padding: 16px 16px 90px; }
     .dash-header { padding: 12px 16px 6px; }
     .two-col { grid-template-columns: 1fr; }
-    .ask-panel { top: 12%; border-radius: var(--radius-card) var(--radius-card) 0 0; }
+    /* Phones: the bubble lives in the bottom nav, so the chat is a bottom sheet over a scrim. */
+    .ask-panel { top: 12%; left: 0; right: 0; bottom: 0; width: auto; max-width: none; height: auto; border-radius: var(--radius-card) var(--radius-card) 0 0; transform-origin: bottom center; }
+    .ask-scrim { display: block; background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
     /* Insights: reflow every multi-column grid to a single readable column. */
     .sb-grid, .pv-grid { grid-template-columns: 1fr; }
     .cmp2-row { grid-template-columns: 96px 1fr; gap: 10px; }

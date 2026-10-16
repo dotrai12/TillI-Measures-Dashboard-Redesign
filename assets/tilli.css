@@ -862,8 +862,9 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
   position: fixed; right: var(--tf-right); bottom: calc(var(--tf-bottom) + env(safe-area-inset-bottom));
   z-index: 55; display: flex; flex-direction: column; align-items: flex-end; gap: var(--tf-gap);
   font-family: var(--font-body);
+  will-change: transform;   /* keeps the drag + corner glide on the GPU (no jank) */
 }
-.tf-row { display: flex; align-items: center; gap: 10px; }
+.tf-row { position: relative; display: flex; align-items: center; }
 .tf-row[hidden] { display: none; }
 .tf-bubble {
   flex: none; display: grid; place-items: center; border: none; cursor: pointer;
@@ -884,15 +885,33 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 .tf-help { width: var(--tf-help-size); height: var(--tf-help-size); box-shadow: var(--shadow-pop), 0 0 0 4px color-mix(in srgb, var(--tf-bubble-bg) 35%, transparent); }
 .tf-help svg { width: 22px; height: 22px; }
 .tf-stack.pop-open .tf-help { background: var(--tf-bubble-bg-hover); }
+/* Ask bubble icon: chat ↔ × while the page's chat window is open (TilliFloat.setAskOpen). */
+.tf-ic-chat, .tf-ic-close { display: grid; place-items: center; }
+.tf-ic-close { display: none; }
+.tf-stack.ask-open .tf-ic-chat { display: none; }
+.tf-stack.ask-open .tf-ic-close { display: grid; }
+.tf-stack.ask-open .tf-row-ask .tf-label { display: none; }
+/* Drag to move (float-help.js): no touch scrolling from a bubble; while dragging, no hover lift / labels. */
+.tf-bubble { touch-action: none; }
+.tf-stack.dragging .tf-bubble { cursor: grabbing; transform: none; }
+.tf-stack.dragging .tf-label { opacity: 0 !important; }
+/* Moved to the left half → labels sit right of the bubbles; card opens from the left edge.
+   Only the label side flips (labels are absolutely placed), so the bubbles never shift
+   inside the stack — the corner snap stays one clean glide. */
+.tf-stack.tf-left .tf-label { right: auto; left: calc(100% + 10px); transform: translate(-6px, -50%); }
+.tf-stack.tf-left .tf-pop { right: auto; left: 0; }
+/* Moved to the top half → the help card opens below instead of above. */
+.tf-stack.tf-top .tf-pop { bottom: auto; top: calc(100% + 10px); }
 
 /* Label pill beside a bubble — revealed on hover / keyboard focus. */
 .tf-label {
+  position: absolute; top: 50%; right: calc(100% + 10px);   /* floats beside the bubble — takes no layout space */
   background: var(--white); color: var(--ink-900); border: 1px solid var(--line-200);
   border-radius: var(--radius-pill); padding: 8px 14px; font-weight: 700; font-size: var(--fs-sm);
   white-space: nowrap; box-shadow: var(--shadow-pop); pointer-events: none;
-  opacity: 0; transform: translateX(6px); transition: opacity .15s, transform .15s;
+  opacity: 0; transform: translate(6px, -50%); transition: opacity .15s, transform .15s;
 }
-.tf-row:hover .tf-label, .tf-row:focus-within .tf-label { opacity: 1; transform: none; }
+.tf-row:hover .tf-label, .tf-row:focus-within .tf-label { opacity: 1; transform: translate(0, -50%); }
 .tf-stack.pop-open .tf-label { opacity: 0; }
 
 /* Help card — opens above the stack. */
