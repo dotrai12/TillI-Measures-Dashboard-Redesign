@@ -10,6 +10,12 @@
         "import os,sys,http.server,socketserver; os.chdir('/private/tmp/claude-501/-Users-dotrai-Desktop-Tilli-Tilli-Measures-Dashboard/81dbb17f-2fc2-4307-a247-060f0047ba71/scratchpad/site'); http.server.test(HandlerClass=http.server.SimpleHTTPRequestHandler, port=8765, bind='127.0.0.1')"
       ],
       "port": 8765
+    },
+    {
+      "name": "dashboard-preview",
+      "runtimeExecutable": "/usr/bin/python3",
+      "runtimeArgs": ["-I", "-m", "http.server", "8766", "--bind", "127.0.0.1", "--directory", "/Users/dotrai/Desktop/Tilli/Tilli Measures Dashboard"],
+      "port": 8766
     }
   ]
 }

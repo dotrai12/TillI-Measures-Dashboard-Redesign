@@ -184,17 +184,19 @@
   // Wrap an already-safe label so hovering it (and the little ⓘ) shows `text`.
   // `cls` adds tooltip modifiers, e.g. 'down', 'down end'.
   function withInfo(labelHTML, text, cls) {
-    return '<span class="ad-tip' + (cls ? ' ' + cls : '') + '" data-tip="' + esc(text) + '" tabindex="0">' +
-      labelHTML + '<span class="ad-info" aria-hidden="true">i</span></span>';
+    return '<span class="ui-tooltip help' + (cls ? ' ' + cls : '') + '" data-tip="' + esc(text) + '" tabindex="0">' +
+      labelHTML + '<span class="ui-info" aria-hidden="true">i</span></span>';
   }
 
   // ---------- band rendering (shared by Outcomes + Reports) ----------
+  // Look = .ui-bandbar (tilli.css), shared with the teacher dashboard. `hero` = the
+  // one big bar per screen (22px); every other bar is the 14px default.
   // `targetSecure` (optional) draws a target marker on the bar (feedback §2):
   // Secure is the right-most segment, so an N% Blooming target sits at (100−N)%
   // from the left — the green block should reach that line.
-  function bandBar(dist, slim, targetSecure) {
+  function bandBar(dist, hero, targetSecure) {
     var p = dist.pct;
-    var bar = '<div class="ad-bar' + (slim ? ' slim' : '') + '" role="img" aria-label="' +
+    var bar = '<div class="ui-bandbar' + (hero ? ' hero' : '') + '" role="img" aria-label="' +
       AD.bands.map(function (b) { return b.label + ' ' + p[b.key] + '%'; }).join(', ') + '">' +
       AD.bands.map(function (b) { return p[b.key] > 0 ? '<span style="width:' + p[b.key] + '%;background:' + b.color + '"></span>' : ''; }).join('') +
       '</div>';
@@ -212,7 +214,7 @@
   }
   function bandLegend() {
     return '<div class="ui-legend">' + AD.bands.map(function (b) {
-      return '<span class="ad-tip" data-tip="' + esc(TIP[b.key] || '') + '" tabindex="0"><i style="background:' + b.color + '"></i>' + b.label + '</span>';
+      return '<span class="ui-tooltip help" data-tip="' + esc(TIP[b.key] || '') + '" tabindex="0"><i style="background:' + b.color + '"></i>' + b.label + '</span>';
     }).join('') + '</div>';
   }
   // Cadence label — every periodic module carries one (spec §3).
@@ -223,24 +225,24 @@
     var pt = AD.points.find(function (p) { return p.key === pointKey; }) || AD.latestComplete;
     if (!pt) return '';   // no completed point yet (No-data lifecycle state)
     var next = nextPoint();
-    return '<span class="ad-cadence ad-tip end" data-tip="' + esc(TIP.cadence) + '" tabindex="0">' + esc(pointLabel(pt)) +
+    return '<span class="ui-chip info ad-cadence ui-tooltip help end" data-tip="' + esc(TIP.cadence) + '" tabindex="0">' + esc(pointLabel(pt)) +
       (next ? '<span class="next">Next: ' + esc(pointLabel(next)) + '</span>' : '') +
-      '<span class="ad-info" aria-hidden="true">i</span></span>';
+      '<span class="ui-info" aria-hidden="true">i</span></span>';
   }
   // "n = 24 children" — and a caution when a group is too small to read as a verdict.
   var SMALL_N = 10;
   function nNote(n) {
     var line = '<span class="ad-n">n = ' + n + (n === 1 ? ' child' : ' children') + '</span>';
     if (n >= SMALL_N || n < 1) return line;
-    return line + ' <span class="ad-small ad-tip" data-tip="' + esc(TIP.smallN) + '" tabindex="0">Small group — one child shifts this by ~' + Math.round(100 / n) + ' points</span>';
+    return line + ' <span class="ui-chip warn ad-small ui-tooltip help" data-tip="' + esc(TIP.smallN) + '" tabindex="0">Small group — one child shifts this by ~' + Math.round(100 / n) + ' points</span>';
   }
   // Focus areas / Strengths pair (weakest + strongest skills by % Blooming).
   function gsPair(students, point, wrapCls) {
     var gs = AD.growthStrength(students, point, 2), em = AD.bandMeta('emerging'), se = AD.bandMeta('secure');
     var list = function (rows) { return '<ul>' + rows.map(function (x) { return '<li>' + esc(x.name) + '<span class="p">' + x.secure + '% blooming</span></li>'; }).join('') + '</ul>'; };
     return '<div class="' + (wrapCls || 'ad-grid two') + '">' +
-      '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4>Where to help next</h4>' + list(gs.growth) + '</div>' +
-      '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4>What’s going well</h4>' + list(gs.strength) + '</div></div>';
+      '<div class="ad-gs" style="--band:' + em.color + ';--bandwash:' + em.wash + '"><h4 class="ui-title md">Where to help next</h4>' + list(gs.growth) + '</div>' +
+      '<div class="ad-gs" style="--band:' + se.color + ';--bandwash:' + se.wash + '"><h4 class="ui-title md">What’s going well</h4>' + list(gs.strength) + '</div></div>';
   }
 
   // ============================================================
@@ -345,7 +347,7 @@
     // faded ticks for points that aren't measured yet (time view only)
     var futTicks = opts.showFuture ? AD.points.filter(function (p) { return p.status !== 'complete'; }).map(function (p) {
       var r = AD.pointRange(p);
-      return '<span class="ad-progfut"><i>' + esc(p.label) + '</i>' + esc(p.status === 'open' ? 'collecting now' : (r || 'not yet measured')) + '</span>';
+      return '<span class="ui-metachip dashed ad-progfut"><i>' + esc(p.label) + '</i>' + esc(p.status === 'open' ? 'collecting now' : (r || 'not yet measured')) + '</span>';
     }).join('') : '';
     return '<div class="ad-progchart"><svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Band distribution across assessment points">' +
       grid + areas + lines + dots + overlay + '</svg></div>' + (futTicks ? '<div class="ad-progfuts">' + futTicks + '</div>' : '');
@@ -449,6 +451,7 @@
   //  CHROME (sidebar / header / bottom nav)
   // ========================================================
   var ICONS = {
+    send: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/></svg>',
     asktilli: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg>',
     overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
     implementation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>',
@@ -551,6 +554,7 @@
     closeAcctMenu();
     app.innerHTML = chromeHTML(r);
     app.classList.toggle('ask-mode', r.screen === 'asktilli');   // Ask Tilli is full-bleed, like the teacher view
+    if (r.screen !== 'overview') removeDlGUI();   // dandelion tuning panel lives on Overview only
     placeStatePanel();
     var body = document.getElementById('ad-main-body');
     if (!loadedScreens[r.screen]) {
@@ -617,100 +621,513 @@
   // One headline (is it working + direction of travel), one sub-line
   // (adoption + children moved + window), and a pooled band bar with the
   // Secure target marked. Adapts to every lifecycle state.
-  // ---------- Overview hero ----------
-  // ONE thing to look at (like the teacher garden): the big number, one line
-  // on what it means, the band bar, and a quiet footer with counts + the link.
-  function heroHTML() {
-    var v = AD.leadershipVerdict();
-    var teachersWithSection = AD.teachers.filter(function (t) { return AD.sections.some(function (sd) { return sd.teacherId === t.id; }); }).length;
-    var meta = countNoun(AD.students.length, 'child', 'children') + ' · ' + countNoun(AD.sections.length, 'section', 'sections') + ' · ' + countNoun(teachersWithSection, 'teacher', 'teachers');
-    if (!v.hasOutcomes) {
-      return '<div class="ov-hero">' +
-        '<div class="ov-hero-main"><div class="ov-kicker">' + esc((v.openPoint ? v.openPoint.label : 'Baseline') + ' is under way') + '</div>' +
-          '<div class="ov-big">Nothing measured yet</div>' +
-          '<p class="ov-line">Your first results arrive as soon as it closes.</p></div>' +
-        '<div class="ov-hero-foot"><span>' + esc(meta) + '</span></div></div>';
-    }
-    var line, cls = '';
-    if (v.deltaSecure == null) line = 'Your starting point — everything from here is growth you' + '’' + 'll be able to see.';
-    else if (v.deltaSecure > 0) { cls = ' up'; line = 'Up ' + v.deltaSecure + ' points since Baseline' + (v.movementAvail && v.childrenUp ? ' · ' + v.childrenUp + ' of ' + v.childrenN + ' children moved up a band' : '') + '.'; }
-    else if (v.deltaSecure < 0) { cls = ' down'; line = 'Down ' + Math.abs(v.deltaSecure) + ' points since Baseline — dips happen mid-year; see where to help next.'; }
-    else line = 'Holding steady since Baseline.';
-    var d = schoolDistAllSkills(v.point.key);
-    return '<div class="ov-hero">' +
-      '<div class="ov-hero-main">' +
-        '<div class="ov-kicker">' + esc(pointLabel(v.point)) + '</div>' +
-        '<div class="ov-numrow"><span class="ov-num">' + v.pctSecure + '%</span><span class="ov-numlbl">of skill ratings are Blooming</span></div>' +
-        '<p class="ov-line' + cls + '">' + esc(line) + '</p></div>' +
-      '<div class="ov-hero-bar">' + bandBar(d, false, v.targetSecure) + '<div class="ov-legend">' + bandLegend() + '</div></div>' +
-      '<div class="ov-hero-foot"><span>' + esc(meta) + '</span><button class="btn-link" data-tooutcomes="1">View outcomes →</button></div>' +
-    '</div>';
+  // ---------- Overview hero: the dandelion school ----------
+  // A fractal radial tree: focus hub → its children → … → one dot per child.
+  // The same shape repeats at every level (school › grade › section), and the
+  // focus lives in the URL (?grade= / ?section=) so browser Back walks up.
+  // Hubs are clickable ONE level down (or the centre, one level up); children
+  // are never clickable or hoverable (groups-only rule, spec §2).
+  // Two modes: 'checkin' (who's been assessed in the open window) and
+  // 'results' (bands at the latest completed point).
+  var DL_CFG = {
+    gradeDist: 120,      // school hub → grade hub
+    sectionDist: 100,    // grade hub → section hub
+    kidDist: 46,         // section hub → child dot
+    sectionSpread: 140,  // fan of sections around their grade's outward direction (deg)
+    kidSpread: 330,      // fan of children around their section (deg; 360 = full burst)
+    rootAngle: 180,      // direction of the first branch from the centre (deg; 0 = right)
+    kidJitter: 0.18,     // ± share of random variation in child spoke length
+    rootR: 18,           // centre hub radius
+    hubR: 9,             // grade/section hub radius
+    hubRing: 3.5,        // donut ring width on hubs
+    kidR: 3.6,           // child dot radius (at school zoom)
+    sizeBoost: 0.55,     // 0 = dots keep their size when zoomed in, 1 = they grow with the zoom
+    lineW: 1,            // spoke width
+    zoomMs: 650,         // click-to-zoom duration
+    growMs: 700,         // grow-in duration after a zoom
+    childRule: 'mean',   // child colour: 'mean' = band of average score, 'mode' = most common band
+  };
+  var DL_DEFAULTS = Object.assign({}, DL_CFG);
+  var DL_W = 600;   // viewBox width; height follows the tree's aspect
+
+  // Scope from route params → { level, grade, sectionId }.
+  function dlScope(params) {
+    var sd = params.section && AD.sections.find(function (s) { return s.id === params.section; });
+    if (sd) return { level: 'section', grade: sd.grade, sectionId: sd.id };
+    if (params.grade && AD.grades.indexOf(params.grade) >= 0) return { level: 'grade', grade: params.grade };
+    return { level: 'school' };
+  }
+  function dlModes() {
+    var m = [];
+    if (AD.openPoint) m.push('checkin');
+    if (AD.latestComplete) m.push('results');
+    return m;
+  }
+  function dlMode(params) {
+    var m = dlModes();
+    return m.indexOf(params.view) >= 0 ? params.view : m[0] || 'checkin';
   }
 
+  // Tree for the focused node. Kid nodes carry their student (never rendered as a name).
+  function dlTree(scope) {
+    function kidNodes(sd) { return AD.studentsInSection(sd).map(function (s) { return { type: 'kid', id: s.adm, student: s }; }); }
+    function secNode(sd) { return { type: 'section', id: sd.id, name: sd.name, grade: sd.grade, teacher: AD.teacherFor(sd), children: kidNodes(sd) }; }
+    function gradeNode(g) { return { type: 'grade', id: g, name: g, children: AD.sections.filter(function (s) { return s.grade === g; }).map(secNode) }; }
+    if (scope.level === 'section') return secNode(AD.sections.find(function (s) { return s.id === scope.sectionId; }));
+    if (scope.level === 'grade') return gradeNode(scope.grade);
+    return { type: 'school', id: 'school', name: (AD.school && AD.school.name) || 'Your school', children: AD.grades.map(gradeNode) };
+  }
+  function dlStudents(node) {
+    if (node.type === 'kid') return [node.student];
+    return node.children.reduce(function (a, c) { return a.concat(dlStudents(c)); }, []);
+  }
+
+  // Radial layout in layout units, root at (0,0). Each child fans around its
+  // parent's outward direction, so every subtree reads as its own burst.
+  function dlLayout(root) {
+    var DIST = { grade: DL_CFG.gradeDist, section: DL_CFG.sectionDist, kid: DL_CFG.kidDist };
+    var SPREAD = { grade: 360, section: DL_CFG.sectionSpread, kid: DL_CFG.kidSpread };
+    var nodes = [];
+    (function place(n, x, y, dir, depth, parent) {
+      n.x = x; n.y = y; n.dir = dir; n.depth = depth; n.parent = parent; nodes.push(n);
+      var kids = n.children || [], k = kids.length; if (!k) return;
+      var full = depth === 0;   // the focus hub's children ring all the way round
+      var spread = full ? 360 : SPREAD[kids[0].type];
+      kids.forEach(function (c, i) {
+        var a = full ? DL_CFG.rootAngle + i * 360 / k : dir - spread / 2 + (i + 0.5) * spread / k;
+        var d = DIST[c.type];
+        if (c.type === 'kid') d *= 1 + DL_CFG.kidJitter * ((hashStr(c.id) % 1000) / 500 - 1);
+        var rad = a * Math.PI / 180;
+        place(c, x + d * Math.cos(rad), y + d * Math.sin(rad), a, depth + 1, n);
+      });
+    })(root, 0, 0, DL_CFG.rootAngle, 0, null);
+    return nodes;
+  }
+  function hashStr(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+  // Fit layout units into the viewBox. `k` = layout→viewBox scale; zoom `z`
+  // compares it with the whole-school scale so dots can grow when zoomed in.
+  function dlFit(nodes) {
+    var ext = nodes.reduce(function (e, n) { return { x: Math.max(e.x, Math.abs(n.x)), y: Math.max(e.y, Math.abs(n.y)) }; }, { x: 1, y: 1 });
+    var pad = 34, k = (DL_W / 2 - pad) / Math.max(ext.x, ext.y * 0.9);
+    var H = Math.round(Math.min(DL_W, Math.max(DL_W * 0.62, 2 * (ext.y * k + pad))));
+    k = Math.min(k, (H / 2 - pad) / ext.y);
+    return { k: k, H: H };
+  }
+  var dlSchoolK = null;
+  function dlZoom(k) {
+    if (dlSchoolK == null) dlSchoolK = dlFit(dlLayout(dlTree({ level: 'school' }))).k;
+    return Math.max(1, k / dlSchoolK);
+  }
+
+  // Colours
+  var DL_STATUS = {
+    done:  { label: 'Assessed',    color: 'var(--status-done-dot)' },
+    draft: { label: 'In progress', color: 'var(--lvl-2)' },
+    none:  { label: 'Not started', color: 'var(--ink-300)' },
+  };
+  function dlKidBand(st, pt) {
+    var f = pt.scoreField;
+    if (DL_CFG.childRule === 'mode') {
+      var c = { emerging: 0, developing: 0, secure: 0 };
+      st.skills.forEach(function (sk) { c[AD.bandOf(sk[f])]++; });
+      return ['secure', 'developing', 'emerging'].reduce(function (b, k) { return c[k] > c[b] ? k : b; }, 'emerging');
+    }
+    return AD.bandOf(AD.meanScore(st, f));
+  }
+  // Segments [{color, share}] for a hub's donut ring.
+  function dlMix(students, mode) {
+    if (mode === 'checkin') {
+      var c = { done: 0, draft: 0, none: 0 };
+      students.forEach(function (s) { c[AD.checkinStatus(s) || 'none']++; });
+      return { counts: c, segs: ['done', 'draft', 'none'].map(function (k) { return { color: DL_STATUS[k].color, share: students.length ? c[k] / students.length : 0 }; }) };
+    }
+    var d = dlDist(students, AD.latestComplete.key);
+    return { dist: d, segs: AD.bands.map(function (b) { return { color: b.color, share: d.n ? d.counts[b.key] / d.n : 0 }; }) };
+  }
+  // Pooled skill-reading distribution for any set of students.
+  function dlDist(students, pointKey) {
+    var c = { emerging: 0, developing: 0, secure: 0 }, n = 0;
+    var f = AD.points.find(function (p) { return p.key === pointKey; }).scoreField;
+    students.forEach(function (st) { st.skills.forEach(function (sk) { c[AD.bandOf(sk[f])]++; n++; }); });
+    var p = function (x) { return n ? Math.round(x / n * 100) : 0; };
+    return { n: n, counts: c, pct: { emerging: p(c.emerging), developing: p(c.developing), secure: p(c.secure) } };
+  }
+
+  function dlArc(cx, cy, r, a0, a1) {
+    if (a1 - a0 >= Math.PI * 2 - 1e-6) a1 = a0 + Math.PI * 2 - 1e-4;
+    var x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    return 'M' + x0.toFixed(2) + ' ' + y0.toFixed(2) + 'A' + r + ' ' + r + ' 0 ' + (a1 - a0 > Math.PI ? 1 : 0) + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2);
+  }
+  function dlHubSVG(cx, cy, r, ring, segs, core) {
+    var out = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" style="fill:' + core + '"/>';
+    var a = -Math.PI / 2, rr = r - ring / 2;
+    segs.forEach(function (s) {
+      if (s.share <= 0) return;
+      var b = a + s.share * Math.PI * 2;
+      out += '<path d="' + dlArc(cx, cy, rr, a, b) + '" fill="none" stroke-width="' + ring + '" style="stroke:' + s.color + '"/>';
+      a = b;
+    });
+    return out;
+  }
+
+  function dlSummary(node, mode) {
+    var studs = dlStudents(node), mix = dlMix(studs, mode);
+    if (mode === 'checkin') return { n: studs.length, text: mix.counts.done + ' of ' + studs.length + ' assessed' + (mix.counts.draft ? ' · ' + mix.counts.draft + ' in progress' : ''), mix: mix };
+    return { n: studs.length, text: mix.dist.pct.secure + '% Blooming', mix: mix };
+  }
+
+  // Can this hub be clicked from the current focus? One level down, or the centre (one up).
+  function dlNav(n, scope) {
+    if (n.type === 'kid') return null;
+    if (n.depth === 0) return scope.level === 'school' ? null : 'up';
+    return n.depth === 1 ? 'down' : null;
+  }
+  function dlParamsFor(n) {
+    if (n.type === 'grade') return { grade: n.id };
+    if (n.type === 'section') return { grade: n.grade, section: n.id };
+    return {};
+  }
+  function dlUpParams(scope) { return scope.level === 'section' ? { grade: scope.grade } : {}; }
+
+  function dandelionSVG(scope, mode, animate) {
+    var root = dlTree(scope), nodes = dlLayout(root), fit = dlFit(nodes), k = fit.k, H = fit.H;
+    var z = Math.pow(dlZoom(k), DL_CFG.sizeBoost);
+    var cx = DL_W / 2, cy = H / 2;
+    nodes.forEach(function (n) { n.vx = +(cx + n.x * k).toFixed(2); n.vy = +(cy + n.y * k).toFixed(2); });
+    var pt = AD.latestComplete, g = DL_CFG.growMs, step = g / 3;
+    var lines = '', dots = '', hubs = '', labels = '';
+    nodes.forEach(function (n, i) {
+      var delay = Math.round(n.depth * step * 0.8 + (n.type === 'kid' ? (i % 25) * 6 : 0));
+      var st = 'style="--dl-delay:' + delay + 'ms"';
+      if (n.parent) {
+        var w = n.type === 'kid' ? DL_CFG.lineW * 0.6 : n.type === 'section' ? DL_CFG.lineW : DL_CFG.lineW * 1.4;
+        lines += '<line class="dl-spoke" pathLength="1" ' + st + ' data-dl-sub="' + esc(dlBranchOf(n)) + '" x1="' + n.parent.vx + '" y1="' + n.parent.vy + '" x2="' + n.vx + '" y2="' + n.vy + '" stroke-width="' + w + '"/>';
+      }
+      if (n.type === 'kid') {
+        var r = DL_CFG.kidR * z, fill, stroke = '';
+        if (mode === 'checkin') {
+          var s = AD.checkinStatus(n.student) || 'none';
+          fill = s === 'none' ? 'var(--white)' : DL_STATUS[s].color;
+          if (s === 'none') stroke = ';stroke:' + DL_STATUS.none.color + ';stroke-width:' + Math.max(1, r * 0.35);
+        } else fill = AD.bandMeta(dlKidBand(n.student, pt)).color;
+        dots += '<circle class="dl-kid" data-dl-sub="' + esc(dlBranchOf(n)) + '" cx="' + n.vx + '" cy="' + n.vy + '" r="' + r.toFixed(2) + '" style="--dl-delay:' + delay + 'ms;fill:' + fill + stroke + '"/>';
+        return;
+      }
+      var sum = dlSummary(n, mode), nav = dlNav(n, scope);
+      var hr = (n.depth === 0 ? DL_CFG.rootR : DL_CFG.hubR) * (n.depth === 0 ? 1 : z);
+      var core = n.depth === 0 ? PAL.RING_PETALS[0] : 'var(--white)';
+      var tip = '<b>' + esc(n.name) + '</b>' + (n.teacher ? '<span>' + esc(n.teacher) + '</span>' : '') +
+        '<span>' + countNoun(sum.n, 'child', 'children') + ' · ' + esc(sum.text) + '</span>' +
+        (nav === 'down' ? '<em>Click to open</em>' : nav === 'up' ? '<em>Click to go back up</em>' : '');
+      hubs += '<g class="dl-hub' + (nav ? ' nav' : '') + '" ' + st + ' data-dl-sub="' + esc(dlBranchOf(n)) + '" data-dl-id="' + esc(n.id) + '" data-dl-tip="' + esc(tip) + '"' +
+        (nav ? ' data-dl-nav="' + nav + '" tabindex="0" role="button" aria-label="' + esc((nav === 'up' ? 'Back up from ' : 'Open ') + n.name + ', ' + sum.text) + '"' : '') +
+        ' data-dl-x="' + n.vx + '" data-dl-y="' + n.vy + '">' +
+        '<circle class="dl-hit" cx="' + n.vx + '" cy="' + n.vy + '" r="' + (hr + 6) + '"/>' +
+        dlHubSVG(n.vx, n.vy, hr, Math.min(hr * 0.75, DL_CFG.hubRing * (n.depth === 0 ? 1.6 : z)), sum.mix.segs, core) + '</g>';
+      // Name labels on the focus hub's direct children (orientation, not data).
+      if (n.depth === 1) {
+        var ly = n.vy + hr + 14;
+        labels += '<span class="dl-label" style="left:' + (n.vx / DL_W * 100) + '%;top:' + (ly / H * 100) + '%">' + esc(n.type === 'section' && scope.level === 'grade' ? n.name.replace(n.grade + ' ', 'Section ') : n.name) + '</span>';
+      }
+    });
+    return '<div class="dl-stage' + (animate ? ' grow' : '') + '" style="--dl-grow:' + g + 'ms;--dl-zoom:' + DL_CFG.zoomMs + 'ms">' +
+      '<svg class="dl-svg" viewBox="0 0 ' + DL_W + ' ' + H + '" role="img" aria-label="' + esc(root.name + ': ' + dlSummary(root, mode).text) + '">' +
+        '<g class="dl-world" data-dl-cx="' + cx + '" data-dl-cy="' + cy + '">' + lines + dots + hubs + '</g></svg>' +
+      labels + '<div class="dl-tip" role="tooltip" hidden></div></div>';
+  }
+  // Which focus-child branch a node belongs to (used to keep the clicked branch visible while zooming).
+  function dlBranchOf(n) { var a = n; while (a.parent && a.parent.parent) a = a.parent; return a.parent ? a.id : ''; }
+
+  function dlPanelHTML(scope, mode) {
+    var root = dlTree(scope), studs = dlStudents(root), n = studs.length;
+    var where = scope.level === 'school' ? 'Whole school' : root.name;
+    if (mode === 'checkin') {
+      var op = AD.openPoint, left = AD.daysLeft(op), c = dlMix(studs, 'checkin').counts;
+      var pct = function (x) { return n ? Math.round(x / n * 100) : 0; };
+      var bar = '<div class="ui-bandbar hero" role="img" aria-label="Assessed ' + c.done + ', in progress ' + c.draft + ', not started ' + c.none + '">' +
+        ['done', 'draft', 'none'].map(function (k) { return c[k] ? '<span style="width:' + pct(c[k]) + '%;background:' + DL_STATUS[k].color + '"></span>' : ''; }).join('') + '</div>';
+      var legend = '<div class="ui-legend">' + ['done', 'draft', 'none'].map(function (k) { return '<span><i style="background:' + DL_STATUS[k].color + '"></i>' + DL_STATUS[k].label + '</span>'; }).join('') + '</div>';
+      return '<div class="ov-kicker">' + esc(where + ' · ' + op.label + ' check-in') + '</div>' +
+        '<div class="ov-numrow"><span class="ov-num">' + c.done + '</span><span class="ov-numlbl">of ' + countNoun(n, 'child', 'children') + ' assessed</span></div>' +
+        '<p class="ov-line">' + esc((c.draft ? c.draft + ' in progress · ' : '') + c.none + ' not started' + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go' : '') + '.') + '</p>' +
+        '<div class="dl-panel-bar">' + bar + '<div class="ov-legend">' + legend + '</div></div>';
+    }
+    var pt = AD.latestComplete, d = dlDist(studs, pt.key), line, cls = '';
+    var first = AD.completedPoints[0];
+    if (AD.completedPoints.length < 2) line = 'Your starting point — everything from here is growth you' + '’' + 'll be able to see.';
+    else {
+      var delta = d.pct.secure - dlDist(studs, first.key).pct.secure;
+      var m = AD.overallBandMovement(studs);
+      if (delta > 0) { cls = ' up'; line = 'Up ' + delta + ' points since ' + first.label + (m.avail && m.up ? ' · ' + m.up + ' of ' + m.n + ' children moved up a band' : '') + '.'; }
+      else if (delta < 0) { cls = ' down'; line = 'Down ' + Math.abs(delta) + ' points since ' + first.label + ' — dips happen mid-year; see where to help next.'; }
+      else line = 'Holding steady since ' + first.label + '.';
+    }
+    return '<div class="ov-kicker">' + esc(where + ' · ' + pointLabel(pt)) + '</div>' +
+      '<div class="ov-numrow"><span class="ov-num">' + d.pct.secure + '%</span><span class="ov-numlbl">of skill ratings are Blooming</span></div>' +
+      '<p class="ov-line' + cls + '">' + esc(line) + '</p>' +
+      '<div class="dl-panel-bar">' + bandBar(d, true) + '<div class="ov-legend">' + bandLegend() + '</div></div>' +
+      '<p class="dl-key">Each dot is one child' + '’' + 's overall band; rings show the mix of every skill rating.</p>';
+  }
+
+  function dandelionHTML(params, animate) {
+    var modes = dlModes();
+    if (!modes.length) return '<div class="ui-card ov-dl"><div class="dl-panel"><div class="ov-big">Nothing to show yet</div><p class="ov-line">Your school appears here once the first check-in opens.</p></div></div>';
+    var scope = dlScope(params), mode = dlMode(params), root = dlTree(scope);
+    var crumbs = '<div class="ui-crumbs dl-crumbs">' + (scope.level === 'school' ? '<span class="cur">School</span>' : '<button data-dl-crumb="school">School</button>');
+    if (scope.level !== 'school') crumbs += '<span class="sep">›</span>' + (scope.level === 'section' ? '<button data-dl-crumb="grade">' + esc(scope.grade) + '</button>' : '<span class="cur">' + esc(scope.grade) + '</span>');
+    if (scope.level === 'section') crumbs += '<span class="sep">›</span><span class="cur">' + esc(root.name) + '</span>';
+    crumbs += '</div>';
+    var seg = modes.length > 1 ? '<div class="ui-seg dl-seg" role="tablist" aria-label="What the dandelion shows">' + modes.map(function (m) {
+      return '<button role="tab" aria-selected="' + (m === mode) + '" class="' + (m === mode ? 'on' : '') + '" data-dl-mode="' + m + '">' + (m === 'checkin' ? 'Check-in' : 'Results') + '</button>';
+    }).join('') + '</div>' : '';
+    var outLink = mode === 'results' ? '<button class="btn-link" data-tooutcomes="1">View outcomes →</button>' : '';
+    return '<div class="ui-card ov-dl" id="ov-dl">' +
+      '<div class="dl-head">' + crumbs + seg + '</div>' +
+      '<div class="dl-viz" id="dl-viz">' + dandelionSVG(scope, mode, animate) + '</div>' +
+      '<div class="dl-panel">' + dlPanelHTML(scope, mode) + '</div>' +
+      '<div class="ov-hero-foot"><span>' + esc(nNoteText(dlStudents(root).length)) + '</span>' + outLink + '</div>' +
+    '</div>';
+  }
+  function nNoteText(n) { return 'n = ' + countNoun(n, 'child', 'children'); }
+
+  // Zoom toward the clicked hub (or out, for 'up'), then hand the new focus to the router.
+  var dlBusy = false;
+  function dlNavigate(params, toParams, hubEl, dir) {
+    if (dlBusy) return;
+    var mode = dlMode(params), next = Object.assign({}, toParams);
+    if (params.view) next.view = mode;
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var stage = document.querySelector('#ov-dl .dl-stage'), world = stage && stage.querySelector('.dl-world');
+    if (reduce || !world) { go('overview', next); return; }
+    dlBusy = true;
+    var cx = +world.dataset.dlCx, cy = +world.dataset.dlCy, x = +hubEl.dataset.dlX, y = +hubEl.dataset.dlY;
+    var s = dir === 'down' ? 2.4 : 0.45;
+    var tx = dir === 'down' ? cx - s * x : cx - s * cx, ty = dir === 'down' ? cy - s * y : cy - s * cy;
+    stage.classList.remove('grow');
+    stage.classList.add('leaving', dir);
+    if (dir === 'down') stage.querySelectorAll('[data-dl-sub]').forEach(function (el) { el.classList.toggle('keep', el.dataset.dlSub === hubEl.dataset.dlId); });
+    world.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
+    setTimeout(function () { dlBusy = false; go('overview', next); }, DL_CFG.zoomMs);
+  }
+
+  function wireDandelion(body, params) {
+    var card = body.querySelector('#ov-dl'); if (!card) return;
+    var scope = dlScope(params);
+    var stage = card.querySelector('.dl-stage'), tipEl = stage.querySelector('.dl-tip');
+    card.querySelectorAll('[data-dl-crumb]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var to = b.dataset.dlCrumb === 'school' ? {} : { grade: scope.grade };
+        var root = stage.querySelector('.dl-hub[data-dl-nav="up"]');
+        if (root) dlNavigate(params, to, root, 'up'); else go('overview', to);
+      });
+    });
+    card.querySelectorAll('[data-dl-mode]').forEach(function (b) {
+      b.addEventListener('click', function () { go('overview', Object.assign({}, dlParamsForScope(scope), { view: b.dataset.dlMode }), { replace: true }); });
+    });
+    stage.querySelectorAll('.dl-hub').forEach(function (h) {
+      function show() {
+        tipEl.innerHTML = h.dataset.dlTip; tipEl.hidden = false;
+        var sv = stage.querySelector('svg').getBoundingClientRect(), vb = stage.querySelector('svg').viewBox.baseVal;
+        var px = (+h.dataset.dlX) / vb.width * sv.width, py = (+h.dataset.dlY) / vb.height * sv.height;
+        tipEl.style.left = px + 'px'; tipEl.style.top = py + 'px';
+        tipEl.classList.toggle('below', py < 90);
+      }
+      function hide() { tipEl.hidden = true; }
+      h.addEventListener('mouseenter', show); h.addEventListener('mouseleave', hide);
+      h.addEventListener('focus', show); h.addEventListener('blur', hide);
+      var nav = h.dataset.dlNav; if (!nav) return;
+      function act() {
+        hide();
+        var n = { type: scope.level === 'school' ? 'grade' : 'section', id: h.dataset.dlId, grade: scope.grade };
+        dlNavigate(params, nav === 'up' ? dlUpParams(scope) : dlParamsFor(n), h, nav);
+      }
+      h.addEventListener('click', act);
+      h.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
+    });
+    card.querySelectorAll('[data-tooutcomes]').forEach(function (b) {
+      b.addEventListener('click', function () { go('outcomes', Object.assign({ point: AD.latestComplete.key }, dlParamsForScope(scope))); });
+    });
+  }
+  function dlParamsForScope(scope) {
+    if (scope.level === 'section') return { grade: scope.grade, section: scope.sectionId };
+    if (scope.level === 'grade') return { grade: scope.grade };
+    return {};
+  }
+  // GUI tweak → redraw just the dandelion, no grow-in.
+  function dlRedraw() {
+    var viz = document.getElementById('dl-viz'); if (!viz) return;
+    var params = currentRoute().params;
+    viz.innerHTML = dandelionSVG(dlScope(params), dlMode(params), false);
+    wireDandelion(document.getElementById('ad-main-body'), params);
+  }
+
+  // ---------- Dandelion tuning GUI (dev tooling — leave in place) ----------
+  var DL_CONTROLS = [
+    { key: 'gradeDist',     label: 'Grade Spoke Length',   min: 40,  max: 260,  step: 1,    tip: 'Distance from the school hub to each grade hub (layout units).' },
+    { key: 'sectionDist',   label: 'Section Spoke Length', min: 30,  max: 200,  step: 1,    tip: 'Distance from a grade hub to each of its section hubs.' },
+    { key: 'kidDist',       label: 'Child Spoke Length',   min: 14,  max: 120,  step: 1,    tip: 'Distance from a section hub to each child dot.' },
+    { key: 'sectionSpread', label: 'Section Fan Angle',    min: 20,  max: 360,  step: 1,    tip: 'How widely sections fan out around their grade, in degrees.' },
+    { key: 'kidSpread',     label: 'Child Fan Angle',      min: 60,  max: 360,  step: 1,    tip: 'How widely children fan out around their section, in degrees. 360 = full dandelion burst.' },
+    { key: 'rootAngle',     label: 'Start Angle',          min: 0,   max: 359,  step: 1,    tip: 'Direction of the first branch from the centre, in degrees (0 = right, 90 = down, 180 = left).' },
+    { key: 'kidJitter',     label: 'Child Spoke Jitter',   min: 0,   max: 0.6,  step: 0.01, tip: 'Random ± variation in child spoke length, as a share of the length. 0 = perfect circle.' },
+    { key: 'rootR',         label: 'Centre Hub Size',      min: 6,   max: 40,   step: 0.5,  tip: 'Radius of the centre (focused) hub.' },
+    { key: 'hubR',          label: 'Branch Hub Size',      min: 3,   max: 24,   step: 0.5,  tip: 'Radius of grade and section hubs (before zoom boost).' },
+    { key: 'hubRing',       label: 'Hub Ring Width',       min: 1,   max: 10,   step: 0.5,  tip: 'Thickness of the coloured mix ring around each hub.' },
+    { key: 'kidR',          label: 'Child Dot Size',       min: 1,   max: 10,   step: 0.1,  tip: 'Radius of each child dot at whole-school zoom.' },
+    { key: 'sizeBoost',     label: 'Zoom Size Boost',      min: 0,   max: 1,    step: 0.05, tip: 'How much dots and hubs grow when you zoom into a grade or section. 0 = same size, 1 = full zoom.' },
+    { key: 'lineW',         label: 'Spoke Width',          min: 0.2, max: 4,    step: 0.1,  tip: 'Stroke width of the spokes (child spokes are drawn at 60%).' },
+    { key: 'zoomMs',        label: 'Zoom Duration',        min: 0,   max: 2000, step: 10,   tip: 'Milliseconds for the click-to-zoom animation.' },
+    { key: 'growMs',        label: 'Grow-in Duration',     min: 0,   max: 2000, step: 10,   tip: 'Milliseconds for the branches to grow in after a zoom.' },
+    { key: 'childRule',     label: 'Child Colour Rule',    options: [['mean', 'Average score'], ['mode', 'Most common band']], tip: 'Results mode: colour each child by the band of their average score, or by the band most of their 12 skills fall in.' },
+  ];
+  var DL_GUI_KEY = 'tilliMeasures.dlGuiCollapsed';
+  function ensureDlGUI() {
+    var panel = document.getElementById('dl-gui');
+    if (panel) return;
+    panel = document.createElement('div');
+    panel.id = 'dl-gui';
+    var collapsed = false; try { collapsed = localStorage.getItem(DL_GUI_KEY) === '1'; } catch (e) {}
+    if (collapsed) panel.classList.add('collapsed');
+    function row(c) {
+      var input = c.options
+        ? '<select data-dlg-input="' + c.key + '">' + c.options.map(function (o) { return '<option value="' + o[0] + '"' + (DL_CFG[c.key] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'
+        : '<input type="range" data-dlg-input="' + c.key + '" min="' + c.min + '" max="' + c.max + '" step="' + c.step + '" value="' + DL_CFG[c.key] + '">';
+      return '<label title="' + esc(c.tip) + '"><span class="dlg-row"><span class="dlg-new">' + esc(c.label) + ' <span title="Newly added control">*</span></span>' +
+        (c.options ? '' : '<span class="dlg-val" data-dlg-val="' + c.key + '">' + DL_CFG[c.key] + '</span>') + '</span>' + input + '</label>';
+    }
+    panel.innerHTML = '<button class="dlg-head" data-dlg="toggle" title="Tuning controls for the Overview dandelion. Dev only. Click to show / hide."><b>Dandelion controls</b><span>▾</span></button>' +
+      '<div class="dlg-body">' + DL_CONTROLS.map(row).join('') +
+      '<div class="dlg-actions"><button data-dlg="reset" title="Reset every dandelion control to its default value">Reset</button>' +
+      '<button data-dlg="copy" class="primary" title="Copy the current dandelion values to the clipboard as JSON, ready to bake into DL_CFG">Copy values</button></div></div>';
+    document.body.appendChild(panel);
+    function refresh() {
+      DL_CONTROLS.forEach(function (c) {
+        var inp = panel.querySelector('[data-dlg-input="' + c.key + '"]'), val = panel.querySelector('[data-dlg-val="' + c.key + '"]');
+        if (inp) inp.value = DL_CFG[c.key]; if (val) val.textContent = DL_CFG[c.key];
+      });
+    }
+    panel.querySelectorAll('[data-dlg-input]').forEach(function (inp) {
+      inp.addEventListener(inp.tagName === 'SELECT' ? 'change' : 'input', function () {
+        var key = inp.dataset.dlgInput;
+        DL_CFG[key] = inp.tagName === 'SELECT' ? inp.value : parseFloat(inp.value);
+        var val = panel.querySelector('[data-dlg-val="' + key + '"]'); if (val) val.textContent = DL_CFG[key];
+        dlSchoolK = null; dlRedraw();
+      });
+    });
+    panel.querySelector('[data-dlg="toggle"]').addEventListener('click', function () {
+      panel.classList.toggle('collapsed');
+      try { localStorage.setItem(DL_GUI_KEY, panel.classList.contains('collapsed') ? '1' : '0'); } catch (e) {}
+    });
+    panel.querySelector('[data-dlg="reset"]').addEventListener('click', function () { Object.assign(DL_CFG, DL_DEFAULTS); dlSchoolK = null; refresh(); dlRedraw(); });
+    panel.querySelector('[data-dlg="copy"]').addEventListener('click', function (ev) {
+      try { navigator.clipboard.writeText(JSON.stringify(DL_CFG, null, 2)); } catch (e) {}
+      var b = ev.currentTarget, old = b.textContent; b.textContent = 'Copied ✓';
+      setTimeout(function () { b.textContent = old; }, 1200);
+    });
+  }
+  function removeDlGUI() { var p = document.getElementById('dl-gui'); if (p) p.remove(); }
+
+  // Overview reads top-down as: is data coming in → how are children doing →
+  // where to help. The help card only appears once the current window is
+  // fully collected or past its end date, so it never advises on half the data.
   SCREEN.overview = function (params, body) {
     var firstName = (me && me.name ? String(me.name).replace(/^[A-Z]\.\s*/, '').split(' ')[0] : '') || 'there';
-    var row = AD.completedPoints.length
-      ? '<div class="ov-row">' + windowCardHTML() + gsQuietHTML(AD.students, AD.latestComplete.key) + '</div>'
-      : '<div class="ov-row one">' + windowCardHTML() + '</div>';
-    body.innerHTML =
-      '<h1 class="ov-hello">' + esc(greetWord() + ', ' + firstName) + '</h1>' +
-      '<p class="ov-sub">Here' + '’' + 's where your school is this term.</p>' +
+    var op = AD.openPoint, cs = op ? AD.collectionStatus() : null;
+    var collected = !op || cs.allDone || AD.daysLeft(op) === 0;
+    var help = (collected && AD.latestComplete) ? '<div class="ov-row one">' + helpNextHTML(AD.latestComplete) + '</div>' : '';
+    // Landing screens (this + teacher My Garden) use the narrow column (--content-narrow).
+    body.innerHTML = '<div class="ui-narrow">' +
+      '<h1 class="ui-screen-title greet">' + esc(greetWord() + ', ' + firstName) + '</h1>' +
+      '<p class="ui-screen-sub">Here' + '’' + 's where your school is this term.</p>' +
       sinceLastVisitHTML() +
-      heroHTML() +
-      row;
+      glanceHTML() +
+      '<div class="ov-row one mb-gap">' + windowCardHTML(cs) + '</div>' +
+      dandelionHTML(params, true) +
+      help + '</div>';
 
     // wiring
     if (isCoordinator) body.querySelectorAll('[data-secdetail]').forEach(function (r) { r.addEventListener('click', function () { completionDetail(r.dataset.secdetail); }); });
-    body.querySelectorAll('[data-tooutcomes]').forEach(function (b) { b.addEventListener('click', function () { go('outcomes', { point: AD.latestComplete.key }); }); });
+    wireDandelion(body, params);
+    ensureDlGUI();
     body.querySelectorAll('[data-toroster]').forEach(function (b) { b.addEventListener('click', function () { go('roster', {}); }); });
   };
   function greetWord() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
 
-  // Where to help next / What's going well — one plain card; colour only in the dots.
-  function gsQuietHTML(students, point) {
-    var gs = AD.growthStrength(students, point, 2);
-    var list = function (rows, band) {
-      var c = AD.bandMeta(band).color;
-      return '<ul class="ov-list">' + rows.map(function (x) { return '<li><i style="background:' + c + '"></i><span>' + esc(x.name) + '</span><b>' + x.secure + '%</b></li>'; }).join('') + '</ul>';
-    };
-    return '<div class="ov-card">' +
-      '<h3 class="ov-card-t">Where to help next</h3>' + list(gs.growth, 'emerging') +
-      '<h3 class="ov-card-t mt">What' + '’' + 's going well</h3>' + list(gs.strength, 'secure') +
-      '<p class="ov-card-note">% of ratings at Blooming, whole school.</p></div>';
+  // School at a glance — headcounts only (staff = class teachers with a section).
+  function glanceHTML() {
+    var teachersWithSection = AD.teachers.filter(function (t) { return AD.sections.some(function (sd) { return sd.teacherId === t.id; }); }).length;
+    var kpi = function (n, lbl) { return '<div class="ui-card sm subtle ov-glance-k"><b>' + n + '</b><span>' + esc(lbl) + '</span></div>'; };
+    return '<div class="ov-glance">' +
+      kpi(AD.students.length, AD.students.length === 1 ? 'Student' : 'Students') +
+      kpi(teachersWithSection, teachersWithSection === 1 ? 'Teacher' : 'Teachers') +
+      kpi(AD.sections.length, AD.sections.length === 1 ? 'Section' : 'Sections') + '</div>';
+  }
+
+  // Where to help next — per grade, the skill with the fewest children
+  // Blooming, how many are still Sprouting in it, and one small step.
+  function helpNextHTML(pt) {
+    var c = AD.bandMeta('emerging').color;
+    var rows = AD.grades.map(function (g) {
+      var studs = AD.studentsInGrade(g); if (!studs.length) return '';
+      var sk = AD.growthStrength(studs, pt.key, 1).growth[0]; if (!sk) return '';
+      return '<li><div class="ov-help-h"><b>' + esc(g) + '</b><span>' + esc(sk.name) + '</span>' +
+          '<em><i style="background:' + c + '"></i>' + sk.emerging + '% Sprouting</em></div>' +
+        '<p>' + esc(AD.helpStep(sk.key)) + '</p></li>';
+    }).join('');
+    return '<div class="ui-card md tint-cyan"><div class="ui-eyebrow pill mb-3">Next step</div><h3 class="ui-title">Where to help next</h3>' +
+      '<p class="ov-card-line">One small step per grade for the children who are just starting out, from ' + esc(pt.label) + ' results.</p>' +
+      '<ul class="ov-help">' + rows + '</ul></div>';
   }
 
   // ---------- Assessment window card ----------
   // The one real "is it happening?" signal. Between windows it's a quiet
   // one-liner with a collapsible prep checklist; while a window is open it
-  // lists each section's completion (lowest first).
-  function windowCardHTML() {
+  // flags sections that haven't started or are well behind the furthest-
+  // along section, then lists each section's completion (lowest first).
+  function windowCardHTML(cs) {
     var op = AD.openPoint;
     if (!op) {
       var nx = nextPoint();
-      if (!nx) return '<div class="ov-card"><h3 class="ov-card-t">A full year of check-ins</h3><p class="ov-card-line">All three are done — thank you to every teacher who made it happen. Next year begins with a fresh Baseline.</p></div>';
+      if (!nx) return '<div class="ui-card md tint-green"><div class="ui-eyebrow pill mb-3">Year complete</div><h3 class="ui-title">A full year of check-ins</h3><p class="ov-card-line">All three are done — thank you to every teacher who made it happen. Next year begins with a fresh Baseline.</p></div>';
       var r = AD.pointRange(nx);
       var steps = [
         'The roster is up to date — new children added, leavers removed',
         'Teachers know when the window opens',
         'Families have linked their child, so parents can add their view',
       ];
-      return '<div class="ov-card"><h3 class="ov-card-t">Next up: ' + esc(nx.label) + '</h3>' +
+      return '<div class="ui-card md tint-green"><div class="ui-eyebrow pill mb-3">Coming up</div><h3 class="ui-title">Next up: ' + esc(nx.label) + '</h3>' +
         '<p class="ov-card-line">' + esc(r ? 'Runs ' + r + '.' : 'Dates coming soon from the Tilli team.') + '</p>' +
         '<details class="ov-prep"><summary>Prep checklist</summary><ul>' + steps.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
           (isCoordinator ? '<button class="btn-link" data-toroster="1">Check the roster →</button>' : '') + '</details></div>';
     }
-    var rows = AD.windowProgress().slice().sort(function (a, b) { return (a.completion.done / (a.completion.total || 1)) - (b.completion.done / (b.completion.total || 1)); });
-    var done = rows.reduce(function (a, x) { return a + x.completion.done; }, 0), total = rows.reduce(function (a, x) { return a + x.completion.total; }, 0);
+    cs = cs || AD.collectionStatus();
+    var rows = cs.rows.slice().sort(function (a, b) { return a.pct - b.pct; });
     var left = AD.daysLeft(op);
-    var line = done + ' of ' + countNoun(total, 'child', 'children') + ' assessed' + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go' : '') + '.';
+    var line = cs.done + ' of ' + countNoun(cs.total, 'child', 'children') + ' assessed' + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go' : '') + '.';
+
+    // Status first: the answer to "is data being collected?" before the list.
+    var flagged = rows.filter(function (a) { return a.flag; });
+    var status;
+    if (cs.allDone) status = '<div class="ov-collect ok">All ' + esc(op.label) + ' data is in — thank you, everyone.</div>';
+    else if (!cs.done) status = '<div class="ov-collect warn"><b>No check-ins recorded yet.</b> A quick reminder to teachers that ' + esc(op.label) + ' is open can get things started.</div>';
+    else if (!flagged.length) status = '<div class="ov-collect ok">Data is coming in steadily across every section.</div>';
+    else status = '<div class="ov-collect warn"><b>' + countNoun(flagged.length, 'section needs', 'sections need') + ' a hand</b>' +
+      '<ul>' + flagged.map(function (a) {
+        var who = '<b>' + esc(a.name) + '</b> (' + esc(a.teacher) + ')';
+        return '<li>' + (a.flag === 'stalled'
+          ? who + ' hasn' + '’' + 't started yet. A quick check-in could help.'
+          : who + ' is at ' + a.pct + '% while ' + esc(cs.lead.name) + ' is at ' + cs.lead.pct + '% — they may need a hand or a little more time.') + '</li>';
+      }).join('') + '</ul></div>';
+
     var list = '<ul class="ov-progress">' + rows.map(function (a) {
-      var pct = a.completion.total ? Math.round(a.completion.done / a.completion.total * 100) : 0;
-      return '<li' + (isCoordinator ? ' class="clickable" data-secdetail="' + a.id + '" title="See who' + '’' + 's still to do"' : '') + '>' +
+      var cls = (isCoordinator ? 'clickable' : '') + (a.flag ? ' flag' : '');
+      return '<li' + (cls ? ' class="' + cls.trim() + '"' : '') + (isCoordinator ? ' data-secdetail="' + a.id + '" title="See who' + '’' + 's still to do"' : '') + '>' +
         '<span class="nm">' + esc(a.name) + '<small>' + esc(a.teacher) + '</small></span>' +
-        '<span class="ui-meter"><span style="width:' + pct + '%"></span></span>' +
+        '<span class="ui-meter"><span style="width:' + a.pct + '%"></span></span>' +
         '<b>' + a.completion.done + ' of ' + a.completion.total + '</b></li>';
     }).join('') + '</ul>';
-    return '<div class="ov-card"><h3 class="ov-card-t">' + esc(op.label) + ' is open</h3><p class="ov-card-line">' + esc(line) + '</p>' + list + '</div>';
+    return '<div class="ui-card md tint-green"><div class="ui-eyebrow pill mb-3">Check-in open</div><h3 class="ui-title">' + esc(op.label) + ' is open</h3><p class="ov-card-line">' + esc(line) + '</p>' + status + list + '</div>';
   }
 
   // ---------- "Since your last visit" ----------
@@ -744,13 +1161,6 @@
     if (!parts.length) return '';
     var d = new Date(prevVisit.at), M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '<div class="ad-since"><span class="ad-since-h">Welcome back — since ' + d.getDate() + ' ' + M[d.getMonth()] + ':</span>' + parts.join('<span class="sep">·</span>') + '</div>';
-  }
-  // aggregate distribution across ALL skills school-wide (snapshot only)
-  function schoolDistAllSkills(pointKey) {
-    var c = { emerging: 0, developing: 0, secure: 0 }, n = 0;
-    var f = AD.points.find(function (p) { return p.key === pointKey; }).scoreField;
-    AD.students.forEach(function (st) { st.skills.forEach(function (sk) { c[AD.bandOf(sk[f])]++; n++; }); });
-    return { n: n, counts: c, pct: { emerging: Math.round(c.emerging / n * 100), developing: Math.round(c.developing / n * 100), secure: Math.round(c.secure / n * 100) } };
   }
 
   var cmpTwo = { a: null, b: null };  // "Compare two sections" picker state (Outcomes) — any two sections, school-wide
@@ -811,7 +1221,7 @@
       var snap = '<div class="ad-gradesnap">' +
         '<div class="ui-kpi"><div class="num">' + gd.pct.secure + '%</div>' +
           '<div class="lbl">' + esc(seMeta.label) + ' at ' + esc(gPt ? gPt.label : '') + '</div></div>' +
-        '<div class="gs-bar">' + bandBar(gd) + '<div style="margin-top:10px">' + bandLegend() + '</div></div></div>';
+        '<div class="gs-bar">' + bandBar(gd, true) + '<div style="margin-top:10px">' + bandLegend() + '</div></div></div>';
       var gNote = plural(gSecs.length, 'section') + ' · Open a section for its full skill view. ' + nNote(gStuds.length);
       navCards = '<div class="mb-gap">' + card(grade, gNote, snap + sectionNavHTML(grade, point), 'span2') + '</div>';
     }
@@ -844,9 +1254,9 @@
     // the children sit in. Used for the little status chip on each skill row.
     function cmpSkillVerdict(d) {
       var p = d.pct;
-      if (p.secure >= p.developing && p.secure >= p.emerging) return { label: 'Blooming', color: AD.bandMeta('secure').color };
-      if (p.emerging >= p.developing && p.emerging >= p.secure) return { label: 'Sprouting', color: AD.bandMeta('emerging').color };
-      return { label: 'Growing', color: AD.bandMeta('developing').color };
+      if (p.secure >= p.developing && p.secure >= p.emerging) return { label: 'Blooming', lvl: AD.bandMeta('secure').lvl };
+      if (p.emerging >= p.developing && p.emerging >= p.secure) return { label: 'Sprouting', lvl: AD.bandMeta('emerging').lvl };
+      return { label: 'Growing', lvl: AD.bandMeta('developing').lvl };
     }
     // One class column: picker on top, then (once picked) growth/strength,
     // a skill-band-bar list, and the multi-perspective radar — the full
@@ -866,8 +1276,8 @@
         var skillList = '<div class="cmp-skills">' + AD.skills.map(function (sk) {
           var d = AD.distribution(studs, sk.key, point), v = cmpSkillVerdict(d);
           return '<div class="cmp-skillrow"><span class="cmp-sk-name">' + esc(sk.name) + '</span>' +
-            '<div class="cmp-sk-bar">' + bandBar(d, true) + '</div>' +
-            '<span class="cmp-sk-status" style="color:' + v.color + '"><i style="background:' + v.color + '"></i>' + v.label + '</span></div>';
+            '<div class="cmp-sk-bar">' + bandBar(d) + '</div>' +
+            '<span class="ui-bandword lvl-' + v.lvl + ' cmp-sk-status">' + v.label + '</span></div>';
         }).join('') + '</div>';
         inner = gsBlock + '<div class="cmp-legend">' + bandLegend() + '</div>' + skillList +
           '<div class="cmp-views"><div class="ui-eyebrow dark mb-2">Where views differ</div>' + viewsDifferBlock(studs, 3) + '</div>';
@@ -876,7 +1286,7 @@
     }
     function cmp2HTML() {
       return '<div class="cmp-head"><div class="cmp-head-kicker">Compare two sections</div>' +
-        '<div class="cmp-head-row"><h2 class="cmp-head-title">Which two sections would you like to see side by side?</h2>' + cadence(point) + '</div></div>' +
+        '<div class="cmp-head-row"><h2 class="ui-title xl">Which two sections would you like to see side by side?</h2>' + cadence(point) + '</div></div>' +
         '<div class="cmp-cols">' + cmpColHTML('a') + cmpColHTML('b') + '</div>';
     }
     function wireCmp2() {
@@ -932,9 +1342,9 @@
       '<div class="ad-gradebreaks">' + AD.grades.map(function (g) {
         var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; });
         var d = distAllSkills(studs, point);
-        return '<div class="ad-gradebreak">' +
-          '<div class="gb-head"><div><div class="gb-name">' + esc(g) + '</div>' +
-            '<div class="gb-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div></div>' +
+        return '<div class="ui-card tight ad-gradebreak">' +
+          '<div class="gb-head"><div><div class="ui-title">' + esc(g) + '</div>' +
+            '<div class="ui-meta gb-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div></div>' +
             '<button class="btn-link" data-gradenav="' + esc(g) + '">View ' + esc(g) + ' →</button></div>' +
           '<div class="gb-snap"><div class="ui-kpi"><div class="num">' + d.pct.secure + '%</div>' +
             '<div class="lbl">' + esc(se.label) + ' at ' + esc(ptLabel) + '</div></div>' +
@@ -945,8 +1355,8 @@
   function sectionNavHTML(grade, point) {
     return '<div class="ad-navcards">' + AD.sections.filter(function (s) { return s.grade === grade; }).map(function (s) {
       var studs = AD.studentsInSection(s), d = distAllSkills(studs, point);
-      return '<button class="ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="nc-name">' + esc(s.name) + '</span><span class="text-muted">›</span></div>' +
-        '<div class="nc-meta">' + plural(studs.length, 'student') + (studs.length < SMALL_N ? ' · small group' : '') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
+      return '<button class="ui-card tight link ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="ui-title md">' + esc(s.name) + '</span><span class="text-muted">›</span></div>' +
+        '<div class="ui-meta nc-meta">' + plural(studs.length, 'student') + (studs.length < SMALL_N ? ' · small group' : '') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
     }).join('') + '</div>';
   }
 
@@ -964,9 +1374,9 @@
         var teacherLine = '<div class="nc-pcts">' + secs.map(function (s) {
           return '<span>' + esc(s.section) + ' · ' + esc(AD.teacherFor(s)) + '</span>';
         }).join('') + '</div>';
-        return '<button class="ad-navcard" data-graderoster="' + esc(g) + '">' +
-          '<div class="nc-top"><span class="nc-name">' + esc(g) + '</span><span class="text-muted">›</span></div>' +
-          '<div class="nc-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div>' +
+        return '<button class="ui-card tight link ad-navcard" data-graderoster="' + esc(g) + '">' +
+          '<div class="nc-top"><span class="ui-title md">' + esc(g) + '</span><span class="text-muted">›</span></div>' +
+          '<div class="ui-meta nc-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div>' +
           teacherLine + '</button>';
       }).join('') + '</div>';
     var listBody = gradeCards;
@@ -1067,7 +1477,7 @@
     if (!u || !u.tempPassword) { toast('No temporary password to show.'); return; }
     openModal(modalHead('Temporary password') +
       '<p class="ui-mod-note mb-3">Relay this one-time password to <b>' + esc(u.name) + '</b>. It stops working the moment they set their own — the row then reads <b>Active</b>.</p>' +
-      '<div class="row" style="background:var(--surface-100);border-radius:var(--radius-sm);padding:12px 14px">' +
+      '<div class="row ui-inset">' +
         '<span class="mono" style="font-size:var(--fs-lg);font-weight:800;letter-spacing:.08em">' + esc(u.tempPassword) + '</span>' +
         '<button class="btn btn-outline btn-sm ml-auto" data-copypw="' + esc(u.tempPassword) + '">Copy</button></div>' +
       '<div class="ui-modal-foot"><button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div>');
@@ -1224,7 +1634,7 @@
         '<div class="flex-1">' +
           '<div class="row wrap" style="gap:8px"><b class="ad-hist-t">' + esc(o.cls) + '</b><span class="text-muted ad-hist-y">' + esc(o.year) + '</span>' + (o.now ? '<span class="ui-chip ok">Current class</span>' : '') + '</div>' +
           '<div class="ad-hist-sub">Teacher: ' + esc(o.teacher) + ' · ' + esc(o.done) + '</div>' +
-          (o.note ? '<div class="ad-hist-note"><span class="ui-eyebrow mb-1">Handover note from ' + esc(o.teacher) + '</span><p>' + esc(o.note) + '</p></div>' : '') +
+          (o.note ? '<div class="ui-inset ad-hist-note"><span class="ui-eyebrow mb-1">Handover note from ' + esc(o.teacher) + '</span><p>' + esc(o.note) + '</p></div>' : '') +
         '</div></div>';
     };
     var rows = [row({ now: true, cls: r.grade + ' ' + r.section, year: AD.academicYears[0], teacher: teacher ? teacher.name : '—', done: 'in progress' })]
@@ -1595,7 +2005,7 @@
     return { html: 'I can help with whether it’s working, focus areas, the current assessment window, and a board-ready paragraph. Try one of these:', sugs: true };
   }
   function askMsgHTML(m) {
-    if (m.role === 'me') return '<div class="ask-msg me">' + esc(m.text) + '</div>';
+    if (m.role === 'me') return '<div class="ask-msg user">' + esc(m.text) + '</div>';
     var s = '<div class="ask-msg tilli">' + m.html + '</div>';
     if (m.sugs) s += '<div class="ask-sugs">' + askSugs().map(function (x) { return '<button class="ui-filterchip" data-asksug="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') + '</div>';
     return s;
@@ -1616,7 +2026,7 @@
     askRefresh();
   }
   function askFootHTML(idBase) {
-    return '<div class="ask-foot"><input class="ask-input" id="' + idBase + '-input" placeholder="Ask about your data…" aria-label="Ask Tilli"><button class="ask-send" id="' + idBase + '-send" aria-label="Send">➤</button></div>';
+    return '<div class="ask-foot"><div class="ask-compose"><input class="ask-input" id="' + idBase + '-input" placeholder="Ask about your data…" aria-label="Ask Tilli"><button class="ask-sendbtn" id="' + idBase + '-send" aria-label="Send">' + ICONS.send + '</button></div></div>';
   }
   function askWireFoot(idBase) {
     var inp = document.getElementById(idBase + '-input'), send = document.getElementById(idBase + '-send');
@@ -1629,9 +2039,9 @@
     askEnsure();
     var p = document.createElement('div'); p.className = 'ask-panel'; p.id = 'ask-panel';
     p.innerHTML =
-      '<div class="ask-head"><span class="ask-ava">' + ICONS.asktilli + '</span>' +
-      '<div><b>Ask Tilli<span class="ui-tag cyan">Beta</span></b><span class="ask-sub">Answers from your school\'s data</span></div>' +
-      '<button class="btn-icon bare ml-auto" data-askclose="1" aria-label="Close Ask Tilli">×</button></div>' +
+      '<div class="ask-head"><span class="ui-icontile">' + ICONS.asktilli + '</span>' +
+      '<div class="ask-hmeta"><div class="t">Ask Tilli<span class="ui-tag cyan">Beta</span></div><div class="s">Answers from your school\'s data</div></div>' +
+      '<button class="btn-icon bare" data-askclose="1" aria-label="Close Ask Tilli">×</button></div>' +
       '<div class="ask-body" id="ask-panel-body"></div>' + askFootHTML('ask-panel');
     document.body.appendChild(p);
     askState.open = true; syncFab();
@@ -1702,7 +2112,7 @@
     var firstName = (me && me.name ? String(me.name).replace(/^[A-Z]\.\s*/, '').split(' ')[0] : '') || '';
     var thread = c ? c.thread : [];
     var bodyHTML = (thread.length || askx.thinking)
-      ? '<div class="askx-thread">' + thread.map(function (m) { return m.role === 'me' ? '<div class="ask-msg me">' + esc(m.text) + '</div>' : '<div class="ask-msg tilli">' + m.html + '</div>'; }).join('') +
+      ? '<div class="askx-thread">' + thread.map(function (m) { return m.role === 'me' ? '<div class="ask-msg user">' + esc(m.text) + '</div>' : '<div class="ask-msg tilli">' + m.html + '</div>'; }).join('') +
           (askx.thinking ? '<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>' : '') + '</div>'
       : '<div class="askx-empty"><span class="askx-spark">' + LU.sparkLg + '</span>' +
           '<h2>Hi' + (firstName ? ' ' + esc(firstName) : '') + '! I' + "'" + 'm Tilli 👋</h2>' +
@@ -1794,9 +2204,9 @@
     var list = AD.concerns.filter(function (c) { return !filterStatus || filterStatus === 'All' || c.status === filterStatus; });
     var body = list.map(function (c) {
       var st = c.status.toLowerCase();
-      return '<div class="ad-concern"><div class="top"><div><div class="who">' + esc(c.student) + '</div><div class="meta">' + esc(c.section) + ' · ' + esc(c.teacher) + ' · ' + esc(c.date) + '</div></div><span class="ui-chip ' + ({ new: 'info', routed: 'warn', closed: 'muted' }[st] || '') + '">' + esc(c.status) + (c.routed_to ? ' → ' + esc(c.routed_to) : '') + '</span></div>' +
+      return '<div class="ui-card sm ad-concern"><div class="top"><div><div class="who">' + esc(c.student) + '</div><div class="ui-meta meta">' + esc(c.section) + ' · ' + esc(c.teacher) + ' · ' + esc(c.date) + '</div></div><span class="ui-chip ' + ({ new: 'info', routed: 'warn', closed: 'muted' }[st] || '') + '">' + esc(c.status) + (c.routed_to ? ' → ' + esc(c.routed_to) : '') + '</span></div>' +
         '<p class="note">' + esc(c.note) + '</p>' +
-        (c.outcome ? '<div class="outcome"><b>Outcome:</b> ' + esc(c.outcome) + '</div>' : '') +
+        (c.outcome ? '<div class="ui-inset outcome"><b>Outcome:</b> ' + esc(c.outcome) + '</div>' : '') +
         (c.status === 'New' ? '<div class="actions"><button class="btn btn-cyan btn-sm" data-route="' + c.id + '">Route to counsellor</button><button class="btn btn-outline btn-sm" data-handle="' + c.id + '">Handle internally</button></div>' :
          c.status === 'Routed' ? '<div class="actions"><button class="btn btn-outline btn-sm" data-close="' + c.id + '">Close with outcome</button></div>' : '') +
         '</div>';

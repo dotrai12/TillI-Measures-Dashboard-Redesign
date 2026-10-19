@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261016zx">
+<link rel="stylesheet" href="assets/tilli.css?v=20261019d">
 <style>
   /* ============================================================
      Teacher onboarding — screen chrome (live design system).
@@ -66,13 +66,13 @@
   .onb-hero .actions { margin-top: 26px; }
   .onb-hero .ui-empty-t + .actions { margin-top: 18px; }
   /* Italic pre-title ("You can not pour from an empty cup") */
-  .onb-kicker { font-style: italic; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-300); }
+  .onb-kicker { font-style: italic; font-weight: 700; font-size: var(--fs-sm); color: var(--text-meta); }
 
   /* Step progress */
   .onb-steprow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .onb-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); margin: 0; }
-  .onb-step { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; white-space: nowrap; }
-  .onb-help { margin: 0 0 20px; font-size: var(--fs-sm); color: var(--ink-300); line-height: 1.5; }
+  /* .onb-title = .ui-title.xl */
+  .onb-step { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 700; white-space: nowrap; }
+  .onb-help { margin: 0 0 20px; font-size: var(--fs-sm); color: var(--text-meta); line-height: 1.5; }
 
   .onb-fields { display: flex; flex-direction: column; gap: 15px; }
   .onb-fields.loose { gap: 18px; }
@@ -97,13 +97,7 @@
     padding: 6px 0; font-family: var(--font-body); font-size: var(--fs-md); color: var(--ink-700);
     font-weight: 600; text-align: left;
   }
-  .onb-box {
-    width: 20px; height: 20px; border-radius: var(--radius-xs); flex: none;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: var(--fs-sm); font-weight: 800; color: var(--white);
-    background: var(--white); border: 1.5px solid var(--line-200); transition: all .15s;
-  }
-  .onb-box.on { background: var(--green-500); border-color: var(--green-600); }
+  /* checkbox square = .ui-check (tilli.css) */
 
   /* Section-per-grade cards (step 3) → .ui-card.sm.subtle */
   .onb-seccard + .onb-seccard { margin-top: 8px; }
@@ -120,7 +114,7 @@
   .onb-ac-menu { max-height: 200px; }
   .onb-sel-menu { max-height: 240px; }
   .onb-sel-menu.up { top: auto; bottom: calc(100% + 6px); }
-  .onb-ac-empty { padding: 10px; font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .onb-ac-empty { padding: 10px; font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
   .onb-ac-flag { position: absolute; right: 12px; top: 38px; transform: translateY(-50%); font-size: var(--fs-md); pointer-events: none; }
 
   /* Custom dropdown (replaces native <select> — see selectField in teacher.js).
@@ -146,18 +140,15 @@
   /* Grade · section is picked once per group (no per-row picker), so the three
      text columns get the full width and names are never truncated. */
   .roster-sheet { --roster-cols: 1.15fr 1.15fr 1fr 36px; }
-  .roster-group {
-    border: 1px solid var(--line-200); border-radius: var(--radius-lg);
-    padding: 12px 12px 10px; margin-bottom: 14px; background: var(--white);
-  }
+  .roster-group { padding: 12px 12px 10px; margin-bottom: 14px; }   /* .ui-card.sm */
   .roster-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .roster-group-gs { flex: 1; min-width: 0; max-width: 300px; }
-  .roster-group-n { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-300); white-space: nowrap; }
+  .roster-group-n { font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); white-space: nowrap; }
   /* Quiet text button — "Remove" (section) and "Not now" (reflection) */
   .onb-quiet {
     background: none; border: none; cursor: pointer;
     font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm);
-    color: var(--ink-300); padding: 6px 10px; border-radius: var(--radius-pill);
+    color: var(--text-meta); padding: 6px 10px; border-radius: var(--radius-pill);
     transition: color .15s, background .15s;
   }
   .onb-quiet:hover:not(:disabled) { color: var(--green-600); }
@@ -186,7 +177,7 @@
   .roster-head {
     margin-bottom: 8px; padding: 0 6px;
     font-weight: 800; font-size: var(--fs-xs); letter-spacing: .04em;
-    text-transform: uppercase; color: var(--ink-300);
+    text-transform: uppercase; color: var(--text-meta);
   }
   .roster-sheet-row { padding: 7px 6px; border-radius: var(--radius-md); transition: background .15s; }
   .roster-sheet-row + .roster-sheet-row { border-top: 1px solid var(--line-200); }
@@ -203,9 +194,9 @@
 
   /* Self-assessment (category chips are .ui-chip; colour inline from the reflection bank) */
   .onb-catrow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 18px; }
-  .onb-qnum { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; margin-bottom: 6px; }
-  .onb-question { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.35; margin: 0 0 8px; color: var(--ink-900); }
-  .onb-qhint { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--ink-300); line-height: 1.5; }
+  .onb-qnum { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 700; margin-bottom: 6px; }
+  .onb-question { line-height: 1.35; margin: 0 0 8px; }   /* .ui-title */
+  .onb-qhint { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--text-meta); line-height: 1.5; }
   .onb-scale { display: flex; gap: 10px; justify-content: center; margin: 16px 0 10px; }
   .onb-scale-btn {
     width: 52px; height: 52px; border-radius: 50%; border: 1.5px solid var(--line-200); background: var(--white);
@@ -214,15 +205,12 @@
   }
   .onb-scale-btn:hover { border-color: var(--green-500); }
   .onb-scale-btn.on { background: var(--green-500); border-color: var(--green-600); color: var(--white); transform: scale(1.06); }
-  .onb-scale-ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--ink-300); font-weight: 700; padding: 0 4px; }
+  .onb-scale-ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--text-meta); font-weight: 700; padding: 0 4px; }
   .onb-choices { display: flex; flex-direction: column; gap: 9px; margin-top: 8px; }
-  .onb-choice {
-    width: 100%; text-align: left; border: 1.5px solid var(--line-200); background: var(--white); cursor: pointer;
-    padding: 14px 16px; border-radius: var(--radius-md); font-family: var(--font-body); font-weight: 600; font-size: var(--fs-md);
-    color: var(--ink-700); transition: all .15s;
+  .onb-choice {   /* .ui-pick */
+    width: 100%; padding: 14px 16px; border-radius: var(--radius-md); font-weight: 600; font-size: var(--fs-md); color: var(--ink-700);
   }
-  .onb-choice:hover { border-color: var(--green-500); }
-  .onb-choice.on { border-color: var(--green-600); background: var(--wash-green); color: var(--green-700); font-weight: 700; }
+  .onb-choice.on { color: var(--green-700); font-weight: 700; }
   .onb-textarea {
     width: 100%; border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 14px;
     font-size: var(--fs-md); font-family: var(--font-body); color: var(--ink-900); resize: none; outline: none;
@@ -259,7 +247,7 @@
   .onb-drop-ic { font-size: var(--fs-xl); margin-bottom: 6px; }
   .onb-drop-t { font-weight: 800; font-size: var(--fs-md); color: var(--ink-700); }
   .onb-drop.compact .onb-drop-t { font-size: var(--fs-sm); }
-  .onb-drop-s { font-size: var(--fs-sm); color: var(--ink-300); margin-top: 4px; }
+  .onb-drop-s { font-size: var(--fs-sm); color: var(--text-meta); margin-top: 4px; }
   /* Note with stacked action buttons (roster conflict note) */
   .onb-note-col { flex-direction: column; align-items: stretch; }
   .onb-note-acts { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -287,14 +275,14 @@
 <!-- Dashboard mounts here after onboarding (Phase 2). Hidden until then. -->
 <div id="dash-root" style="display:none"></div>
 
-<script src="assets/school-data.js?v=20261016zx"></script>
-<script src="assets/tilli-api.js?v=20261016zx"></script>
+<script src="assets/school-data.js?v=20261019dl"></script>
+<script src="assets/tilli-api.js?v=20261019dl"></script>
 <script src="assets/tilli-history.js?v=20261016zx"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Teacher' });</script>
 <script src="assets/dashboard-data.js?v=20261016zx"></script>
 <script src="assets/flower-band.js?v=20261016zx"></script>
-<script src="assets/teacher-dashboard.js?v=20261016zx"></script>
-<script src="assets/teacher.js?v=20261016zx"></script>
+<script src="assets/teacher-dashboard.js?v=20261019d"></script>
+<script src="assets/teacher.js?v=20261019b"></script>
 </body>
 </html>

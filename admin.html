@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261016zx">
+<link rel="stylesheet" href="assets/tilli.css?v=20261019d">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -20,15 +20,8 @@
      leadership visits.
      ============================================================ */
   :root {
-    /* Admin's per-page accent is cyan (btn-outline hover, link buttons,
-       role badge, crumbs, card hover) — everything else stays green. */
-    --accent: var(--cyan-500);
-    --accent-ink: var(--cyan-700);
-    --accent-wash: var(--wash-cyan);
-    --ad-side-w: var(--side-w);   /* shared with teacher + Tilli platform (tilli.css) */
-    --ad-header-h: 66px;
-    --ad-gap: var(--page-gap);   /* alias kept for any old references */
-    --ad-maxw: 1180px;
+    /* Accent, sidebar width, header height, content width and page padding
+       all come from tilli.css tokens — same values as the teacher dashboard. */
     --ov-num-size: 48px;   /* Overview hero number (the one thing to look at) */
   }
   body { background: var(--white); }   /* pure white, same as the teacher dashboard — cards keep their 1px border */
@@ -37,7 +30,7 @@
   /* minmax(0,…) lets the content track shrink below its min-content, so a wide
      table scrolls inside its own .ui-tablewrap instead of forcing a page-wide
      horizontal scrollbar. */
-  .ad-app { min-height: 100dvh; display: grid; grid-template-columns: var(--ad-side-w) minmax(0, 1fr); }
+  .ad-app { min-height: 100dvh; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
   /* min-width:0 lets the content column shrink below its children's intrinsic
      min-width (tables carry min-width:520–640px). Without it a wide card forces
      the track past the viewport and the whole page scrolls sideways. */
@@ -57,8 +50,8 @@
   .ad-updated:hover .hist-last { color: var(--green-700); }
 
   /* ---- Main ---- */
-  .ad-main { padding: var(--page-gap) clamp(16px, 3vw, 32px) 96px; }
-  .ad-wrap { max-width: var(--ad-maxw); margin: 0 auto; }
+  .ad-main { padding: var(--page-pad-y) var(--page-pad-x) 96px; }
+  .ad-wrap { max-width: var(--content-max); margin: 0 auto; }
 
   /* ---- Layout grids ---- */
   .ad-grid { display: grid; gap: var(--page-gap); }
@@ -68,36 +61,22 @@
   .ad-grid.tri { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ad-grid > * { min-width: 0; }
 
-  /* ---- Cadence label (periodic modules) ---- */
-  .ad-cadence {
-    display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    background: var(--wash-cyan); color: var(--cyan-700); border-radius: var(--radius-pill);
-    padding: 5px 12px; font-weight: 700; font-size: var(--fs-xs);
-  }
-  .ad-cadence .next { color: var(--cyan-700); opacity: .72; }
-
-  /* ---- Status line ---- */
-  .ad-status {
-    background: var(--white); border: 1px solid var(--line-200); border-left: 4px solid var(--cyan-500);
-    border-radius: var(--radius-lg); padding: 16px 20px; font-family: var(--font-heading);
-    font-weight: 600; font-size: var(--fs-lg); color: var(--ink-900); line-height: 1.5;
-  }
+  /* ---- Cadence label (periodic modules) — a .ui-chip.info that can wrap ---- */
+  .ad-cadence { gap: 8px; flex-wrap: wrap; white-space: normal; }
+  .ad-cadence .next { opacity: .72; }
 
   /* ---- Table extras (base: .ui-table) — sticky, sortable headers ---- */
   .ui-table th { position: sticky; top: 0; }
   .ui-table th.sortable { cursor: pointer; user-select: none; }
   .ui-table th.sortable:hover { color: var(--ink-900); }
-  .ui-table th .arw { font-size: var(--fs-xs); margin-left: 4px; color: var(--cyan-500); }
+  .ui-table th .arw { font-size: var(--fs-xs); margin-left: 4px; color: var(--accent); }
   .ad-num { font-variant-numeric: tabular-nums; }
 
-  /* ---- Stacked band bar ---- */
-  .ad-bar { display: flex; height: 22px; border-radius: var(--radius-xs); overflow: hidden; background: var(--surface-100); }
-  .ad-bar > span { display: block; height: 100%; }
-  .ad-bar.slim { height: 14px; border-radius: var(--radius-xs); }
+  /* ---- Skill rows (band bar = .ui-bandbar, tilli.css) ---- */
   .ad-skillrow { display: grid; grid-template-columns: 190px 1fr; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-200); }
   .ad-skillrow:last-child { border-bottom: none; }
   .ad-skillname { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
-  .ad-skillname small { display: block; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-300); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+  .ad-skillname small { display: block; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
   .ad-interp { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); line-height: 1.5; margin: 6px 0 0; }
 
   /* ---- Collapsible skill buckets (Social-Emotional / Cognitive) ---- */
@@ -106,7 +85,7 @@
   .ad-bucket-sum { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface-100); user-select: none; }
   .ad-bucket-sum::-webkit-details-marker { display: none; }
   .ad-bucket-title { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); letter-spacing: .01em; }
-  .ad-bucket-count { font-weight: 700; font-size: var(--fs-xs); color: var(--ink-300); text-transform: uppercase; letter-spacing: .04em; margin-left: auto; }
+  .ad-bucket-count { font-weight: 700; font-size: var(--fs-xs); color: var(--text-meta); text-transform: uppercase; letter-spacing: .04em; margin-left: auto; }
   .ad-bucket-chev { font-size: var(--fs-sm); color: var(--ink-450); transition: transform .18s var(--ease); }
   .ad-bucket[open] .ad-bucket-chev { transform: rotate(0deg); }
   .ad-bucket:not([open]) .ad-bucket-chev { transform: rotate(-90deg); }
@@ -120,7 +99,7 @@
   .ad-progchart { width: 100%; }
   .ad-progchart svg { display: block; width: 100%; overflow: hidden; }
   .ad-progfuts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 12px; }
-  .ad-progfut { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: var(--radius-pill); padding: 4px 11px; }
+  .ad-progfut { gap: 6px; }   /* .ui-metachip.dashed */
   .ad-progfut i { font-style: normal; font-weight: 800; color: var(--ink-450); }
 
   /* ---- Filters bar ---- */
@@ -133,60 +112,15 @@
   .ad-skel { height: 14px; border-radius: var(--radius-xs); margin: 8px 0; }
 
   /* ---- Concern rows ---- */
-  .ad-concern { border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 15px 17px; }
   .ad-concern + .ad-concern { margin-top: 12px; }
   .ad-concern .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .ad-concern .who { font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
-  .ad-concern .meta { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-300); margin-top: 2px; }
+  .ad-concern .meta { margin-top: 2px; }   /* .ui-meta */
   .ad-concern .note { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.55; margin: 10px 0 0; }
-  .ad-concern .outcome { background: var(--surface-100); border-radius: var(--radius-sm); padding: 9px 12px; font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; margin-top: 10px; }
+  .ad-concern .outcome { margin-top: 10px; }   /* .ui-inset */
   .ad-concern .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
-  /* ============================================================
-     Hover info boxes (tooltips). One trigger class `.ad-tip` with
-     a `data-tip="..."` string; the bubble is drawn with ::after and
-     the arrow with ::before, so no JS wiring is needed and they
-     survive every re-render. `.ad-info` is the little ⓘ affordance.
-     Modifiers: `.down` opens the bubble below (used inside the
-     scroll-clipped table headers); `.end` right-anchors it so a
-     right-edge trigger doesn't overflow. `--tx` carries the x-offset
-     so the same hover-reset works for centred and end-anchored tips.
-     ============================================================ */
-  .ad-tip { position: relative; display: inline-flex; align-items: center; cursor: help; }
-  .ad-tip:hover, .ad-tip:focus-within { z-index: 70; }
-  .ad-tip:focus { outline: none; }
-  .ad-tip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-xs); }
-  .ad-info {
-    display: inline-grid; place-items: center; flex: none;
-    width: 15px; height: 15px; margin-left: 5px; border-radius: 50%;
-    border: 1.3px solid var(--ink-300); color: var(--ink-300);
-    font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xs); line-height: 1;
-    text-transform: none; letter-spacing: 0; transition: border-color .15s, color .15s;
-  }
-  .ad-tip:hover .ad-info, .ad-tip:focus-within .ad-info { border-color: var(--cyan-500); color: var(--cyan-700); }
-
-  .ad-tip[data-tip]::after {
-    content: attr(data-tip); --tx: -50%;
-    position: absolute; left: 50%; bottom: calc(100% + 9px);
-    transform: translate(var(--tx), 4px);
-    width: max-content; max-width: 240px; white-space: normal; text-align: left;
-    background: var(--ink-900); color: var(--white);
-    font-family: var(--font-body); font-weight: 600; font-size: var(--fs-sm); line-height: 1.45;
-    letter-spacing: 0; text-transform: none;
-    padding: 9px 12px; border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
-    opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
-  }
-  .ad-tip[data-tip]::before {
-    content: ''; position: absolute; left: 50%; bottom: calc(100% + 3px);
-    transform: translate(-50%, 4px); border: 6px solid transparent; border-top-color: var(--ink-900);
-    opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
-  }
-  .ad-tip.down[data-tip]::after { bottom: auto; top: calc(100% + 9px); transform: translate(var(--tx), -4px); }
-  .ad-tip.down[data-tip]::before { bottom: auto; top: calc(100% + 3px); transform: translate(-50%, -4px); border-top-color: transparent; border-bottom-color: var(--ink-900); }
-  .ad-tip.end[data-tip]::after { --tx: 0; left: auto; right: 0; }
-  .ad-tip.end[data-tip]::before { display: none; }
-  .ad-tip:hover::after, .ad-tip:focus-within::after { opacity: 1; transform: translate(var(--tx), 0); }
-  .ad-tip:hover::before, .ad-tip:focus-within::before { opacity: 1; transform: translate(-50%, 0); }
+  /* Hover info boxes: .ui-tooltip.help + .ui-info (tilli.css), shared with the teacher dashboard. */
 
   /* ---- Copy block (newsletter / message / note textareas) ---- */
   .ad-copyblock { border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 14px; font-family: var(--font-body); font-size: var(--fs-md); line-height: 1.6; color: var(--ink-700); width: 100%; resize: vertical; min-height: 150px; }
@@ -201,20 +135,17 @@
   /* ---- Grade / section navigator cards (Outcomes drill) ---- */
   .ad-navcards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--page-gap); }
   .ad-navcards > * { min-width: 0; }
-  .ad-navcard { display: block; width: 100%; text-align: left; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 18px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-  .ad-navcard:hover { border-color: var(--accent); box-shadow: var(--shadow-hover); }
+  .ad-navcard { display: block; width: 100%; text-align: left; font: inherit; }   /* .ui-card.tight.link */
   .ad-navcard .nc-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .ad-navcard .nc-name { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
-  .ad-navcard .nc-meta { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-300); margin: 4px 0 12px; }
+  .ad-navcard .nc-meta { margin: 4px 0 12px; }   /* .ui-meta */
   .ad-navcard .nc-pcts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
 
   /* ---- Per-grade breakdown (Outcomes school scope — Overview snapshot format) ---- */
   .ad-gradebreaks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--page-gap); }
   @media (max-width: 900px) { .ad-gradebreaks { grid-template-columns: 1fr; } }
-  .ad-gradebreak { border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 18px; background: var(--white); }
+  /* .ad-gradebreak = .ui-card.tight; name = .ui-title, meta = .ui-meta */
   .ad-gradebreak .gb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .ad-gradebreak .gb-name { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
-  .ad-gradebreak .gb-meta { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-300); margin-top: 4px; }
+  .ad-gradebreak .gb-meta { margin-top: 4px; }
   .ad-gradebreak .gb-snap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 14px 0 16px; }
   .ad-gradebreak .gb-bar { flex: 1; min-width: 220px; }
   .ad-gradebreak .gb-gs { margin: 0; }
@@ -232,10 +163,9 @@
   .ad-hist-t { font-family: var(--font-heading); font-size: var(--fs-md); color: var(--ink-900); }
   .ad-hist-y { font-weight: 700; font-size: var(--fs-sm); }
   .ad-hist-sub { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); margin-top: 2px; }
-  .ad-hist-note { background: var(--surface-100); border-radius: var(--radius-md); padding: 10px 12px; margin-top: 8px; }
-  .ad-hist-note p { margin: 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.55; }
+  .ad-hist-note { margin-top: 8px; }   /* .ui-inset */
   .ad-gs { border-radius: var(--radius-card); padding: 16px 18px; border: 1.5px solid var(--band, var(--line-200)); background: var(--bandwash, var(--white)); }
-  .ad-gs h4 { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); margin: 0 0 10px; color: var(--ink-900); }
+  .ad-gs h4 { margin: 0 0 10px; }   /* .ui-title.md */
   .ad-gs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
   .ad-gs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); }
   .ad-gs li .p { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-450); }
@@ -245,7 +175,6 @@
   .cmp-head { margin-bottom: 18px; }
   .cmp-head-kicker { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
   .cmp-head-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
-  .cmp-head-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); margin: 0; }
   .cmp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--page-gap); align-items: start; }
   .cmp-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .cmp-select { width: 100%; }
@@ -258,15 +187,14 @@
   .cmp-skillrow:last-child { border-bottom: none; }
   .cmp-sk-name { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); line-height: 1.25; }
   .cmp-sk-bar { min-width: 0; }
-  .cmp-sk-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: var(--fs-sm); white-space: nowrap; justify-self: end; }
-  .cmp-sk-status i { width: 8px; height: 8px; border-radius: var(--radius-pill); flex: none; }
+  .cmp-sk-status { justify-self: end; }   /* .ui-bandword */
   .cmp-views { margin-top: 14px; }
   @media (max-width: 860px) { .cmp-cols { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 560px) { .cmp-gs { grid-template-columns: minmax(0, 1fr); } }
 
   /* ---- Where views differ (teacher / parent / child) ---- */
   .ad-views td.name { font-weight: 700; }
-  .ad-views-note { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-300); margin: 8px 2px 0; }
+  .ad-views-note { font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); margin: 8px 2px 0; }
 
   /* ---- Mobile bottom tab bar (.ui-bottomnav) — shown ≤860px only ---- */
   .ui-bottomnav { display: none; }
@@ -301,7 +229,6 @@
 
   /* ---- Phone-specific tightening (portrait) ---- */
   @media (max-width: 560px) {
-    .ad-main { padding: 16px 14px 96px; }
     .ad-main .ui-card:not(.tight):not(.pad0):not(.sm):not(.md) { padding: 15px 14px; }
     /* Role badge is redundant on a phone and steals header width — drop it, keep the avatar. */
     .ui-header .ui-rolebadge { display: none; }
@@ -320,7 +247,7 @@
 
   /* n = … children, and the small-group caution (< 10 children) */
   .ad-n { font-weight: 700; color: var(--ink-450); white-space: nowrap; }
-  .ad-small { display: inline-flex; align-items: center; margin-left: 6px; padding: 2px 9px; border-radius: var(--radius-pill); background: var(--warn-wash); color: var(--warn-700); font-size: var(--fs-xs); font-weight: 700; }
+  .ad-small { margin-left: 6px; }   /* .ui-chip.warn */
   .ad-scope-n { font-size: var(--fs-sm); }
 
   /* "Since your last visit" strip */
@@ -333,10 +260,7 @@
      Type ramp on this screen: 32 greeting · 48 hero number ·
      18 card titles · 15 body · 13 meta. Secondary text = --ink-450.
      ============================================================ */
-  .ov-hello { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); color: var(--green-700); margin: 6px 0 2px; }
-  .ov-sub { font-weight: 600; font-size: var(--fs-md); color: var(--ink-450); margin: 0 0 var(--page-gap); }
-  .ov-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr); gap: 12px 32px; align-items: center;
-    background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: clamp(20px, 3vw, 28px); }
+  /* Greeting = .ui-screen-title.greet + .ui-screen-sub (tilli.css), same as the teacher landing. */
   .ov-kicker { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
   .ov-numrow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
   .ov-num { font-family: var(--font-heading); font-weight: 700; font-size: var(--ov-num-size); line-height: 1; color: var(--ink-900); letter-spacing: -.01em; }
@@ -348,18 +272,94 @@
   .ov-legend { margin-top: 10px; }
   .ov-hero-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     border-top: 1px solid var(--line-200); padding-top: 14px; margin-top: 6px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
+  /* ---- Dandelion school (Overview hero) — fractal radial tree, see dandelionHTML() ---- */
+  .ov-dl { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(220px, 1fr); gap: 12px 28px; align-items: center;
+    padding: clamp(20px, 3vw, 28px); }   /* .ui-card */
+  .dl-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .dl-head .ui-crumbs { margin: 0; }
+  .dl-stage { position: relative; }
+  .dl-svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .dl-world { transform-box: view-box; transform-origin: 0 0; transition: transform var(--dl-zoom) cubic-bezier(.6, 0, .3, 1), opacity var(--dl-zoom); }
+  .dl-spoke { stroke: var(--ink-300); stroke-linecap: round; }
+  .dl-hit { fill: transparent; }
+  .dl-hub { transform-box: fill-box; transform-origin: center; transition: transform .18s ease; }
+  .dl-hub.nav { cursor: pointer; }
+  .dl-hub.nav:hover, .dl-hub.nav:focus-visible { transform: scale(1.18); }
+  .dl-hub:focus { outline: none; }
+  .dl-hub.nav:focus-visible .dl-hit { stroke: var(--focus); stroke-width: 2; }
+  .dl-kid { pointer-events: none; transform-box: fill-box; transform-origin: center; }
+  .dl-label { position: absolute; transform: translateX(-50%); pointer-events: none; white-space: nowrap; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700);
+    text-shadow: 0 0 3px var(--white), 0 0 3px var(--white), 0 0 3px var(--white); transition: opacity .15s; }
+  .dl-tip { position: absolute; z-index: 5; transform: translate(-50%, calc(-100% - 16px)); pointer-events: none; background: var(--ink-900); color: var(--white);
+    border-radius: var(--radius-sm); padding: 8px 12px; box-shadow: var(--shadow-pop); font-size: var(--fs-sm); font-weight: 600; line-height: 1.45; white-space: nowrap; }
+  .dl-tip.below { transform: translate(-50%, 16px); }
+  .dl-tip b { display: block; font-weight: 800; }
+  .dl-tip span { display: block; color: var(--ink-300); }
+  .dl-tip em { display: block; font-style: normal; color: var(--green-500); margin-top: 2px; }
+  .dl-panel-bar { margin-top: 16px; }
+  .dl-key { margin: 12px 0 0; font-weight: 600; font-size: var(--fs-sm); color: var(--text-meta); line-height: 1.5; }
+  /* grow-in: spokes draw outward, hubs and dots pop, staggered by depth (--dl-delay per element) */
+  @keyframes dl-draw { from { stroke-dasharray: 1; stroke-dashoffset: 1; } to { stroke-dasharray: 1; stroke-dashoffset: 0; } }
+  @keyframes dl-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .dl-stage.grow .dl-spoke { animation: dl-draw calc(var(--dl-grow) * .6) ease-out backwards; animation-delay: var(--dl-delay); }
+  .dl-stage.grow .dl-kid, .dl-stage.grow .dl-hub { animation: dl-pop calc(var(--dl-grow) * .5) cubic-bezier(.3, 1.4, .5, 1) backwards; animation-delay: var(--dl-delay); }
+  .dl-stage.grow .dl-label { animation: dl-fade var(--dl-grow) ease-out backwards; }
+  @keyframes dl-fade { from { opacity: 0; } }
+  /* zoom-out-going: the clicked branch stays, everything else fades */
+  .dl-stage.leaving { pointer-events: none; }
+  .dl-stage.leaving .dl-label, .dl-stage.leaving .dl-tip { opacity: 0; }
+  .dl-stage.leaving.down [data-dl-sub]:not(.keep) { opacity: 0; transition: opacity calc(var(--dl-zoom) * .6); }
+  .dl-stage.leaving.up .dl-world { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .dl-stage.grow .dl-spoke, .dl-stage.grow .dl-kid, .dl-stage.grow .dl-hub, .dl-stage.grow .dl-label { animation: none; }
+    .dl-world, .dl-hub { transition: none; }
+  }
+  /* Dandelion tuning GUI (dev tooling) */
+  #dl-gui { position: fixed; top: 76px; right: 16px; z-index: 9999; width: 260px; max-height: calc(100dvh - 96px); overflow: auto; background: var(--white);
+    border: 1px solid var(--line-200); border-radius: 14px; box-shadow: var(--shadow-pop); font-family: var(--font-body); }
+  #dl-gui .dlg-head { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none; cursor: pointer; padding: 12px 16px; font: inherit; }
+  #dl-gui .dlg-head b { font-size: 13px; color: var(--ink-900); }
+  #dl-gui.collapsed .dlg-body { display: none; }
+  #dl-gui .dlg-body { padding: 0 16px 14px; border-top: 1px solid var(--line-200); }
+  #dl-gui label { display: block; margin: 10px 0 0; cursor: ns-resize; }
+  #dl-gui .dlg-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; font-weight: 700; }
+  #dl-gui .dlg-new { color: #F0A84A; }   /* newly added control (CLAUDE.md) */
+  #dl-gui .dlg-val { color: var(--ink-450); font-weight: 600; font-family: var(--font-heading); }
+  #dl-gui input[type=range] { width: 100%; accent-color: var(--green-500); margin-top: 3px; }
+  #dl-gui select { width: 100%; margin-top: 4px; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--line-200); border-radius: var(--radius-xs); }
+  #dl-gui .dlg-actions { display: flex; gap: 8px; margin-top: 14px; }
+  #dl-gui .dlg-actions button { flex: 1; font-family: var(--font-body); font-weight: 700; font-size: 12px; border-radius: 999px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line-200); background: var(--white); color: var(--ink-450); }
+  #dl-gui .dlg-actions button.primary { border: none; background: var(--green-500); color: var(--white); }
   .ov-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--page-gap); margin-top: var(--page-gap); align-items: start; }
   .ov-row.one { grid-template-columns: minmax(0, 1fr); }
-  .ov-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 18px 20px; }
-  .ov-card-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); margin: 0; }
-  .ov-card-t.mt { margin-top: 16px; }
+  /* Overview cards = .ui-card.md, titles = .ui-title */
   .ov-card-line { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
-  .ov-card-note { margin: 14px 0 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
-  .ov-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-  .ov-list li { display: flex; align-items: center; gap: 10px; font-size: var(--fs-md); font-weight: 600; color: var(--ink-700); }
-  .ov-list i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-  .ov-list span { flex: 1; min-width: 0; }
-  .ov-list b { font-weight: 700; color: var(--ink-450); font-size: var(--fs-sm); }
+
+  /* School at a glance — headcount strip under the greeting */
+  .ov-glance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .ov-glance-k { padding: 12px 16px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }   /* .ui-card */
+  .ov-glance-k b { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); line-height: 1; font-variant-numeric: tabular-nums; }
+  .ov-glance-k span { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
+
+  /* "Is data being collected?" status inside the window card */
+  .ov-collect { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius-md); font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; }
+  .ov-collect.ok { background: var(--wash-green); color: var(--green-700); }
+  .ui-card.tint-green .ov-collect.ok { background: var(--white); }   /* window card is green-tinted */
+  .ov-collect.warn { background: var(--warn-wash); border: 1px solid var(--warn-line); color: var(--ink-700); }
+  .ov-collect.warn > b { color: var(--warn-700); }
+  .ov-collect ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+  .ov-progress li.flag .ui-meter > span { background: var(--warn-500); }
+  .ov-progress li.flag b { color: var(--warn-700); }
+
+  /* Where to help next — one row per grade */
+  .ov-help { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
+  .ov-help li { padding: 12px 0; border-top: 1px solid var(--line-200); }
+  .ov-help-h { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+  .ov-help-h b { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); }
+  .ov-help-h span { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); }
+  .ov-help-h em { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-style: normal; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
+  .ov-help-h i { width: var(--dot-md); height: var(--dot-md); border-radius: 50%; flex: none; }
+  .ov-help p { margin: 6px 0 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.5; }
   .ov-prep { margin-top: 12px; }
   .ov-prep summary { cursor: pointer; font-weight: 700; font-size: var(--fs-sm); color: var(--accent-ink); list-style: none; }
   .ov-prep summary::-webkit-details-marker { display: none; }
@@ -374,11 +374,11 @@
   .ov-progress .nm small { display: block; font-weight: 600; color: var(--ink-450); font-size: var(--fs-sm); }
   .ov-progress .ui-meter { height: 8px; }
   .ov-progress b { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); white-space: nowrap; }
-  /* Admin-wide: secondary notes at --ink-450 (--ink-300 fails contrast on white). */
-  .ad-main .ui-mod-note { color: var(--ink-450); }
   @media (max-width: 760px) {
-    .ov-hero { grid-template-columns: minmax(0, 1fr); }
+    .ov-dl { grid-template-columns: minmax(0, 1fr); }
     .ov-row { grid-template-columns: minmax(0, 1fr); }
+    .ov-glance { gap: 8px; }
+    .ov-glance-k { padding: 10px 12px; flex-direction: column; gap: 4px; }
   }
 
   /* Roster: quiet year-end row + neutral user actions */
@@ -386,7 +386,7 @@
   .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }
   .ad-yearend span { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; }
   .ad-useracts .btn-link.muted { color: var(--ink-450); }
-  .ad-useracts .ad-revoke:hover { color: var(--pink-600); }
+  .ad-useracts .ad-revoke:hover { color: var(--danger-700); }
 
   /* ---- Band-bar target marker (feedback §2) — "compared to what?" ----
      Secure is the right-most segment, so a target of N% Secure sits at
@@ -412,39 +412,13 @@
   .ad-app.ask-mode .ad-main { flex: 1; min-height: 0; padding: 0; display: flex; }
   .ad-app.ask-mode .ad-wrap { max-width: none; margin: 0; flex: 1; min-height: 0; display: flex; }
   .ad-app.ask-mode #ad-main-body { flex: 1; min-width: 0; min-height: 0; display: flex; }
-  .askx-thread .ask-msg.me { font-weight: 600; }
-  @media (max-width: 860px) { .ad-app.ask-mode .ad-col { height: calc(100dvh - 64px); } }
-  .ask-panel {
-    position: fixed; right: 22px; bottom: 22px; z-index: 60;
-    width: min(384px, calc(100vw - 28px)); height: min(564px, calc(100dvh - 40px));
-    background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-modal); display: flex; flex-direction: column; overflow: hidden;
-  }
-  @media (max-width: 860px) { .ask-panel { right: 8px; left: 8px; bottom: 74px; width: auto; height: min(72dvh, 560px); } }
-
-  .ask-head { display: flex; align-items: center; gap: 11px; padding: 13px 15px; border-bottom: 1px solid var(--line-200); }
-  .ask-ava { width: 34px; height: 34px; border-radius: 50%; background: var(--wash-green); color: var(--green-700); display: grid; place-items: center; flex: none; }
-  .ask-ava svg { width: 19px; height: 19px; }
-  .ask-head b { font-family: var(--font-heading); font-size: var(--fs-md); color: var(--ink-900); display: flex; align-items: center; }
-  .ask-head .ask-sub { display: block; font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; }
-  .ask-head .ui-tag { margin-left: 7px; }
-  .ask-head .btn-icon { font-size: var(--fs-xl); }
-
-  .ask-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 11px; background: var(--surface-100); }
-  .ask-msg { max-width: 88%; font-size: var(--fs-sm); line-height: 1.5; font-weight: 600; padding: 11px 14px; border-radius: var(--radius-lg); }
-  .ask-msg.tilli { background: var(--white); border: 1px solid var(--line-200); color: var(--ink-700); align-self: flex-start; border-bottom-left-radius: 5px; }
-  .ask-msg.me { background: var(--green-600); color: var(--white); align-self: flex-end; border-bottom-right-radius: 5px; }
-  .ask-msg b { font-weight: 800; }
-  .ask-src { margin-top: 8px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
-  .ask-quote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface-100); border-radius: var(--radius-sm); font-weight: 600; color: var(--ink-700); }
+  /* Floating chat window look = .ask-panel / .ask-* (tilli.css, shared with teacher).
+     Admin has no bubble-anchored positioning, so on tablet/phone it sits above the bottom nav. */
+  @media (max-width: 860px) { .ask-panel { right: 8px; left: 8px; bottom: 74px; width: auto; max-width: none; height: min(72dvh, 560px); } }
+  /* Admin-only extras inside a Tilli answer */
+  .ask-src { margin-top: 8px; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); }
+  .ask-quote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--white); border-radius: var(--radius-sm); font-weight: 600; color: var(--ink-700); }
   .ask-sugs { display: flex; flex-wrap: wrap; gap: 7px; align-self: flex-start; }
-  .ask-foot { display: flex; gap: 8px; padding: 11px; border-top: 1px solid var(--line-200); background: var(--white); }
-  .ask-input { flex: 1; border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 10px 15px; font-family: var(--font-body); font-size: var(--fs-sm); color: var(--ink-900); outline: none; }
-  .ask-input:focus { border-color: var(--focus); }
-  .ask-send { border: none; background: var(--green-600); color: var(--white); border-radius: 50%; width: 40px; height: 40px; flex: none; cursor: pointer; font-size: var(--fs-md); }
-  .ask-send:hover { background: var(--green-700); }
-
-  /* Ask Tilli full screen (nav destination) — same engine, roomier shell. */
 
   /* ---- Preview-stage panel (demo tooling; remove to ship) ----
      Look comes from .ui-devpanel (tilli.css). Docked in the sidebar on desktop;
@@ -461,12 +435,12 @@
 <div id="ad-modal-root"></div>
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261016zx"></script>
-<script src="assets/tilli-api.js?v=20261016zx"></script>
+<script src="assets/school-data.js?v=20261019dl"></script>
+<script src="assets/tilli-api.js?v=20261019dl"></script>
 <script src="assets/tilli-history.js?v=20261016zx"></script>
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
-<script src="assets/admin-data.js?v=20261016zx"></script>
+<script src="assets/admin-data.js?v=20261019dl"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261016zx"></script>
+<script src="assets/admin.js?v=20261019dl"></script>
 </body>
 </html>

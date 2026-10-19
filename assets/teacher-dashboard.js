@@ -470,7 +470,7 @@
         <div class="ui-side-bottom">
           ${sideWide ? stateSwitcherGUI(false) : ''}
           <button class="ui-side-profile dash-profilebtn" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">
-            <span class="ui-avatar sm dash-avatar">${esc(initials())}</span>
+            <span class="ui-avatar sm">${esc(initials())}</span>
             ${sideWide ? `<span class="meta"><b>${esc((S.teacher.demo && S.teacher.demo.name) || 'Teacher')}</b><span>Teacher</span></span><span class="chev">›</span>` : ''}
           </button>
         </div>
@@ -572,10 +572,10 @@
 
   function placeholder(title, sub) {
     return `<div class="dash-wrap" style="max-width:820px">
-      <h1 class="dash-h1">${esc(title)}</h1>
-      ${sub ? `<p class="dash-sub">${esc(sub)}</p>` : ''}
+      <h1 class="ui-screen-title">${esc(title)}</h1>
+      ${sub ? `<p class="ui-screen-sub flush">${esc(sub)}</p>` : ''}
       <div class="ui-card ui-empty empty-card mt-4">
-        <div class="empty-badge">${bloomSVG('learner', 'var(--green-500)', 34, 4)}</div>
+        <div class="ui-icontile lg empty-badge">${bloomSVG('learner', 'var(--green-500)', 34, 4)}</div>
         <div class="ui-empty-t">Coming in the next update</div>
         <p class="ui-empty-b">This section is being planted. The garden is ready to explore now.</p>
         <div class="actions"><button class="btn btn-primary md focus" data-nav="garden">Go to My Garden</button></div>
@@ -665,7 +665,7 @@
       ['Growing', ld.growing, STATE_DOT.growing, '❋'],
       ['Sprouting', ld.tend, STATE_DOT.tending, '◗'],
     ].concat(ld.notAssessed ? [['Not assessed yet', ld.notAssessed, STATE_DOT.waiting, '○']] : []);
-    return `<div class="mg-bandmix" role="group" aria-label="Class band mix">
+    return `<div class="ui-card sm subtle mg-bandmix" role="group" aria-label="Class band mix">
       ${items.map(([lb, ct, c, ic]) => `<div class="mg-band"><span class="mg-band-ic" style="color:${c}" aria-hidden="true">${ic}</span><span class="mg-band-n">${ct}</span><span class="mg-band-lb">${lb}</span></div>`).join('')}
       ${note ? `<div class="mg-band-note">${esc(note)}</div>` : ''}
     </div>`;
@@ -675,9 +675,9 @@
     const pg = windowProgress(st.winKey);
     const pct = pg.total ? Math.round((pg.done / pg.total) * 100) : 0;
     const nextName = pg.next ? (pg.next.dispFirst || pg.next.first) : '';
-    return `<section class="mg-hero mg-hero-window">
+    return `<section class="mg-hero ui-card tint-green mg-hero-window">
       <div class="ui-eyebrow pill">Do what you came for</div>
-      <h2 class="mg-hero-t">${esc(st.heroTitle)}</h2>
+      <h2 class="ui-title xl mg-hero-t">${esc(st.heroTitle)}</h2>
       <p class="mg-hero-b">${esc(fill(st.heroBlurb, { N, kids: nounFor(N, 'child', 'children') }))}</p>
       <div class="ui-meter mg-prog"><span style="width:${pct}%"></span></div>
       <div class="mg-prog-row"><span><b>${pg.done}</b> of ${pg.total} ${nounFor(pg.total, 'child', 'children')} done</span><span class="mg-deadline">Window closes ${esc(st.deadline)}</span></div>
@@ -692,9 +692,9 @@
       ["Help me plan tomorrow's lesson", `Help me plan tomorrow's lesson for my ${sec.grade} class. Ask me what to focus on, then give a simple structure.`],
       ['A calm-down idea for one child', `Give me a gentle calm-down idea I can use with one child who gets overwhelmed, in a ${sec.grade} classroom.`],
     ];
-    return `<section class="mg-hero mg-hero-ask">
+    return `<section class="mg-hero ui-card mg-hero-ask">
       <div class="ui-eyebrow pill">Do what you came for</div>
-      <div class="mg-hero-askhead"><span class="mg-hero-askic">${chatIcon('var(--green-700)')}</span><h2 class="mg-hero-t">Ask Tilli</h2></div>
+      <div class="mg-hero-askhead"><span class="ui-icontile mg-hero-askic">${chatIcon('var(--green-700)')}</span><h2 class="ui-title xl mg-hero-t">Ask Tilli</h2></div>
       <p class="mg-hero-b">Your teaching changes every day — even when the scores don't.</p>
       <div class="mg-starters">${starters.map(([lb, pr]) => `<button class="mg-starter focus" data-ask-prompt="${esc(pr)}" data-ask-ctx="${esc(sec.name + ' · quick start')}"><span>${esc(lb)}</span><span class="mg-starter-ar" aria-hidden="true">→</span></button>`).join('')}</div>
     </section>`;
@@ -702,9 +702,9 @@
 
   function weekIdeaSlot() {
     const wi = weekIdea();
-    return `<section class="mg-idea">
+    return `<section class="ui-card tint-cyan mg-idea">
       <div class="ui-eyebrow pill">This week's idea</div>
-      <h3 class="mg-idea-t">${esc(wi.t)}</h3>
+      <h3 class="ui-title mg-idea-t">${esc(wi.t)}</h3>
       <p class="mg-idea-d">${esc(wi.d)}</p>
       <button class="mg-idea-ask focus" data-ask-prompt="${esc(wi.ask)}" data-ask-ctx="${esc("This week's idea · " + wi.t)}">${chatIcon('var(--green-700)')} Ask Tilli for more</button>
     </section>`;
@@ -713,7 +713,7 @@
   function tendSlot(ld, state) {
     if (state === 'baseline') {
       return `<section class="mg-tend">
-        <h3 class="mg-tend-h">Who could use you</h3>
+        <h3 class="ui-title mg-tend-h">Who could use you</h3>
         <div class="mg-tend-empty">Once baseline is in, this is where the 2–3 children who could use a little extra will appear.</div>
       </section>`;
     }
@@ -723,13 +723,13 @@
       endline: `Down to ${ld.nTend} now, from ${ld.baselineTend} at baseline — look how far they've come`,
     };
     const cards = ld.tending.slice(0, 3).map((st) => `
-      <div class="mg-tend-card">
-        <div class="mg-tend-top"><span class="mg-tend-pl">${flowerArt('tending', 46, 0)}</span><span class="mg-tend-nm">${esc(st.dispFirst)}</span></div>
+      <div class="ui-card sm mg-tend-card">
+        <div class="mg-tend-top"><span class="mg-tend-pl">${flowerArt('tending', 46, 0)}</span><span class="ui-title md mg-tend-nm">${esc(st.dispFirst)}</span></div>
         <p class="mg-tend-reason">${esc(st.tendReason)}</p>
-        <button class="btn-ask-a focus" data-ask-prompt="${esc('How can I gently support ' + st.name + ', a ' + st.grade + ' child working on ' + st.lowestSkill.name + '? Give me one small thing to try this week.')}" data-ask-ctx="${esc(st.first + ' · ' + st.lowestSkill.name)}">${chatIcon('var(--white)')} Ask Tilli for an idea</button>
+        <button class="btn btn-primary sm btn-ask-a focus" data-ask-prompt="${esc('How can I gently support ' + st.name + ', a ' + st.grade + ' child working on ' + st.lowestSkill.name + '? Give me one small thing to try this week.')}" data-ask-ctx="${esc(st.first + ' · ' + st.lowestSkill.name)}">${chatIcon('var(--white)')} Ask Tilli for an idea</button>
       </div>`).join('');
     return `<section class="mg-tend">
-      <div class="mg-tend-head"><h3 class="mg-tend-h">Who could use you</h3><span class="mg-tend-note">${esc(notes[state] || '')}</span></div>
+      <div class="mg-tend-head"><h3 class="ui-title mg-tend-h">Who could use you</h3><span class="ui-meta mg-tend-note">${esc(notes[state] || '')}</span></div>
       <div class="mg-tend-grid">${cards || `<div class="mg-tend-empty">Every child is on track right now — nothing to tend. 🌿</div>`}</div>
     </section>`;
   }
@@ -749,7 +749,7 @@
     // Slot 5 — band mix (hidden at baseline; there's no prior data to mix).
     let bandBlock;
     if (state === 'baseline') {
-      bandBlock = `<div class="mg-bandmix mg-bandmix-empty">${countNoun(N, 'child', 'children')}, ready to begin their year.</div>`;
+      bandBlock = `<div class="ui-card sm subtle mg-bandmix mg-bandmix-empty">${countNoun(N, 'child', 'children')}, ready to begin their year.</div>`;
     } else {
       const note = state === 'between' ? `Last measured at baseline · ${countNoun(N, 'child', 'children')}`
         : state === 'midline' ? `Your ${sec.name} · ${countNoun(N, 'child', 'children')}`
@@ -763,10 +763,10 @@
     return `<div class="dash-wrap mg-wrap">
       <div class="mg-greet">
         <div>
-          <h1 class="mg-hello">${greetWord()}, ${esc(firstName())} 🌱</h1>
-          <p class="mg-season">Your <b>${esc(sec.name)}</b> garden</p>
+          <h1 class="ui-screen-title greet">${greetWord()}, ${esc(firstName())} 🌱</h1>
+          <p class="ui-screen-sub flush">Your <b>${esc(sec.name)}</b> garden</p>
         </div>
-        <button class="dash-avatarbtn focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
+        <button class="ui-avatar focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
       </div>
 
       <button class="mg-scene-btn focus" data-garden-level="section" aria-label="Open your ${esc(sec.name)} garden — one plant per child" title="See each child's plant">${gardenScene(st.maturity)}</button>
@@ -946,11 +946,11 @@
       <button class="btn-link mb-3 focus" data-garden-level="landing">← My Garden</button>
       <div class="garden-head">
         <div>
-          <h1 class="dash-h1" style="color:var(--green-700)">My garden</h1>
-          <p class="dash-sub">Good morning, ${esc(firstName())} 🌱 — every bloom is one of your students. Pick a bush to tend.</p>
+          <h1 class="ui-screen-title">My garden</h1>
+          <p class="ui-screen-sub flush">Good morning, ${esc(firstName())} 🌱 — every bloom is one of your students. Pick a bush to tend.</p>
         </div>
         <div class="garden-head-right">
-          <button class="dash-avatarbtn focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
+          <button class="ui-avatar focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
           ${gardenerSVG()}
         </div>
       </div>
@@ -996,7 +996,7 @@
       const size = st === 'expert' ? 34 : st === 'learner' ? 26 : 20;
       const label = st === 'expert' ? 'Blooming' : st === 'learner' ? 'Growing' : 'Sprouting';
       return `<button class="cm-row" data-open-student="${esc(stu.id)}">
-        <span class="cm-bloom">${bloomSVG(st, color, size, (i * 11) % 97)}</span>
+        <span class="ui-icontile cm-bloom">${bloomSVG(st, color, size, (i * 11) % 97)}</span>
         <span class="cm-info"><span class="nm">${esc(stu.name)}</span>
           <span class="sk"><span><b>Good at</b> ${esc(bestOf(stu))}</span><span class="td-help"><b>Next to practise</b> ${esc(weakOf(stu))}</span></span></span>
         <span class="cm-band">${label}</span>
@@ -1005,7 +1005,7 @@
     return `<div class="ui-scrim cm-backdrop" data-close-modal>
       <div class="ui-modal-card cm-card" data-stop>
         <div class="cm-head">
-          <div><div class="cm-title">${esc(sec.name)}</div><div class="cm-sub">${countNoun(sec.students.length, 'student', 'students')} · one bloom each</div></div>
+          <div><div class="ui-title xl cm-title">${esc(sec.name)}</div><div class="ui-meta cm-sub">${countNoun(sec.students.length, 'student', 'students')} · one bloom each</div></div>
           <button class="btn-icon" data-close-modal>✕</button>
         </div>
         <div class="cm-list">${rows}</div>
@@ -1045,7 +1045,7 @@
     const HU = window.TilliHistory; if (!HU) return '';
     return `<div class="ui-card mt-4 stu-changes">
       <div class="stu-changes-h"><div style="font-weight:800;font-size:var(--fs-md)">Record changes</div>
-        <span class="dash-sub">Who changed ${esc(stu.dispFirst || stu.first)}'s record, and what changed.</span></div>
+        <span class="ui-screen-sub flush">Who changed ${esc(stu.dispFirst || stu.first)}'s record, and what changed.</span></div>
       ${HU.listHTML(studentHistory(stu), histOpts({ hideStudent: true, showSection: false, empty: 'No changes recorded for ' + (stu.dispFirst || stu.first) + ' yet.' }))}
     </div>`;
   }
@@ -1058,7 +1058,7 @@
     return `<div class="ui-scrim cm-backdrop" data-close-hist>
       <div class="ui-modal-card cm-card hist-card" data-stop role="dialog" aria-label="Change history">
         <div class="cm-head">
-          <div><div class="cm-title">Change history</div><div class="cm-sub">${esc(sec.name)} · student records and assessments, newest first</div></div>
+          <div><div class="ui-title xl cm-title">Change history</div><div class="ui-meta cm-sub">${esc(sec.name)} · student records and assessments, newest first</div></div>
           <button class="btn-icon" data-close-hist aria-label="Close">✕</button>
         </div>
         <div class="hist-tools">${HU.kindChipsHTML(S.histKind, 'dark')}<span class="hist-count">${countNoun(list.length, 'change', 'changes')}</span></div>
@@ -1080,7 +1080,7 @@
     const bed = sorted.map((st, i) => `
       <div class="pg-cell tip-host" style="transform:translateY(${offs[i % offs.length]})">
         <button class="pg-plant" data-open-student="${esc(st.id)}" title="${esc(st.name)}">${flowerArt(st.state, sizeFor(st.state), i)}</button>
-        <button type="button" class="tip-i focus" data-tip-open aria-expanded="false" aria-label="About ${esc(st.name)}">ⓘ</button>
+        <button type="button" class="ui-info lg tip-i focus" data-tip-open aria-expanded="false" aria-label="About ${esc(st.name)}">i</button>
         <div class="ui-tip pg-tip">
           <div class="nm">${esc(st.name)}</div><div class="sl">${esc(bandLine(st))}</div>
           <div class="ch">${chipHTML(st.chips)}</div>
@@ -1104,11 +1104,11 @@
     const tendList = sorted.filter((st) => st.state === 'tending').slice(0, 3);
     const nTend = sorted.filter((st) => st.state === 'tending').length;
     const tendCards = tendList.map((st, i) => `
-      <div class="tend-card">
+      <div class="ui-card sm tend-card">
         <div class="tend-top"><span class="pl">${flowerArt('tending', 52, i)}</span>
           <span><span class="nm">${esc(st.dispFirst)}</span><span class="bd">${esc(st.band)} overall</span></span></div>
         <p class="reason">${esc(st.tendReason)}</p>
-        <button class="btn-ask-a focus" data-ask="activity" data-skill="${esc(st.lowestSkill.name)}" data-band="${esc(st.lowestSkill.band)}">
+        <button class="btn btn-primary sm btn-ask-a focus" data-ask="activity" data-skill="${esc(st.lowestSkill.name)}" data-band="${esc(st.lowestSkill.band)}">
           ${chatIcon('var(--white)')} Ask Tilli for an activity</button>
         <button class="btn-link mt-2 focus" data-open-student="${esc(st.id)}">See ${esc(st.dispFirst)}'s skills →</button>
       </div>`).join('');
@@ -1125,8 +1125,8 @@
       </div>
       <div class="garden-head" style="margin-bottom:6px">
         <div>
-          <h1 class="dash-h1">Good morning, ${esc(firstName())} 🌱</h1>
-          <p class="dash-sub">Your <b style="color:var(--ink-900)">${esc(sec.name)}</b> garden.</p>
+          <h1 class="ui-screen-title">Good morning, ${esc(firstName())} 🌱</h1>
+          <p class="ui-screen-sub flush">Your <b>${esc(sec.name)}</b> garden.</p>
         </div>
         <div class="blossom-pill">${sunSmall()} ${blossomed} student${blossomed === 1 ? '' : 's'} reached Blooming since baseline</div>
       </div>
@@ -1138,7 +1138,7 @@
 
       <section style="margin-top:26px">
         <h2 class="ui-title mb-3">🌱 ${countNoun(nTend, 'child', 'children')} could use a little extra</h2>
-        <div class="tend-grid">${tendCards || '<p class="dash-sub">No students need tending right now — lovely. 🌼</p>'}</div>
+        <div class="tend-grid">${tendCards || '<p class="ui-screen-sub flush">No students need tending right now — lovely. 🌼</p>'}</div>
       </section>
 
       <div class="two-col" style="margin-top:26px">
@@ -1168,13 +1168,13 @@
   }
   function rosterList() {
     const list = rosterFiltered();
-    if (!list.length) return '<p class="dash-sub" style="padding:8px 2px">No students match “' + esc(S.rosterSearch) + '”.</p>';
+    if (!list.length) return '<p class="ui-screen-sub flush" style="padding:8px 2px">No students match “' + esc(S.rosterSearch) + '”.</p>';
     const picking = S.select.on;
     return list.map((st, i) => {
       const on = !!S.select.ids[st.id];
       const act = picking ? `data-pick-stu="${esc(st.id)}" aria-pressed="${on}"` : `data-open-student="${esc(st.id)}"`;
-      return `<button class="roster-row${picking ? ' picking' : ''}${on ? ' picked' : ''}" ${act}>
-        ${picking ? `<span class="rr-check${on ? ' on' : ''}" aria-hidden="true">${on ? '✓' : ''}</span>` : ''}
+      return `<button class="ui-card sm roster-row${picking ? ' picking' : ''}${on ? ' picked' : ''}" ${act}>
+        ${picking ? `<span class="ui-check rr-check${on ? ' on' : ''}" aria-hidden="true">${on ? '✓' : ''}</span>` : ''}
         <span class="rr-plant">${flowerArt(st.state, 46, i)}</span>
         <span class="rr-info"><span class="nm">${esc(st.name)} ${uidChip(st, true)}</span><span class="sl">${esc(bandLine(st))}</span></span>
         <span class="rr-chips">${chipHTML(st.chips)}</span>
@@ -1191,7 +1191,7 @@
     const n = Object.keys(sel.ids).length;
     const allOn = vis.length > 0 && vis.every((st) => sel.ids[st.id]);
     return `<div class="sel-bar">
-      <button class="sel-all focus" data-sel-all><span class="rr-check${allOn ? ' on' : ''}">${allOn ? '✓' : ''}</span>Select all</button>
+      <button class="sel-all focus" data-sel-all><span class="ui-check rr-check${allOn ? ' on' : ''}">${allOn ? '✓' : ''}</span>Select all</button>
       <span class="sel-n">${n} selected</span>
       ${sel.err ? `<span class="sel-err">${esc(sel.err)}</span>` : ''}
       <span class="sel-sp"></span>
@@ -1210,11 +1210,11 @@
     return `<div class="dash-wrap" style="max-width:900px">
       <div class="roster-titlebar">
         <div>
-          <h1 class="dash-h1">Students</h1>
-          <p class="dash-sub">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
+          <h1 class="ui-screen-title">Students</h1>
+          <p class="ui-screen-sub flush">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
         </div>
         <div class="roster-actions">
-          ${HU ? `<button class="btn-line hist-tip focus" data-class-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">🕘 History</button>` : ''}
+          ${HU ? `<button class="btn-line ui-tooltip down end hover-only focus" data-class-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">🕘 History</button>` : ''}
           ${S.select.on ? '' : '<button class="btn-line focus" data-sel-start title="Select students and download a PDF report for each, ready to share with parents">☑ Parent reports</button>'}
           <button class="btn-line primary focus" data-add-students title="Add students to one of your grades · sections">+ Add students</button>
         </div>
@@ -1281,7 +1281,7 @@
     return `<div class="ui-scrim cm-backdrop" data-close-preview>
       <div class="ui-modal-card cm-card rp-card" role="dialog" aria-label="Parent report preview">
         <div class="cm-head">
-          <div><div class="cm-title">Parent report · ${esc(stu.name)}</div><div class="cm-sub">${n > 1 ? (i + 1) + ' of ' + n + ' · ' : ''}What this child&rsquo;s family will receive</div></div>
+          <div><div class="ui-title xl cm-title">Parent report · ${esc(stu.name)}</div><div class="ui-meta cm-sub">${n > 1 ? (i + 1) + ' of ' + n + ' · ' : ''}What this child&rsquo;s family will receive</div></div>
           <button class="btn-icon" data-close-preview aria-label="Close preview">✕</button>
         </div>
         <div class="rp-body"><div class="rp-fit"><div class="pr">${reportHTML(stu)}</div></div></div>
@@ -1490,7 +1490,7 @@
   function stuHead(stu, plantState, extra) {
     const ed = S.stuEdit && S.stuEdit.id === stu.id ? S.stuEdit : null;
     if (ed) {
-      return `<div class="stu-head">
+      return `<div class="ui-card stu-head">
         <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
         <div class="stu-meta stu-editform">
           <div class="stu-edit-grid">
@@ -1510,12 +1510,12 @@
     // hover / focus and, on tap, jumps to the History tab's Record changes.
     const HU = window.TilliHistory;
     const tip = HU ? HU.lastUpdatedText(studentHistory(stu)[0], histOpts()) : '';
-    const histBtn = HU ? `<button class="hist-peek hist-tip focus" data-stu-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">${HIST_ICON}</button>` : '';
-    return `<div class="stu-head">
+    const histBtn = HU ? `<button class="hist-peek ui-tooltip down end hover-only focus" data-stu-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">${HIST_ICON}</button>` : '';
+    return `<div class="ui-card stu-head">
       <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
       <div class="stu-meta">
-        <h1 class="stu-name">${esc(stu.name)}</h1>
-        <div class="stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
+        <h1 class="ui-title xl stu-name">${esc(stu.name)}</h1>
+        <div class="ui-meta stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
         ${uidLine(stu)}
         ${extra || ''}
       </div>
@@ -1613,7 +1613,7 @@
         <div class="grow-card">
           <div class="ui-eyebrow mb-2">🪴 Start by focusing on</div>
           <p class="td-lead">${esc(stu.tendReason)}.</p>
-          <button class="btn-ask-a inline focus" data-ask-stu="tend">Ask Tilli for an activity →</button>
+          <button class="btn btn-primary sm btn-ask-a inline focus" data-ask-stu="tend">Ask Tilli for an activity →</button>
         </div>
       </div>
       <div class="ui-card mt-4">
@@ -1628,14 +1628,14 @@
   // show percentages at all is still to be confirmed (Masoomi / Kavi, T11).
   const SCORE_INFO = 'A 0–100 score for this skill, combining your observation, the parent’s survey and the child’s own tasks. Under 34 = Sprouting · 34–66 = Growing · 67+ = Blooming.';
   const PERSP_INFO = 'Each view’s own 0–100 score for the skill: 👩‍🏫 your observation, 🏠 the parent’s survey, 🧒 the child’s own tasks. The skill’s level combines all three.';
-  function infoBtn(id) { return `<button type="button" class="info-tip focus" data-info="${id}" aria-expanded="false" aria-controls="${id}" aria-label="What does this score mean?">ⓘ</button>`; }
-  function infoPop(id, text) { return `<div class="info-pop" id="${id}" hidden>${esc(text)}</div>`; }
+  function infoBtn(id) { return `<button type="button" class="ui-info lg info-tip focus" data-info="${id}" aria-expanded="false" aria-controls="${id}" aria-label="What does this score mean?">i</button>`; }
+  function infoPop(id, text) { return `<div class="ui-inset info-pop" id="${id}" hidden>${esc(text)}</div>`; }
 
   function stuSkills(stu) {
     const bandName = (v) => (v < 34 ? 'Sprouting' : v < 67 ? 'Growing' : 'Blooming');
     const card = (sk) => {
       const win = (label, val) => `<div class="scw"><div class="scw-col"><div class="scw-bar" style="background:${TP.levelOf(bandName(val)).soft};height:${Math.max(6, Math.round(val * 0.4))}px"></div></div><div class="scw-l">${label}</div><div class="scw-v">${val}</div></div>`;
-      return `<div class="skill-card">
+      return `<div class="ui-card sm skill-card">
         <div class="sc-head"><div class="nm">${esc(sk.name)}</div><span class="ui-badge lvl-${TP.levelOf(sk.band).n}">${sk.band}</span></div>
         <div class="sc-bars">${win('Base', sk.pre)}${win('Mid', sk.mid)}${win('End', sk.post)}</div>
         <div class="sc-persp"><span>👩‍🏫 ${sk.teacher}%</span><span>🏠 ${sk.parent}%</span><span>🧒 ${sk.student}%</span></div>
@@ -1644,7 +1644,7 @@
     };
     const group = (grp, title) => {
       const cards = stu.skills.filter((sk) => sk.group === grp).map(card).join('');
-      return `<div style="margin-bottom:22px"><h3 class="sg-title">${title}</h3><div class="skill-grid">${cards}</div></div>`;
+      return `<div style="margin-bottom:22px"><h3 class="ui-title md sg-title">${title}</h3><div class="skill-grid">${cards}</div></div>`;
     };
     return `<div class="info-row">How skills are scored ${infoBtn('info-skills')}</div>${infoPop('info-skills', SCORE_INFO)}`
       + group('sel', 'Social-Emotional') + group('cog', 'Cognitive');
@@ -1670,7 +1670,7 @@
         ${rows}
       </div>
       <details class="persp-chart"${S.perspChartOpen ? ' open' : ''}><summary>See it as a chart</summary>
-        <div class="persp-chart-body">${radarSVG(stu)}
+        <div class="ui-card persp-chart-body">${radarSVG(stu)}
           <div class="ui-legend persp-legend"><span><i class="round" style="background:var(--persp-teacher)"></i>Teacher</span><span><i class="round" style="background:var(--persp-parent)"></i>Parent</span><span><i class="round" style="background:var(--persp-student)"></i>Student</span></div>
         </div>
       </details>`;
@@ -1748,12 +1748,12 @@
       const start = pastYearAvg(y, 0), end = pastYearAvg(y, 1);
       return `<div class="ui-card sm past-year">
         <div class="py-head">
-          <div><div class="py-t">${esc(y.grade)} ${esc(y.section)} · ${esc(y.year)}</div>
-          <div class="py-sub">Teacher: ${esc(y.teacher)} · ${y.windowsDone} of 3 assessments completed</div></div>
+          <div><div class="ui-title py-t">${esc(y.grade)} ${esc(y.section)} · ${esc(y.year)}</div>
+          <div class="ui-meta py-sub">Teacher: ${esc(y.teacher)} · ${y.windowsDone} of 3 assessments completed</div></div>
           ${levelBadge(levelName(end))}
         </div>
         <div class="py-grow">Overall <b>${start}%</b> → <b>${end}%</b> across the year</div>
-        <div class="py-note"><span class="ui-eyebrow mb-1">Handover note from ${esc(y.teacher)}</span><p>${esc(y.note)}</p></div>
+        <div class="ui-inset py-note"><span class="ui-eyebrow mb-1">Handover note from ${esc(y.teacher)}</span><p>${esc(y.note)}</p></div>
       </div>`;
     }).join('');
 
@@ -1867,8 +1867,8 @@
     else if (S.todoView === 'pending') { body = pendingView(); subtitle = 'Who still needs a teacher observation in this window.'; }
     else { body = obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
     return `<div class="dash-wrap" style="max-width:1080px">
-      <h1 class="dash-h1" style="color:var(--green-700)">Assess</h1>
-      <p class="dash-sub" style="max-width:560px">${esc(subtitle)}</p>
+      <h1 class="ui-screen-title">Assess</h1>
+      <p class="ui-screen-sub flush" style="max-width:560px">${esc(subtitle)}</p>
       <div class="log-tabs mt-4">${subTabs}</div>
       <div class="mt-4">${body}</div>
     </div>`;
@@ -1946,10 +1946,10 @@
       return `<div class="obs-row">
         <div class="obs-node">${marker}</div>
         <button class="obs-card ${j.st}" ${dataAttr} ${clickable ? '' : 'disabled'}>
-          <div class="obs-card-top"><div class="obs-card-title">${esc(j.title)}</div><span class="ui-badge ${dn ? 'done' : active ? 'prog' : 'pend'}">${badge}</span></div>
-          <div class="obs-meta">${esc(j.meta)}</div>
+          <div class="obs-card-top"><div class="ui-title md obs-card-title">${esc(j.title)}</div><span class="ui-badge ${dn ? 'done' : active ? 'prog' : 'pend'}">${badge}</span></div>
+          <div class="ui-meta obs-meta">${esc(j.meta)}</div>
           ${j.body ? `<div class="obs-body">${esc(j.body)}</div>` : ''}
-          ${cta ? `<span class="obs-cta ${active ? 'active' : ''}">${cta}</span>` : ''}
+          ${cta ? `<span class="btn-soft green obs-cta ${active ? 'active' : ''}">${cta}</span>` : ''}
         </button>
       </div>`;
     }).join('');
@@ -1984,15 +1984,15 @@
         <div class="todo-done-list">${done.map((st) => `<span>${esc(st.dispFirst || st.first)}</span>`).join('')}</div></details>` : '';
     const list = !ordered.length ? `<div class="todo-h">Everyone is observed for ${esc(winLabel)} 🌸</div>`
       : rows ? `<div class="todo-list">${rows}</div>`
-      : `<p class="dash-sub" style="padding:6px 2px">No child matches “${esc(S.todoSearch)}”.</p>`;
+      : `<p class="ui-screen-sub flush" style="padding:6px 2px">No child matches “${esc(S.todoSearch)}”.</p>`;
     return `<button class="btn-link mb-3 focus" data-todo-back>← Back to the journey</button>
       <div class="todo-head">
-        <div><div class="todo-t">${esc(winLabel)} observations</div>
-          <div class="todo-s"><b>${ordered.length}</b> of ${countNoun(N, 'child', 'children')} still to do</div></div>
+        <div><div class="ui-title todo-t">${esc(winLabel)} observations</div>
+          <div class="ui-meta todo-s"><b>${ordered.length}</b> of ${countNoun(N, 'child', 'children')} still to do</div></div>
         ${next ? `<button class="btn btn-primary md focus" data-continue-assess="${esc(next.id)}">${draftOf(next, wk) ? 'Continue' : 'Start'} with ${esc(next.dispFirst || next.first)} →</button>` : ''}
       </div>
       ${search}
-      <div class="todo">${list}${doneFold}</div>`;
+      <div class="ui-card sm todo">${list}${doneFold}</div>`;
   }
 
   // Vine through the step markers. `ys` = each marker's centre, `H` = total height.
@@ -2014,7 +2014,7 @@
     const left = pendingIn(sec.students, wk);
     if (e.allDone && left > 0 && !e.studentId) e.allDone = false;
     if (e.allDone) {
-      return `<div class="obs-alldone">
+      return `<div class="ui-card obs-alldone">
         <div class="pl">${flowerArt('blossoming', 96, 0)}</div>
         <div class="t">Every child is observed for ${esc(winLabel)} 🌸</div>
         <p>${e.justDone ? esc(e.justDone) + '&rsquo;s observation is saved. ' : ''}No pending teacher observations left.</p>
@@ -2043,11 +2043,11 @@
       const sk = skillOf(q.skill);
       const opts = STAR_LABELS.map((lbl, i) => {
         const picked = e.ratings[q.id] === i + 1;
-        return `<button class="obs-star${picked ? ' on' : ''}" data-star="${i + 1}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}"><div class="row">${[0, 1, 2, 3].map((j) => star(j, i)).join('')}</div><div class="lb">${lbl}</div></button>`;
+        return `<button class="ui-pick obs-star${picked ? ' on' : ''}" data-star="${i + 1}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}"><div class="row">${[0, 1, 2, 3].map((j) => star(j, i)).join('')}</div><div class="lb">${lbl}</div></button>`;
       }).join('');
-      return `<div class="obs-qcard${e.ratings[q.id] ? ' done' : ''}">
+      return `<div class="ui-card sm obs-qcard${e.ratings[q.id] ? ' done' : ''}">
         <div class="obs-q">Question ${from + k + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
-        <div class="obs-skill">${esc(sk.name)}</div>
+        <div class="ui-title obs-skill">${esc(sk.name)}</div>
         <p class="obs-anchor">${esc(q.text)}</p>
         <div class="obs-stars" role="radiogroup" aria-label="${esc(sk.name)}">${opts}</div>
       </div>`;
@@ -2055,7 +2055,7 @@
     const last = page >= pages - 1;
     const nextLbl = last ? (left > 1 ? 'Finish → next child' : 'Finish 🌱') : 'Next page →';
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
-    return `${saved}${resumed}<div class="obs-enter">
+    return `${saved}${resumed}<div class="ui-card obs-enter">
       <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · ${esc(winLabel)} observation</div></div>${progress}</div>
       <div class="obs-dots">${dots}</div>
       <div class="obs-page">Page ${page + 1} of ${pages} · ${answered} of ${nQ} answered</div>
@@ -2152,7 +2152,7 @@
     // hover shows when this class's assessment activity last changed.
     const HU = window.TilliHistory;
     const tip = HU ? HU.lastUpdatedText(sectionHistory(section(), 'assessment')[0], histOpts()) : '';
-    const histBtn = HU ? `<button class="btn-line hist-tip focus" data-assess-hist data-tip="${esc(tip)}" aria-label="Assessment history · ${esc(tip)}">🕘 History</button>` : '';
+    const histBtn = HU ? `<button class="btn-line ui-tooltip down end hover-only focus" data-assess-hist data-tip="${esc(tip)}" aria-label="Assessment history · ${esc(tip)}">🕘 History</button>` : '';
     const one = S.trackerStu ? trackerStudentView() : '';
     if (one) return legend + one;
     return `<div class="log-tabs-row end"><div class="log-actions">${histBtn}
@@ -2190,9 +2190,9 @@
       const badge = locked ? '<span class="ui-badge wc-lock">🔒 Not deployed yet</span>'
         : `<span class="ui-badge ${all ? 'done' : 'prog'}">${all ? 'All complete 🌸' : (total - done) + ' still to go'}</span>`;
       const tip = locked ? w.label + ' opens here once Tilli deploys it.' : 'Show each child’s ' + w.label + ' completion';
-      return `<button class="win-card pick${on ? ' on' : ''}${locked ? ' locked' : ''}" data-logwin="${w.key}" aria-pressed="${on}"${locked ? ' aria-disabled="true"' : ''} title="${esc(tip)}">
+      return `<button class="ui-card sm ui-pick win-card pick${on ? ' on' : ''}${locked ? ' locked' : ''}" data-logwin="${w.key}" aria-pressed="${on}"${locked ? ' aria-disabled="true"' : ''} title="${esc(tip)}">
         <div class="ring">${ringSVG(locked ? 0 : done, total)}</div>
-        <div class="wc-meta"><div class="wc-label">${esc(w.label)}</div><div class="wc-sub">${esc(w.sub)} · ${esc(w.date)}</div>${badge}</div></button>`;
+        <div class="wc-meta"><div class="ui-title md wc-label">${esc(w.label)}</div><div class="ui-meta wc-sub">${esc(w.sub)} · ${esc(w.date)}</div>${badge}</div></button>`;
     }).join('');
   }
   function logsByClass() {
@@ -2226,7 +2226,7 @@
       const fully = s.students.filter((st) => (logOf(st, wk) || {}).status === 'done').length;
       const pct = n ? Math.round((fully / n) * 100) : 0;
       const on = s.id === S.sectionId;
-      return `<button class="strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
+      return `<button class="ui-card sm ui-pick strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
     }).join('');
     // Parents still to finish this window (T18): a list the teacher can act on,
     // a no-names reminder for the class group, and a per-child message for a DM.
@@ -2236,8 +2236,8 @@
     const groupMsg = `Hello parents 🌱 A gentle reminder: the Tilli ${w.label} parent survey for ${sec.name}${closes}. It helps us see how your child is growing at home. If you've already finished it, thank you! — ${teacherName}`;
     const oneMsg = (st) => `Hello! A gentle reminder that ${st.first}'s Tilli ${w.label} parent survey${closes}. It helps us see how ${st.first} is growing at home. Thank you! — ${teacherName}`;
     const remind = !P.some((p) => p.key === 'parent') ? ''
-      : !parentPending.length ? `<div class="par-remind done">🏠 Every parent has finished for ${esc(w.label)} 🌸</div>`
-      : `<div class="par-remind">
+      : !parentPending.length ? `<div class="ui-card sm par-remind done">🏠 Every parent has finished for ${esc(w.label)} 🌸</div>`
+      : `<div class="ui-card sm par-remind">
           <div class="par-remind-top">
             <div><b>🏠 ${countNoun(parentPending.length, 'parent', 'parents')} still to finish</b><span> · ${esc(w.label)}${w.date ? ' closes ' + esc(w.date) : ''}</span></div>
             <button class="btn-line primary focus" data-copy="${esc(groupMsg)}" title="Copies a reminder with no children's names, ready to paste in the class group">📋 Copy reminder for the class group</button>
@@ -2249,7 +2249,7 @@
     // "Your classes at a glance" only helps a teacher with 2+ sections.
     const glance = S.data.sections.length > 1
       ? `<div class="ui-eyebrow log-strip-title">Your classes at a glance</div><div class="strip-grid">${strip}</div>` : '';
-    return `${remind}<div class="cr-wrap">
+    return `${remind}<div class="ui-card cr-wrap">
         <div class="cr-title">Done so far <span>· ${esc(w.label)} — ${esc(w.sub)}</span></div>
         <div class="cr"><div class="cr-head"><div class="ui-eyebrow mtx-corner">Student</div>${head}</div>${rows}</div>
       </div>${glance}`;
@@ -2362,13 +2362,13 @@
       const canGo = !locked && w.key === openWk && !teacherDone(st, w.key);
       const dot = locked ? 'var(--line-200)' : ss.dot, halo = locked ? 'var(--surface-100)' : ss.bg;
       return `<div class="tl-row"><div class="tl-dot-wrap"><div class="tl-dot" style="background:${dot};box-shadow:0 0 0 4px ${halo}"></div><div class="tl-line"></div></div>
-        <div class="tl-card${locked ? ' locked' : ''}"><div class="tl-top"><div><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)} · ${esc(w.date)}</div></div>${badge}</div>
+        <div class="ui-card sm tl-card${locked ? ' locked' : ''}"><div class="tl-top"><div><div class="l">${esc(w.label)}</div><div class="s">${esc(w.sub)} · ${esc(w.date)}</div></div>${badge}</div>
           <div class="tl-persps">${persp}</div>
-          ${canGo ? `<button class="btn-ask-a inline focus" data-continue-assess="${esc(st.id)}">${draftOf(st, w.key) ? 'Continue' : 'Start'} ${esc(st.dispFirst || st.first)}&rsquo;s observation →</button>` : ''}</div></div>`;
+          ${canGo ? `<button class="btn btn-primary sm btn-ask-a inline focus" data-continue-assess="${esc(st.id)}">${draftOf(st, w.key) ? 'Continue' : 'Start'} ${esc(st.dispFirst || st.first)}&rsquo;s observation →</button>` : ''}</div></div>`;
     }).join('');
     return `<button class="btn-link mb-3 focus" data-tracker-back>← Back to Done so far</button>
-      <div class="logstu-head"><span class="pl">${flowerArt(st.state, 60, 0)}</span>
-        <div class="m"><h2 class="stu-name" style="font-size:var(--fs-xl)">${esc(st.name)}</h2><div class="stu-sub">${esc(sec.name)} · ${st.perspDone} of ${total} parts done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
+      <div class="ui-card logstu-head"><span class="pl">${flowerArt(st.state, 60, 0)}</span>
+        <div class="m"><h2 class="ui-title xl stu-name" style="font-size:var(--fs-xl)">${esc(st.name)}</h2><div class="ui-meta stu-sub">${esc(sec.name)} · ${st.perspDone} of ${total} parts done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
         <button class="btn-soft green focus" data-open-student="${esc(st.id)}">Open full profile →</button></div>
       <div class="tl">${timeline}</div>`;
   }
@@ -2466,8 +2466,8 @@
     else body = insCompare();
 
     return `<div class="dash-wrap" style="max-width:1040px">
-      <h1 class="dash-h1">Insights</h1>
-      <p class="dash-sub">A quiet place to plan — where ${esc(scope.name)} is strong, growing, and ready for focus.</p>
+      <h1 class="ui-screen-title">Insights</h1>
+      <p class="ui-screen-sub flush">A quiet place to plan — where ${esc(scope.name)} is strong, growing, and ready for focus.</p>
       ${S._insSample ? '<div class="ui-note sample mt-3">🌱 Sample view — your class&rsquo;s real insights replace this once Baseline is complete.</div>' : ''}
       <div class="log-tabs mt-4" role="tablist">${tabs}</div>
       ${body}
@@ -2477,7 +2477,7 @@
   // Whole-page pre-baseline state.
   function insPreBaseline(scope) {
     return `<div class="dash-wrap" style="max-width:640px">
-      <h1 class="dash-h1">Insights</h1>
+      <h1 class="ui-screen-title">Insights</h1>
       <div class="ui-empty empty-hero">
         <div class="empty-plant">${flowerArt('waiting', 92, 0)}</div>
         <h2 class="ui-empty-t">Your first insights arrive after baseline 🌱</h2>
@@ -2512,7 +2512,7 @@
     // line and the "tap a box" hint). Counts are SKILLS by their largest group.
     const chip = (band, label, n, lvl) => {
       const on = (S.ovBand || '') === band;
-      return `<button class="ov-chip${on ? ' on' : ''} focus" data-ov-band="${band}" aria-pressed="${on}"${n || !band ? '' : ' disabled'}
+      return `<button class="ui-filterchip dark cso-chip${on ? ' on' : ''} focus" data-ov-band="${band}" aria-pressed="${on}"${n || !band ? '' : ' disabled'}
         title="${band ? `Show only skills where most of the class is ${band}` : 'Show every skill'}">${lvl ? `<i style="background:var(--lvl-${lvl})"></i>` : ''}${label}<b>${n}</b></button>`;
     };
     const chips = chip('', 'All skills', stats.length, 0) + OV_BANDS.map((b) =>
@@ -2523,22 +2523,22 @@
       .sort((a, b) => (rank[a.plurality] - rank[b.plurality]) || ((b.counts.Sprouting / (b.total || 1)) - (a.counts.Sprouting / (a.total || 1))) || ((a.counts.Blooming / (a.total || 1)) - (b.counts.Blooming / (b.total || 1))))
       .map((s) => {
         const t = s.total || 1, m = meta(s.plurality), open = S.ovSkill === s.key;
-        const seg = (b, n) => s.counts[b] ? `<span class="ov-seg" style="width:${(s.counts[b] / t) * 100}%;background:var(--lvl-${n})" title="${s.counts[b]} ${b}"></span>` : '';
-        return `<div class="ov-row${open ? ' open' : ''}">
-          <button class="ov-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}" title="${open ? 'Hide' : 'See'} which children are where">
-            <span class="ov-name">${esc(s.name)}</span>
-            <span class="ov-bar">${seg('Sprouting', 1)}${seg('Growing', 2)}${seg('Blooming', 3)}</span>
-            <span class="ov-status ov-st-l${m.n}">${m.label}</span>
-            <span class="ov-chev" aria-hidden="true">›</span>
+        const seg = (b, n) => s.counts[b] ? `<span class="cso-seg" style="width:${(s.counts[b] / t) * 100}%;background:var(--lvl-${n})" title="${s.counts[b]} ${b}"></span>` : '';
+        return `<div class="cso-row${open ? ' open' : ''}">
+          <button class="cso-rowbtn focus" data-ov-skill="${esc(s.key)}" aria-expanded="${open}" title="${open ? 'Hide' : 'See'} which children are where">
+            <span class="cso-name">${esc(s.name)}</span>
+            <span class="ui-bandbar">${seg('Sprouting', 1)}${seg('Growing', 2)}${seg('Blooming', 3)}</span>
+            <span class="ui-bandword lvl-${m.n} cso-status">${m.label}</span>
+            <span class="cso-chev" aria-hidden="true">›</span>
           </button>
           ${open ? ovBreakdown(s, scope) : ''}
         </div>`;
       }).join('') || '<div class="ui-empty">No skills in this group right now.</div>';
     return `<div class="ui-card ins-card ov mt-4">
-      <div class="ov-h">Class Skill Overview ${infoBtn('info-ov')}</div>${infoPop('info-ov', SCORE_INFO)}
-      <p class="ov-desc">Where most of ${esc(scope.name)}&rsquo;s ${countNoun(N, 'student', 'students')} sit on each skill. Tap a skill to see who&rsquo;s where.${notAssessed ? ` <span class="ov-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet.</span>` : ''}</p>
-      <div class="ov-chips" role="group" aria-label="Filter skills">${chips}</div>
-      <div class="ov-list">${rows}</div>
+      <div class="cso-h">Class Skill Overview ${infoBtn('info-ov')}</div>${infoPop('info-ov', SCORE_INFO)}
+      <p class="cso-desc">Where most of ${esc(scope.name)}&rsquo;s ${countNoun(N, 'student', 'students')} sit on each skill. Tap a skill to see who&rsquo;s where.${notAssessed ? ` <span class="cso-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet.</span>` : ''}</p>
+      <div class="cso-chips" role="group" aria-label="Filter skills">${chips}</div>
+      <div class="cso-list">${rows}</div>
     </div>`;
   }
   // Which students sit in each band for one skill (assessed students only).
@@ -2551,13 +2551,13 @@
     const col = (b) => {
       const m = OV_BANDS.find((x) => x.band === b);
       const list = by[b].sort((x, y) => x.name.localeCompare(y.name));
-      return `<div class="ov-bcol">
-        <div class="ov-bh"><i style="background:var(--lvl-${m.n})"></i>${b} <span>${list.length}</span></div>
-        ${list.length ? list.map((st) => `<button class="ov-stu focus" data-open-student="${esc(st.id)}" title="Open ${esc(st.name)}">${esc(st.name)}</button>`).join('') : '<div class="ov-bnone">—</div>'}
+      return `<div class="cso-bcol">
+        <div class="cso-bh"><i style="background:var(--lvl-${m.n})"></i>${b} <span>${list.length}</span></div>
+        ${list.length ? list.map((st) => `<button class="ui-filterchip sm cso-stu focus" data-open-student="${esc(st.id)}" title="Open ${esc(st.name)}">${esc(st.name)}</button>`).join('') : '<div class="cso-bnone">—</div>'}
       </div>`;
     };
-    return `<div class="ov-break">${col('Sprouting')}${col('Growing')}${col('Blooming')}
-      <div class="ov-bfoot"><button class="btn-link focus" data-ask="build" data-skill="${esc(stat.name)}" data-band="${stat.plurality}">Ask Tilli how to build ${esc(stat.name)} →</button></div>
+    return `<div class="cso-break">${col('Sprouting')}${col('Growing')}${col('Blooming')}
+      <div class="cso-bfoot"><button class="btn-link focus" data-ask="build" data-skill="${esc(stat.name)}" data-band="${stat.plurality}">Ask Tilli how to build ${esc(stat.name)} →</button></div>
     </div>`;
   }
 
@@ -2653,14 +2653,14 @@
     const note = pending.length
       ? `<div class="ui-note mt-3">🕒 ${pending.map((p) => `${esc(p.meta.label)}${p.meta.date ? ' opens ' + esc(p.meta.date) : ' hasn\'t opened yet'}`).join(' · ')}</div>` : '';
     return `<div class="ui-card ins-card mt-4">
-      <div class="ins-h">Growth over time ${infoBtn('info-growth')}</div>${infoPop('info-growth', SCORE_INFO)}
-      <div class="ins-sub">Class average per skill at Baseline → Midline → Endline. Filter to compare groups or follow one skill.</div>
+      <div class="ui-title md ins-h">Growth over time ${infoBtn('info-growth')}</div>${infoPop('info-growth', SCORE_INFO)}
+      <div class="ui-meta ins-sub">Class average per skill at Baseline → Midline → Endline. Filter to compare groups or follow one skill.</div>
       <div class="gr-filters">
         ${pill('overview', 'Overview')}${pill('sel', 'Social-Emotional')}${pill('cog', 'Cognitive')}${skillSel}
         <button class="gr-view focus" data-growth-table title="Switch between the chart and a table of the same numbers">${S.growthTable ? '📈 Chart view' : '▦ Table view'}</button>
       </div>
       ${S.growthTable ? table : `${legend}<div class="gr-wrap" tabindex="0" aria-label="Growth chart — use left and right arrows to read each window">${growthSVG(series, phases, meas, partial)}<div class="ui-tip gr-tip" hidden></div></div>
-        <div class="gr-taps">${phases.map((p, i) => `<button type="button" class="tip-chip focus" data-gr-i="${i}" aria-pressed="false">ⓘ ${esc(p.meta.label)}</button>`).join('')}</div>`}
+        <div class="gr-taps">${phases.map((p, i) => `<button type="button" class="ui-filterchip tip-chip focus" data-gr-i="${i}" aria-pressed="false">ⓘ ${esc(p.meta.label)}</button>`).join('')}</div>`}
       ${note}
       <div class="ins-foot"><button class="btn-soft green focus" data-ask-ins="grow">Ask Tilli what to do with this →</button></div>
     </div>`;
@@ -2729,15 +2729,15 @@
       const prog = phases.map((p) => meas[p.win]
         ? `<div class="scph"><span class="scph-l">${esc(shortWin(p.meta.label))}</span><span class="scph-v">${s[p.field]}%</span></div>`
         : `<div class="scph scph-empty"><span class="scph-l">${esc(shortWin(p.meta.label))}</span><span class="scph-v">—</span></div>`).join('');
-      return `<button class="sb-card focus" data-ask="build" data-skill="${esc(s.name)}" data-band="${s.plurality}" aria-label="Ask Tilli how to build ${esc(s.name)}">
-        <div class="sb-top"><span class="sb-name">${esc(s.name)}</span><span class="ui-tag ${g === 'sel' ? 'cyan' : 'sb-tag-cog'}">${groupLabel(g)}</span></div>
+      return `<button class="ui-card sm subtle sb-card focus" data-ask="build" data-skill="${esc(s.name)}" data-band="${s.plurality}" aria-label="Ask Tilli how to build ${esc(s.name)}">
+        <div class="sb-top"><span class="ui-title md sb-name">${esc(s.name)}</span><span class="ui-tag ${g === 'sel' ? 'cyan' : 'sb-tag-cog'}">${groupLabel(g)}</span></div>
         <div class="scprog">${prog}</div>
         <span class="sb-ask">Ask Tilli how to build this →</span>
       </button>`;
     }).join('');
     return `<div class="ui-card ins-card mt-4">
-      <div class="ins-h">Every skill, up close</div>
-      <div class="ins-sub">Tap a skill for a Tilli idea to build it.</div>
+      <div class="ui-title md ins-h">Every skill, up close</div>
+      <div class="ui-meta ins-sub">Tap a skill for a Tilli idea to build it.</div>
       ${toggle}
       <div class="sb-grid">${cards}</div>
     </div>`;
@@ -2756,8 +2756,8 @@
     return `<div class="persp-note">Teachers, parents and children each see a skill from where they stand. A difference isn't right or wrong — it's a clue about where the skill shows up. 🌤️</div>
       ${prompts}
       <div class="ui-card ins-card mt-4">
-        <div class="ins-h">Every skill, three viewpoints ${infoBtn('info-persp')}</div>${infoPop('info-persp', PERSP_INFO)}
-        <div class="ins-sub">The same numbers from your skill cards, lined up to compare.</div>
+        <div class="ui-title md ins-h">Every skill, three viewpoints ${infoBtn('info-persp')}</div>${infoPop('info-persp', PERSP_INFO)}
+        <div class="ui-meta ins-sub">The same numbers from your skill cards, lined up to compare.</div>
         <div class="pv-grid">${cards}</div>
       </div>`;
   }
@@ -2775,14 +2775,14 @@
     const items = picked.map((s) => {
       const line = `${cap(PERSP_NOUN[s.hiKey])} rate ${esc(s.name)} noticeably higher than ${PERSP_NOUN[s.loKey]} do. That's worth a closer look — a skill can simply show up differently at home, in play, or in class.`;
       return `<div class="wcl-item">
-        <div class="wcl-skill">${esc(s.name)} <span class="wcl-gap">${s.gap} pts apart</span></div>
+        <div class="ui-title md wcl-skill">${esc(s.name)} <span class="wcl-gap">${s.gap} pts apart</span></div>
         <p class="wcl-text">${line}</p>
         <button class="btn-soft green focus" data-ask="persp" data-skill="${esc(s.name)}" data-hi="${esc(s.hiKey)}" data-lo="${esc(s.loKey)}">Ask Tilli why this happens →</button>
       </div>`;
     }).join('');
     return `<div class="ui-card ins-card">
-      <div class="ins-h">Worth a closer look</div>
-      <div class="ins-sub">The few places your class's views differ most — each a conversation, never a correction.</div>
+      <div class="ui-title md ins-h">Worth a closer look</div>
+      <div class="ui-meta ins-sub">The few places your class's views differ most — each a conversation, never a correction.</div>
       <div class="wcl-list">${items}</div>
     </div>`;
   }
@@ -2816,7 +2816,7 @@
       return { name: sk.name, gap: hi.v - lo.v, hi, lo };
     }).sort((a, b) => b.gap - a.gap).filter((d) => d.gap >= 10).slice(0, 3);
     const prompts = diffs.length ? `<div class="wcl-list mt-4">${diffs.map((d) => `<div class="wcl-item">
-      <div class="wcl-skill">${esc(d.name)} <span class="wcl-gap">${esc(d.hi.sec.name)} +${d.gap}</span></div>
+      <div class="ui-title md wcl-skill">${esc(d.name)} <span class="wcl-gap">${esc(d.hi.sec.name)} +${d.gap}</span></div>
       <p class="wcl-text">${esc(d.hi.sec.name)} is ahead of ${esc(d.lo.sec.name)} on ${esc(d.name)}. What's working in ${esc(d.hi.sec.name)} that could help ${esc(d.lo.sec.name)}?</p>
       <button class="btn-soft green focus" data-ask="cmp" data-skill="${esc(d.name)}" data-hi="${esc(d.hi.sec.name)}" data-lo="${esc(d.lo.sec.name)}">Ask Tilli for an activity to bring to ${esc(d.lo.sec.name)} →</button>
     </div>`).join('')}</div>` : '';
@@ -2824,8 +2824,8 @@
     return `<div class="persp-note green">Two of your own classes, side by side. This is for learning from yourself — what's working in one room you could carry to the other. Never a ranking. 🌿</div>
       ${gsel}
       <div class="ui-card ins-card">
-        <div class="ins-h">${esc(active.grade)} — section by section</div>
-        <div class="ins-sub">Current level per skill. No grade average, no benchmark — just your rooms compared to each other.</div>
+        <div class="ui-title md ins-h">${esc(active.grade)} — section by section</div>
+        <div class="ui-meta ins-sub">Current level per skill. No grade average, no benchmark — just your rooms compared to each other.</div>
         <div class="cmp2-table">${head}${rows}</div>
       </div>
       ${prompts}`;
@@ -2860,7 +2860,7 @@
   }
   function uidLine(stu) {
     const chip = uidChip(stu);
-    return chip ? `<div class="stu-sub stu-uid">Student UID ${chip}</div>` : '';
+    return chip ? `<div class="ui-meta stu-sub stu-uid">Student UID ${chip}</div>` : '';
   }
 
   // ================= Add student flow =================
@@ -3011,7 +3011,7 @@
         <div class="add-secchips">${secChips}<button class="ui-filterchip focus${a.sectionId === 'new' ? ' on' : ''}" data-add-sec="new">+ New</button></div>
         ${a.sectionId === 'new' ? `<div class="add-newsec"><input id="add-new-grade" class="input td-in" value="${esc(a.newGrade)}" placeholder="Grade (e.g. Grade 1)"><input id="add-new-section" class="input td-in" value="${esc(a.newSection)}" placeholder="Section (e.g. A)" maxlength="3"></div>` : ''}
       </div>`;
-    const title = (sub) => `<h2 class="add-title">Add your students</h2>${sub ? `<p class="add-sub">${sub}</p>` : ''}`;
+    const title = (sub) => `<h2 class="ui-title xl add-title">Add your students</h2>${sub ? `<p class="add-sub">${sub}</p>` : ''}`;
     let step = '';
     if (a.step === 'method') {
       step = `${title('')}${secPick}
@@ -3067,7 +3067,7 @@
       step = `${title(a.csvMsg ? '' : `Students are added to <b class="add-target">${esc(addGradeName())}</b>.`)}${secPick}
         ${a.csvMsg ? `<div class="ui-note ok mb-3">${esc(a.csvMsg)}</div>` : ''}
         ${Object.keys(issues).length ? '<div class="ui-note warn mb-3">A few students need a quick check before we can plant them — see the highlighted rows.</div>' : ''}
-        <section class="roster-group">
+        <section class="ui-card sm roster-group">
           <div class="roster-group-head"><span class="add-group-name">${esc(addGradeName())}</span><span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span></div>
           <div class="roster-sheet"><div class="roster-head"><span>First name</span><span>Last name</span><span>Admission #</span><span></span></div>${rowsHTML}</div>
           <button class="btn-dashed mt-2 focus" data-add-rowadd>+ Add student</button>
@@ -3228,7 +3228,7 @@
     return `<div class="ui-scrim ask-scrim" data-close-ask></div>
       <div class="ask-panel${a._popIn ? ' pop-in' : ''}" role="dialog" aria-label="Ask Tilli">
         <div class="ask-head">
-          <span class="ask-ic">${chatIcon('var(--green-700)')}</span>
+          <span class="ui-icontile">${chatIcon('var(--green-700)')}</span>
           <div class="ask-hmeta"><div class="t">Ask Tilli</div><div class="s">Your teaching assistant</div></div>
           <button class="btn-icon" data-ask-expand title="Open full screen" aria-label="Open Ask Tilli full screen">${LU.max}</button>
           <button class="btn-icon" data-close-ask aria-label="Close Ask Tilli">×</button>
@@ -3622,7 +3622,7 @@
   function mirrorCard() {
     const R = S.teacher.reflection || { cats: [], questions: [] };
     const snaps = mirrorSnapshots();
-    const head = `<div class="mir-head"><div><div class="mir-t">🪞 Your Teaching Mirror</div><div class="mir-s">How you described yourself in each reflection — switch between them to see how you&rsquo;ve changed.</div></div></div>`;
+    const head = `<div class="mir-head"><div><div class="ui-title mir-t">🪞 Your Teaching Mirror</div><div class="ui-meta mir-s">How you described yourself in each reflection — switch between them to see how you&rsquo;ve changed.</div></div></div>`;
     if (!snaps.length) {
       return `<div class="ui-card mir">${head}<p class="mir-empty">Finish your reflection to see your Teaching Mirror.</p></div>`;
     }
@@ -3631,7 +3631,7 @@
     const cats = mirrorAverages(A);
     const prev = idx > 0 ? mirrorAverages(snaps[idx - 1].answers || {}) : null;
     // Timeline switcher: one stop per snapshot, each with its local date + time.
-    const stops = snaps.map((r, i) => `<button class="mir-stop${i === idx ? ' on' : ''} focus" data-mirror-idx="${i}" aria-pressed="${i === idx}">
+    const stops = snaps.map((r, i) => `<button class="ui-pick mir-stop${i === idx ? ' on' : ''} focus" data-mirror-idx="${i}" aria-pressed="${i === idx}">
         <span class="mir-dot"></span><span class="mir-sn">${esc(mirrorName(r, i))}${r.sample ? ' <em class="ui-tag lvl mir-sample">Sample</em>' : ''}</span><span class="mir-sd">${esc(fmtDateTime(r.at))}</span></button>`).join('');
     const timeline = `<div class="mir-tl">
         <button class="mir-nav focus" data-mirror-step="-1"${idx === 0 ? ' disabled' : ''} aria-label="Previous mirror">‹</button>
@@ -3673,8 +3673,8 @@
     const txt = (key, ph, num) => `<input class="input td-in pf-in focus" data-pf="${key}" value="${esc(d[key] || '')}" placeholder="${esc(ph)}"${num ? ' inputmode="numeric"' : ''}>`;
     const row = (label, ctrl) => `<label class="pf-row pf-edit"><span class="k">${label}</span>${ctrl}</label>`;
     return `<div class="dash-wrap" style="max-width:720px">
-      <h1 class="dash-h1">Edit your details</h1>
-      <p class="dash-sub">Changes save to your profile right away.</p>
+      <h1 class="ui-screen-title">Edit your details</h1>
+      <p class="ui-screen-sub flush">Changes save to your profile right away.</p>
       <div class="ui-card td-rows mt-4">
         ${row('Name', txt('name', 'Your full name'))}
         <div class="pf-row"><span class="k">Email</span><span class="v">${esc(S.teacher.email || '')} 🔒</span></div>
@@ -3705,8 +3705,8 @@
     ].filter((r) => r[1]).map((r) => `<div class="pf-row"><span class="k">${esc(r[0])}</span><span class="v">${esc(r[1])}</span></div>`).join('');
     return `<div class="dash-wrap" style="max-width:720px">
       <div class="pf-titlebar">
-        <div><h1 class="dash-h1">Your profile</h1>
-        <p class="dash-sub">From your one-time setup — keep it up to date.</p></div>
+        <div><h1 class="ui-screen-title">Your profile</h1>
+        <p class="ui-screen-sub flush">From your one-time setup — keep it up to date.</p></div>
         <button class="btn-line focus" data-pf-edit title="Edit your name, age, experience, education and location">✎ Edit details</button>
       </div>
       <div class="ui-card td-rows mt-4">${rows}</div>
@@ -4031,8 +4031,8 @@
   .dash-nav { width: 100%; }
   .dash-side.narrow .dash-navbtn { justify-content: center; padding: 11px; }
   .dash-side.narrow .dash-profilebtn { justify-content: center; padding: 12px 0 4px; }
-  /* .ui-avatar.sm, kept in the teacher's pink identity colour (same as .dash-avatarbtn) */
-  .dash-avatar { background: var(--pink-400); color: var(--white); }
+  /* Teacher identity colour for every .ui-avatar on this page (tilli.css default is green wash). */
+  :root { --avatar-bg: var(--pink-400); --avatar-fg: var(--white); }
   .dash-col { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
   /* Header bar look comes from .ui-header (tilli.css) — same height/border as the admin header. */
   .dash-header:empty { display: none; }
@@ -4042,10 +4042,9 @@
   .dash-header .dash-chips:only-child { margin-left: 0; }
   .dash-chips::-webkit-scrollbar { display: none; }
   .dash-chips .ui-filterchip { flex: none; }
-  .dash-main { flex: 1; padding: 28px 40px; max-width: 1500px; width: 100%; margin: 0 auto; }
-  .dash-wrap { max-width: 1180px; margin: 0 auto; width: 100%; }
-  .dash-h1 { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); margin: 0; color: var(--ink-900); }
-  .dash-sub { margin: 6px 0 0; color: var(--ink-450); font-size: var(--fs-md); }
+  .dash-main { flex: 1; padding: var(--page-pad-y) var(--page-pad-x); max-width: 1500px; width: 100%; margin: 0 auto; }
+  .dash-wrap { max-width: var(--content-max); margin: 0 auto; width: 100%; }
+  /* Page titles = .ui-screen-title (+ .greet on the landing) / .ui-screen-sub.flush — tilli.css */
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
   /* page-local helpers */
@@ -4058,7 +4057,7 @@
   .td-uid { font-family: var(--font-heading); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
   .td-good { color: var(--green-700); }
   .td-help { color: var(--warn-700); }
-  .td-lead { margin: 0 0 14px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.45; }
+  .td-lead { margin: 0 0 14px; font-size: var(--fs-md); color: var(--text-meta); line-height: 1.45; }
   .svg-t { font-family: var(--font-body); }
   .ui-legend .lg-t { display: inline; font-weight: 600; }
   .btn-soft.green:hover { background: color-mix(in srgb, var(--green-500) 14%, var(--white)); }
@@ -4066,8 +4065,6 @@
   /* garden beds */
   .garden-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
   .garden-head-right { display: flex; align-items: center; gap: 14px; }
-  .dash-avatarbtn { width: 42px; height: 42px; border-radius: 50%; background: var(--pink-400); color: var(--white); border: none; cursor: pointer; font-family: var(--font-body); font-weight: 800; font-size: var(--fs-md); flex: none; box-shadow: var(--shadow-card); }
-  .dash-avatarbtn:hover { filter: brightness(1.05); }
   .gardener { flex: none; animation: tdFloat 4.6s ease-in-out infinite; }
   @keyframes tdFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
   @media (prefers-reduced-motion: reduce) { .gardener { animation: none; } }
@@ -4082,7 +4079,7 @@
   .bed-tip .rw { font-size: var(--fs-sm); color: var(--ink-450); margin-top: 4px; }
   .bed-label { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 10px; }
   .bed-label .nm { background: var(--white); border: 1.5px solid var(--line-200); border-radius: var(--radius-md); padding: 7px 18px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); box-shadow: var(--shadow-card); }
-  .bed-label .ct { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .bed-label .ct { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
   .bed-add { position: absolute; left: 0; bottom: 0; width: 100%; height: 56px; border-radius: var(--radius-card) var(--radius-card) var(--radius-lg) var(--radius-lg); display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--wash-green); border: 2.5px dashed var(--green-500); color: var(--green-700); font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); }
   .bed-add .plus { width: 30px; height: 30px; border-radius: 50%; background: var(--white); display: flex; align-items: center; justify-content: center; font-size: var(--fs-lg); line-height: 1; }
   /* bed key + section-garden legend (ui-legend) */
@@ -4093,8 +4090,7 @@
   .cm-backdrop { z-index: 600; }
   .cm-card { max-width: 680px; max-height: 82vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--line-200); }
   .cm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 16px; border-bottom: 1px solid var(--line-200); }
-  .cm-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); }
-  .cm-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin-top: 3px; }
+  .cm-sub { margin-top: 3px; }   /* .ui-meta; title = .ui-title.xl */
   .cm-list { overflow: auto; padding: 8px 10px 4px; }
   /* change history: class modal, "Last updated" line, student "Record changes" card */
   .hist-card .hist-tools { padding: 14px 24px 0; margin-bottom: 4px; }
@@ -4104,11 +4100,11 @@
   .stu-changes-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; }
   .cm-row { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: none; border: none; border-radius: var(--radius-md); padding: 11px 14px; cursor: pointer; font-family: var(--font-body); }
   .cm-row:hover { background: var(--surface-100); }
-  .cm-bloom { flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--wash-green); display: flex; align-items: center; justify-content: center; }
+  .cm-bloom { --icon-tile: 42px; }   /* .ui-icontile */
   .cm-info { flex: 1; min-width: 0; }
   .cm-info .nm { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); }
   .cm-info .sk { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; font-size: var(--fs-sm); color: var(--green-700); }
-  .cm-band { flex: none; font-size: var(--fs-sm); font-weight: 700; color: var(--ink-300); }
+  .cm-band { flex: none; font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); }
   .cm-foot { padding: 14px 24px 20px; border-top: 1px solid var(--line-200); }
 
   /* section garden */
@@ -4122,81 +4118,46 @@
   .pg-cell:hover .pg-tip, .pg-cell.tip-on .pg-tip { opacity: 1; visibility: visible; }
   /* Hover devices read tooltips on hover; touch devices (hover: none) get an ⓘ to tap. */
   .tip-i, .gr-taps { display: none; }
-  .tip-i { position: absolute; top: -4px; right: calc(50% - 30px); z-index: 2; width: 24px; height: 24px; align-items: center; justify-content: center; border: 1px solid var(--line-200); border-radius: 50%; background: var(--white); color: var(--ink-450); font-family: var(--font-body); font-size: var(--fs-xs); font-weight: 700; cursor: pointer; }
-  .tip-host.tip-on .tip-i { background: var(--wash-green); color: var(--green-700); border-color: var(--green-500); }
-  .gr-taps { gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
-  .tip-chip { border: 1px solid var(--line-200); background: var(--white); border-radius: var(--radius-pill); padding: 6px 12px; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); cursor: pointer; }
-  .tip-chip[aria-pressed="true"] { background: var(--wash-green); color: var(--green-700); border-color: var(--green-500); }
+  .tip-i { position: absolute; top: -4px; right: calc(50% - 30px); z-index: 2; margin: 0; }   /* .ui-info.lg — positioning only */
+  .tip-host.tip-on .tip-i { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-wash); }
+  .gr-taps { gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }   /* chips = .ui-filterchip[aria-pressed] */
   @media (hover: none) {
-    .tip-i { display: inline-flex; }
+    .tip-i { display: inline-grid; }
     .gr-taps { display: flex; }
     .pg-cell:hover .pg-tip { opacity: 0; visibility: hidden; }   /* a tap shouldn't leave a sticky hover tip */
     .pg-cell.tip-on .pg-tip { opacity: 1; visibility: visible; }
   }
   .pg-tip .nm { margin-bottom: 3px; }
-  .pg-tip .sl { font-size: var(--fs-xs); color: var(--ink-300); margin-bottom: 8px; }
+  .pg-tip .sl { font-size: var(--fs-xs); color: var(--text-meta); margin-bottom: 8px; }
   .pg-tip .ch { display: flex; gap: 5px; margin-bottom: 9px; flex-wrap: wrap; }
   .pg-tip .vw { font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); }
   .tend-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 14px; }
-  .tend-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 16px; display: flex; flex-direction: column; box-shadow: var(--shadow-card); }
+  .tend-card { display: flex; flex-direction: column; box-shadow: var(--shadow-card); }   /* .ui-card.sm */
   .tend-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
   .tend-top .pl { flex: none; }
   .tend-top .nm { font-weight: 800; font-size: var(--fs-md); line-height: 1.1; display: block; }
-  .tend-top .bd { font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; }
-  .tend-card .reason { margin: 2px 0 14px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.4; }
-  /* Primary "Ask Tilli" action inside cards. margin-top:auto pins it to the card bottom in flex-column cards. */
-  .btn-ask-a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: auto; border: none; cursor: pointer;
-    background: var(--green-500); color: var(--white); font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); padding: 10px 12px; border-radius: var(--radius-pill); transition: background .15s; }
-  .btn-ask-a:hover { background: var(--green-600); }
+  .tend-top .bd { font-size: var(--fs-xs); color: var(--text-meta); font-weight: 600; }
+  .tend-card .reason { margin: 2px 0 14px; font-size: var(--fs-md); color: var(--text-meta); line-height: 1.4; }
+  /* "Ask Tilli" action inside cards = .btn.btn-primary.sm; this only adds the layout.
+     margin-top:auto pins it to the card bottom in flex-column cards. */
+  .btn-ask-a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: auto; }
   .btn-ask-a.inline { width: auto; }
-  .hl-card { background: ${ART.highlight}; border-radius: var(--radius-xl); padding: 20px 22px; }
+  .hl-card { background: ${ART.highlight}; border-radius: var(--radius-card); padding: 20px 22px; }
   .hl-card .ui-eyebrow { color: var(--pink-600); }
   .hl-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   .hl-chip { background: color-mix(in srgb, var(--white) 70%, transparent); color: var(--pink-600); font-weight: 700; font-size: var(--fs-sm); padding: 8px 13px; border-radius: var(--radius-md); }
   .hl-more { background: none; border: none; color: var(--pink-600); font-weight: 700; font-size: var(--fs-sm); cursor: pointer; padding: 0; font-family: var(--font-body); }
   .hl-more.boxed { background: color-mix(in srgb, var(--white) 75%, transparent); border-radius: var(--radius-md); padding: 10px 14px; }
-  .grow-card { background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 20px 22px; }
+  .grow-card { background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 20px 22px; }
   .grow-card .ui-eyebrow { color: var(--lvl-2-ink); }
   .grow-list { display: flex; flex-direction: column; gap: 10px; }
   .grow-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .grow-row .nm { font-weight: 700; font-size: var(--fs-md); }
-  .grow-row .sub { font-size: var(--fs-sm); color: var(--ink-300); }
+  .grow-row .sub { font-size: var(--fs-sm); color: var(--text-meta); }
   .grow-ask { background: var(--wash-yellow); color: var(--lvl-2-ink); white-space: nowrap; }   /* .btn-soft, Growing-amber variant */
 
-  /* ask tilli — chat window pinned to the floating bubble (positionAskPop sets
-     its left/right/top/bottom + max-height; these are the no-anchor fallbacks). */
-  .ask-panel {
-    --ask-pop-w: 380px;   /* chat window width */
-    --ask-pop-h: 560px;   /* chat window height (capped by the space beside the bubble) */
-    position: fixed; z-index: 61; right: 22px; bottom: 104px; width: var(--ask-pop-w); max-width: calc(100vw - 16px); height: var(--ask-pop-h);
-    background: var(--white); display: flex; flex-direction: column; overflow: hidden;
-    border: 1px solid var(--line-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-modal);
-    transition: left .42s cubic-bezier(.22, 1.12, .36, 1), right .42s cubic-bezier(.22, 1.12, .36, 1), top .42s cubic-bezier(.22, 1.12, .36, 1), bottom .42s cubic-bezier(.22, 1.12, .36, 1);
-  }
-  .ask-panel.following { transition: none; }   /* tracking a drag 1:1 */
-  /* Grows out of the bubble: origin is the corner the bubble sits in. */
-  .ask-panel[data-from="br"] { transform-origin: bottom right; } .ask-panel[data-from="bl"] { transform-origin: bottom left; }
-  .ask-panel[data-from="tr"] { transform-origin: top right; }    .ask-panel[data-from="tl"] { transform-origin: top left; }
-  .ask-panel.pop-in { animation: askPopIn .26s cubic-bezier(.22, 1.12, .36, 1) both; }
-  @keyframes askPopIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .ask-panel { transition: none; } .ask-panel.pop-in { animation: none; } }
-  .ask-scrim { display: none; }   /* desktop/tablet: no dimming — it's a chat, not a modal */
-  .ask-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--line-200); }
-  .ask-ic { width: 34px; height: 34px; border-radius: var(--radius-md); background: var(--wash-green); display: flex; align-items: center; justify-content: center; flex: none; }
-  .ask-hmeta { flex: 1; } .ask-hmeta .t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); } .ask-hmeta .s { font-size: var(--fs-xs); color: var(--ink-300); }
-  .ask-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
-  .ask-ctx { align-self: flex-start; white-space: normal; --badge-bg: var(--wash-green); --badge-fg: var(--green-700); }   /* .ui-badge */
-  .ask-msg { max-width: 85%; padding: 10px 14px; font-size: var(--fs-sm); line-height: 1.45; }
-  .ask-msg.user { align-self: flex-end; background: var(--green-500); color: var(--white); border-radius: 14px 14px 4px 14px; }
-  .ask-msg.tilli { align-self: flex-start; background: var(--surface-100); color: var(--ink-700); border-radius: 14px 14px 14px 4px; }
-  .ask-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: auto 0; text-align: center; color: var(--ink-300); font-size: var(--fs-sm); max-width: 240px; align-self: center; line-height: 1.5; }
-  .ask-foot { padding: 10px 12px 12px; border-top: 1px solid var(--line-200); }
-  .ask-compose { display: flex; align-items: flex-end; gap: 8px; }
-  .ask-input { flex: 1; min-width: 0; border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 10px 12px; font-size: var(--fs-sm); color: var(--ink-900); resize: none; outline: none; background: var(--white); line-height: 1.45; font-family: var(--font-body); }
-  .ask-input:focus { border-color: var(--focus); }
-  .ask-sendbtn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: none; border-radius: var(--radius-md); background: var(--green-500); color: var(--white); cursor: pointer; }
-  .ask-sendbtn:hover:not(:disabled) { background: var(--green-600); }
-  .ask-sendbtn:disabled { opacity: .5; cursor: default; }
+  /* Ask Tilli floating chat window: .ask-panel / .ask-* live in tilli.css (shared with
+     school admin). Only the phone bottom-sheet layout below is teacher-specific. */
   /* ask tilli (full screen — nav destination) */
   .dash-col.ask-mode { height: 100vh; height: 100dvh; }
   .dash-main.ask-mode { padding: 0; max-width: none; display: flex; min-height: 0; }
@@ -4210,31 +4171,29 @@
   /* students: roster */
   .roster-tools { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 16px; }
   .roster-search { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 9px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 10px 14px; }
-  .roster-search svg { flex: none; color: var(--ink-300); }
+  .roster-search svg { flex: none; color: var(--text-faint); }
   .roster-search input { border: none; outline: none; background: none; font-size: var(--fs-md); width: 100%; font-family: var(--font-body); color: var(--ink-900); }
   .roster-sort { display: flex; gap: 6px; align-items: center; }
-  .roster-sort > span { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .roster-sort > span { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
   .roster-list { display: flex; flex-direction: column; gap: 9px; }
-  .roster-row { display: flex; align-items: center; gap: 14px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 10px 16px 10px 10px; cursor: pointer; text-align: left; font-family: var(--font-body); transition: box-shadow .15s; }
+  .ui-card.roster-row { display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 10px; cursor: pointer; text-align: left; font-family: var(--font-body); transition: box-shadow .15s; }   /* .ui-card.sm */
   .roster-row:hover { box-shadow: var(--shadow-hover); }
   .rr-plant { flex: none; }
   .rr-info { flex: 1; min-width: 0; }
   .rr-info .nm { font-weight: 800; font-size: var(--fs-md); display: block; }
-  .rr-info .sl { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .rr-info .sl { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
   .rr-chips { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
 
   /* students: detail */
-  .stu-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 18px 22px; margin-bottom: 16px; }
+  .stu-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 16px; }   /* .ui-card */
   .stu-plant { flex: none; }
   .stu-meta { flex: 1; min-width: 180px; }
-  .stu-name { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); margin: 0; }
-  .stu-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin: 3px 0 9px; }
+  .stu-sub { margin: 3px 0 9px; }   /* .ui-meta; name = .ui-title.xl */
   .stu-chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .stu-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 18px; scrollbar-width: none; }
   .stu-tabs::-webkit-scrollbar { display: none; }
-  .sg-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); margin: 0 0 12px; color: var(--ink-900); }
+  .sg-title { margin: 0 0 12px; }   /* .ui-title.md */
   .skill-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 12px; }
-  .skill-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 14px 15px; }
   .sc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
   .sc-head .nm { font-weight: 700; font-size: var(--fs-md); line-height: 1.2; }
   .sc-head .ui-badge { flex: none; }
@@ -4242,7 +4201,7 @@
   .scw { flex: 1; text-align: center; }
   .scw-col { height: 44px; display: flex; align-items: flex-end; justify-content: center; }
   .scw-bar { width: 16px; border-radius: var(--radius-xs) var(--radius-xs) 3px 3px; }
-  .scw-l { font-size: var(--fs-xs); color: var(--ink-300); font-weight: 700; margin-top: 4px; }
+  .scw-l { font-size: var(--fs-xs); color: var(--text-meta); font-weight: 700; margin-top: 4px; }
   .scw-v { font-size: var(--fs-xs); color: var(--ink-450); font-weight: 700; }
   .sc-persp { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--ink-450); border-top: 1px dashed var(--line-200); padding-top: 9px; margin-bottom: 11px; }
   .sc-full { width: 100%; justify-content: center; }
@@ -4253,24 +4212,24 @@
   .gap-row .gm { flex: 1; min-width: 200px; }
   .gap-row:last-child { border-bottom: none; }
   .gap-row .nm { font-weight: 700; font-size: var(--fs-sm); }
-  .gap-row .sub { font-size: var(--fs-xs); color: var(--ink-300); }
+  .gap-row .sub { font-size: var(--fs-xs); color: var(--text-meta); }
   /* Child → Perspectives list (main view) + folded radar chart */
   .persp-list { padding: 6px 8px; }
   .persp-list-h { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 10px 12px 6px; font-weight: 800; font-size: var(--fs-md); }
-  .persp-list-s { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
+  .persp-list-s { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); }
   .persp-list .info-pop { margin: 0 12px 8px; }
   .pv3 { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; font-size: var(--fs-xs); color: var(--ink-450); font-weight: 600; }
   .pv3 b { color: var(--ink-900); font-weight: 800; }
   .persp-chart { margin-top: 14px; }
   .persp-chart summary { cursor: pointer; font-weight: 700; font-size: var(--fs-sm); color: var(--green-700); }
-  .persp-chart-body { margin-top: 10px; padding: 18px; text-align: center; border: 1px solid var(--line-200); border-radius: var(--radius-card); max-width: 420px; }
+  .persp-chart-body { margin-top: 10px; text-align: center; max-width: 420px; }   /* .ui-card */
   .gap-right { display: flex; align-items: center; gap: 8px; flex: none; }
   .gap-badge { --badge-bg: var(--wash-cyan); --badge-fg: var(--cyan-700); }
   .gap-ask { background: none; border: none; cursor: pointer; padding: 4px; }
   .hist-row { display: flex; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--line-200); align-items: flex-start; }
   .hist-row:last-child { border-bottom: none; }
-  .hist-row .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex: none; }
-  .hist-row .hm { flex: 1; } .hist-row .hm .nm { font-weight: 700; font-size: var(--fs-md); } .hist-row .hm .sub { font-size: var(--fs-sm); color: var(--ink-300); }
+  .hist-row .dot { width: var(--dot-lg); height: var(--dot-lg); border-radius: 50%; margin-top: 4px; flex: none; }
+  .hist-row .hm { flex: 1; } .hist-row .hm .nm { font-weight: 700; font-size: var(--fs-md); } .hist-row .hm .sub { font-size: var(--fs-sm); color: var(--text-meta); }
   .hist-row .st { font-size: var(--fs-sm); font-weight: 700; }
   /* Previous classes — header chips + multi-year History tab */
   .stu-past { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -4286,17 +4245,14 @@
   .hs-cell b { font-size: var(--fs-sm); color: var(--ink-900); font-variant-numeric: tabular-nums; }
   .past-years { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
   .py-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  .py-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
-  .py-sub { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-300); margin-top: 2px; }
-  .py-grow { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); margin: 10px 0; }
+  .py-sub { margin-top: 2px; }   /* .ui-meta; title = .ui-title; note = .ui-inset */
+  .py-grow { font-weight: 600; font-size: var(--fs-sm); color: var(--text-meta); margin: 10px 0; }
   .py-grow b { color: var(--green-700); }
-  .py-note { background: var(--surface-100); border-radius: var(--radius-md); padding: 10px 12px; }
-  .py-note p { margin: 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.55; }
 
   /* profile */
   .pf-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--line-200); }
   .pf-row:last-child { border-bottom: none; }
-  .pf-row .k { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; }
+  .pf-row .k { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 700; }
   .pf-row .v { font-size: var(--fs-md); color: var(--ink-900); font-weight: 600; text-align: right; }
 
   /* observations */
@@ -4314,48 +4270,46 @@
   .obs-card:disabled { cursor: default; }
   .obs-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .obs-card-top .ui-badge { flex: none; }
-  .obs-card-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); }
-  .obs-card.locked .obs-card-title { color: var(--ink-300); }
-  .obs-meta { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin-top: 3px; }
-  .obs-body { font-size: var(--fs-md); color: var(--ink-450); margin-top: 8px; }
-  .obs-cta { display: inline-flex; margin-top: 12px; background: var(--wash-green); color: var(--green-700); border-radius: var(--radius-md); padding: 9px 16px; font-weight: 700; font-size: var(--fs-sm); }
+  .obs-card.locked .obs-card-title { color: var(--text-faint); }   /* title = .ui-title.md */
+  .obs-meta { margin-top: 3px; }   /* .ui-meta */
+  .obs-body { font-size: var(--fs-md); color: var(--text-meta); margin-top: 8px; }
+  .obs-cta { margin-top: 12px; }   /* .btn-soft.green (a <span> inside the card button) */
   .obs-cta.active { background: var(--green-500); color: var(--white); }
   /* To-do → who's still to observe (opened from the active step) */
   .todo-head { max-width: 720px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .todo-head ~ .roster-search { max-width: 720px; }
-  .todo-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
-  .todo-s { font-size: var(--fs-sm); color: var(--ink-450); margin-top: 2px; }
-  .todo { max-width: 720px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 12px 14px; }
+  .todo-s { margin-top: 2px; }   /* .ui-meta; title = .ui-title */
+  .todo { max-width: 720px; }   /* .ui-card.sm */
   .todo-h { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-700); margin-bottom: 4px; }
   .todo-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line-200); }
   .todo-row:first-child { border-top: none; }
   .todo-pl { flex: none; width: 28px; display: flex; justify-content: center; }
   .todo-nm { flex: 1; min-width: 0; font-weight: 700; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .todo-st { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); white-space: nowrap; }
+  .todo-st { font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); white-space: nowrap; }
   .todo-st.started { color: var(--lvl-2-ink); }
   .todo-row .btn { flex: none; }
-  .todo-done { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-200); font-size: var(--fs-sm); color: var(--ink-450); }
+  .todo-done { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-200); font-size: var(--fs-sm); color: var(--text-meta); }
   .todo-done summary { cursor: pointer; font-weight: 700; }
   .todo-done-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
   .log-tabs-row.end { justify-content: flex-end; }
   /* Done so far → parents still to finish (T18) — "par-" so it never mixes with the .pr- report styles */
-  .par-remind { border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 14px 16px; margin-bottom: 16px; background: var(--white); }
+  .par-remind { margin-bottom: 16px; }   /* .ui-card.sm */
   .par-remind.done { color: var(--green-700); font-weight: 700; font-size: var(--fs-sm); background: var(--wash-green); border-color: var(--lvl-3-wash); }
   .par-remind-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: var(--fs-sm); }
-  .par-remind-top span { color: var(--ink-300); font-weight: 600; }
+  .par-remind-top span { color: var(--text-meta); font-weight: 600; }
   .par-remind-list { margin-top: 10px; font-size: var(--fs-sm); }
-  .par-remind-list summary { cursor: pointer; font-weight: 700; color: var(--ink-450); }
+  .par-remind-list summary { cursor: pointer; font-weight: 700; color: var(--text-meta); }
   .par-remind-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line-200); }
   .par-remind-row:first-of-type { margin-top: 6px; }
   .par-remind-row .nm { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .par-remind-row .pt { color: var(--ink-300); font-weight: 600; white-space: nowrap; }
+  .par-remind-row .pt { color: var(--text-meta); font-weight: 600; white-space: nowrap; }
   /* Students → parent report preview (T17) */
   .rp-card { max-width: 900px; width: calc(100vw - 32px); max-height: 92vh; }
   .rp-body { flex: 1; min-height: 0; overflow-y: auto; background: var(--surface-100); padding: 14px; }
   .rp-fit { overflow: hidden; background: var(--white); box-shadow: var(--shadow-card); }
   .rp-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   /* Tracker → one child: all-windows timeline */
-  .logstu-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px 20px; margin-bottom: 16px; }
+  .logstu-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }   /* .ui-card */
   .logstu-head .m { flex: 1; min-width: 160px; }
   .logstu-bar { max-width: 260px; margin-top: 8px; }
   .tl { display: flex; flex-direction: column; gap: 14px; }
@@ -4363,49 +4317,48 @@
   .tl-dot-wrap { display: flex; flex-direction: column; align-items: center; flex: none; padding-top: 4px; }
   .tl-dot { width: 15px; height: 15px; border-radius: 50%; }
   .tl-line { flex: 1; width: 2px; background: var(--line-200); margin-top: 4px; }
-  .tl-card { flex: 1; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 2px; }
+  .tl-card { flex: 1; margin-bottom: 2px; }   /* .ui-card.sm */
   .tl-card .btn-ask-a { margin-top: 14px; }
   .tl-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .tl-top .l { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); } .tl-top .s { font-size: var(--fs-sm); color: var(--ink-300); }
+  .tl-top .l { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); } .tl-top .s { font-size: var(--fs-sm); color: var(--text-meta); }
   .tl-persps { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; }
   .tl-persp { display: flex; align-items: center; gap: 9px; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 9px 11px; }
   .tl-persp.done { background: var(--wash-green); border-color: var(--lvl-3-wash); }
   .tl-persp .ic { font-size: var(--fs-md); }
-  .tl-persp .nm { font-weight: 700; font-size: var(--fs-sm); } .tl-persp .st { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); }
+  .tl-persp .nm { font-weight: 700; font-size: var(--fs-sm); } .tl-persp .st { font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); }
   .tl-persp.done .st { color: var(--green-700); }
   .tl-card.locked { background: var(--surface-100); }
   .tl-card.locked .tl-persp { opacity: .6; }
-  .cr-date { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-300); }
-  .obs-enter { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 22px 24px; }
+  .cr-date { font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); }
+  /* .obs-enter = .ui-card */
   .obs-enter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
   .obs-enter-head .pl { flex: none; }
   .obs-enter-head .nm { font-weight: 800; font-size: var(--fs-md); }
-  .obs-enter-head .sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; }
+  .obs-enter-head .sub { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
   .obs-prog { margin-left: auto; min-width: 190px; text-align: right; }
-  .obs-prog-txt { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
+  .obs-prog-txt { font-size: var(--fs-sm); font-weight: 600; color: var(--text-meta); }
   .obs-prog-txt b { color: var(--ink-900); font-weight: 800; }
   .obs-prog-pend { color: var(--lvl-2-ink); font-weight: 700; }
   .obs-prog-bar { margin-top: 6px; }
   @media (max-width: 640px) { .obs-enter-head { flex-wrap: wrap; } .obs-prog { margin-left: 0; width: 100%; text-align: left; } }
   .obs-dots { display: flex; gap: 3px; margin: 14px 0 18px; }
   .obs-dot { flex: 1; height: 5px; border-radius: 3px; }
-  .obs-q { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; margin-bottom: 4px; }
-  .obs-skill { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); margin-bottom: 6px; }
-  .obs-anchor { margin: 0 0 20px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
+  .obs-q { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 700; margin-bottom: 4px; }
+  .obs-skill { margin-bottom: 6px; }   /* .ui-title */
+  .obs-anchor { margin: 0 0 20px; font-size: var(--fs-md); color: var(--text-meta); line-height: 1.5; }
   .obs-stars { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; }
-  .obs-star { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: pointer; border: 2px solid var(--line-200); background: var(--white); border-radius: var(--radius-md); padding: 13px 15px; font-family: var(--font-body); color: var(--ink-900); min-height: 58px; }
+  .obs-star { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; border-radius: var(--radius-md); padding: 13px 15px; min-height: 58px; }   /* .ui-pick */
   .obs-star .row { display: flex; gap: 2px; }
   .obs-star .lb { font-weight: 700; font-size: var(--fs-md); }
-  .obs-star.on { border-color: var(--green-500); background: var(--wash-green); }
   .obs-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 22px; }
   .obs-nav .btn-soft:disabled { opacity: .45; cursor: default; }
   .obs-nav-r { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
   .obs-need { font-size: var(--fs-sm); font-weight: 700; color: var(--lvl-2-ink); }
   /* One page = OBS_PAGE_SIZE question cards stacked */
   .obs-enter { scroll-margin-top: 90px; }
-  .obs-page { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin: -6px 0 14px; }
+  .obs-page { font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); margin: -6px 0 14px; }
   .obs-qcards { display: flex; flex-direction: column; gap: 14px; }
-  .obs-qcard { border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 16px 18px; }
+  /* .obs-qcard = .ui-card.sm */
   .obs-qcard.done { border-color: var(--lvl-3-wash); background: color-mix(in srgb, var(--wash-green) 45%, transparent); }
   .obs-qcard .obs-anchor { margin-bottom: 14px; }
   /* Phone: the 4 rating options sit 2 × 2 so a page of 6 questions isn't 24 stacked buttons */
@@ -4421,33 +4374,28 @@
   .log-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
   .log-legend { gap: 10px 20px; margin: 0 0 18px; }
   .win-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
-  .win-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
+  .win-card { display: flex; align-items: center; gap: 16px; }   /* .ui-card.sm */
   .win-card .ring { flex: none; }
   /* Pickable window cards (Assess → Done so far) */
-  .win-card.pick { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, background .15s; }
-  .win-card.pick:hover:not(.locked) { border-color: var(--green-500); }
-  .win-card.pick.on { border-color: var(--green-500); box-shadow: 0 0 0 3px var(--wash-green); }
+  .win-card.pick { width: 100%; font: inherit; }   /* + .ui-pick (selected state) */
   .win-card.pick.locked { cursor: not-allowed; background: var(--surface-100); }
   .win-card.pick.locked .ring, .win-card.pick.locked .wc-label, .win-card.pick.locked .wc-sub { opacity: .5; }
   .wc-lock { background: var(--white); border: 1px solid var(--line-200); color: var(--ink-450); }
-  .wc-label { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); }
-  .wc-sub { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin: 2px 0 6px; }
+  .wc-sub { margin: 2px 0 6px; }   /* .ui-meta; label = .ui-title.md */
   .mtx-corner { align-self: end; }
   .mtx-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
-  .mtx-name .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .mtx-name .dot { width: var(--dot-md); height: var(--dot-md); border-radius: 50%; flex: none; }
   .mtx-name span:last-child { font-weight: 700; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .log-strip-title { margin: 24px 0 12px; }
   .strip-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 12px; }
-  .strip-card { text-align: left; cursor: pointer; border: 1px solid var(--line-200); background: var(--white); border-radius: var(--radius-lg); padding: 16px 18px; font-family: var(--font-body); }
-  .strip-card.on { border: 2px solid var(--green-500); background: var(--wash-green); padding: 15px 17px; }
+  /* .strip-card = .ui-card.sm.ui-pick */
   .strip-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
   .strip-top .nm { font-weight: 800; font-size: var(--fs-md); } .strip-top .pct { font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); }
   .strip-bar { margin-bottom: 9px; }
-  .strip-cap { font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; }
+  .strip-cap { font-size: var(--fs-xs); color: var(--text-meta); font-weight: 600; }
 
   /* insights */
-  .ins-h { font-weight: 800; font-size: var(--fs-md); font-family: var(--font-heading); }
-  .ins-sub { font-size: var(--fs-sm); color: var(--ink-300); margin-bottom: 18px; }
+  .ins-sub { margin-bottom: 18px; }   /* .ui-meta; title = .ui-title.md */
   .ins-foot { border-top: 1px dashed var(--line-200); margin-top: 16px; padding-top: 14px; }
   /* Level-tone fills for the Compare mini meters (never traffic-light red). */
   .ui-meter > .bs-fill-focus { background: var(--lvl-1-soft); } .ui-meter > .bs-fill-devel { background: var(--lvl-2-soft); } .ui-meter > .bs-fill-strong { background: var(--lvl-3-soft); }
@@ -4455,15 +4403,14 @@
   /* c) Detailed skill breakdown */
   .sb-toggle { display: flex; gap: 6px; margin: 4px 0 16px; }
   .sb-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .sb-card { text-align: left; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-lg); padding: 14px 15px; cursor: pointer; font-family: var(--font-body); transition: border-color .2s, transform .2s var(--ease); }
+  .sb-card { text-align: left; cursor: pointer; font-family: var(--font-body); transition: border-color .2s, transform .2s var(--ease); }   /* .ui-card.sm.subtle */
   .sb-card:hover { border-color: color-mix(in srgb, var(--green-500) 35%, var(--white)); transform: translateY(-1px); }
   @media (prefers-reduced-motion: reduce) { .sb-card:hover { transform: none; } }
   .sb-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-  .sb-name { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
   .sb-tag-cog { background: color-mix(in srgb, var(--violet-500) 12%, var(--white)); color: color-mix(in srgb, var(--violet-500) 75%, var(--ink-900)); }   /* .ui-tag, violet */
   .scprog { display: flex; gap: 8px; margin-bottom: 10px; }
   .scph { flex: 1; background: var(--white); border-radius: var(--radius-sm); padding: 6px 4px; text-align: center; }
-  .scph-l { display: block; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); text-transform: uppercase; }
+  .scph-l { display: block; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); text-transform: uppercase; }
   .scph-v { display: block; font-size: var(--fs-sm); font-weight: 800; color: var(--ink-700); }
   .scph-empty .scph-v { color: var(--ink-300); }
   .sb-ask { display: inline-block; margin-top: 11px; font-size: var(--fs-sm); font-weight: 800; color: var(--green-700); }
@@ -4474,12 +4421,12 @@
   .pv-skill { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-700); }
   .pv-nums { display: flex; gap: 12px; }
   .pv-num { display: flex; flex-direction: column; align-items: center; line-height: 1.25; }
-  .pv-num i { font-style: normal; font-size: var(--fs-sm); } .pv-num b { font-size: var(--fs-sm); font-weight: 800; color: var(--ink-900); } .pv-num em { font-style: normal; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); text-transform: uppercase; }
+  .pv-num i { font-style: normal; font-size: var(--fs-sm); } .pv-num b { font-size: var(--fs-sm); font-weight: 800; color: var(--ink-900); } .pv-num em { font-style: normal; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); text-transform: uppercase; }
   .wcl-list { display: flex; flex-direction: column; gap: 12px; }
   .wcl-item { background: var(--surface-100); border-radius: var(--radius-md); padding: 14px 16px; }
-  .wcl-skill { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .wcl-skill { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }   /* .ui-title.md */
   .wcl-gap { font-size: var(--fs-xs); font-weight: 800; color: var(--ink-450); background: var(--white); border-radius: var(--radius-xs); padding: 2px 8px; }
-  .wcl-text { font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-450); margin: 6px 0 12px; }
+  .wcl-text { font-size: var(--fs-sm); line-height: 1.5; color: var(--text-meta); margin: 6px 0 12px; }
 
   /* Compare my sections */
   .cmp2-table { display: flex; flex-direction: column; }
@@ -4499,13 +4446,13 @@
   .add-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .add-top-r { display: flex; align-items: center; gap: 4px; }
   .add-eyebrow { text-align: center; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--green-700); }
-  .add-title { text-align: center; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1.3; margin: 6px 0 4px; }
-  .add-sub { text-align: center; margin: 0 0 14px; font-size: var(--fs-md); color: var(--ink-450); }
+  .add-title { text-align: center; line-height: 1.3; margin: 6px 0 4px; }   /* .ui-title.xl */
+  .add-sub { text-align: center; margin: 0 0 14px; font-size: var(--fs-md); color: var(--text-meta); }
   .add-target { color: var(--ink-900); }
   .add-secpick { margin-bottom: 16px; }
   .add-group-name { font-weight: 800; font-size: var(--fs-md); color: var(--ink-700); flex: 1; min-width: 0; }
   .add-methods { margin-top: 4px; }
-  .add-hint { text-align: center; font-size: var(--fs-sm); color: var(--ink-300); margin: 10px 0 0; }
+  .add-hint { text-align: center; font-size: var(--fs-sm); color: var(--text-meta); margin: 10px 0 0; }
   .add-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
   .add-center { text-align: center; margin-top: 18px; }
   /* Full screen (toggle in the card's top bar; remembered per browser). */
@@ -4513,10 +4460,10 @@
   .add-card.full { max-width: none; width: 100%; height: 100dvh; max-height: none; border-radius: 0; }
   .add-card.full .add-body { max-width: 880px; margin: 0 auto; }
   .add-done-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--green-700); }
-  .add-done-sub { margin: 8px 0 20px; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
+  .add-done-sub { margin: 8px 0 20px; font-size: var(--fs-md); color: var(--text-meta); line-height: 1.5; }
   .add-note { margin: 0 auto 12px; max-width: 340px; }
   .add-uids { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 12px 16px; margin: 0 auto 16px; max-width: 340px; text-align: left; }
-  .add-uids-h { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-450); margin-bottom: 6px; }
+  .add-uids-h { font-weight: 800; font-size: var(--fs-sm); color: var(--text-meta); margin-bottom: 6px; }
   .add-uid-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-200); }
   .add-uid-row > span:first-child { font-weight: 700; color: var(--ink-700); }
 
@@ -4536,12 +4483,10 @@
   @media (prefers-reduced-motion: reduce) { .dash-bnav.center:active .dash-fab { transform: none; } }
 
   /* ================= My Garden — landing (state-driven doorway) ================= */
-  .mg-wrap { max-width: 860px; display: flex; flex-direction: column; gap: 18px; }
+  .mg-wrap { max-width: var(--content-narrow); display: flex; flex-direction: column; gap: 18px; }
   /* Slot 1 — greeting */
   .mg-greet { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  .mg-hello { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); color: var(--green-700); margin: 0; }
-  .mg-season { margin: 5px 0 0; font-size: var(--fs-md); color: var(--ink-450); }
-  .mg-season b { color: var(--ink-900); }
+  /* greeting = .ui-screen-title.greet + .ui-screen-sub.flush */
 
   /* Slot 2 — garden scene (composed from existing plant art; presentational) */
   .mg-scene { position: relative; overflow: hidden; border-radius: var(--radius-card); border: 1px solid var(--line-200);
@@ -4565,28 +4510,24 @@
   .mg-celebrate { align-self: center; background: var(--wash-pink); color: var(--pink-600); font-weight: 800; font-size: var(--fs-md); padding: 10px 18px; border-radius: var(--radius-pill); }
 
   /* Slot 5 — band mix (colour + glyph + word: distinguishable without colour) */
-  .mg-bandmix { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 22px; padding: 14px 18px; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-lg); }
+  .mg-bandmix { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 22px; }   /* .ui-card.sm.subtle */
   .mg-band { display: inline-flex; align-items: baseline; gap: 7px; }
   .mg-band-ic { font-size: var(--fs-md); line-height: 1; }
   .mg-band-n { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
   .mg-band-lb { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); }
-  .mg-band-note { flex-basis: 100%; text-align: center; font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; }
-  .mg-bandmix-empty { justify-content: center; font-weight: 700; color: var(--ink-450); font-size: var(--fs-md); }
+  .mg-band-note { flex-basis: 100%; text-align: center; font-size: var(--fs-sm); color: var(--text-meta); font-weight: 700; }
+  .mg-bandmix-empty { justify-content: center; font-weight: 700; color: var(--text-meta); font-size: var(--fs-md); }
 
   /* Slot 6 — hero (context-aware) */
-  .mg-hero { border-radius: var(--radius-card); padding: 22px 24px; }
-  .mg-hero-window { background: var(--wash-green); border: 1.5px solid color-mix(in srgb, var(--green-500) 25%, var(--white)); }
-  .mg-hero-ask { background: var(--white); border: 1.5px solid var(--line-200); box-shadow: var(--shadow-pop); }
+  .mg-hero { padding: 22px 24px; }   /* .ui-card (+ .tint-green on the window hero) */
+  .mg-hero-ask { box-shadow: var(--shadow-pop); }
   .mg-hero .ui-eyebrow { margin-bottom: 12px; }
-  .mg-hero-window .ui-eyebrow.pill { background: color-mix(in srgb, var(--white) 70%, transparent); }
-  .mg-hero-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); margin: 0; }
   .mg-hero-b { margin: 8px 0 0; font-size: var(--fs-md); color: var(--ink-600); line-height: 1.5; }
   .mg-hero-askhead { display: flex; align-items: center; gap: 10px; }
-  .mg-hero-askic { width: 34px; height: 34px; border-radius: 50%; background: var(--wash-green); display: inline-flex; align-items: center; justify-content: center; flex: none; }
-  .mg-prog { background: color-mix(in srgb, var(--green-700) 14%, transparent); margin: 16px 0 8px; }
+  .mg-prog { margin: 16px 0 8px; }   /* track colour on the green tint comes from tilli.css */
   .mg-prog-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-sm); color: var(--ink-600); font-weight: 700; }
   .mg-prog-row b { color: var(--green-700); }
-  .mg-deadline { color: var(--ink-300); }
+  .mg-deadline { color: var(--text-meta); }
   .mg-hero-cta { margin-top: 16px; }
   .mg-starters { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
   .mg-starter { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left;
@@ -4596,32 +4537,29 @@
   .mg-starter-ar { color: var(--green-600); font-weight: 800; }
 
   /* Slot 7 — this week's idea */
-  .mg-idea { background: var(--wash-cyan); border: 1.5px solid color-mix(in srgb, var(--cyan-500) 25%, var(--white)); border-radius: var(--radius-card); padding: 20px 22px; }
-  .mg-idea .ui-eyebrow.pill { background: var(--white); color: var(--cyan-700); }
-  .mg-idea-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); margin: 12px 0 0; }
+  .mg-idea { padding: 20px 22px; }   /* .ui-card.tint-cyan */
+  .mg-idea-t { margin: 12px 0 0; }   /* .ui-title */
   .mg-idea-d { margin: 7px 0 0; font-size: var(--fs-md); color: var(--ink-600); line-height: 1.55; }
-  .mg-idea-ask { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; background: var(--white); border: 1.5px solid color-mix(in srgb, var(--cyan-500) 25%, var(--white)); color: var(--cyan-700);
+  .mg-idea-ask { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; background: var(--white); border: 1.5px solid var(--cyan-line); color: var(--cyan-700);
     font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); padding: 10px 16px; border-radius: var(--radius-pill); cursor: pointer; transition: border-color .15s; }
   .mg-idea-ask:hover { border-color: var(--cyan-500); }
 
   /* Slot 8 — who could use you (tend cards) */
   .mg-tend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-  .mg-tend-h { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); margin: 0; }
-  .mg-tend-note { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 700; }
+  /* heading = .ui-title, note = .ui-meta */
   .mg-tend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .mg-tend-card { border: 1px solid var(--line-200); border-radius: var(--radius-lg); background: var(--white); padding: 15px; display: flex; flex-direction: column; gap: 9px; }
+  .mg-tend-card { display: flex; flex-direction: column; gap: 9px; }   /* .ui-card.sm */
   .mg-tend-top { display: flex; align-items: center; gap: 10px; }
   .mg-tend-pl { line-height: 0; flex: none; }
-  .mg-tend-nm { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
   .mg-tend-reason { margin: 0; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.45; flex: 1; }
-  .mg-tend-empty { background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: var(--radius-lg); padding: 20px; font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; line-height: 1.5; }
+  .mg-tend-empty { background: var(--surface-100); border: 1px dashed var(--line-200); border-radius: var(--radius-lg); padding: 20px; font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; line-height: 1.5; }
 
   /* Empty states (ui-empty): first-run / pre-baseline hero, and in-card ones */
   .empty-hero { padding: clamp(32px, 8vh, 72px) 20px; }
   .empty-hero .ui-empty-t { font-size: var(--fs-xl); margin-bottom: 10px; }
   .empty-plant { margin-bottom: 10px; }
   .empty-card { padding: 44px 28px; }
-  .empty-badge { margin: 0 auto 14px; width: 64px; height: 64px; border-radius: 50%; background: var(--wash-green); display: flex; align-items: center; justify-content: center; }
+  .empty-badge { display: flex; margin: 0 auto 14px; }   /* .ui-icontile.lg */
 
   /* Dev-only preview-stage panel (scaffold; not teacher-facing). Look = .ui-devpanel (tilli.css).
      Floating (tablet/phone, no wide sidebar): top-right so it clears the Ask Tilli / Need help bubbles. */
@@ -4646,12 +4584,10 @@
   .sel-bar { position: sticky; top: 8px; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px;
     background: var(--white); border: 1.5px solid var(--green-500); border-radius: var(--radius-lg); padding: 10px 12px; box-shadow: var(--shadow-hover); }
   .sel-all { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); }
-  .sel-n { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-300); }
+  .sel-n { font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); }
   .sel-err { font-size: var(--fs-sm); font-weight: 700; color: var(--danger-700); }
   .sel-sp { flex: 1; }
-  .rr-check { flex: none; width: 22px; height: 22px; border-radius: var(--radius-xs); border: 2px solid var(--line-200); background: var(--white); color: var(--white);
-    display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-sm); font-weight: 800; }
-  .rr-check.on { background: var(--green-500); border-color: var(--green-500); }
+  /* .rr-check = .ui-check */
   .roster-row.picked { border-color: var(--green-500); background: var(--wash-green); }
 
   .add-secpick { margin-top: 12px; }
@@ -4660,22 +4596,22 @@
   .add-newsec .input { flex: 1; min-width: 0; }
   .add-newsec .input:last-child { flex: 0 0 110px; }
 
-  .obs-alldone { text-align: center; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 30px 24px; }
+  .obs-alldone { text-align: center; padding: 30px 24px; }   /* .ui-card */
   .obs-alldone .t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); margin-top: 10px; }
-  .obs-alldone p { color: var(--ink-450); font-size: var(--fs-md); margin: 8px 0 18px; }
+  .obs-alldone p { color: var(--text-meta); font-size: var(--fs-md); margin: 8px 0 18px; }
 
   .log-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
   .log-tabs-row > .log-tabs { margin: 0; }
-  .cr-wrap { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); padding: 8px; overflow-x: auto; }
+  .cr-wrap { padding: 8px; overflow-x: auto; }   /* .ui-card */
   /* Lighter type throughout: one bold-ish title, quiet headers, regular-weight figures. */
   .cr-title { text-align: left; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); padding: 14px 12px 2px; }
-  .cr-title span { font-weight: 500; color: var(--ink-300); font-size: var(--fs-sm); }
+  .cr-title span { font-weight: 500; color: var(--text-meta); font-size: var(--fs-sm); }
   .cr { min-width: 420px; }
   .cr-head, .cr-row { display: grid; grid-template-columns: minmax(120px,1.6fr) repeat(3, minmax(84px,1fr)); }
   .cr-head { padding: 10px 12px; align-items: end; }
   .cr-h { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; }
   .cr-h .ic { font-size: var(--fs-lg); line-height: 1; }
-  .cr-h .lb, .cr .mtx-corner { font-weight: 600; letter-spacing: .06em; color: var(--ink-300); }
+  .cr-h .lb, .cr .mtx-corner { font-weight: 600; letter-spacing: .06em; color: var(--text-meta); }
   .cr-row { width: 100%; background: none; border: none; border-top: 1px solid var(--line-200); padding: 10px 12px; cursor: pointer; text-align: left; font-family: var(--font-body); align-items: center; }
   .cr-row:hover { background: var(--surface-100); }
   .cr-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; justify-content: center; }
@@ -4687,7 +4623,7 @@
   /* Insights → Growth over time (line chart) */
   .gr-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
   .gr-select:has(option:checked:not([value=""])) { background: var(--ink-900); color: var(--white); border-color: var(--ink-900); }   /* .ui-filterchip.dark on a <select> */
-  .gr-view { margin-left: auto; border: none; background: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); padding: 6px 8px; border-radius: var(--radius-sm); }
+  .gr-view { margin-left: auto; border: none; background: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-sm); color: var(--text-meta); padding: 6px 8px; border-radius: var(--radius-sm); }
   .gr-view:hover { background: var(--surface-100); color: var(--ink-900); }
   .gr-legend { margin: 0 0 8px; }
   .gr-legend i { width: 16px; height: 0; border-radius: 0; }
@@ -4699,91 +4635,75 @@
   .gr-tip-r { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); padding: 2px 0; }
   .gr-tip-r i { flex: none; width: 14px; height: 0; }
   .gr-tip-r b { font-weight: 800; color: var(--ink-900); min-width: 46px; }
-  .gr-tip-r span { color: var(--ink-450); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gr-tip-r span { color: var(--text-meta); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gr-table td { font-weight: 600; color: var(--ink-900); }   /* .ui-table.compact */
   .gr-table td i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
 
   /* Insights → Class Skill Overview (level tokens: 1 Sprouting · 2 Growing · 3 Blooming) */
-  .ov-h { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); }
-  .ov-desc { font-size: var(--fs-sm); color: var(--ink-450); margin: 4px 0 0; max-width: 640px; line-height: 1.5; }
-  /* Filter chips double as the legend: dot = band colour, bold number = skills in it. */
-  .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 14px; }
-  .ov-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border: 1px solid var(--line-200); border-radius: var(--radius-pill); background: var(--white); cursor: pointer; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; color: var(--ink-600); transition: border-color .15s, background .15s; }
-  .ov-chip i { width: 9px; height: 9px; border-radius: 50%; }
-  .ov-chip b { font-weight: 800; color: var(--ink-900); }
-  .ov-chip:hover:not(:disabled) { border-color: var(--ink-300); }
-  .ov-chip.on { background: var(--ink-900); border-color: var(--ink-900); color: var(--white); }
-  .ov-chip.on b { color: var(--white); }
-  .ov-chip:disabled { opacity: .45; cursor: default; }
-  /* ⓘ score explanation (tap to open; T11) */
-  .info-tip { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 4px; vertical-align: middle; border: none; border-radius: 50%; background: var(--surface-100); color: var(--ink-450); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; cursor: pointer; }
-  .info-tip:hover, .info-tip[aria-expanded="true"] { background: var(--wash-green); color: var(--green-700); }
-  .info-pop { margin: 8px 0 6px; padding: 10px 12px; max-width: 560px; background: var(--surface-100); border-radius: var(--radius-md); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 500; color: var(--ink-700); line-height: 1.5; text-align: left; }
-  .info-row { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-bottom: 12px; }
-  .ov-note { font-weight: 700; color: var(--ink-600); }
-  .ov-bh i { width: 9px; height: 9px; border-radius: 50%; }
-  .ov-list { border-top: 1px solid var(--line-200); }
-  .ov-row + .ov-row { border-top: 1px solid var(--line-200); }
-  .ov-rowbtn { width: 100%; display: grid; grid-template-columns: minmax(150px, 220px) 1fr 84px 16px; gap: 16px; align-items: center; background: none; border: none; cursor: pointer; padding: 12px 8px; font-family: var(--font-body); text-align: left; border-radius: var(--radius-sm); }
-  .ov-rowbtn:hover { background: var(--surface-100); }
-  .ov-name { font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
-  .ov-bar { display: flex; height: 10px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-100); }
-  .ov-seg { height: 100%; }
-  .ov-status { justify-self: end; font-size: var(--fs-sm); font-weight: 700; }
-  .ov-st-l1 { color: var(--lvl-1-ink); }
-  .ov-st-l2 { color: var(--lvl-2-ink); }
-  .ov-st-l3 { color: var(--lvl-3-ink); }
-  .ov-chev { color: var(--ink-300); font-size: var(--fs-lg); line-height: 1; transition: transform .15s; }
-  .ov-row.open .ov-chev { transform: rotate(90deg); }
-  .ov-row.open { background: var(--surface-100); border-radius: var(--radius-md); }
-  .ov-break { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 2px 8px 12px; }
-  .ov-bcol { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
-  .ov-bh { flex-basis: 100%; }
-  .ov-bh { display: flex; align-items: center; gap: 7px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-450); margin-bottom: 2px; }
-  .ov-bh span { color: var(--ink-300); }
-  .ov-stu { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-pill); padding: 4px 11px; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 600; color: var(--ink-700); cursor: pointer; }
-  .ov-stu:hover { border-color: var(--green-500); color: var(--green-700); }
-  .ov-bnone { color: var(--ink-300); font-size: var(--fs-sm); }
-  .ov-bfoot { grid-column: 1 / -1; }
+  .cso-h { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); }
+  .cso-desc { font-size: var(--fs-sm); color: var(--text-meta); margin: 4px 0 0; max-width: 640px; line-height: 1.5; }
+  /* Filter chips (.ui-filterchip.dark) double as the legend: dot = band colour, bold number = skills in it. */
+  .cso-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 14px; }
+  .cso-chip i { width: var(--dot-md); height: var(--dot-md); border-radius: 50%; }
+  /* ⓘ score explanation (tap to open; T11) = .ui-info.lg + .ui-inset */
+  .info-pop { margin: 8px 0 6px; max-width: 560px; text-align: left; }
+  .info-row { font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); margin-bottom: 12px; }
+  .cso-note { font-weight: 700; color: var(--ink-600); }
+  .cso-bh i { width: var(--dot-md); height: var(--dot-md); border-radius: 50%; }
+  .cso-list { border-top: 1px solid var(--line-200); }
+  .cso-row + .cso-row { border-top: 1px solid var(--line-200); }
+  .cso-rowbtn { width: 100%; display: grid; grid-template-columns: minmax(150px, 220px) 1fr 84px 16px; gap: 16px; align-items: center; background: none; border: none; cursor: pointer; padding: 12px 8px; font-family: var(--font-body); text-align: left; border-radius: var(--radius-sm); }
+  .cso-rowbtn:hover { background: var(--surface-100); }
+  .cso-name { font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .cso-status { justify-self: end; }   /* .ui-bandword; bar = .ui-bandbar */
+  .cso-chev { color: var(--text-faint); font-size: var(--fs-lg); line-height: 1; transition: transform .15s; }
+  .cso-row.open .cso-chev { transform: rotate(90deg); }
+  .cso-row.open { background: var(--surface-100); border-radius: var(--radius-md); }
+  .cso-break { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 2px 8px 12px; }
+  .cso-bcol { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+  .cso-bh { flex-basis: 100%; }
+  .cso-bh { display: flex; align-items: center; gap: 7px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-meta); margin-bottom: 2px; }
+  .cso-bh span { color: var(--text-meta); font-weight: 600; }
+  /* child names = .ui-filterchip.sm */
+  .cso-bnone { color: var(--text-meta); font-size: var(--fs-sm); }
+  .cso-bfoot { grid-column: 1 / -1; }
   @media (max-width: 760px) {
-    .ov-break { grid-template-columns: 1fr; }
-    .ov-rowbtn { grid-template-columns: 1fr auto 16px; gap: 8px 10px; }
-    .ov-bar { grid-column: 1 / -1; grid-row: 2; }
+    .cso-break { grid-template-columns: 1fr; }
+    .cso-rowbtn { grid-template-columns: 1fr auto 16px; gap: 8px 10px; }
+    .cso-rowbtn .ui-bandbar { grid-column: 1 / -1; grid-row: 2; }
   }
 
   .pf-edit { cursor: default; }
   .pf-in { flex: 0 1 260px; min-width: 0; text-align: right; }   /* .input.td-in */
   .mir { margin-top: 16px; padding: 18px 22px; }
-  .mir-t { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
-  .mir-s { font-size: var(--fs-sm); color: var(--ink-300); font-weight: 600; margin-top: 2px; }
-  .mir-empty { color: var(--ink-450); font-size: var(--fs-md); margin: 12px 0 2px; }
+  .mir-s { margin-top: 2px; }   /* .ui-meta; title = .ui-title */
+  .mir-empty { color: var(--text-meta); font-size: var(--fs-md); margin: 12px 0 2px; }
   .mir-bars { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
   .mir-row { display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: center; }
   .mir-lb { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-700); }
   .mir-track { height: 12px; }
   .mir-v { font-size: var(--fs-sm); font-weight: 800; color: var(--ink-700); text-align: right; white-space: nowrap; }
-  .mir-d { margin-left: 8px; font-size: var(--fs-xs); font-weight: 800; color: var(--ink-300); }
+  .mir-d { margin-left: 8px; font-size: var(--fs-xs); font-weight: 800; color: var(--text-meta); }
   .mir-d.up { color: var(--green-700); } .mir-d.down { color: var(--danger-700); }
   .mir-tl { display: flex; align-items: stretch; gap: 8px; margin-top: 16px; }
   .mir-nav { flex: none; width: 34px; border: 1px solid var(--line-200); background: var(--white); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--fs-lg); color: var(--ink-450); }
   .mir-nav:disabled { opacity: .35; cursor: default; }
   .mir-stops { flex: 1; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
   .mir-stops::-webkit-scrollbar { display: none; }
-  .mir-stop { flex: 0 0 auto; min-width: 150px; display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; align-items: center; text-align: left;
-    background: var(--surface-100); border: 1.5px solid transparent; border-radius: var(--radius-md); padding: 9px 12px; cursor: pointer; font-family: var(--font-body); }
-  .mir-stop.on { background: var(--wash-green); border-color: var(--green-500); }
-  .mir-dot { grid-row: 1 / 3; width: 10px; height: 10px; border-radius: 50%; background: var(--line-200); }
+  .mir-stop { flex: 0 0 auto; min-width: 150px; display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; align-items: center;
+    border-radius: var(--radius-md); padding: 9px 12px; }   /* .ui-pick */
+  .mir-dot { grid-row: 1 / 3; width: var(--dot-md); height: var(--dot-md); border-radius: 50%; background: var(--line-200); }
   .mir-stop.on .mir-dot { background: var(--green-500); }
   .mir-sn { font-size: var(--fs-sm); font-weight: 800; color: var(--ink-900); }
-  .mir-sd { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-300); }
+  .mir-sd { font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); }
   .mir-sample { font-style: normal; margin-left: 4px; vertical-align: 1px; }   /* .ui-tag.lvl */
   .mir-samplenote { align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 12px; }   /* .ui-note.sample */
-  .mir-scale { font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; margin-top: 8px; text-align: right; }
-  .mir-fact { display: flex; justify-content: space-between; gap: 14px; font-size: var(--fs-sm); color: var(--ink-450); border-top: 1px solid var(--line-200); padding-top: 10px; margin-top: 12px; }
+  .mir-scale { font-size: var(--fs-xs); color: var(--text-meta); font-weight: 600; margin-top: 8px; text-align: right; }
+  .mir-fact { display: flex; justify-content: space-between; gap: 14px; font-size: var(--fs-sm); color: var(--text-meta); border-top: 1px solid var(--line-200); padding-top: 10px; margin-top: 12px; }
   .mir-fact b { color: var(--ink-900); white-space: nowrap; }
   .mir-words { display: grid; gap: 10px; margin-top: 12px; }
   .mir-q { margin: 0; background: var(--surface-100); border-radius: var(--radius-md); padding: 12px 14px; font-size: var(--fs-md); color: var(--ink-700); line-height: 1.5; font-style: italic; }
-  .mir-qq { font-style: normal; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-300); margin-bottom: 4px; }
+  .mir-qq { font-style: normal; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); margin-bottom: 4px; }
   @media (max-width: 640px) { .mir-row { grid-template-columns: 1fr auto; } .mir-lb { grid-column: 1 / -1; } }
 
   /* parent report PDF (A4 portrait). html2pdf clones .pr into an overlay inside THIS
@@ -4849,14 +4769,13 @@
   .pr-foot b { color: var(--report-navy); }
   .pr-conf { font-size: var(--fs-xs); color: var(--report-faint); }
 
-  @media (max-width: 1023px) { .dash-main { padding: 22px 26px; } }
   @media (max-width: 640px) {
-    .dash-main { padding: 16px 16px 90px; }
+    .dash-main { padding-bottom: 90px; }   /* clear the bottom nav; sides/top = --page-pad-* */
     .dash-header { padding: 0 16px; }
     .two-col { grid-template-columns: 1fr; }
     /* Phones: the bubble lives in the bottom nav, so the chat is a bottom sheet over a scrim. */
     .ask-panel { top: 12%; left: 0; right: 0; bottom: 0; width: auto; max-width: none; height: auto; border-radius: var(--radius-card) var(--radius-card) 0 0; transform-origin: bottom center; }
-    .ask-scrim { display: block; background: color-mix(in srgb, var(--ink-900) 28%, transparent); }
+    .ask-scrim { display: block; background: var(--scrim-soft); }
     /* Insights: reflow every multi-column grid to a single readable column. */
     .sb-grid, .pv-grid { grid-template-columns: 1fr; }
     .cmp2-row { grid-template-columns: 96px 1fr; gap: 10px; }

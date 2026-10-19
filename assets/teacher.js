@@ -419,7 +419,7 @@
     return `
       <span class="ui-eyebrow pill mb-3">Demographic questions</span>
       <div class="onb-steprow">
-        <h2 class="onb-title">${esc(demoTitle(d.step))}</h2>
+        <h2 class="ui-title xl onb-title">${esc(demoTitle(d.step))}</h2>
         <span class="onb-step">Step ${d.step} of 4</span>
       </div>
       <div class="ui-meter mt-3 mb-3"><span style="width:${(d.step / 4) * 100}%"></span></div>
@@ -502,7 +502,7 @@
       const count = gradeSecs.filter((sx) => d.secs[gi + '-' + sx]).length;
       const secs = gradeSecs.map((sx) => {
         const on = !!d.secs[gi + '-' + sx];
-        return `<button class="onb-check focus" data-sec="${gi}-${sx}"><span class="onb-box${on ? ' on' : ''}">${on ? '✓' : ''}</span>${sx}</button>`;
+        return `<button class="onb-check focus" data-sec="${gi}-${sx}"><span class="ui-check${on ? ' on' : ''}">${on ? '✓' : ''}</span>${sx}</button>`;
       }).join('');
       return `<div class="ui-card sm subtle onb-seccard">
         <div class="onb-sechead"><span style="font-size:var(--fs-sm);font-weight:800;color:var(--ink-700)">${esc(name)}</span>
@@ -526,11 +526,11 @@
     const d = state.demo;
     const subjects = DEMO_SUBJECTS.map((label) => {
       const on = !!d.subjects[label];
-      return `<button class="onb-check focus" data-subject="${esc(label)}"><span class="onb-box${on ? ' on' : ''}">${on ? '✓' : ''}</span>${esc(label)}</button>`;
+      return `<button class="onb-check focus" data-subject="${esc(label)}"><span class="ui-check${on ? ' on' : ''}">${on ? '✓' : ''}</span>${esc(label)}</button>`;
     }).join('');
     const resources = DEMO_RESOURCES.map((label) => {
       const on = !!d.resources[label];
-      return `<button class="onb-check focus" data-resource="${esc(label)}"><span class="onb-box${on ? ' on' : ''}">${on ? '✓' : ''}</span>${esc(label)}</button>`;
+      return `<button class="onb-check focus" data-resource="${esc(label)}"><span class="ui-check${on ? ' on' : ''}">${on ? '✓' : ''}</span>${esc(label)}</button>`;
     }).join('');
     return `<div class="onb-fields loose">
       <div><label class="onb-label">Subjects you teach *</label>
@@ -608,7 +608,7 @@
     } else if (q.type === 'choice') {
       const cur = state.selfAnswers[ak];
       body = `<div class="onb-choices">${(q.options || []).map((o) =>
-        `<button class="onb-choice focus${cur === o ? ' on' : ''}" data-choice="${esc(o)}">${esc(o)}</button>`).join('')}</div>`;
+        `<button class="ui-pick onb-choice focus${cur === o ? ' on' : ''}" data-choice="${esc(o)}">${esc(o)}</button>`).join('')}</div>`;
     } else {
       body = `<textarea class="onb-textarea focus" data-self-text rows="4" placeholder="Take a breath and write freely…">${esc(state.selfAnswers[ak] || '')}</textarea>`;
     }
@@ -617,7 +617,7 @@
       <div class="onb-dots">${dots}</div>
       <div class="onb-catrow">${cats}</div>
       <div class="onb-qnum">Question ${i + 1} of ${SELF.length}</div>
-      <h2 class="onb-question">${esc(q.q)}</h2>
+      <h2 class="ui-title onb-question">${esc(q.q)}</h2>
       ${q.hint ? `<p class="onb-qhint">${esc(q.hint)}</p>` : ''}
       ${body}
       <div class="row end mt-5">
@@ -685,7 +685,7 @@
     const head = (sub) => `
       <div class="text-center" style="margin-bottom:${sub ? 18 : 20}px">
         <div class="onb-kicker mb-2">Let&rsquo;s create your garden</div>
-        <h2 class="onb-title">Add your students</h2>
+        <h2 class="ui-title xl onb-title">Add your students</h2>
         ${sub ? `<p class="onb-help" style="margin-top:6px">${sub}</p>` : ''}
       </div>`;
 
@@ -761,7 +761,7 @@
           <button class="btn-icon bare roster-del focus" data-rowdel="${gi}-${i}" title="Remove student ${i + 1}" aria-label="Remove student ${i + 1}">&times;</button>
         </div>${note}`;
       }).join('');
-      return `<section class="roster-group">
+      return `<section class="ui-card sm roster-group">
         <div class="roster-group-head">
           <div class="roster-group-gs">${gsSelect(gi, g.gs, gopts)}</div>
           <span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span>

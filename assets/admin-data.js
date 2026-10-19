@@ -142,7 +142,7 @@
 
   var SKILLS = TS.skills;                 // shared source of truth (12 skills)
   var SECTIONS = TS.sections.slice();     // 4 sections
-  var STUDENTS = TS.students;             // 24 students w/ per-skill baseline/mid/post
+  var STUDENTS = TS.students;             // 100 students (25 per section) w/ per-skill baseline/mid/post
   var TEACHERS = TS.teachers;
   var GRADES = SECTIONS.reduce(function (acc, s) { if (acc.indexOf(s.grade) < 0) acc.push(s.grade); return acc; }, []);
 
@@ -211,18 +211,42 @@
   //  Created schools read real completion from TilliAPI; the demo school
   //  uses a stable seeded count.
   // ---------------------------------------------------------------
+  // Per-child check-in state for the open window: 'done' | 'draft' | 'none'
+  // (null when no window is open). 'draft' = the teacher started but hasn't
+  // finished. Created schools: all of the lane's items done → 'done', some →
+  // 'draft'. Demo school: a seeded share of each section is done (same count
+  // the section rows show) and a seeded share of the rest are drafts.
+  var DRAFT_SHARE = 0.35;
+  function sectionCheckins(secDef) {
+    var students = studentsInSection(secDef), out = {};
+    if (!OPEN_POINT) return out;
+    var API = window.TilliAPI;
+    if (window.TILLI_CREATED && API && API.completionStats) {
+      students.forEach(function (s) {
+        var c = API.completionStats(SCHOOL_ID, OPEN_POINT.label, 'Teacher', [s.adm]);
+        out[s.adm] = c.expected && c.done >= c.expected ? 'done' : c.done > 0 ? 'draft' : 'none';
+      });
+      return out;
+    }
+    var rnd = mulberry32(hashStr(secDef.id + ':' + OPEN_POINT.key + ':progress'));
+    var done = Math.round(students.length * (0.3 + rnd() * 0.7));
+    var rank = function (s) { return hashStr(s.adm + ':' + OPEN_POINT.key + ':order'); };
+    students.slice().sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (s, i) {
+      out[s.adm] = i < done ? 'done' : mulberry32(hashStr(s.adm + ':' + OPEN_POINT.key + ':draft'))() < DRAFT_SHARE ? 'draft' : 'none';
+    });
+    return out;
+  }
+  function checkinStatus(student) {
+    if (!OPEN_POINT) return null;
+    var sd = SECTIONS.find(function (s) { return s.grade === student.grade && s.section === student.section; });
+    return sd ? sectionCheckins(sd)[student.adm] || 'none' : 'none';
+  }
+
   function sectionProgress(secDef) {
     var students = studentsInSection(secDef);
-    var total = students.length, done = 0;
-    var API = window.TilliAPI;
-    if (window.TILLI_CREATED && OPEN_POINT && API && API.completionStats) {
-      var ids = students.map(function (s) { return s.adm; });
-      var c = API.completionStats(SCHOOL_ID, OPEN_POINT.label, 'Teacher', ids);
-      done = Math.round((c.pct / 100) * total);
-    } else {
-      var rnd = mulberry32(hashStr(secDef.id + ':' + (OPEN_POINT ? OPEN_POINT.key : '') + ':progress'));
-      done = Math.round(total * (0.3 + rnd() * 0.7));
-    }
+    var total = students.length;
+    var st = sectionCheckins(secDef);
+    var done = students.filter(function (s) { return st[s.adm] === 'done'; }).length;
     return {
       id: secDef.id, name: secDef.name, grade: secDef.grade, section: secDef.section,
       teacher: teacherFor(secDef), n: total,
@@ -232,6 +256,26 @@
   // Recomputed per call so it always follows the open window.
   function windowProgress() { return OPEN_POINT ? SECTIONS.map(sectionProgress) : []; }
   function progressFor(id) { return windowProgress().find(function (a) { return a.id === id; }); }
+
+  // Is data being collected? Each section is compared with the furthest-along
+  // section (not the school average), so one slow class is visible even when
+  // the rest are bunched together. 'stalled' = nothing in yet while others
+  // have started; 'slow' = COLLECT_GAP_PTS or more behind the leader.
+  var COLLECT_GAP_PTS = 15;
+  function collectionStatus() {
+    var rows = windowProgress().map(function (a) {
+      return Object.assign({}, a, { pct: a.completion.total ? Math.round(a.completion.done / a.completion.total * 100) : 0 });
+    });
+    var lead = rows.reduce(function (b, r) { return !b || r.pct > b.pct ? r : b; }, null);
+    rows.forEach(function (r) {
+      r.flag = !lead || !lead.pct || r === lead ? null
+        : r.completion.done === 0 ? 'stalled'
+        : lead.pct - r.pct >= COLLECT_GAP_PTS ? 'slow' : null;
+    });
+    var done = rows.reduce(function (s, r) { return s + r.completion.done; }, 0);
+    var total = rows.reduce(function (s, r) { return s + r.completion.total; }, 0);
+    return { rows: rows, lead: lead, done: done, total: total, allDone: total > 0 && done >= total, gapPts: COLLECT_GAP_PTS };
+  }
 
   // ---------------------------------------------------------------
   //  CONTINUOUS: teacher-raised concerns queue (spec §6.4).
@@ -322,6 +366,25 @@
       mostly_secure: 'Children here can hold attention well for their age. Varying task length keeps this strength stretching rather than plateauing.',
     },
   };
+  // "Where to help next" — one small classroom step per skill for the children
+  // still Sprouting. DRAFT copy (stand-in until Masoomi signs off); keep the
+  // steps short, concrete and doable without extra materials.
+  var HELP_STEPS = {
+    emotion_awareness:      'Start the day with a quick feelings check-in — children point to a face that matches how they feel.',
+    emotion_regulation:     'Practise one calm-down move together (like "smell the flower, blow the candle") before it' + '’' + 's needed.',
+    empathy:                'During story time, pause and ask "How do you think they feel right now?"',
+    relationship_skills:    'Pair children for a two-minute share — one talks, one listens, then swap.',
+    metacognition:          'After an activity, ask "What helped you?" and let two or three children answer.',
+    critical_thinking:      'Ask "Why do you think that?" once a day and wait for a full answer.',
+    working_memory:         'Give two-step instructions ("Pick up your pencil, then stand up") and build to three.',
+    planning:               'Before a task, ask children to say their first step out loud.',
+    cognitive_flexibility:  'Play a quick rule-switch game — clap on red, stamp on blue, then swap the rules.',
+    inhibition_distraction: 'Use a "freeze" signal during busy moments and praise the children who stop quickly.',
+    inhibition_response:    'Play "Simon says" for a few minutes — waiting for the cue builds self-control.',
+    attention:              'Break tasks into short chunks with a quick movement break in between.',
+  };
+  function helpStep(skillKey) { return HELP_STEPS[skillKey] || '[Help step pending sign-off]'; }
+
   function interpret(skillKey, gradeBand, pointKey, shape) {
     var a = AUTHORED[skillKey] && AUTHORED[skillKey][shape];
     if (a) return { text: a, authored: true };
@@ -517,9 +580,10 @@
     overallBandMovement: overallBandMovement,
     // mockup-inspired derived reads
     schoolSkillGroups: schoolSkillGroups, growthStrength: growthStrength,
-    perspectiveGaps: perspectiveGaps, studentStage: studentStage,
+    perspectiveGaps: perspectiveGaps, studentStage: studentStage, helpStep: helpStep,
     // assessment window progress (only while a window is open)
-    windowProgress: windowProgress, progressFor: progressFor,
+    windowProgress: windowProgress, progressFor: progressFor, collectionStatus: collectionStatus,
+    sectionCheckins: sectionCheckins, checkinStatus: checkinStatus, meanScore: meanScore,
     concerns: CONCERNS, concernCounts: concernCounts,
     // roster
     rosterRows: rosterRows,

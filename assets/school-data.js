@@ -74,7 +74,7 @@
     { id: 't-g1b', name: 'Dilani Perera',  email: 'dilani.perera@littlesprouts.edu',  grade: 'Grade 1',      section: 'B', role: 'Class Teacher' },
   ];
 
-  // ---- roster: 24 students (12 per grade, 6 per section) ----
+  // ---- roster: 24 hand-written students (6 per section); padded to 25 per section below ----
   // The linked parent (Priya Menon) owns the two `parentEmail: priya.menon@example.com` kids.
   const ROSTER = [
     // Kindergarten A
@@ -107,6 +107,40 @@
     { adm: 'ADM-5112', first: 'Tharindu', last: 'Silva',        grade: 'Grade 1', section: 'B', gender: 'm', parentName: 'Ruwan Silva',        parentEmail: 'ruwan.silva@example.com' },
   ];
 
+  // ---- placeholder children: pad every section to SECTION_SIZE ----
+  // Generated (seeded, stable across reloads) so the admin dandelion has a
+  // realistic class size. Flagged `filler: true`; delete this block when the
+  // real roster arrives. The 24 hand-written children above are untouched.
+  const SECTION_SIZE = 25;
+  const FILLER_GIRLS = ['Kiara', 'Navya', 'Tara', 'Meher', 'Ira', 'Siya', 'Anvi', 'Pari', 'Zara', 'Avni', 'Kavya', 'Ishita', 'Mahika', 'Rhea', 'Dinithi', 'Sanduni', 'Tharushi', 'Nisansala', 'Hiruni', 'Ama', 'Esha', 'Gauri', 'Larissa', 'Mira', 'Nila', 'Ojasvi', 'Pihu', 'Riddhi', 'Sara', 'Trisha', 'Uma', 'Vanya', 'Yashvi', 'Anika', 'Chathuri', 'Dulani', 'Ishara', 'Kaveesha', 'Lithmi', 'Methmi'];
+  const FILLER_BOYS = ['Aarav', 'Advik', 'Ayaan', 'Krish', 'Rudra', 'Shaurya', 'Atharv', 'Kian', 'Veer', 'Yuvan', 'Hridaan', 'Laksh', 'Nihal', 'Om', 'Parth', 'Sehan', 'Kaveen', 'Thisal', 'Dinuka', 'Janith', 'Arnav', 'Darsh', 'Eshan', 'Harsh', 'Jai', 'Manav', 'Neil', 'Pranav', 'Rehan', 'Samar', 'Tanay', 'Udit', 'Vedant', 'Yash', 'Chamod', 'Hasith', 'Isuru', 'Lahiru', 'Minul', 'Ravin'];
+  const FILLER_LASTS = ['Agarwal', 'Bhat', 'Chopra', 'Desai', 'Ghosh', 'Hegde', 'Kulkarni', 'Mehta', 'Naidu', 'Rao', 'Shetty', 'Thomas', 'Varma', 'Abeysekara', 'Dissanayake', 'Gunawardena', 'Herath', 'Karunaratne', 'Liyanage', 'Mendis', 'Ranasinghe', 'Senanayake', 'Weerasinghe', 'Kumara'];
+  const FILLER_PARENTS = ['Anil', 'Bhavna', 'Chitra', 'Deepak', 'Geetha', 'Harini', 'Imran', 'Jaya', 'Kamal', 'Lalitha', 'Manoj', 'Nirmala', 'Prakash', 'Radha', 'Sanjay', 'Thilini', 'Upul', 'Vasanthi'];
+  (function padRoster() {
+    const rnd = mulberry32(hashStr('filler-roster'));
+    const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+    const usedFirst = new Set(ROSTER.map((r) => r.first));
+    const takeFirst = (pool) => {
+      const free = pool.filter((n) => !usedFirst.has(n));
+      const n = free.length ? free[Math.floor(rnd() * free.length)] : pick(pool);
+      usedFirst.add(n); return n;
+    };
+    const nextAdm = { Kindergarten: 5013, 'Grade 1': 5113 };
+    [['Kindergarten', 'A'], ['Kindergarten', 'B'], ['Grade 1', 'A'], ['Grade 1', 'B']].forEach(([grade, section]) => {
+      let have = ROSTER.filter((r) => r.grade === grade && r.section === section).length;
+      while (have < SECTION_SIZE) {
+        const gender = rnd() < 0.5 ? 'f' : 'm';
+        const first = takeFirst(gender === 'f' ? FILLER_GIRLS : FILLER_BOYS);
+        const last = pick(FILLER_LASTS);
+        const adm = 'ADM-' + nextAdm[grade]++;
+        ROSTER.push({ adm, first, last, grade, section, gender,
+          parentName: pick(FILLER_PARENTS) + ' ' + last,
+          parentEmail: 'parent.' + adm.toLowerCase() + '@example.com', filler: true });
+        have++;
+      }
+    });
+  })();
+
   // ---- sections (derived) ----
   // Kavya Rao (t-kga) is the demo's logged-in teacher and owns BOTH Kindergarten
   // sections (A + B) so the "Compare my sections" Insights tab has 2 same-grade
@@ -135,7 +169,8 @@
   }
 
   function buildSkills(stu) {
-    const post = currentSnapshot(stu.first);
+    // Placeholder kids seed by admission no. (first names can repeat across the pools).
+    const post = currentSnapshot(stu.filler ? stu.adm : stu.first);
     const rnd = mulberry32(hashStr(stu.adm + ':assess'));
     return SKILLS.map((sk) => {
       const p = post[sk.key];
