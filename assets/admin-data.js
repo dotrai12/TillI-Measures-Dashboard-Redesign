@@ -141,8 +141,8 @@
   applyLifecycle(readLifecycleKey());
 
   var SKILLS = TS.skills;                 // shared source of truth (12 skills)
-  var SECTIONS = TS.sections.slice();     // 4 sections
-  var STUDENTS = TS.students;             // 100 students (25 per section) w/ per-skill baseline/mid/post
+  var SECTIONS = TS.sections.slice();     // 30 sections (6 grades × 5)
+  var STUDENTS = TS.students;             // 900 students (30 per section) w/ per-skill baseline/mid/post
   var TEACHERS = TS.teachers;
   var GRADES = SECTIONS.reduce(function (acc, s) { if (acc.indexOf(s.grade) < 0) acc.push(s.grade); return acc; }, []);
 
@@ -212,14 +212,23 @@
   //  uses a stable seeded count.
   // ---------------------------------------------------------------
   // Per-child check-in state for the open window: 'done' | 'draft' | 'none'
-  // (null when no window is open). 'draft' = the teacher started but hasn't
-  // finished. Created schools: all of the lane's items done → 'done', some →
-  // 'draft'. Demo school: a seeded share of each section is done (same count
-  // the section rows show) and a seeded share of the rest are drafts.
+  // (null when no window is open). PRODUCT RULE (agreed 2026-10-19; goes in the
+  // admin dev handoff):
+  //   Completed   ('done')  — the child has completed EVERY assessment deployed to the school.
+  //   In progress ('draft') — the child has started or completed AT LEAST ONE deployed assessment.
+  //   Not started ('none')  — none of the deployed assessments has been completed.
+  // Created schools: counted from TilliAPI completions on the open window's
+  // Teacher lane ("started but not completed" isn't visible here — teacher
+  // drafts live in the teacher's browser). Demo school: a seeded share of each
+  // section is done (same count the section rows show), a seeded share of the
+  // rest are in progress.
   var DRAFT_SHARE = 0.35;
+  var CHECKIN_CACHE = {};   // demo school only: seeded, so stable per section × window (900 children → called a lot)
   function sectionCheckins(secDef) {
     var students = studentsInSection(secDef), out = {};
     if (!OPEN_POINT) return out;
+    var ck = secDef.id + '|' + OPEN_POINT.key;
+    if (!window.TILLI_CREATED && CHECKIN_CACHE[ck]) return CHECKIN_CACHE[ck];
     var API = window.TilliAPI;
     if (window.TILLI_CREATED && API && API.completionStats) {
       students.forEach(function (s) {
@@ -234,7 +243,7 @@
     students.slice().sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (s, i) {
       out[s.adm] = i < done ? 'done' : mulberry32(hashStr(s.adm + ':' + OPEN_POINT.key + ':draft'))() < DRAFT_SHARE ? 'draft' : 'none';
     });
-    return out;
+    return (CHECKIN_CACHE[ck] = out);
   }
   function checkinStatus(student) {
     if (!OPEN_POINT) return null;

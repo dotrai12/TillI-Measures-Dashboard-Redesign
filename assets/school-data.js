@@ -66,7 +66,7 @@
   // their school at sign-up (matches the code shown in the Platform Admin).
   const SCHOOL = { id: 'little-sprouts', name: 'Little Sprouts School', city: 'Bengaluru', country: 'India', term: 'Term One', joinCode: 'LSPR-2210' };
 
-  // ---- 4 class teachers (one per section) ----
+  // ---- hand-written class teachers (more are generated with the placeholder sections below) ----
   const TEACHERS = [
     { id: 't-kga', name: 'Kavya Rao',      email: 'kavya.rao@littlesprouts.edu',      grade: 'Kindergarten', section: 'A', role: 'Class Teacher' },
     { id: 't-kgb', name: 'Nadia Fernando', email: 'nadia.fernando@littlesprouts.edu', grade: 'Kindergarten', section: 'B', role: 'Class Teacher' },
@@ -74,7 +74,7 @@
     { id: 't-g1b', name: 'Dilani Perera',  email: 'dilani.perera@littlesprouts.edu',  grade: 'Grade 1',      section: 'B', role: 'Class Teacher' },
   ];
 
-  // ---- roster: 24 hand-written students (6 per section); padded to 25 per section below ----
+  // ---- roster: 24 hand-written students (6 per section); the school is padded to 6 × 5 × 30 below ----
   // The linked parent (Priya Menon) owns the two `parentEmail: priya.menon@example.com` kids.
   const ROSTER = [
     // Kindergarten A
@@ -107,31 +107,56 @@
     { adm: 'ADM-5112', first: 'Tharindu', last: 'Silva',        grade: 'Grade 1', section: 'B', gender: 'm', parentName: 'Ruwan Silva',        parentEmail: 'ruwan.silva@example.com' },
   ];
 
-  // ---- placeholder children: pad every section to SECTION_SIZE ----
-  // Generated (seeded, stable across reloads) so the admin dandelion has a
-  // realistic class size. Flagged `filler: true`; delete this block when the
-  // real roster arrives. The 24 hand-written children above are untouched.
-  const SECTION_SIZE = 25;
+  // ---- sections ----
+  // Kavya Rao (t-kga) is the demo's logged-in teacher and owns BOTH Kindergarten
+  // sections A + B so the "Compare my sections" Insights tab has 2 same-grade
+  // sections to compare. Nadia stays in TEACHERS but doesn't own a section.
+  const SECTION_DEFS = [
+    { id: 'kg_a', name: 'Kindergarten A', grade: 'Kindergarten', section: 'A', teacherId: 't-kga' },
+    { id: 'kg_b', name: 'Kindergarten B', grade: 'Kindergarten', section: 'B', teacherId: 't-kga' },
+    { id: 'g1_a', name: 'Grade 1 A',      grade: 'Grade 1',      section: 'A', teacherId: 't-g1a' },
+    { id: 'g1_b', name: 'Grade 1 B',      grade: 'Grade 1',      section: 'B', teacherId: 't-g1b' },
+  ];
+
+  // ---- placeholder school size: GRADES × SECTION_LETTERS × SECTION_SIZE ----
+  // Generated (seeded, stable across reloads) so the demo school is a realistic
+  // size: 6 grades × 5 sections × 30 children = 900 children, 30 sections.
+  // The hand-written teachers, sections and 24 children above are untouched;
+  // every generated section gets its own class teacher, every generated child
+  // is flagged `filler: true`. Delete this block when the real roster arrives.
+  const GRADES = ['Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'];
+  const SECTION_LETTERS = ['A', 'B', 'C', 'D', 'E'];
+  const SECTION_SIZE = 30;
   const FILLER_GIRLS = ['Kiara', 'Navya', 'Tara', 'Meher', 'Ira', 'Siya', 'Anvi', 'Pari', 'Zara', 'Avni', 'Kavya', 'Ishita', 'Mahika', 'Rhea', 'Dinithi', 'Sanduni', 'Tharushi', 'Nisansala', 'Hiruni', 'Ama', 'Esha', 'Gauri', 'Larissa', 'Mira', 'Nila', 'Ojasvi', 'Pihu', 'Riddhi', 'Sara', 'Trisha', 'Uma', 'Vanya', 'Yashvi', 'Anika', 'Chathuri', 'Dulani', 'Ishara', 'Kaveesha', 'Lithmi', 'Methmi'];
   const FILLER_BOYS = ['Aarav', 'Advik', 'Ayaan', 'Krish', 'Rudra', 'Shaurya', 'Atharv', 'Kian', 'Veer', 'Yuvan', 'Hridaan', 'Laksh', 'Nihal', 'Om', 'Parth', 'Sehan', 'Kaveen', 'Thisal', 'Dinuka', 'Janith', 'Arnav', 'Darsh', 'Eshan', 'Harsh', 'Jai', 'Manav', 'Neil', 'Pranav', 'Rehan', 'Samar', 'Tanay', 'Udit', 'Vedant', 'Yash', 'Chamod', 'Hasith', 'Isuru', 'Lahiru', 'Minul', 'Ravin'];
   const FILLER_LASTS = ['Agarwal', 'Bhat', 'Chopra', 'Desai', 'Ghosh', 'Hegde', 'Kulkarni', 'Mehta', 'Naidu', 'Rao', 'Shetty', 'Thomas', 'Varma', 'Abeysekara', 'Dissanayake', 'Gunawardena', 'Herath', 'Karunaratne', 'Liyanage', 'Mendis', 'Ranasinghe', 'Senanayake', 'Weerasinghe', 'Kumara'];
   const FILLER_PARENTS = ['Anil', 'Bhavna', 'Chitra', 'Deepak', 'Geetha', 'Harini', 'Imran', 'Jaya', 'Kamal', 'Lalitha', 'Manoj', 'Nirmala', 'Prakash', 'Radha', 'Sanjay', 'Thilini', 'Upul', 'Vasanthi'];
-  (function padRoster() {
+  const FILLER_TEACHER_FIRSTS = ['Anita', 'Bharathi', 'Chandrika', 'Deepa', 'Farah', 'Gayathri', 'Hema', 'Indira', 'Jyothi', 'Kamala', 'Leela', 'Madhavi', 'Nalini', 'Padma', 'Revathi', 'Sharmila', 'Tanuja', 'Usha', 'Vidya', 'Arjun', 'Bhaskar', 'Dilan', 'Ganesh', 'Kasun', 'Mohan', 'Nimal', 'Ravi', 'Suresh'];
+  (function padSchool() {
     const rnd = mulberry32(hashStr('filler-roster'));
     const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
-    const usedFirst = new Set(ROSTER.map((r) => r.first));
-    const takeFirst = (pool) => {
-      const free = pool.filter((n) => !usedFirst.has(n));
-      const n = free.length ? free[Math.floor(rnd() * free.length)] : pick(pool);
-      usedFirst.add(n); return n;
-    };
-    const nextAdm = { Kindergarten: 5013, 'Grade 1': 5113 };
-    [['Kindergarten', 'A'], ['Kindergarten', 'B'], ['Grade 1', 'A'], ['Grade 1', 'B']].forEach(([grade, section]) => {
+    const slug = (g) => (g === 'Kindergarten' ? 'kg' : 'g' + g.split(' ')[1]);
+    // 1) sections + their class teachers
+    const usedTeacher = new Set(TEACHERS.map((t) => t.name));
+    GRADES.forEach((grade) => SECTION_LETTERS.forEach((section) => {
+      if (SECTION_DEFS.some((sd) => sd.grade === grade && sd.section === section)) return;
+      const id = slug(grade) + '_' + section.toLowerCase();
+      let name; do { name = pick(FILLER_TEACHER_FIRSTS) + ' ' + pick(FILLER_LASTS); } while (usedTeacher.has(name));
+      usedTeacher.add(name);
+      const tid = 't-' + id.replace('_', '');
+      TEACHERS.push({ id: tid, name, email: name.toLowerCase().replace(/\s+/g, '.') + '@littlesprouts.edu', grade, section, role: 'Class Teacher', filler: true });
+      SECTION_DEFS.push({ id, name: grade + ' ' + section, grade, section, teacherId: tid });
+    }));
+    // 2) children: pad every section to SECTION_SIZE (unique full names; ADM per grade from 6001, 7001, …)
+    const usedName = new Set(ROSTER.map((r) => r.first + ' ' + r.last));
+    const nextAdm = {}; GRADES.forEach((g, i) => { nextAdm[g] = 6001 + i * 1000; });
+    SECTION_DEFS.forEach(({ grade, section }) => {
       let have = ROSTER.filter((r) => r.grade === grade && r.section === section).length;
       while (have < SECTION_SIZE) {
         const gender = rnd() < 0.5 ? 'f' : 'm';
-        const first = takeFirst(gender === 'f' ? FILLER_GIRLS : FILLER_BOYS);
-        const last = pick(FILLER_LASTS);
+        let first, last;
+        do { first = pick(gender === 'f' ? FILLER_GIRLS : FILLER_BOYS); last = pick(FILLER_LASTS); } while (usedName.has(first + ' ' + last));
+        usedName.add(first + ' ' + last);
         const adm = 'ADM-' + nextAdm[grade]++;
         ROSTER.push({ adm, first, last, grade, section, gender,
           parentName: pick(FILLER_PARENTS) + ' ' + last,
@@ -140,17 +165,6 @@
       }
     });
   })();
-
-  // ---- sections (derived) ----
-  // Kavya Rao (t-kga) is the demo's logged-in teacher and owns BOTH Kindergarten
-  // sections (A + B) so the "Compare my sections" Insights tab has 2 same-grade
-  // sections to compare. Nadia stays in TEACHERS but no longer owns a section.
-  const SECTION_DEFS = [
-    { id: 'kg_a', name: 'Kindergarten A', grade: 'Kindergarten', section: 'A', teacherId: 't-kga' },
-    { id: 'kg_b', name: 'Kindergarten B', grade: 'Kindergarten', section: 'B', teacherId: 't-kga' },
-    { id: 'g1_a', name: 'Grade 1 A',      grade: 'Grade 1',      section: 'A', teacherId: 't-g1a' },
-    { id: 'g1_b', name: 'Grade 1 B',      grade: 'Grade 1',      section: 'B', teacherId: 't-g1b' },
-  ];
 
   // Which teacher the demo dashboard opens as (the "selected" teacher).
   const ACTIVE_TEACHER_ID = 't-kga';

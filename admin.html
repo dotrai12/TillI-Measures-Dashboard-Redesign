@@ -22,7 +22,6 @@
   :root {
     /* Accent, sidebar width, header height, content width and page padding
        all come from tilli.css tokens — same values as the teacher dashboard. */
-    --ov-num-size: 48px;   /* Overview hero number (the one thing to look at) */
   }
   body { background: var(--white); }   /* pure white, same as the teacher dashboard — cards keep their 1px border */
 
@@ -250,69 +249,76 @@
   .ad-small { margin-left: 6px; }   /* .ui-chip.warn */
   .ad-scope-n { font-size: var(--fs-sm); }
 
-  /* "Since your last visit" strip */
-  .ad-since { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius-md); background: var(--white); border: 1px solid var(--line-200); font-size: var(--fs-sm); font-weight: 600; color: var(--ink-600); }
-  .ad-since-h { font-weight: 800; color: var(--accent-ink); margin-right: 4px; }
-  .ad-since .sep { color: var(--ink-300); }
-
   /* ============================================================
-     OVERVIEW — one hero (like the teacher garden), then a quiet row.
-     Type ramp on this screen: 32 greeting · 48 hero number ·
-     18 card titles · 15 body · 13 meta. Secondary text = --ink-450.
+     OVERVIEW — the living dandelion + guided story, free-flowing on
+     the page (no cards). A soft wash sits behind it. Type ramp:
+     32 story headline · 15 body · 13 meta. SVG text = 11 / 13.
      ============================================================ */
-  /* Greeting = .ui-screen-title.greet + .ui-screen-sub (tilli.css), same as the teacher landing. */
-  .ov-kicker { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
-  .ov-numrow { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
-  .ov-num { font-family: var(--font-heading); font-weight: 700; font-size: var(--ov-num-size); line-height: 1; color: var(--ink-900); letter-spacing: -.01em; }
-  .ov-numlbl { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-700); }
-  .ov-big { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); margin-top: 4px; }
-  .ov-line { margin: 10px 0 0; font-weight: 600; font-size: var(--fs-md); color: var(--ink-600); line-height: 1.5; }
-  .ov-line.up { color: var(--green-700); }
-  .ov-line.down { color: var(--warn-700); }
-  .ov-legend { margin-top: 10px; }
-  .ov-hero-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    border-top: 1px solid var(--line-200); padding-top: 14px; margin-top: 6px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
-  /* ---- Dandelion school (Overview hero) — fractal radial tree, see dandelionHTML() ---- */
-  .ov-dl { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(220px, 1fr); gap: 12px 28px; align-items: center;
-    padding: clamp(20px, 3vw, 28px); }   /* .ui-card */
+  .ov-dl { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr); gap: 8px 32px; align-items: center; }
+  .ov-dl::before { content: ''; position: absolute; inset: -32px 0; z-index: -1; pointer-events: none; filter: blur(30px); opacity: .9;
+    background: radial-gradient(40% 50% at 22% 40%, var(--wash-green), transparent 70%),
+                radial-gradient(35% 45% at 70% 25%, var(--wash-yellow), transparent 70%),
+                radial-gradient(40% 50% at 55% 85%, var(--wash-cyan), transparent 70%),
+                radial-gradient(30% 40% at 90% 70%, var(--wash-pink), transparent 70%); }
   .dl-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .dl-head .ui-crumbs { margin: 0; }
-  .dl-stage { position: relative; }
-  .dl-svg { display: block; width: 100%; height: auto; overflow: visible; }
-  .dl-world { transform-box: view-box; transform-origin: 0 0; transition: transform var(--dl-zoom) cubic-bezier(.6, 0, .3, 1), opacity var(--dl-zoom); }
-  .dl-spoke { stroke: var(--ink-300); stroke-linecap: round; }
+  .dl-viz { min-width: 0; }
+  .dl-stage { position: relative; touch-action: none; }
+  .dl-svg { display: block; width: 100%; height: auto; overflow: visible; user-select: none; }
+  .dl-spoke { stroke-linecap: round; transition: opacity .35s; }
+  .dl-spoke.hub { stroke: var(--ink-300); }
+  .dl-spoke.kid { opacity: .45; }
   .dl-hit { fill: transparent; }
-  .dl-hub { transform-box: fill-box; transform-origin: center; transition: transform .18s ease; }
+  .dl-kid { cursor: grab; transition: opacity .35s; }
+  .dl-hub { cursor: grab; transition: opacity .35s; }
   .dl-hub.nav { cursor: pointer; }
-  .dl-hub.nav:hover, .dl-hub.nav:focus-visible { transform: scale(1.18); }
+  .dl-hub.nav:hover .dl-hit, .dl-hub.nav:focus-visible .dl-hit { fill: var(--accent-wash); stroke: var(--accent); stroke-width: 1.5; }
   .dl-hub:focus { outline: none; }
-  .dl-hub.nav:focus-visible .dl-hit { stroke: var(--focus); stroke-width: 2; }
-  .dl-kid { pointer-events: none; transform-box: fill-box; transform-origin: center; }
-  .dl-label { position: absolute; transform: translateX(-50%); pointer-events: none; white-space: nowrap; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700);
-    text-shadow: 0 0 3px var(--white), 0 0 3px var(--white), 0 0 3px var(--white); transition: opacity .15s; }
+  .dl-stage.dragging, .dl-stage.dragging * { cursor: grabbing; }
+  .dl-name { font-family: var(--font-body); font-weight: 700; fill: var(--ink-700); paint-order: stroke; stroke: var(--white); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; transition: opacity .35s; }
+  .dl-name.d0 { fill: var(--ink-900); }
+  .dl-name.d2 { font-weight: 600; fill: var(--ink-450); }
+  .dl-stage [data-dl-i].dim { opacity: var(--dl-dim, .14); }
+  .dl-spoke.kid.dim { opacity: calc(var(--dl-dim, .14) * .45); }
+  /* outside the zoomed-in grade/section: faded context, not interactive */
+  .dl-stage [data-dl-i].ctx { opacity: var(--dl-ctx, .18); pointer-events: none; }
+  .dl-spoke.kid.ctx { opacity: calc(var(--dl-ctx, .18) * .45); }
   .dl-tip { position: absolute; z-index: 5; transform: translate(-50%, calc(-100% - 16px)); pointer-events: none; background: var(--ink-900); color: var(--white);
     border-radius: var(--radius-sm); padding: 8px 12px; box-shadow: var(--shadow-pop); font-size: var(--fs-sm); font-weight: 600; line-height: 1.45; white-space: nowrap; }
   .dl-tip.below { transform: translate(-50%, 16px); }
   .dl-tip b { display: block; font-weight: 800; }
   .dl-tip span { display: block; color: var(--ink-300); }
   .dl-tip em { display: block; font-style: normal; color: var(--green-500); margin-top: 2px; }
-  .dl-panel-bar { margin-top: 16px; }
-  .dl-key { margin: 12px 0 0; font-weight: 600; font-size: var(--fs-sm); color: var(--text-meta); line-height: 1.5; }
-  /* grow-in: spokes draw outward, hubs and dots pop, staggered by depth (--dl-delay per element) */
-  @keyframes dl-draw { from { stroke-dasharray: 1; stroke-dashoffset: 1; } to { stroke-dasharray: 1; stroke-dashoffset: 0; } }
-  @keyframes dl-pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  .dl-stage.grow .dl-spoke { animation: dl-draw calc(var(--dl-grow) * .6) ease-out backwards; animation-delay: var(--dl-delay); }
-  .dl-stage.grow .dl-kid, .dl-stage.grow .dl-hub { animation: dl-pop calc(var(--dl-grow) * .5) cubic-bezier(.3, 1.4, .5, 1) backwards; animation-delay: var(--dl-delay); }
-  .dl-stage.grow .dl-label { animation: dl-fade var(--dl-grow) ease-out backwards; }
-  @keyframes dl-fade { from { opacity: 0; } }
-  /* zoom-out-going: the clicked branch stays, everything else fades */
-  .dl-stage.leaving { pointer-events: none; }
-  .dl-stage.leaving .dl-label, .dl-stage.leaving .dl-tip { opacity: 0; }
-  .dl-stage.leaving.down [data-dl-sub]:not(.keep) { opacity: 0; transition: opacity calc(var(--dl-zoom) * .6); }
-  .dl-stage.leaving.up .dl-world { opacity: 0; }
+  .dl-counts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 28px; margin-top: 10px; }
+  .dl-counts span { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 700; font-size: var(--fs-sm); color: var(--text-meta); }
+  .dl-counts b { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1; color: var(--ink-900); font-variant-numeric: tabular-nums; }
+  .dl-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-top: 6px; }
+  .dl-hint { font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  .ui-legend i.ring { box-shadow: inset 0 0 0 2px var(--ink-300); }
+  /* Guided story */
+  .dl-story { min-width: 0; }
+  .dl-headline { margin: 8px 0 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.15; color: var(--ink-900); letter-spacing: -.01em; }
+  .dl-body { margin: 12px 0 0; font-weight: 600; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-600); }
+  /* story points: hover / focus lights the dandelion, click pins */
+  .dl-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .dl-points li { position: relative; padding: 10px 12px 10px 28px; border-radius: var(--radius-md); cursor: pointer; transition: background .2s; }
+  .dl-points li::before { content: ''; position: absolute; left: 10px; top: 19px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-300); transition: background .2s; }
+  .dl-points li.on { background: color-mix(in srgb, var(--white) 70%, transparent); }
+  .dl-points li.on::before, .dl-points li.pinned::before { background: var(--accent); }
+  .dl-points li:focus { outline: none; }
+  .dl-points li:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .dl-pt-head { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.3; color: var(--ink-900); }
+  .dl-pt-head em { font-style: normal; }
+  .dl-pt-body { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-600); }
+  .dl-source { margin: 10px 0 0 12px; font-weight: 700; font-size: var(--fs-xs); color: var(--text-meta); }
+  .dl-out { margin-top: 18px; }   /* .btn.btn-primary — the way into Outcomes (not in the nav) */
   @media (prefers-reduced-motion: reduce) {
-    .dl-stage.grow .dl-spoke, .dl-stage.grow .dl-kid, .dl-stage.grow .dl-hub, .dl-stage.grow .dl-label { animation: none; }
-    .dl-world, .dl-hub { transition: none; }
+    .dl-spoke, .dl-kid, .dl-hub, .dl-name, .dl-points li, .dl-points li::before { transition: none; }
+  }
+  @media (max-width: 860px) {
+    .ov-dl { grid-template-columns: minmax(0, 1fr); }
+    .dl-viz { order: 1; }   /* phone: dandelion above the story */
+    .dl-story { order: 2; }
   }
   /* Dandelion tuning GUI (dev tooling) */
   #dl-gui { position: fixed; top: 76px; right: 16px; z-index: 9999; width: 260px; max-height: calc(100dvh - 96px); overflow: auto; background: var(--white);
@@ -330,56 +336,6 @@
   #dl-gui .dlg-actions { display: flex; gap: 8px; margin-top: 14px; }
   #dl-gui .dlg-actions button { flex: 1; font-family: var(--font-body); font-weight: 700; font-size: 12px; border-radius: 999px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line-200); background: var(--white); color: var(--ink-450); }
   #dl-gui .dlg-actions button.primary { border: none; background: var(--green-500); color: var(--white); }
-  .ov-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--page-gap); margin-top: var(--page-gap); align-items: start; }
-  .ov-row.one { grid-template-columns: minmax(0, 1fr); }
-  /* Overview cards = .ui-card.md, titles = .ui-title */
-  .ov-card-line { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-md); color: var(--ink-450); line-height: 1.5; }
-
-  /* School at a glance — headcount strip under the greeting */
-  .ov-glance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  .ov-glance-k { padding: 12px 16px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }   /* .ui-card */
-  .ov-glance-k b { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); color: var(--ink-900); line-height: 1; font-variant-numeric: tabular-nums; }
-  .ov-glance-k span { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
-
-  /* "Is data being collected?" status inside the window card */
-  .ov-collect { margin-top: 12px; padding: 10px 14px; border-radius: var(--radius-md); font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; }
-  .ov-collect.ok { background: var(--wash-green); color: var(--green-700); }
-  .ui-card.tint-green .ov-collect.ok { background: var(--white); }   /* window card is green-tinted */
-  .ov-collect.warn { background: var(--warn-wash); border: 1px solid var(--warn-line); color: var(--ink-700); }
-  .ov-collect.warn > b { color: var(--warn-700); }
-  .ov-collect ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
-  .ov-progress li.flag .ui-meter > span { background: var(--warn-500); }
-  .ov-progress li.flag b { color: var(--warn-700); }
-
-  /* Where to help next — one row per grade */
-  .ov-help { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
-  .ov-help li { padding: 12px 0; border-top: 1px solid var(--line-200); }
-  .ov-help-h { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
-  .ov-help-h b { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); }
-  .ov-help-h span { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); }
-  .ov-help-h em { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-style: normal; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
-  .ov-help-h i { width: var(--dot-md); height: var(--dot-md); border-radius: 50%; flex: none; }
-  .ov-help p { margin: 6px 0 0; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.5; }
-  .ov-prep { margin-top: 12px; }
-  .ov-prep summary { cursor: pointer; font-weight: 700; font-size: var(--fs-sm); color: var(--accent-ink); list-style: none; }
-  .ov-prep summary::-webkit-details-marker { display: none; }
-  .ov-prep summary::after { content: ' ▾'; }
-  .ov-prep[open] summary::after { content: ' ▴'; }
-  .ov-prep ul { margin: 10px 0 8px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-600); }
-  .ov-progress { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
-  .ov-progress li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto; gap: 12px; align-items: center; padding: 9px 6px; border-top: 1px solid var(--line-200); border-radius: var(--radius-sm); }
-  .ov-progress li.clickable { cursor: pointer; }
-  .ov-progress li.clickable:hover { background: var(--surface-100); }
-  .ov-progress .nm { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); min-width: 0; }
-  .ov-progress .nm small { display: block; font-weight: 600; color: var(--ink-450); font-size: var(--fs-sm); }
-  .ov-progress .ui-meter { height: 8px; }
-  .ov-progress b { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); white-space: nowrap; }
-  @media (max-width: 760px) {
-    .ov-dl { grid-template-columns: minmax(0, 1fr); }
-    .ov-row { grid-template-columns: minmax(0, 1fr); }
-    .ov-glance { gap: 8px; }
-    .ov-glance-k { padding: 10px 12px; flex-direction: column; gap: 4px; }
-  }
 
   /* Roster: quiet year-end row + neutral user actions */
   .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
@@ -435,12 +391,12 @@
 <div id="ad-modal-root"></div>
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261019dl"></script>
-<script src="assets/tilli-api.js?v=20261019dl"></script>
+<script src="assets/school-data.js?v=20261019sz"></script>
+<script src="assets/tilli-api.js?v=20261019sz"></script>
 <script src="assets/tilli-history.js?v=20261016zx"></script>
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
-<script src="assets/admin-data.js?v=20261019dl"></script>
+<script src="assets/admin-data.js?v=20261019sz"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261019dl"></script>
+<script src="assets/admin.js?v=20261019dz"></script>
 </body>
 </html>

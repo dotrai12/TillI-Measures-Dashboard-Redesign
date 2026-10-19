@@ -461,13 +461,14 @@
     reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
   };
   var NAV = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'outcomes', label: 'Outcomes' },
+    { key: 'overview', label: 'Overview' },   // Outcomes is reached from the Overview button, not the nav
     { key: 'roster', label: 'Roster' },      // absent for principal
     { key: 'history', label: 'History' },    // absent for principal — names + identity edits, same rule as Roster
     { key: 'reports', label: 'Reports' },
     { key: 'asktilli', label: 'Ask Tilli' }, // live assistant — also reachable via the floating button
   ];
+  // Outcomes lives under Overview, so Overview stays highlighted there.
+  function navOn(key, screen) { return key === screen || (key === 'overview' && screen === 'outcomes'); }
   function navItems() { return NAV.filter(function (n) { return !((n.key === 'roster' || n.key === 'history') && isPrincipal); }); }
 
   function chromeHTML(r) {
@@ -483,7 +484,7 @@
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
       '<nav class="ui-nav">' + navItems().map(function (n) {
         if (n.disabled) return '<button class="ui-nav-item disabled" data-navsoon="1" title="Coming soon to the leadership view"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '<span class="ui-tag ml-auto">Soon</span></button>';
-        return '<button class="ui-nav-item' + (n.key === r.screen ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
+        return '<button class="ui-nav-item' + (navOn(n.key, r.screen) ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
       }).join('') + '</nav>' +
       // Bottom-left stack, same on every dashboard: dev preview panel (placed by
       // placeStatePanel) above the profile, which opens the account menu.
@@ -500,7 +501,7 @@
       '<button class="ui-avatar ad-acct-m" id="ad-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
     var bottom = '<nav class="ui-bottomnav dash-bottomnav">' + navItems().filter(function (n) { return !n.disabled && n.key !== 'asktilli'; }).map(function (n) {
-      return '<button class="' + (n.key === r.screen ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.key] + '<span>' + esc(n.label) + '</span></button>';
+      return '<button class="' + (navOn(n.key, r.screen) ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.key] + '<span>' + esc(n.label) + '</span></button>';
     }).join('') + '</nav>';
 
     return side + '<div class="ad-col"><div style="position:relative">' + header + '</div>' +
@@ -621,31 +622,49 @@
   // One headline (is it working + direction of travel), one sub-line
   // (adoption + children moved + window), and a pooled band bar with the
   // Secure target marked. Adapts to every lifecycle state.
-  // ---------- Overview hero: the dandelion school ----------
-  // A fractal radial tree: focus hub → its children → … → one dot per child.
-  // The same shape repeats at every level (school › grade › section), and the
-  // focus lives in the URL (?grade= / ?section=) so browser Back walks up.
-  // Hubs are clickable ONE level down (or the centre, one level up); children
-  // are never clickable or hoverable (groups-only rule, spec §2).
-  // Two modes: 'checkin' (who's been assessed in the open window) and
-  // 'results' (bands at the latest completed point).
+  // ---------- Overview: the living dandelion school ----------
+  // A force-directed dandelion: focus hub → its children → … → one dot per
+  // child. The same shape repeats at every level (school › grade › section).
+  // Focus lives in the URL (?grade= / ?section=) so browser Back walks up, and
+  // node positions survive re-renders, so changing level is a glide, not a cut.
+  // Beside it, a guided story (dot pager) written from the data; each step
+  // highlights part of the dandelion and can pull groups apart to compare them.
+  // Hubs: click one level down (or the centre, one up). Children are never
+  // clickable; their names show on hover for coordinators only, and only in
+  // Check-in mode unless leadershipStudentResultsVisible (no student results).
   var DL_CFG = {
     gradeDist: 120,      // school hub → grade hub
     sectionDist: 100,    // grade hub → section hub
-    kidDist: 46,         // section hub → child dot
+    kidDist: 52,         // section hub → child dot
     sectionSpread: 140,  // fan of sections around their grade's outward direction (deg)
     kidSpread: 330,      // fan of children around their section (deg; 360 = full burst)
     rootAngle: 180,      // direction of the first branch from the centre (deg; 0 = right)
     kidJitter: 0.18,     // ± share of random variation in child spoke length
-    rootR: 18,           // centre hub radius
-    hubR: 9,             // grade/section hub radius
-    hubRing: 3.5,        // donut ring width on hubs
-    kidR: 3.6,           // child dot radius (at school zoom)
-    sizeBoost: 0.55,     // 0 = dots keep their size when zoomed in, 1 = they grow with the zoom
+    asymmetry: 0.6,      // 0 = perfectly even fans, 1 = hubs wander off-angle and spokes vary in length
+    kidScatter: 0.6,     // 0 = children evenly spaced round their section, 1 = clumped and gappy
+    sectionGap: 36,      // minimum clear space between two class bursts (layout units)
+    gradeGap: 40,        // minimum clear space between two grades' groups of classes (layout units)
+    zoomMs: 900,         // camera glide when you click into a grade/section or step back
+    contextOpacity: 0.18, // opacity of the parts outside the focused grade/section
+    sectionLabelMax: 8,  // more sections than this → section names only appear once you zoom into a grade
+    kidDotMax: 200,      // more children than this in view → classes show as summary hubs, no child dots
+    classHubR: 12,       // radius of a class hub while its child dots are hidden (kept below the grade size)
+    rootR: 24,           // school hub radius — biggest
+    gradeR: 15,          // grade hub radius — kept below the school hub
+    sectionR: 9,         // section hub radius — kept below the grade hub
+    hubRing: 3.5,        // donut ring width on a section-sized hub (scales with hub size)
+    kidR: 4,             // child dot radius (at whole-school zoom)
+    sizeBoost: 0.55,     // 0 = dots keep their on-screen size when zoomed in, 1 = they grow with the camera
     lineW: 1,            // spoke width
-    zoomMs: 650,         // click-to-zoom duration
-    growMs: 700,         // grow-in duration after a zoom
     childRule: 'mean',   // child colour: 'mean' = band of average score, 'mode' = most common band
+    targetPull: 0.035,   // physics: pull of each node toward its dandelion position
+    linkPull: 0.06,      // physics: spring strength of each spoke
+    repel: 0.5,          // physics: push between overlapping nodes
+    damping: 0.2,        // physics: velocity lost per frame (higher = calmer, slower glides)
+    breatheAmp: 2.2,     // idle float distance (viewBox units; 0 = still)
+    breatheSpeed: 0.7,   // idle float speed
+    storySpread: 1.15,   // how far groups pull apart on story steps that compare them
+    dimOpacity: 0.14,    // opacity of parts a story step is not about
   };
   var DL_DEFAULTS = Object.assign({}, DL_CFG);
   var DL_W = 600;   // viewBox width; height follows the tree's aspect
@@ -667,10 +686,21 @@
     var m = dlModes();
     return m.indexOf(params.view) >= 0 ? params.view : m[0] || 'checkin';
   }
+  function dlParamsFor(n) {
+    if (n.type === 'grade') return { grade: n.id };
+    if (n.type === 'section') return { grade: n.grade, section: n.id };
+    return {};
+  }
+  function dlParamsForScope(scope) {
+    if (scope.level === 'section') return { grade: scope.grade, section: scope.sectionId };
+    if (scope.level === 'grade') return { grade: scope.grade };
+    return {};
+  }
+  function dlUpParams(scope) { return scope.level === 'section' ? { grade: scope.grade } : {}; }
 
-  // Tree for the focused node. Kid nodes carry their student (never rendered as a name).
+  // Tree for the focused node. Kid nodes carry their student.
   function dlTree(scope) {
-    function kidNodes(sd) { return AD.studentsInSection(sd).map(function (s) { return { type: 'kid', id: s.adm, student: s }; }); }
+    function kidNodes(sd) { return AD.studentsInSection(sd).map(function (s) { return { type: 'kid', id: s.adm, student: s, grade: sd.grade }; }); }
     function secNode(sd) { return { type: 'section', id: sd.id, name: sd.name, grade: sd.grade, teacher: AD.teacherFor(sd), children: kidNodes(sd) }; }
     function gradeNode(g) { return { type: 'grade', id: g, name: g, children: AD.sections.filter(function (s) { return s.grade === g; }).map(secNode) }; }
     if (scope.level === 'section') return secNode(AD.sections.find(function (s) { return s.id === scope.sectionId; }));
@@ -681,50 +711,125 @@
     if (node.type === 'kid') return [node.student];
     return node.children.reduce(function (a, c) { return a.concat(dlStudents(c)); }, []);
   }
+  function dlKey(n) { return n.type + ':' + n.id; }
+  function dlFocusKey(scope) { return scope.level === 'section' ? 'section:' + scope.sectionId : scope.level === 'grade' ? 'grade:' + scope.grade : 'school:school'; }
+  function dlSubtree(n) { return [n].concat((n.children || []).reduce(function (a, c) { return a.concat(dlSubtree(c)); }, [])); }
 
-  // Radial layout in layout units, root at (0,0). Each child fans around its
+  // Radial layout in world units, school hub at (0,0). Each child fans around its
   // parent's outward direction, so every subtree reads as its own burst.
-  function dlLayout(root) {
+  // `sep` stretches the focus hub's own ring (story steps that compare groups).
+  function dlLayout(root, sep, focusKey) {
     var DIST = { grade: DL_CFG.gradeDist, section: DL_CFG.sectionDist, kid: DL_CFG.kidDist };
     var SPREAD = { grade: 360, section: DL_CFG.sectionSpread, kid: DL_CFG.kidSpread };
     var nodes = [];
     (function place(n, x, y, dir, depth, parent) {
-      n.x = x; n.y = y; n.dir = dir; n.depth = depth; n.parent = parent; nodes.push(n);
+      n.lx = x; n.ly = y; n.dir = dir; n.depth = depth; n.parent = parent; n.key = dlKey(n); nodes.push(n);
       var kids = n.children || [], k = kids.length; if (!k) return;
       var full = depth === 0;   // the focus hub's children ring all the way round
       var spread = full ? 360 : SPREAD[kids[0].type];
+      // Seeded per node (stable across reloads and levels), so the asymmetry is organic, not random each paint.
+      var wob = function (id, salt) { return (hashStr(id + salt) % 2000) / 1000 - 1; };   // −1…1
+      if (kids[0].type === 'kid') spread *= 1 - 0.3 * DL_CFG.asymmetry * Math.abs(wob(n.id, ':fan'));
+      var slot = spread / k;
+      // Many sections on one grade: lengthen the grade→section spokes so neighbouring
+      // class bursts fit side by side on the fan (arc between them ≥ burst + gap).
+      var minD = kids[0].type === 'section' && k > 1 ? (2 * dlBurstR() + DL_CFG.sectionGap) / (slot * Math.PI / 180) : 0;
       kids.forEach(function (c, i) {
-        var a = full ? DL_CFG.rootAngle + i * 360 / k : dir - spread / 2 + (i + 0.5) * spread / k;
-        var d = DIST[c.type];
-        if (c.type === 'kid') d *= 1 + DL_CFG.kidJitter * ((hashStr(c.id) % 1000) / 500 - 1);
+        var a = full ? DL_CFG.rootAngle + i * 360 / k : dir - spread / 2 + (i + 0.5) * slot;
+        var d = Math.max(DIST[c.type], c.type === 'section' ? minD : 0) * (n.key === focusKey ? sep || 1 : 1);
+        if (c.type === 'kid') {
+          d *= 1 + DL_CFG.kidJitter * wob(c.id, '');
+          a += DL_CFG.kidScatter * 0.5 * slot * wob(c.id, ':a');
+        } else {
+          a += DL_CFG.asymmetry * Math.min(40, slot * 0.35) * wob(c.id, ':a');
+          d *= 1 + DL_CFG.asymmetry * 0.3 * wob(c.id, ':d');
+        }
         var rad = a * Math.PI / 180;
         place(c, x + d * Math.cos(rad), y + d * Math.sin(rad), a, depth + 1, n);
       });
     })(root, 0, 0, DL_CFG.rootAngle, 0, null);
+    dlSeparate(nodes);
     return nodes;
+  }
+  // Keep classes apart, and keep every grade's classes together:
+  //  1) within each grade, push its class bursts (section + children, as one disc)
+  //     apart and off the grade + school hubs, so two classes never read as one blob;
+  //  2) then treat each whole grade (hub + classes + children) as one disc and push
+  //     grade discs apart as rigid groups, so one grade's classes never mix in
+  //     among another grade's.
+  function dlBurstR() { return DL_CFG.kidDist * (1 + DL_CFG.kidJitter) + DL_CFG.kidR; }   // radius of one class burst
+  function dlSeparate(nodes) {
+    var R = dlBurstR(), root = nodes[0], gap = DL_CFG.sectionGap;
+    var grades = nodes.filter(function (n) { return n.type === 'grade'; });
+    function shift(n, dx, dy) { n.lx += dx; n.ly += dy; (n.children || []).forEach(function (c) { shift(c, dx, dy); }); }
+    // Push b (and a, by 1 − share) apart along the line between them; the school hub never moves.
+    function apart(a, b, min, share) {
+      var dx = b.lx - a.lx, dy = b.ly - a.ly, d = Math.hypot(dx, dy);
+      if (d >= min - 0.05) return false;   // tolerance so tiny residual pushes can't keep the loop alive
+      if (d < 0.01) { dx = 1; dy = 0; d = 1; }
+      var push = (min - d), ux = dx / d, uy = dy / d;
+      if (a.depth > 0) shift(a, -ux * push * (1 - share), -uy * push * (1 - share));
+      shift(b, ux * push * share, uy * push * share);
+      return true;
+    }
+    var it, moved;
+    // 1) classes within each grade (capped so a pathological config can't hang the page)
+    for (it = 0; it < 600; it++) {
+      moved = false;
+      grades.forEach(function (g) {
+        var secs = g.children || [];
+        for (var i = 0; i < secs.length; i++) {
+          for (var j = i + 1; j < secs.length; j++) moved = apart(secs[i], secs[j], 2 * R + gap, 0.5) || moved;
+          moved = apart(g, secs[i], R + DL_CFG.gradeR + gap * 0.5, 1) || moved;
+          moved = apart(root, secs[i], R + DL_CFG.rootR + gap * 0.5, 1) || moved;
+        }
+      });
+      if (!moved) break;
+    }
+    // 2) whole grades as rigid discs: centre = mean of the grade hub and its classes,
+    //    radius reaches the far edge of its furthest class burst.
+    var discs = grades.map(function (g) {
+      var pts = [{ x: g.lx, y: g.ly, r: DL_CFG.gradeR }].concat((g.children || []).map(function (c) { return { x: c.lx, y: c.ly, r: R }; }));
+      var cx = pts.reduce(function (a, p) { return a + p.x; }, 0) / pts.length, cy = pts.reduce(function (a, p) { return a + p.y; }, 0) / pts.length;
+      return { g: g, ox: cx - g.lx, oy: cy - g.ly, r: pts.reduce(function (m, p) { return Math.max(m, Math.hypot(p.x - cx, p.y - cy) + p.r); }, 0) };
+    });
+    for (it = 0; it < 600; it++) {
+      moved = false;
+      for (var i = 0; i < discs.length; i++) for (var j = i + 1; j < discs.length; j++) {
+        var A = discs[i], B = discs[j];
+        var ax = A.g.lx + A.ox, ay = A.g.ly + A.oy, bx = B.g.lx + B.ox, by = B.g.ly + B.oy;
+        var dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy), min = A.r + B.r + DL_CFG.gradeGap;
+        if (d >= min - 0.05) continue;
+        if (d < 0.01) { dx = 1; dy = 0; d = 1; }
+        var push = (min - d) / 2;
+        shift(A.g, -dx / d * push, -dy / d * push); shift(B.g, dx / d * push, dy / d * push);
+        moved = true;
+      }
+      if (!moved) break;
+    }
   }
   function hashStr(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 
-  // Fit layout units into the viewBox. `k` = layout→viewBox scale; zoom `z`
-  // compares it with the whole-school scale so dots can grow when zoomed in.
-  function dlFit(nodes) {
-    var ext = nodes.reduce(function (e, n) { return { x: Math.max(e.x, Math.abs(n.x)), y: Math.max(e.y, Math.abs(n.y)) }; }, { x: 1, y: 1 });
-    var pad = 34, k = (DL_W / 2 - pad) / Math.max(ext.x, ext.y * 0.9);
-    var H = Math.round(Math.min(DL_W, Math.max(DL_W * 0.62, 2 * (ext.y * k + pad))));
-    k = Math.min(k, (H / 2 - pad) / ext.y);
-    return { k: k, H: H };
+  // Bounding box of nodes (world units), with room for dots and labels.
+  function dlBox(nodes) {
+    var b = nodes.reduce(function (b, n) { return { x0: Math.min(b.x0, n.lx), y0: Math.min(b.y0, n.ly), x1: Math.max(b.x1, n.lx), y1: Math.max(b.y1, n.ly) }; },
+      { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+    var m = 14 + DL_CFG.kidR * 2;
+    return { x0: b.x0 - m, y0: b.y0 - m, x1: b.x1 + m, y1: b.y1 + m + 12 };   // + label room under the lowest hub
   }
-  var dlSchoolK = null;
-  function dlZoom(k) {
-    if (dlSchoolK == null) dlSchoolK = dlFit(dlLayout(dlTree({ level: 'school' }))).k;
-    return Math.max(1, k / dlSchoolK);
+  // Camera (viewBox) that shows the box at a fixed aspect, centred.
+  function dlCamFit(box, aspect) {
+    var w = box.x1 - box.x0, h = box.y1 - box.y0;
+    if (h > w * aspect) w = h / aspect;
+    h = w * aspect;
+    return { x: (box.x0 + box.x1) / 2 - w / 2, y: (box.y0 + box.y1) / 2 - h / 2, w: w, h: h };
   }
 
   // Colours
   var DL_STATUS = {
-    done:  { label: 'Assessed',    color: 'var(--status-done-dot)' },
-    draft: { label: 'In progress', color: 'var(--lvl-2)' },
-    none:  { label: 'Not started', color: 'var(--ink-300)' },
+    done:  { label: 'Assessed',    color: 'var(--status-done-dot)', ink: 'var(--green-700)' },
+    draft: { label: 'In progress', color: 'var(--lvl-2)',           ink: 'var(--lvl-2-ink)' },
+    none:  { label: 'Not started', color: 'var(--ink-300)',         ink: 'var(--ink-700)' },
   };
   function dlKidBand(st, pt) {
     var f = pt.scoreField;
@@ -735,16 +840,6 @@
     }
     return AD.bandOf(AD.meanScore(st, f));
   }
-  // Segments [{color, share}] for a hub's donut ring.
-  function dlMix(students, mode) {
-    if (mode === 'checkin') {
-      var c = { done: 0, draft: 0, none: 0 };
-      students.forEach(function (s) { c[AD.checkinStatus(s) || 'none']++; });
-      return { counts: c, segs: ['done', 'draft', 'none'].map(function (k) { return { color: DL_STATUS[k].color, share: students.length ? c[k] / students.length : 0 }; }) };
-    }
-    var d = dlDist(students, AD.latestComplete.key);
-    return { dist: d, segs: AD.bands.map(function (b) { return { color: b.color, share: d.n ? d.counts[b.key] / d.n : 0 }; }) };
-  }
   // Pooled skill-reading distribution for any set of students.
   function dlDist(students, pointKey) {
     var c = { emerging: 0, developing: 0, secure: 0 }, n = 0;
@@ -753,126 +848,385 @@
     var p = function (x) { return n ? Math.round(x / n * 100) : 0; };
     return { n: n, counts: c, pct: { emerging: p(c.emerging), developing: p(c.developing), secure: p(c.secure) } };
   }
-
-  function dlArc(cx, cy, r, a0, a1) {
-    if (a1 - a0 >= Math.PI * 2 - 1e-6) a1 = a0 + Math.PI * 2 - 1e-4;
-    var x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-    return 'M' + x0.toFixed(2) + ' ' + y0.toFixed(2) + 'A' + r + ' ' + r + ' 0 ' + (a1 - a0 > Math.PI ? 1 : 0) + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2);
+  function dlCheckinCounts(students) {
+    var c = { done: 0, draft: 0, none: 0 };
+    students.forEach(function (s) { c[AD.checkinStatus(s) || 'none']++; });
+    return c;
   }
-  function dlHubSVG(cx, cy, r, ring, segs, core) {
-    var out = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" style="fill:' + core + '"/>';
+  // Segments [{color, share}] for a hub's donut ring + its tooltip line.
+  function dlSummary(node, mode) {
+    var studs = dlStudents(node), n = studs.length;
+    if (mode === 'checkin') {
+      var c = dlCheckinCounts(studs);
+      return { n: n, text: c.done + ' of ' + n + ' assessed' + (c.draft ? ' · ' + c.draft + ' in progress' : ''),
+        segs: ['done', 'draft', 'none'].map(function (k) { return { color: DL_STATUS[k].color, share: n ? c[k] / n : 0 }; }) };
+    }
+    var d = dlDist(studs, AD.latestComplete.key);
+    return { n: n, text: d.pct.secure + '% Blooming', segs: AD.bands.map(function (b) { return { color: b.color, share: d.n ? d.counts[b.key] / d.n : 0 }; }) };
+  }
+  function dlArc(r, a0, a1) {
+    if (a1 - a0 >= Math.PI * 2 - 1e-6) a1 = a0 + Math.PI * 2 - 1e-4;
+    return 'M' + (r * Math.cos(a0)).toFixed(2) + ' ' + (r * Math.sin(a0)).toFixed(2) + 'A' + r + ' ' + r + ' 0 ' + (a1 - a0 > Math.PI ? 1 : 0) + ' 1 ' + (r * Math.cos(a1)).toFixed(2) + ' ' + (r * Math.sin(a1)).toFixed(2);
+  }
+  // Hub drawn around (0,0); the group is translated each frame.
+  function dlHubSVG(r, ring, segs, core) {
+    var out = '<circle r="' + r.toFixed(2) + '" style="fill:' + core + '"/>';
     var a = -Math.PI / 2, rr = r - ring / 2;
     segs.forEach(function (s) {
       if (s.share <= 0) return;
       var b = a + s.share * Math.PI * 2;
-      out += '<path d="' + dlArc(cx, cy, rr, a, b) + '" fill="none" stroke-width="' + ring + '" style="stroke:' + s.color + '"/>';
+      out += '<path d="' + dlArc(rr, a, b) + '" fill="none" stroke-width="' + ring.toFixed(2) + '" style="stroke:' + s.color + '"/>';
       a = b;
     });
     return out;
   }
-
-  function dlSummary(node, mode) {
-    var studs = dlStudents(node), mix = dlMix(studs, mode);
-    if (mode === 'checkin') return { n: studs.length, text: mix.counts.done + ' of ' + studs.length + ' assessed' + (mix.counts.draft ? ' · ' + mix.counts.draft + ' in progress' : ''), mix: mix };
-    return { n: studs.length, text: mix.dist.pct.secure + '% Blooming', mix: mix };
-  }
-
-  // Can this hub be clicked from the current focus? One level down, or the centre (one up).
-  function dlNav(n, scope) {
+  // Can this hub be clicked from the current focus? Its children (one down), or the focus itself (one up).
+  function dlNav(n, focusKey, scope) {
     if (n.type === 'kid') return null;
-    if (n.depth === 0) return scope.level === 'school' ? null : 'up';
-    return n.depth === 1 ? 'down' : null;
+    if (n.key === focusKey) return scope.level === 'school' ? null : 'up';
+    return n.parent && n.parent.key === focusKey ? 'down' : null;
   }
-  function dlParamsFor(n) {
-    if (n.type === 'grade') return { grade: n.id };
-    if (n.type === 'section') return { grade: n.grade, section: n.id };
-    return {};
+  // Hub size follows the hierarchy — school > grade > section > child — and the
+  // order is enforced, so no tuning value can make a section outgrow its grade.
+  function dlHubR(n) {
+    var school = DL_CFG.rootR, grade = Math.min(DL_CFG.gradeR, school * 0.9);
+    if (n.type === 'school') return school;
+    if (n.type === 'grade') return grade;
+    var sec = n.children && n.children[0] && n.children[0].hidden ? DL_CFG.classHubR : DL_CFG.sectionR;   // bigger while it stands in for its children
+    return Math.max(DL_CFG.kidR * 1.3, Math.min(sec, grade * 0.85));
   }
-  function dlUpParams(scope) { return scope.level === 'section' ? { grade: scope.grade } : {}; }
+  function dlKidNames(mode) { return isCoordinator && (mode === 'checkin' || AD.leadershipStudentResultsVisible); }
 
-  function dandelionSVG(scope, mode, animate) {
-    var root = dlTree(scope), nodes = dlLayout(root), fit = dlFit(nodes), k = fit.k, H = fit.H;
-    var z = Math.pow(dlZoom(k), DL_CFG.sizeBoost);
-    var cx = DL_W / 2, cy = H / 2;
-    nodes.forEach(function (n) { n.vx = +(cx + n.x * k).toFixed(2); n.vy = +(cy + n.y * k).toFixed(2); });
-    var pt = AD.latestComplete, g = DL_CFG.growMs, step = g / 3;
-    var lines = '', dots = '', hubs = '', labels = '';
-    nodes.forEach(function (n, i) {
-      var delay = Math.round(n.depth * step * 0.8 + (n.type === 'kid' ? (i % 25) * 6 : 0));
-      var st = 'style="--dl-delay:' + delay + 'ms"';
-      if (n.parent) {
-        var w = n.type === 'kid' ? DL_CFG.lineW * 0.6 : n.type === 'section' ? DL_CFG.lineW : DL_CFG.lineW * 1.4;
-        lines += '<line class="dl-spoke" pathLength="1" ' + st + ' data-dl-sub="' + esc(dlBranchOf(n)) + '" x1="' + n.parent.vx + '" y1="' + n.parent.vy + '" x2="' + n.vx + '" y2="' + n.vy + '" stroke-width="' + w + '"/>';
-      }
+  // ---- the living graph ----
+  // ONE whole-school layout (world units, school hub at 0,0). Every level is a
+  // camera on it: clicking a grade or section eases the viewBox in on that
+  // branch; nothing re-arranges. Parts outside the focus stay, faded, as context.
+  // `pos` (world positions) and `cam` survive re-renders, so the router's full
+  // page repaint continues the same picture instead of restarting it.
+  var dlSim = { raf: 0, pos: {}, g: null, cam: null, camFrom: null, camTo: null, camT0: null };
+  var DL_REDUCE = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+
+  function dandelionSVG(scope, mode) {
+    var focusKey = dlFocusKey(scope), pt = AD.latestComplete, names = dlKidNames(mode), still = DL_REDUCE.matches;
+    // Cameras are fitted to the spread-out arrangement so story steps stay in frame.
+    var sbox = dlBox(dlLayout(dlTree({ level: 'school' }), DL_CFG.storySpread, 'school:school'));
+    var aspect = Math.min(1, Math.max(0.62, (sbox.y1 - sbox.y0) / (sbox.x1 - sbox.x0)));
+    var schoolCam = dlCamFit(sbox, aspect);
+    var spread = dlLayout(dlTree({ level: 'school' }), DL_CFG.storySpread, focusKey);
+    var camTo = dlCamFit(dlBox(dlSubtree(spread.find(function (n) { return n.key === focusKey; }))), aspect);
+    var root = dlTree({ level: 'school' }), nodes = dlLayout(root, 1, focusKey);
+    var focus = nodes.find(function (n) { return n.key === focusKey; }), inFocus = {};
+    dlSubtree(focus).forEach(function (n) { inFocus[n.key] = true; });
+    // Child-dot rule: dots only for the focused branch, and only when it has no more
+    // than kidDotMax children. Otherwise each class shows as one bigger summary hub,
+    // and its children burst out of it once you zoom in far enough.
+    var showKids = dlKidsShown(scope);
+    nodes.forEach(function (n) { n.hidden = n.type === 'kid' && (!showKids || !inFocus[n.key]); });
+    var vis = nodes.filter(function (n) { return !n.hidden; });
+    var lines = '', kids = '', hubs = '', labels = '';
+    vis.forEach(function (n, i) {
+      n.i = i; n.tx = n.lx; n.ty = n.ly;
+      var prev = dlSim.pos[n.key], ctx = inFocus[n.key] ? '' : ' ctx';
+      if (still) { n.x = n.tx; n.y = n.ty; }
+      else if (prev) { n.x = prev.x; n.y = prev.y; }
+      else if (n.parent) { n.x = n.parent.x + (Math.random() - 0.5); n.y = n.parent.y + (Math.random() - 0.5); }
+      else { n.x = n.tx; n.y = n.ty; }
+      n.vx = 0; n.vy = 0; n.ph = (hashStr(n.key) % 6283) / 1000;
+      n.mass = n.type === 'kid' ? 1 : 1 + dlStudents(n).length;
+      if (n.parent) n.rest = Math.hypot(n.tx - n.parent.tx, n.ty - n.parent.ty);
       if (n.type === 'kid') {
-        var r = DL_CFG.kidR * z, fill, stroke = '';
+        n.base = DL_CFG.kidR;
+        var fill, stroke = 'var(--white)', sw = 1.2, tip = '';
         if (mode === 'checkin') {
           var s = AD.checkinStatus(n.student) || 'none';
           fill = s === 'none' ? 'var(--white)' : DL_STATUS[s].color;
-          if (s === 'none') stroke = ';stroke:' + DL_STATUS.none.color + ';stroke-width:' + Math.max(1, r * 0.35);
-        } else fill = AD.bandMeta(dlKidBand(n.student, pt)).color;
-        dots += '<circle class="dl-kid" data-dl-sub="' + esc(dlBranchOf(n)) + '" cx="' + n.vx + '" cy="' + n.vy + '" r="' + r.toFixed(2) + '" style="--dl-delay:' + delay + 'ms;fill:' + fill + stroke + '"/>';
+          if (s === 'none') { stroke = DL_STATUS.none.color; sw = Math.max(1, n.base * 0.35); }
+          if (names) tip = '<b>' + esc(n.student.name) + '</b><span>' + DL_STATUS[s].label + '</span>';
+        } else {
+          var b = AD.bandMeta(dlKidBand(n.student, pt));
+          fill = b.color;
+          if (names) tip = '<b>' + esc(n.student.name) + '</b><span>' + esc(b.label) + ' overall</span>';
+        }
+        n.color = fill === 'var(--white)' ? DL_STATUS.none.color : fill;
+        lines += '<line class="dl-spoke kid' + ctx + '" data-dl-i="' + i + '" vector-effect="non-scaling-stroke" stroke-width="' + (DL_CFG.lineW * 0.6) + '" style="stroke:' + n.color + '"/>';
+        kids += '<circle class="dl-kid' + ctx + '" data-dl-i="' + i + '" r="' + n.base + '" style="fill:' + fill + ';stroke:' + stroke + ';stroke-width:' + sw + '"' +
+          (tip && !ctx ? ' data-dl-tip="' + esc(tip) + '"' : '') + '/>';
         return;
       }
-      var sum = dlSummary(n, mode), nav = dlNav(n, scope);
-      var hr = (n.depth === 0 ? DL_CFG.rootR : DL_CFG.hubR) * (n.depth === 0 ? 1 : z);
+      var sum = dlSummary(n, mode), nav = ctx ? null : dlNav(n, focusKey, scope);
+      n.base = dlHubR(n);
       var core = n.depth === 0 ? PAL.RING_PETALS[0] : 'var(--white)';
-      var tip = '<b>' + esc(n.name) + '</b>' + (n.teacher ? '<span>' + esc(n.teacher) + '</span>' : '') +
+      var htip = '<b>' + esc(n.name) + '</b>' + (n.teacher ? '<span>' + esc(n.teacher) + '</span>' : '') +
         '<span>' + countNoun(sum.n, 'child', 'children') + ' · ' + esc(sum.text) + '</span>' +
-        (nav === 'down' ? '<em>Click to open</em>' : nav === 'up' ? '<em>Click to go back up</em>' : '');
-      hubs += '<g class="dl-hub' + (nav ? ' nav' : '') + '" ' + st + ' data-dl-sub="' + esc(dlBranchOf(n)) + '" data-dl-id="' + esc(n.id) + '" data-dl-tip="' + esc(tip) + '"' +
-        (nav ? ' data-dl-nav="' + nav + '" tabindex="0" role="button" aria-label="' + esc((nav === 'up' ? 'Back up from ' : 'Open ') + n.name + ', ' + sum.text) + '"' : '') +
-        ' data-dl-x="' + n.vx + '" data-dl-y="' + n.vy + '">' +
-        '<circle class="dl-hit" cx="' + n.vx + '" cy="' + n.vy + '" r="' + (hr + 6) + '"/>' +
-        dlHubSVG(n.vx, n.vy, hr, Math.min(hr * 0.75, DL_CFG.hubRing * (n.depth === 0 ? 1.6 : z)), sum.mix.segs, core) + '</g>';
-      // Name labels on the focus hub's direct children (orientation, not data).
-      if (n.depth === 1) {
-        var ly = n.vy + hr + 14;
-        labels += '<span class="dl-label" style="left:' + (n.vx / DL_W * 100) + '%;top:' + (ly / H * 100) + '%">' + esc(n.type === 'section' && scope.level === 'grade' ? n.name.replace(n.grade + ' ', 'Section ') : n.name) + '</span>';
-      }
+        (nav === 'down' ? '<em>Click to look closer</em>' : nav === 'up' ? '<em>Click to step back</em>' : '');
+      if (n.parent) lines += '<line class="dl-spoke hub' + ctx + '" data-dl-i="' + i + '" vector-effect="non-scaling-stroke" stroke-width="' + (n.type === 'section' ? DL_CFG.lineW : DL_CFG.lineW * 1.4) + '"/>';
+      hubs += '<g class="dl-hub' + (nav ? ' nav' : '') + ctx + '" data-dl-i="' + i + '"' + (ctx ? '' : ' data-dl-tip="' + esc(htip) + '"') +
+        (nav ? ' data-dl-nav="' + nav + '" tabindex="0" role="button" aria-label="' + esc((nav === 'up' ? 'Step back from ' : 'Look closer at ') + n.name + ', ' + sum.text) + '"' : '') + '>' +
+        '<circle class="dl-hit" r="' + (n.base + 6) + '"/>' +
+        dlHubSVG(n.base, Math.min(n.base * 0.75, DL_CFG.hubRing * n.base / DL_CFG.sectionR), sum.segs, core) + '</g>';
+      var lbl = n.type === 'section' && scope.level !== 'school' && !ctx ? n.name.replace(n.grade + ' ', 'Section ') : n.name;
+      // Big schools: at whole-school zoom (and for faded neighbours) show grade labels only.
+      if (n.type === 'section' && (scope.level === 'school' || ctx) && AD.sections.length > DL_CFG.sectionLabelMax) return;
+      labels += '<text class="dl-name d' + Math.min(n.depth, 2) + ctx + '" data-dl-i="' + i + '" font-size="' + (n.depth === 2 ? 11 : 13) + '" text-anchor="middle">' + esc(lbl) + '</text>';
     });
-    return '<div class="dl-stage' + (animate ? ' grow' : '') + '" style="--dl-grow:' + g + 'ms;--dl-zoom:' + DL_CFG.zoomMs + 'ms">' +
-      '<svg class="dl-svg" viewBox="0 0 ' + DL_W + ' ' + H + '" role="img" aria-label="' + esc(root.name + ': ' + dlSummary(root, mode).text) + '">' +
-        '<g class="dl-world" data-dl-cx="' + cx + '" data-dl-cy="' + cy + '">' + lines + dots + hubs + '</g></svg>' +
-      labels + '<div class="dl-tip" role="tooltip" hidden></div></div>';
+    dlSim.g = { nodes: vis, root: root, focusKey: focusKey, scope: scope, mode: mode, alpha: 1, schoolW: schoolCam.w, f: schoolCam.w / DL_W };
+    // Ease from wherever the camera was (previous level) to this level's frame.
+    dlSim.camTo = camTo;
+    dlSim.camFrom = still || !dlSim.cam ? camTo : dlSim.cam;
+    dlSim.cam = dlSim.camFrom; dlSim.camT0 = null;
+    var c = dlSim.cam, focusName = scope.level === 'school' ? root.name : focus.name;
+    return '<div class="dl-stage">' +
+      '<svg class="dl-svg" viewBox="' + [c.x, c.y, c.w, c.h].map(function (v) { return v.toFixed(2); }).join(' ') + '" role="img" aria-label="' + esc(focusName + ': ' + dlSummary(focus, mode).text) + '">' +
+        '<g class="dl-links">' + lines + '</g><g class="dl-nodes">' + kids + hubs + '</g><g class="dl-labels">' + labels + '</g></svg>' +
+      '<div class="dl-tip" role="tooltip" hidden></div></div>';
   }
-  // Which focus-child branch a node belongs to (used to keep the clicked branch visible while zooming).
-  function dlBranchOf(n) { var a = n; while (a.parent && a.parent.parent) a = a.parent; return a.parent ? a.id : ''; }
 
-  function dlPanelHTML(scope, mode) {
-    var root = dlTree(scope), studs = dlStudents(root), n = studs.length;
-    var where = scope.level === 'school' ? 'Whole school' : root.name;
+  // Move every node's target (story steps that pull groups apart) and wake the sim.
+  function dlRetarget(sep) {
+    var g = dlSim.g; if (!g) return;
+    dlLayout(g.root, sep || 1, g.focusKey);
+    g.nodes.forEach(function (n) {
+      n.tx = n.lx; n.ty = n.ly;
+      if (n.parent) n.rest = Math.hypot(n.tx - n.parent.tx, n.ty - n.parent.ty);
+      if (DL_REDUCE.matches) { n.x = n.tx; n.y = n.ty; }
+    });
+    dlWake();
+  }
+  function dlWake() { var g = dlSim.g; if (!g) return; g.alpha = 1; if (!dlSim.raf) dlSim.raf = requestAnimationFrame(dlFrame); }
+
+  // Camera: ease centre linearly and width on a log scale (feels like a steady zoom).
+  function dlCamStep(t) {
+    if (!dlSim.camTo) return false;
+    if (dlSim.camT0 == null) dlSim.camT0 = t;
+    var p = DL_CFG.zoomMs > 0 ? Math.min(1, (t - dlSim.camT0) / DL_CFG.zoomMs) : 1;
+    var e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+    var a = dlSim.camFrom, b = dlSim.camTo;
+    var w = Math.exp(Math.log(a.w) + (Math.log(b.w) - Math.log(a.w)) * e), h = w * (b.h / b.w);
+    var cx = a.x + a.w / 2 + ((b.x + b.w / 2) - (a.x + a.w / 2)) * e, cy = a.y + a.h / 2 + ((b.y + b.h / 2) - (a.y + a.h / 2)) * e;
+    dlSim.cam = { x: cx - w / 2, y: cy - h / 2, w: w, h: h };
+    return p < 1;
+  }
+  // World units per base unit for dots/hubs (grows with zoom per sizeBoost), and for text (constant on screen).
+  function dlScales() {
+    var g = dlSim.g, z = g.schoolW / dlSim.cam.w;
+    return { z: z, s: g.f * Math.pow(z, DL_CFG.sizeBoost - 1), ts: g.f / z };
+  }
+
+  function dlTick(t, sc) {
+    var g = dlSim.g, N = g.nodes, i, j, n;
+    var amp = DL_REDUCE.matches ? 0 : DL_CFG.breatheAmp * sc.ts, spd = DL_CFG.breatheSpeed * t / 1000, gap = 2 * sc.ts;
+    for (i = 0; i < N.length; i++) {
+      n = N[i]; n.ax = 0; n.ay = 0; n.r = n.base * sc.s;
+      var a = amp * (n.type === 'kid' ? 1 : n.depth === 0 ? 0.25 : 0.55);
+      n.ax += (n.tx + a * Math.sin(spd + n.ph) - n.x) * DL_CFG.targetPull;
+      n.ay += (n.ty + a * Math.cos(spd * 0.83 + n.ph * 1.3) - n.y) * DL_CFG.targetPull;
+    }
+    for (i = 0; i < N.length; i++) {   // spokes as springs; the lighter end moves more
+      n = N[i]; var p = n.parent; if (!p) continue;
+      var dx = n.x - p.x, dy = n.y - p.y, d = Math.hypot(dx, dy) || 0.01;
+      var f = (d - n.rest) / d * DL_CFG.linkPull, wn = p.mass / (p.mass + n.mass), wp = 1 - wn;
+      n.ax -= dx * f * wn; n.ay -= dy * f * wn; p.ax += dx * f * wp; p.ay += dy * f * wp;
+    }
+    // Overlap push. Only nearby pairs are checked: nodes go into a grid of cells
+    // one "largest overlap" wide, and each node looks at its own + 8 neighbouring
+    // cells, so a 900-child school costs about what the 100-child demo does.
+    var maxR = 0;
+    for (i = 0; i < N.length; i++) if (N[i].r > maxR) maxR = N[i].r;
+    var cell = 2 * maxR + gap, grid = {};
+    for (i = 0; i < N.length; i++) {
+      n = N[i]; n.gx = Math.floor(n.x / cell); n.gy = Math.floor(n.y / cell);
+      var gk = n.gx + ',' + n.gy; (grid[gk] || (grid[gk] = [])).push(i);
+    }
+    for (i = 0; i < N.length; i++) {
+      var A = N[i];
+      for (var ox = -1; ox <= 1; ox++) for (var oy = -1; oy <= 1; oy++) {
+        var bucket = grid[(A.gx + ox) + ',' + (A.gy + oy)]; if (!bucket) continue;
+        for (var q = 0; q < bucket.length; q++) {
+          j = bucket[q]; if (j <= i) continue;
+          var B = N[j], ex = B.x - A.x, ey = B.y - A.y, min = A.r + B.r + gap;
+          if (Math.abs(ex) > min || Math.abs(ey) > min) continue;
+          var e = Math.hypot(ex, ey) || 0.01; if (e >= min) continue;
+          var push = (min - e) / e * DL_CFG.repel * 0.5;
+          A.ax -= ex * push; A.ay -= ey * push; B.ax += ex * push; B.ay += ey * push;
+        }
+      }
+    }
+    var energy = 0;
+    for (i = 0; i < N.length; i++) {
+      n = N[i];
+      if (n.fixed) { n.vx = n.vy = 0; continue; }
+      n.vx = (n.vx + n.ax) * (1 - DL_CFG.damping); n.vy = (n.vy + n.ay) * (1 - DL_CFG.damping);
+      n.x += n.vx; n.y += n.vy; energy += (n.vx * n.vx + n.vy * n.vy) / (sc.ts * sc.ts);
+    }
+    return energy;
+  }
+  function dlDraw(sc) {
+    var g = dlSim.g, svg = g.svg, N = g.nodes, c = dlSim.cam, f1 = function (v) { return v.toFixed(2); };
+    svg.setAttribute('viewBox', f1(c.x) + ' ' + f1(c.y) + ' ' + f1(c.w) + ' ' + f1(c.h));
+    N.forEach(function (n) { dlSim.pos[n.key] = { x: n.x, y: n.y }; });
+    var els = g.els;
+    els.spokes.forEach(function (l) {
+      var n = N[l.dataset.dlI], p = n.parent;
+      l.setAttribute('x1', f1(p.x)); l.setAttribute('y1', f1(p.y)); l.setAttribute('x2', f1(n.x)); l.setAttribute('y2', f1(n.y));
+    });
+    var tr = function (n, k) { return 'translate(' + f1(n.x) + ' ' + f1(n.y) + ') scale(' + k.toFixed(4) + ')'; };
+    els.dots.forEach(function (el) { el.setAttribute('transform', tr(N[el.dataset.dlI], sc.s)); });
+    els.names.forEach(function (t) {
+      var n = N[t.dataset.dlI];
+      t.setAttribute('transform', 'translate(' + f1(n.x) + ' ' + f1(n.y + n.base * sc.s + 15 * sc.ts) + ') scale(' + sc.ts.toFixed(4) + ')');
+    });
+  }
+  function dlFrame(t) {
+    dlSim.raf = 0;
+    var g = dlSim.g; if (!g || !g.svg || !g.svg.isConnected) return;
+    var zooming = dlCamStep(t), sc = dlScales();
+    var e = dlTick(t, sc); dlDraw(sc);
+    g.alpha = e < 0.002 ? g.alpha * 0.9 : 1;
+    var idle = DL_REDUCE.matches || DL_CFG.breatheAmp <= 0;
+    if ((zooming || !(idle && g.alpha < 0.05)) && !document.hidden) dlSim.raf = requestAnimationFrame(dlFrame);
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) dlWake(); });
+
+  function dlStart(stage) {
+    cancelAnimationFrame(dlSim.raf); dlSim.raf = 0;
+    dlSim.g.svg = stage.querySelector('svg');
+    // Looked up once per render, not every frame (900+ elements in a big school).
+    var q = function (sel) { return Array.prototype.slice.call(dlSim.g.svg.querySelectorAll(sel)); };
+    dlSim.g.els = { spokes: q('.dl-spoke'), dots: q('.dl-kid, .dl-hub'), names: q('.dl-name') };
+    var sc = dlScales(); dlSim.g.nodes.forEach(function (n) { n.r = n.base * sc.s; });
+    dlDraw(sc); dlWake();
+  }
+
+  // ---- the guided story ----
+  // Steps written from the data for the focused level + mode. Each step:
+  // eyebrow, headline (with coloured key words), body, source line,
+  // `hl` (node keys to keep lit; ancestors are added) and `sep` (pull groups apart).
+  function dlHl(text, color) { return '<em style="color:' + color + '">' + esc(text) + '</em>'; }
+  function dlStory(scope, mode) {
+    var root = dlTree(scope), studs = dlStudents(root), n = studs.length, steps = [];
+    var secs = AD.sections.filter(function (s) { return scope.level === 'school' || (scope.level === 'grade' ? s.grade === scope.grade : s.id === scope.sectionId); });
+    var kidKeys = function (list) { return list.map(function (s) { return 'kid:' + s.adm; }); };
+    var secKeys = function (sd) { return ['section:' + sd.id].concat(kidKeys(AD.studentsInSection(sd))); };
+    var ink = 'var(--accent-ink)';
+    var src = mode === 'checkin' ? AD.openPoint.label + ' check-in · n = ' + n : AD.latestComplete.label + ' results · n = ' + n;
+
     if (mode === 'checkin') {
-      var op = AD.openPoint, left = AD.daysLeft(op), c = dlMix(studs, 'checkin').counts;
-      var pct = function (x) { return n ? Math.round(x / n * 100) : 0; };
-      var bar = '<div class="ui-bandbar hero" role="img" aria-label="Assessed ' + c.done + ', in progress ' + c.draft + ', not started ' + c.none + '">' +
-        ['done', 'draft', 'none'].map(function (k) { return c[k] ? '<span style="width:' + pct(c[k]) + '%;background:' + DL_STATUS[k].color + '"></span>' : ''; }).join('') + '</div>';
-      var legend = '<div class="ui-legend">' + ['done', 'draft', 'none'].map(function (k) { return '<span><i style="background:' + DL_STATUS[k].color + '"></i>' + DL_STATUS[k].label + '</span>'; }).join('') + '</div>';
-      return '<div class="ov-kicker">' + esc(where + ' · ' + op.label + ' check-in') + '</div>' +
-        '<div class="ov-numrow"><span class="ov-num">' + c.done + '</span><span class="ov-numlbl">of ' + countNoun(n, 'child', 'children') + ' assessed</span></div>' +
-        '<p class="ov-line">' + esc((c.draft ? c.draft + ' in progress · ' : '') + c.none + ' not started' + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go' : '') + '.') + '</p>' +
-        '<div class="dl-panel-bar">' + bar + '<div class="ov-legend">' + legend + '</div></div>';
+      var op = AD.openPoint, left = AD.daysLeft(op), c = dlCheckinCounts(studs);
+      steps.push({ eyebrow: op.label + ' check-in',
+        head: dlHl(c.done + ' of ' + n, DL_STATUS.done.ink) + ' children assessed' + (c.draft ? ', ' + dlHl(c.draft + ' in progress', DL_STATUS.draft.ink) : '') + '.',
+        body: (c.none ? countNoun(c.none, 'child hasn' + '’' + 't', 'children haven' + '’' + 't') + ' been started yet' : 'Everyone has been started') + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go.' : '.'),
+        hl: kidKeys(studs.filter(function (s) { return AD.checkinStatus(s) !== 'none'; })) });
+      if (secs.length > 1) {
+        var rows = AD.collectionStatus().rows.filter(function (r) { return secs.some(function (s) { return s.id === r.id; }); });
+        var lead = rows.reduce(function (b, r) { return !b || r.pct > b.pct ? r : b; }, null);
+        var back = rows.reduce(function (b, r) { return !b || r.pct < b.pct ? r : b; }, null);
+        var sdOf = function (r) { return AD.sections.find(function (s) { return s.id === r.id; }); };
+        if (lead && back && lead.pct - back.pct >= AD.collectionStatus().gapPts) steps.push({ eyebrow: 'A section that may need a hand',
+          head: back.completion.done === 0 ? dlHl(back.name, 'var(--warn-700)') + ' hasn' + '’' + 't started yet.' : dlHl(back.name, 'var(--warn-700)') + ' is at ' + back.pct + '% while ' + esc(lead.name) + ' is at ' + lead.pct + '%.',
+          body: esc(back.teacher) + ' may need a hand or a little more time. A quick check-in could help.',
+          hl: secKeys(sdOf(back)).concat(secKeys(sdOf(lead))), sep: true });
+        else steps.push({ eyebrow: 'Moving together',
+          head: 'Every section is within ' + dlHl((lead.pct - back.pct) + ' points', ink) + ' of the one furthest along.',
+          body: 'Data is coming in steadily across ' + countNoun(rows.length, 'section', 'sections') + '.', sep: true });
+      }
+      var waiting = studs.filter(function (s) { return (AD.checkinStatus(s) || 'none') === 'none'; });
+      if (waiting.length) steps.push({ eyebrow: 'Still to start',
+        head: dlHl(countNoun(waiting.length, 'child', 'children'), DL_STATUS.none.ink) + (waiting.length === 1 ? ' hasn' + '’' + 't' : ' haven' + '’' + 't') + ' been started yet.',
+        body: !isCoordinator ? 'Teachers can pick these up next.' : dlKidsShown(scope) ? 'Hover a hollow dot to see who, so teachers can pick them up next.' : 'Look closer at a grade to see who, so teachers can pick them up next.',
+        hl: kidKeys(waiting) });
+    } else {
+      var pt = AD.latestComplete, d = dlDist(studs, pt.key), first = AD.completedPoints[0], line;
+      if (AD.completedPoints.length < 2) line = 'Your starting point. Everything from here is growth you' + '’' + 'll be able to see.';
+      else {
+        var delta = d.pct.secure - dlDist(studs, first.key).pct.secure;
+        line = delta > 0 ? 'Up ' + delta + ' points since ' + first.label + '.' : delta < 0 ? 'Down ' + Math.abs(delta) + ' points since ' + first.label + '. Dips happen mid-year.' : 'Holding steady since ' + first.label + '.';
+      }
+      var blm = AD.bandMeta('secure'), spr = AD.bandMeta('emerging');
+      steps.push({ eyebrow: pt.label + ' results',
+        head: dlHl(d.pct.secure + '%', blm.ink) + ' of skill ratings are ' + dlHl('Blooming', blm.ink) + '.',
+        body: line + ' The ring round each hub shows its whole mix.' });
+      if (secs.length > 1) {
+        var ranked = secs.map(function (s) { return { sd: s, pct: dlDist(AD.studentsInSection(s), pt.key).pct.secure }; }).sort(function (a, b) { return b.pct - a.pct; });
+        var top = ranked[0], low = ranked[ranked.length - 1];
+        steps.push({ eyebrow: 'Furthest along',
+          head: dlHl(top.sd.name, blm.ink) + ' has the most Blooming, at ' + top.pct + '%.',
+          body: esc(low.sd.name) + ' is at ' + low.pct + '%. Groups grow at different speeds; both are worth a look.',
+          hl: secKeys(top.sd).concat(secKeys(low.sd)), sep: true });
+      }
+      var gs = AD.growthStrength(studs, pt.key, 1).growth[0];
+      if (gs) steps.push({ eyebrow: 'Where to help next',
+        head: dlHl(gs.name, spr.ink) + ' has the most children Sprouting: ' + gs.emerging + '%.',
+        body: esc(AD.helpStep(gs.key)),
+        hl: kidKeys(studs.filter(function (s) { var sk = s.skills.find(function (x) { return x.key === gs.key; }); return sk && AD.bandOf(sk[pt.scoreField]) === 'emerging'; })) });
+      if (AD.completedPoints.length >= 2) {
+        var m = AD.overallBandMovement(studs), idx = { emerging: 0, developing: 1, secure: 2 };
+        var up = studs.filter(function (s) { return idx[AD.bandOf(AD.meanScore(s, pt.scoreField))] > idx[AD.bandOf(AD.meanScore(s, first.scoreField))]; });
+        steps.push({ eyebrow: 'Since ' + first.label,
+          head: dlHl(m.up + ' of ' + m.n + ' children', blm.ink) + ' moved up a band.',
+          body: m.down ? countNoun(m.down, 'child', 'children') + ' moved down. Dips happen; a second look helps.' : 'No child moved down a band.',
+          hl: kidKeys(up) });
+      }
     }
-    var pt = AD.latestComplete, d = dlDist(studs, pt.key), line, cls = '';
-    var first = AD.completedPoints[0];
-    if (AD.completedPoints.length < 2) line = 'Your starting point — everything from here is growth you' + '’' + 'll be able to see.';
-    else {
-      var delta = d.pct.secure - dlDist(studs, first.key).pct.secure;
-      var m = AD.overallBandMovement(studs);
-      if (delta > 0) { cls = ' up'; line = 'Up ' + delta + ' points since ' + first.label + (m.avail && m.up ? ' · ' + m.up + ' of ' + m.n + ' children moved up a band' : '') + '.'; }
-      else if (delta < 0) { cls = ' down'; line = 'Down ' + Math.abs(delta) + ' points since ' + first.label + ' — dips happen mid-year; see where to help next.'; }
-      else line = 'Holding steady since ' + first.label + '.';
-    }
-    return '<div class="ov-kicker">' + esc(where + ' · ' + pointLabel(pt)) + '</div>' +
-      '<div class="ov-numrow"><span class="ov-num">' + d.pct.secure + '%</span><span class="ov-numlbl">of skill ratings are Blooming</span></div>' +
-      '<p class="ov-line' + cls + '">' + esc(line) + '</p>' +
-      '<div class="dl-panel-bar">' + bandBar(d, true) + '<div class="ov-legend">' + bandLegend() + '</div></div>' +
-      '<p class="dl-key">Each dot is one child' + '’' + 's overall band; rings show the mix of every skill rating.</p>';
+    steps.forEach(function (s) { s.source = src; });
+    return steps;
   }
 
-  function dandelionHTML(params, animate) {
+  // All story points as one list. Hovering / focusing a point lights up its part
+  // of the dandelion; clicking pins it (click again to unpin).
+  var dlPinned = { key: '', i: -1 };
+  function dlStoryHTML(steps) {
+    return '<ul class="dl-points">' + steps.map(function (x, j) {
+      return '<li tabindex="0" data-dl-pt="' + j + '" aria-label="' + esc(x.eyebrow) + '">' +
+        '<p class="dl-pt-head">' + x.head + '</p><p class="dl-pt-body">' + x.body + '</p></li>';
+    }).join('') + '</ul>' +
+      (steps.length ? '<p class="dl-source">' + esc(steps[0].source) + '</p>' : '');
+  }
+  // Light up a step's nodes (plus their ancestors) and dim the rest.
+  function dlApplyStep(stage, step) {
+    var g = dlSim.g; if (!g) return;
+    var on = null;
+    if (step.hl) {
+      on = {};
+      step.hl.forEach(function (k) { on[k] = true; });
+      // Walk the full tree (not just drawn nodes): a hidden child's class hub still lights up.
+      dlSubtree(g.root).forEach(function (n) { if (on[n.key]) for (var a = n.parent; a; a = a.parent) on[a.key] = true; });
+    }
+    stage.style.setProperty('--dl-dim', DL_CFG.dimOpacity);
+    stage.style.setProperty('--dl-ctx', DL_CFG.contextOpacity);
+    stage.querySelectorAll('[data-dl-i]:not(.ctx)').forEach(function (el) {
+      var n = g.nodes[el.dataset.dlI];
+      el.classList.toggle('dim', !!on && !on[n.key]);
+    });
+    dlRetarget(step.sep ? DL_CFG.storySpread : 1);
+  }
+
+  function dlLegendHTML(mode) {
+    if (mode === 'checkin') return '<div class="ui-legend">' + ['done', 'draft', 'none'].map(function (k) {
+      return '<span><i class="' + (k === 'none' ? 'ring' : '') + '" style="background:' + (k === 'none' ? 'var(--white)' : DL_STATUS[k].color) + '"></i>' + DL_STATUS[k].label + '</span>';
+    }).join('') + '</div>';
+    return bandLegend();
+  }
+  function dlHint(scope, mode) {
+    var shown = dlKidsShown(scope);
+    var h = scope.level === 'school' ? 'Tap a grade to ' + (shown ? 'look closer' : 'see its children') : scope.level === 'grade' ? 'Tap a section to ' + (shown ? 'look closer' : 'see its children') + ' · tap the centre to step back' : 'Tap the centre to step back';
+    return h + ' · drag to move' + (shown && dlKidNames(mode) ? ' · hover a child for their name' : '');
+  }
+  // Are child dots drawn at this level? Only when the focused branch has ≤ kidDotMax children.
+  function dlKidsShown(scope) { return dlStudents(dlTree(scope)).length <= DL_CFG.kidDotMax; }
+
+  // Headcounts for the focused level, as plain text under the dandelion
+  // (staff = class teachers who own a section in scope).
+  function dlCountsHTML(scope) {
+    var secs = AD.sections.filter(function (s) { return scope.level === 'school' || (scope.level === 'grade' ? s.grade === scope.grade : s.id === scope.sectionId); });
+    var n = secs.reduce(function (a, s) { return a + AD.studentsInSection(s).length; }, 0);
+    var t = secs.reduce(function (a, s) { if (a.indexOf(s.teacherId) < 0) a.push(s.teacherId); return a; }, []).length;
+    var item = function (v, one, many) { return '<span><b>' + v + '</b> ' + (v === 1 ? one : many) + '</span>'; };
+    return '<div class="dl-counts">' + item(n, 'Student', 'Students') + item(t, 'Teacher', 'Teachers') + item(secs.length, 'Section', 'Sections') + '</div>';
+  }
+
+  function dandelionHTML(params) {
     var modes = dlModes();
-    if (!modes.length) return '<div class="ui-card ov-dl"><div class="dl-panel"><div class="ov-big">Nothing to show yet</div><p class="ov-line">Your school appears here once the first check-in opens.</p></div></div>';
+    if (!modes.length) return '<div class="ov-dl"><div class="dl-story"><h2 class="dl-headline">Nothing to show yet</h2><p class="dl-body">Your school appears here once the first check-in opens.</p></div></div>';
     var scope = dlScope(params), mode = dlMode(params), root = dlTree(scope);
     var crumbs = '<div class="ui-crumbs dl-crumbs">' + (scope.level === 'school' ? '<span class="cur">School</span>' : '<button data-dl-crumb="school">School</button>');
     if (scope.level !== 'school') crumbs += '<span class="sep">›</span>' + (scope.level === 'section' ? '<button data-dl-crumb="grade">' + esc(scope.grade) + '</button>' : '<span class="cur">' + esc(scope.grade) + '</span>');
@@ -881,105 +1235,143 @@
     var seg = modes.length > 1 ? '<div class="ui-seg dl-seg" role="tablist" aria-label="What the dandelion shows">' + modes.map(function (m) {
       return '<button role="tab" aria-selected="' + (m === mode) + '" class="' + (m === mode ? 'on' : '') + '" data-dl-mode="' + m + '">' + (m === 'checkin' ? 'Check-in' : 'Results') + '</button>';
     }).join('') + '</div>' : '';
-    var outLink = mode === 'results' ? '<button class="btn-link" data-tooutcomes="1">View outcomes →</button>' : '';
-    return '<div class="ui-card ov-dl" id="ov-dl">' +
+    var steps = dlStory(scope, mode), key = JSON.stringify([dlParamsForScope(scope), mode]);
+    if (dlPinned.key !== key) dlPinned = { key: key, i: -1 };
+    var outLink = '<button class="btn btn-primary dl-out" data-tooutcomes="1">See outcomes →</button>';
+    return '<div class="ov-dl" id="ov-dl">' +
       '<div class="dl-head">' + crumbs + seg + '</div>' +
-      '<div class="dl-viz" id="dl-viz">' + dandelionSVG(scope, mode, animate) + '</div>' +
-      '<div class="dl-panel">' + dlPanelHTML(scope, mode) + '</div>' +
-      '<div class="ov-hero-foot"><span>' + esc(nNoteText(dlStudents(root).length)) + '</span>' + outLink + '</div>' +
+      '<div class="dl-story" id="dl-story">' + dlStoryHTML(steps) + outLink + '</div>' +
+      '<div class="dl-viz"><div id="dl-viz">' + dandelionSVG(scope, mode) + '</div>' + dlCountsHTML(scope) +
+        '<div class="dl-foot">' + dlLegendHTML(mode) + '<span class="dl-hint">' + esc(dlHint(scope, mode)) + '</span></div></div>' +
     '</div>';
-  }
-  function nNoteText(n) { return 'n = ' + countNoun(n, 'child', 'children'); }
-
-  // Zoom toward the clicked hub (or out, for 'up'), then hand the new focus to the router.
-  var dlBusy = false;
-  function dlNavigate(params, toParams, hubEl, dir) {
-    if (dlBusy) return;
-    var mode = dlMode(params), next = Object.assign({}, toParams);
-    if (params.view) next.view = mode;
-    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var stage = document.querySelector('#ov-dl .dl-stage'), world = stage && stage.querySelector('.dl-world');
-    if (reduce || !world) { go('overview', next); return; }
-    dlBusy = true;
-    var cx = +world.dataset.dlCx, cy = +world.dataset.dlCy, x = +hubEl.dataset.dlX, y = +hubEl.dataset.dlY;
-    var s = dir === 'down' ? 2.4 : 0.45;
-    var tx = dir === 'down' ? cx - s * x : cx - s * cx, ty = dir === 'down' ? cy - s * y : cy - s * cy;
-    stage.classList.remove('grow');
-    stage.classList.add('leaving', dir);
-    if (dir === 'down') stage.querySelectorAll('[data-dl-sub]').forEach(function (el) { el.classList.toggle('keep', el.dataset.dlSub === hubEl.dataset.dlId); });
-    world.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + s + ')';
-    setTimeout(function () { dlBusy = false; go('overview', next); }, DL_CFG.zoomMs);
   }
 
   function wireDandelion(body, params) {
     var card = body.querySelector('#ov-dl'); if (!card) return;
-    var scope = dlScope(params);
-    var stage = card.querySelector('.dl-stage'), tipEl = stage.querySelector('.dl-tip');
+    var scope = dlScope(params), mode = dlMode(params);
     card.querySelectorAll('[data-dl-crumb]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var to = b.dataset.dlCrumb === 'school' ? {} : { grade: scope.grade };
-        var root = stage.querySelector('.dl-hub[data-dl-nav="up"]');
-        if (root) dlNavigate(params, to, root, 'up'); else go('overview', to);
-      });
+      b.addEventListener('click', function () { go('overview', Object.assign(b.dataset.dlCrumb === 'school' ? {} : { grade: scope.grade }, params.view ? { view: mode } : {})); });
     });
     card.querySelectorAll('[data-dl-mode]').forEach(function (b) {
       b.addEventListener('click', function () { go('overview', Object.assign({}, dlParamsForScope(scope), { view: b.dataset.dlMode }), { replace: true }); });
     });
-    stage.querySelectorAll('.dl-hub').forEach(function (h) {
-      function show() {
-        tipEl.innerHTML = h.dataset.dlTip; tipEl.hidden = false;
-        var sv = stage.querySelector('svg').getBoundingClientRect(), vb = stage.querySelector('svg').viewBox.baseVal;
-        var px = (+h.dataset.dlX) / vb.width * sv.width, py = (+h.dataset.dlY) / vb.height * sv.height;
-        tipEl.style.left = px + 'px'; tipEl.style.top = py + 'px';
-        tipEl.classList.toggle('below', py < 90);
-      }
-      function hide() { tipEl.hidden = true; }
-      h.addEventListener('mouseenter', show); h.addEventListener('mouseleave', hide);
-      h.addEventListener('focus', show); h.addEventListener('blur', hide);
-      var nav = h.dataset.dlNav; if (!nav) return;
-      function act() {
-        hide();
-        var n = { type: scope.level === 'school' ? 'grade' : 'section', id: h.dataset.dlId, grade: scope.grade };
-        dlNavigate(params, nav === 'up' ? dlUpParams(scope) : dlParamsFor(n), h, nav);
-      }
-      h.addEventListener('click', act);
-      h.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } });
-    });
     card.querySelectorAll('[data-tooutcomes]').forEach(function (b) {
-      b.addEventListener('click', function () { go('outcomes', Object.assign({ point: AD.latestComplete.key }, dlParamsForScope(scope))); });
+      b.addEventListener('click', function () { go('outcomes', Object.assign(AD.latestComplete ? { point: AD.latestComplete.key } : {}, dlParamsForScope(scope))); });
+    });
+    wireStory(card, scope, mode);
+    wireGraph(card, params);
+  }
+  function wireStory(card, scope, mode) {
+    var story = card.querySelector('#dl-story'), stage = card.querySelector('.dl-stage');
+    var steps = dlStory(scope, mode);
+    var pts = story.querySelectorAll('[data-dl-pt]'), NONE = {};
+    function light(i) {
+      pts.forEach(function (li) { li.classList.toggle('on', +li.dataset.dlPt === i); li.classList.toggle('pinned', +li.dataset.dlPt === dlPinned.i); });
+      dlApplyStep(stage, i >= 0 ? steps[i] : NONE);
+    }
+    function rest() { light(dlPinned.i); }
+    // onX handlers (not addEventListener) so re-wiring after a GUI redraw never doubles them
+    pts.forEach(function (li) {
+      var i = +li.dataset.dlPt;
+      li.onmouseenter = li.onfocus = function () { light(i); };
+      li.onmouseleave = li.onblur = rest;
+      li.onclick = function () { dlPinned.i = dlPinned.i === i ? -1 : i; rest(); };
+      li.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); li.onclick(); } };
+    });
+    rest();
+  }
+  function wireGraph(card, params) {
+    var scope = dlScope(params), mode = dlMode(params), stage = card.querySelector('.dl-stage');
+    var svg = stage.querySelector('svg'), tipEl = stage.querySelector('.dl-tip'), drag = null;
+    dlStart(stage);
+    function toSvg(e) { var p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+    function showTip(el) {
+      if (!el.dataset.dlTip) return;
+      var n = dlSim.g.nodes[el.dataset.dlI], box = stage.getBoundingClientRect(), p = svg.createSVGPoint();
+      p.x = n.x; p.y = n.y; p = p.matrixTransform(svg.getScreenCTM());
+      tipEl.innerHTML = el.dataset.dlTip; tipEl.hidden = false;
+      var py = p.y - box.top;
+      tipEl.style.left = (p.x - box.left) + 'px'; tipEl.style.top = py + 'px';
+      tipEl.classList.toggle('below', py < 90);
+    }
+    function hideTip() { tipEl.hidden = true; }
+    function navigate(el) {
+      var nav = el.dataset.dlNav, n = dlSim.g.nodes[el.dataset.dlI];
+      var next = nav === 'up' ? dlUpParams(scope) : dlParamsFor(n);
+      if (params.view) next.view = mode;
+      hideTip(); go('overview', next);
+    }
+    stage.querySelectorAll('.dl-hub:not(.ctx), .dl-kid:not(.ctx)').forEach(function (el) {
+      el.addEventListener('pointerenter', function () { if (!drag) showTip(el); });
+      el.addEventListener('pointerleave', hideTip);
+      el.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        var n = dlSim.g.nodes[el.dataset.dlI], p = toSvg(e);
+        drag = { el: el, n: n, ox: n.x - p.x, oy: n.y - p.y, moved: false, sx: e.clientX, sy: e.clientY };
+        el.setPointerCapture(e.pointerId);
+      });
+      el.addEventListener('pointermove', function (e) {
+        if (!drag || drag.el !== el) return;
+        if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+        drag.moved = true; hideTip(); stage.classList.add('dragging');
+        var p = toSvg(e); drag.n.fixed = true; drag.n.x = p.x + drag.ox; drag.n.y = p.y + drag.oy; dlWake();
+      });
+      function end() {
+        if (!drag || drag.el !== el) return;
+        var d = drag; drag = null; d.n.fixed = false; stage.classList.remove('dragging'); dlWake();
+        if (!d.moved && el.dataset.dlNav) navigate(el);
+      }
+      el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+      if (el.dataset.dlNav) {
+        el.addEventListener('focus', function () { showTip(el); }); el.addEventListener('blur', hideTip);
+        el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(el); } });
+      }
     });
   }
-  function dlParamsForScope(scope) {
-    if (scope.level === 'section') return { grade: scope.grade, section: scope.sectionId };
-    if (scope.level === 'grade') return { grade: scope.grade };
-    return {};
-  }
-  // GUI tweak → redraw just the dandelion, no grow-in.
+  // GUI tweak → rebuild just the graph from the current positions (no page re-render).
   function dlRedraw() {
-    var viz = document.getElementById('dl-viz'); if (!viz) return;
+    var viz = document.getElementById('dl-viz'), card = document.getElementById('ov-dl'); if (!viz || !card) return;
     var params = currentRoute().params;
-    viz.innerHTML = dandelionSVG(dlScope(params), dlMode(params), false);
-    wireDandelion(document.getElementById('ad-main-body'), params);
+    viz.innerHTML = dandelionSVG(dlScope(params), dlMode(params));
+    wireStory(card, dlScope(params), dlMode(params));
+    wireGraph(card, params);
   }
 
   // ---------- Dandelion tuning GUI (dev tooling — leave in place) ----------
+  // `fresh: true` = added in the latest change (orange label + *).
   var DL_CONTROLS = [
-    { key: 'gradeDist',     label: 'Grade Spoke Length',   min: 40,  max: 260,  step: 1,    tip: 'Distance from the school hub to each grade hub (layout units).' },
-    { key: 'sectionDist',   label: 'Section Spoke Length', min: 30,  max: 200,  step: 1,    tip: 'Distance from a grade hub to each of its section hubs.' },
-    { key: 'kidDist',       label: 'Child Spoke Length',   min: 14,  max: 120,  step: 1,    tip: 'Distance from a section hub to each child dot.' },
-    { key: 'sectionSpread', label: 'Section Fan Angle',    min: 20,  max: 360,  step: 1,    tip: 'How widely sections fan out around their grade, in degrees.' },
-    { key: 'kidSpread',     label: 'Child Fan Angle',      min: 60,  max: 360,  step: 1,    tip: 'How widely children fan out around their section, in degrees. 360 = full dandelion burst.' },
-    { key: 'rootAngle',     label: 'Start Angle',          min: 0,   max: 359,  step: 1,    tip: 'Direction of the first branch from the centre, in degrees (0 = right, 90 = down, 180 = left).' },
-    { key: 'kidJitter',     label: 'Child Spoke Jitter',   min: 0,   max: 0.6,  step: 0.01, tip: 'Random ± variation in child spoke length, as a share of the length. 0 = perfect circle.' },
-    { key: 'rootR',         label: 'Centre Hub Size',      min: 6,   max: 40,   step: 0.5,  tip: 'Radius of the centre (focused) hub.' },
-    { key: 'hubR',          label: 'Branch Hub Size',      min: 3,   max: 24,   step: 0.5,  tip: 'Radius of grade and section hubs (before zoom boost).' },
-    { key: 'hubRing',       label: 'Hub Ring Width',       min: 1,   max: 10,   step: 0.5,  tip: 'Thickness of the coloured mix ring around each hub.' },
-    { key: 'kidR',          label: 'Child Dot Size',       min: 1,   max: 10,   step: 0.1,  tip: 'Radius of each child dot at whole-school zoom.' },
-    { key: 'sizeBoost',     label: 'Zoom Size Boost',      min: 0,   max: 1,    step: 0.05, tip: 'How much dots and hubs grow when you zoom into a grade or section. 0 = same size, 1 = full zoom.' },
-    { key: 'lineW',         label: 'Spoke Width',          min: 0.2, max: 4,    step: 0.1,  tip: 'Stroke width of the spokes (child spokes are drawn at 60%).' },
-    { key: 'zoomMs',        label: 'Zoom Duration',        min: 0,   max: 2000, step: 10,   tip: 'Milliseconds for the click-to-zoom animation.' },
-    { key: 'growMs',        label: 'Grow-in Duration',     min: 0,   max: 2000, step: 10,   tip: 'Milliseconds for the branches to grow in after a zoom.' },
+    { key: 'gradeDist',     label: 'Grade Spoke Length',   min: 40,  max: 260,  step: 1,     tip: 'Distance from the school hub to each grade hub (layout units).' },
+    { key: 'sectionDist',   label: 'Section Spoke Length', min: 30,  max: 200,  step: 1,     tip: 'Distance from a grade hub to each of its section hubs.' },
+    { key: 'kidDist',       label: 'Child Spoke Length',   min: 14,  max: 120,  step: 1,     tip: 'Distance from a section hub to each child dot.' },
+    { key: 'sectionSpread', label: 'Section Fan Angle',    min: 20,  max: 360,  step: 1,     tip: 'How widely sections fan out around their grade, in degrees.' },
+    { key: 'kidSpread',     label: 'Child Fan Angle',      min: 60,  max: 360,  step: 1,     tip: 'How widely children fan out around their section, in degrees. 360 = full dandelion burst.' },
+    { key: 'rootAngle',     label: 'Start Angle',          min: 0,   max: 359,  step: 1,     tip: 'Direction of the first branch from the centre, in degrees (0 = right, 90 = down, 180 = left).' },
+    { key: 'kidJitter',     label: 'Child Spoke Jitter',   min: 0,   max: 0.6,  step: 0.01,  tip: 'Random ± variation in child spoke length, as a share of the length. 0 = perfect circle.' },
+    { key: 'asymmetry',     label: 'Asymmetry',            min: 0,   max: 1,    step: 0.05,  tip: 'How lopsided the dandelion is: grade and section hubs drift off their even angles and their spokes vary in length. 0 = perfectly symmetrical.' },
+    { key: 'kidScatter',    label: 'Child Scatter',        min: 0,   max: 1,    step: 0.05,  tip: 'How unevenly children are spaced round their section: 0 = evenly spaced, 1 = clumps and gaps. Fan width also varies per section with Asymmetry.' },
+    { key: 'sectionGap',    label: 'Class Gap',            min: 0,   max: 120,  step: 1,     tip: 'Minimum clear space between two class (section) bursts, in layout units. Bursts closer than this are pushed apart so each class reads as its own group.' },
+    { key: 'gradeGap',      label: 'Grade Gap',            min: -100, max: 200, step: 1,     fresh: true, tip: 'Minimum clear space between two grades. Each grade (its hub, classes and children) is kept together as one group, and groups are pushed apart by at least this much so one grade\'s classes never mix in with another\'s. Negative lets groups tuck into each other\'s gaps.' },
+    { key: 'rootR',         label: 'School Hub Size',      min: 6,   max: 50,   step: 0.5,   tip: 'Radius of the school hub — the biggest ball.' },
+    { key: 'gradeR',        label: 'Grade Hub Size',       min: 3,   max: 40,   step: 0.5,   tip: 'Radius of each grade hub. Always kept below the school hub (max 90% of it).' },
+    { key: 'sectionR',      label: 'Section Hub Size',     min: 2,   max: 30,   step: 0.5,   tip: 'Radius of each section (class) hub when its children are showing. Always kept below the grade hub (max 85% of it) and above a child dot.' },
+    { key: 'hubRing',       label: 'Hub Ring Width',       min: 1,   max: 10,   step: 0.5,   tip: 'Thickness of the coloured mix ring on a section-sized hub; bigger hubs get a proportionally thicker ring.' },
+    { key: 'kidR',          label: 'Child Dot Size',       min: 1,   max: 10,   step: 0.1,   tip: 'Radius of each child dot at whole-school zoom.' },
+    { key: 'sizeBoost',     label: 'Zoom Size Boost',      min: 0,   max: 1,    step: 0.05,  tip: 'How much dots and hubs grow as the camera zooms into a grade or section. 0 = same on-screen size, 1 = grow fully with the zoom.' },
+    { key: 'lineW',         label: 'Spoke Width',          min: 0.2, max: 4,    step: 0.1,   tip: 'Stroke width of the spokes (child spokes are drawn at 60%).' },
     { key: 'childRule',     label: 'Child Colour Rule',    options: [['mean', 'Average score'], ['mode', 'Most common band']], tip: 'Results mode: colour each child by the band of their average score, or by the band most of their 12 skills fall in.' },
+    { key: 'targetPull',    label: 'Shape Pull',           min: 0.005, max: 0.15, step: 0.005, tip: 'Physics: how strongly each node is pulled back to its place in the dandelion. Low = loose and floaty, high = snaps into shape.' },
+    { key: 'linkPull',      label: 'Spoke Spring',         min: 0,   max: 0.3,  step: 0.005, tip: 'Physics: spring strength of each spoke. Higher keeps children close to their hub when it moves or is dragged.' },
+    { key: 'repel',         label: 'Overlap Push',         min: 0,   max: 1.5,  step: 0.05,  tip: 'Physics: how hard overlapping dots push each other apart.' },
+    { key: 'damping',       label: 'Damping',              min: 0.02, max: 0.6, step: 0.01,  tip: 'Physics: share of speed lost each frame. Higher = calmer, slower glides; lower = bouncier.' },
+    { key: 'breatheAmp',    label: 'Float Distance',       min: 0,   max: 8,    step: 0.1,   tip: 'How far nodes drift while idle, in viewBox units. 0 = completely still (and the animation loop sleeps).' },
+    { key: 'breatheSpeed',  label: 'Float Speed',          min: 0,   max: 3,    step: 0.05,  tip: 'How fast the idle drift moves.' },
+    { key: 'storySpread',   label: 'Story Spread',         min: 1,   max: 2,    step: 0.05,  tip: 'How far the groups pull apart on story steps that compare two groups (1 = no change).' },
+    { key: 'dimOpacity',    label: 'Story Fade',           min: 0,   max: 1,    step: 0.01,  tip: 'Opacity of the parts of the dandelion a story step is not about. 0 = hidden, 1 = no fading.' },
+    { key: 'zoomMs',        label: 'Zoom Duration',        min: 0,   max: 2500, step: 10,    tip: 'Milliseconds for the camera to glide into a grade or section (or back out).' },
+    { key: 'contextOpacity', label: 'Context Fade',        min: 0,   max: 1,    step: 0.01,  tip: 'Opacity of the parts of the school outside the grade or section you are zoomed into. 0 = hidden, 1 = no fading.' },
+    { key: 'sectionLabelMax', label: 'Section Label Limit', min: 0, max: 40,  step: 1,     tip: 'If the school has more sections than this, section names are hidden at whole-school zoom (grade names only) and appear once you zoom into a grade. Keeps big schools readable.' },
+    { key: 'kidDotMax',     label: 'Child Dot Limit',      min: 0,   max: 1000, step: 10,    tip: 'If the grade, section or school you are looking at has more children than this, child dots are hidden and each class shows as one summary hub. Zoom in (to a grade or class) to see the children.' },
+    { key: 'classHubR',     label: 'Class Hub Size',       min: 4,   max: 40,   step: 0.5,   tip: 'Radius of a class (section) hub while its child dots are hidden. Its ring still shows the class mix. Capped below the grade hub size.' },
   ];
   var DL_GUI_KEY = 'tilliMeasures.dlGuiCollapsed';
   function ensureDlGUI() {
@@ -993,7 +1385,7 @@
       var input = c.options
         ? '<select data-dlg-input="' + c.key + '">' + c.options.map(function (o) { return '<option value="' + o[0] + '"' + (DL_CFG[c.key] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'
         : '<input type="range" data-dlg-input="' + c.key + '" min="' + c.min + '" max="' + c.max + '" step="' + c.step + '" value="' + DL_CFG[c.key] + '">';
-      return '<label title="' + esc(c.tip) + '"><span class="dlg-row"><span class="dlg-new">' + esc(c.label) + ' <span title="Newly added control">*</span></span>' +
+      return '<label title="' + esc(c.tip) + '"><span class="dlg-row"><span' + (c.fresh ? ' class="dlg-new"' : '') + '>' + esc(c.label) + (c.fresh ? ' <span title="Newly added control">*</span>' : '') + '</span>' +
         (c.options ? '' : '<span class="dlg-val" data-dlg-val="' + c.key + '">' + DL_CFG[c.key] + '</span>') + '</span>' + input + '</label>';
     }
     panel.innerHTML = '<button class="dlg-head" data-dlg="toggle" title="Tuning controls for the Overview dandelion. Dev only. Click to show / hide."><b>Dandelion controls</b><span>▾</span></button>' +
@@ -1001,6 +1393,14 @@
       '<div class="dlg-actions"><button data-dlg="reset" title="Reset every dandelion control to its default value">Reset</button>' +
       '<button data-dlg="copy" class="primary" title="Copy the current dandelion values to the clipboard as JSON, ready to bake into DL_CFG">Copy values</button></div></div>';
     document.body.appendChild(panel);
+    // Layout keys rebuild the graph; physics/story keys apply live.
+    var LIVE = { targetPull: 1, linkPull: 1, repel: 1, damping: 1, breatheAmp: 1, breatheSpeed: 1, storySpread: 1, dimOpacity: 1, zoomMs: 1, contextOpacity: 1 };
+    function apply(key) {
+      if (!LIVE[key]) { dlRedraw(); return; }
+      var card = document.getElementById('ov-dl'); if (!card) return;
+      if (key === 'storySpread' || key === 'dimOpacity' || key === 'contextOpacity') { var p = currentRoute().params; dlApplyStep(card.querySelector('.dl-stage'), dlStory(dlScope(p), dlMode(p))[dlPinned.i] || {}); }
+      dlWake();
+    }
     function refresh() {
       DL_CONTROLS.forEach(function (c) {
         var inp = panel.querySelector('[data-dlg-input="' + c.key + '"]'), val = panel.querySelector('[data-dlg-val="' + c.key + '"]');
@@ -1012,14 +1412,14 @@
         var key = inp.dataset.dlgInput;
         DL_CFG[key] = inp.tagName === 'SELECT' ? inp.value : parseFloat(inp.value);
         var val = panel.querySelector('[data-dlg-val="' + key + '"]'); if (val) val.textContent = DL_CFG[key];
-        dlSchoolK = null; dlRedraw();
+        apply(key);
       });
     });
     panel.querySelector('[data-dlg="toggle"]').addEventListener('click', function () {
       panel.classList.toggle('collapsed');
       try { localStorage.setItem(DL_GUI_KEY, panel.classList.contains('collapsed') ? '1' : '0'); } catch (e) {}
     });
-    panel.querySelector('[data-dlg="reset"]').addEventListener('click', function () { Object.assign(DL_CFG, DL_DEFAULTS); dlSchoolK = null; refresh(); dlRedraw(); });
+    panel.querySelector('[data-dlg="reset"]').addEventListener('click', function () { Object.assign(DL_CFG, DL_DEFAULTS); refresh(); dlRedraw(); });
     panel.querySelector('[data-dlg="copy"]').addEventListener('click', function (ev) {
       try { navigator.clipboard.writeText(JSON.stringify(DL_CFG, null, 2)); } catch (e) {}
       var b = ev.currentTarget, old = b.textContent; b.textContent = 'Copied ✓';
@@ -1028,140 +1428,12 @@
   }
   function removeDlGUI() { var p = document.getElementById('dl-gui'); if (p) p.remove(); }
 
-  // Overview reads top-down as: is data coming in → how are children doing →
-  // where to help. The help card only appears once the current window is
-  // fully collected or past its end date, so it never advises on half the data.
+  // Overview = the living dandelion + its guided story, free-flowing on the page (no cards).
   SCREEN.overview = function (params, body) {
-    var firstName = (me && me.name ? String(me.name).replace(/^[A-Z]\.\s*/, '').split(' ')[0] : '') || 'there';
-    var op = AD.openPoint, cs = op ? AD.collectionStatus() : null;
-    var collected = !op || cs.allDone || AD.daysLeft(op) === 0;
-    var help = (collected && AD.latestComplete) ? '<div class="ov-row one">' + helpNextHTML(AD.latestComplete) + '</div>' : '';
-    // Landing screens (this + teacher My Garden) use the narrow column (--content-narrow).
-    body.innerHTML = '<div class="ui-narrow">' +
-      '<h1 class="ui-screen-title greet">' + esc(greetWord() + ', ' + firstName) + '</h1>' +
-      '<p class="ui-screen-sub">Here' + '’' + 's where your school is this term.</p>' +
-      sinceLastVisitHTML() +
-      glanceHTML() +
-      '<div class="ov-row one mb-gap">' + windowCardHTML(cs) + '</div>' +
-      dandelionHTML(params, true) +
-      help + '</div>';
-
-    // wiring
-    if (isCoordinator) body.querySelectorAll('[data-secdetail]').forEach(function (r) { r.addEventListener('click', function () { completionDetail(r.dataset.secdetail); }); });
+    body.innerHTML = dandelionHTML(params);
     wireDandelion(body, params);
     ensureDlGUI();
-    body.querySelectorAll('[data-toroster]').forEach(function (b) { b.addEventListener('click', function () { go('roster', {}); }); });
   };
-  function greetWord() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
-
-  // School at a glance — headcounts only (staff = class teachers with a section).
-  function glanceHTML() {
-    var teachersWithSection = AD.teachers.filter(function (t) { return AD.sections.some(function (sd) { return sd.teacherId === t.id; }); }).length;
-    var kpi = function (n, lbl) { return '<div class="ui-card sm subtle ov-glance-k"><b>' + n + '</b><span>' + esc(lbl) + '</span></div>'; };
-    return '<div class="ov-glance">' +
-      kpi(AD.students.length, AD.students.length === 1 ? 'Student' : 'Students') +
-      kpi(teachersWithSection, teachersWithSection === 1 ? 'Teacher' : 'Teachers') +
-      kpi(AD.sections.length, AD.sections.length === 1 ? 'Section' : 'Sections') + '</div>';
-  }
-
-  // Where to help next — per grade, the skill with the fewest children
-  // Blooming, how many are still Sprouting in it, and one small step.
-  function helpNextHTML(pt) {
-    var c = AD.bandMeta('emerging').color;
-    var rows = AD.grades.map(function (g) {
-      var studs = AD.studentsInGrade(g); if (!studs.length) return '';
-      var sk = AD.growthStrength(studs, pt.key, 1).growth[0]; if (!sk) return '';
-      return '<li><div class="ov-help-h"><b>' + esc(g) + '</b><span>' + esc(sk.name) + '</span>' +
-          '<em><i style="background:' + c + '"></i>' + sk.emerging + '% Sprouting</em></div>' +
-        '<p>' + esc(AD.helpStep(sk.key)) + '</p></li>';
-    }).join('');
-    return '<div class="ui-card md tint-cyan"><div class="ui-eyebrow pill mb-3">Next step</div><h3 class="ui-title">Where to help next</h3>' +
-      '<p class="ov-card-line">One small step per grade for the children who are just starting out, from ' + esc(pt.label) + ' results.</p>' +
-      '<ul class="ov-help">' + rows + '</ul></div>';
-  }
-
-  // ---------- Assessment window card ----------
-  // The one real "is it happening?" signal. Between windows it's a quiet
-  // one-liner with a collapsible prep checklist; while a window is open it
-  // flags sections that haven't started or are well behind the furthest-
-  // along section, then lists each section's completion (lowest first).
-  function windowCardHTML(cs) {
-    var op = AD.openPoint;
-    if (!op) {
-      var nx = nextPoint();
-      if (!nx) return '<div class="ui-card md tint-green"><div class="ui-eyebrow pill mb-3">Year complete</div><h3 class="ui-title">A full year of check-ins</h3><p class="ov-card-line">All three are done — thank you to every teacher who made it happen. Next year begins with a fresh Baseline.</p></div>';
-      var r = AD.pointRange(nx);
-      var steps = [
-        'The roster is up to date — new children added, leavers removed',
-        'Teachers know when the window opens',
-        'Families have linked their child, so parents can add their view',
-      ];
-      return '<div class="ui-card md tint-green"><div class="ui-eyebrow pill mb-3">Coming up</div><h3 class="ui-title">Next up: ' + esc(nx.label) + '</h3>' +
-        '<p class="ov-card-line">' + esc(r ? 'Runs ' + r + '.' : 'Dates coming soon from the Tilli team.') + '</p>' +
-        '<details class="ov-prep"><summary>Prep checklist</summary><ul>' + steps.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' +
-          (isCoordinator ? '<button class="btn-link" data-toroster="1">Check the roster →</button>' : '') + '</details></div>';
-    }
-    cs = cs || AD.collectionStatus();
-    var rows = cs.rows.slice().sort(function (a, b) { return a.pct - b.pct; });
-    var left = AD.daysLeft(op);
-    var line = cs.done + ' of ' + countNoun(cs.total, 'child', 'children') + ' assessed' + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go' : '') + '.';
-
-    // Status first: the answer to "is data being collected?" before the list.
-    var flagged = rows.filter(function (a) { return a.flag; });
-    var status;
-    if (cs.allDone) status = '<div class="ov-collect ok">All ' + esc(op.label) + ' data is in — thank you, everyone.</div>';
-    else if (!cs.done) status = '<div class="ov-collect warn"><b>No check-ins recorded yet.</b> A quick reminder to teachers that ' + esc(op.label) + ' is open can get things started.</div>';
-    else if (!flagged.length) status = '<div class="ov-collect ok">Data is coming in steadily across every section.</div>';
-    else status = '<div class="ov-collect warn"><b>' + countNoun(flagged.length, 'section needs', 'sections need') + ' a hand</b>' +
-      '<ul>' + flagged.map(function (a) {
-        var who = '<b>' + esc(a.name) + '</b> (' + esc(a.teacher) + ')';
-        return '<li>' + (a.flag === 'stalled'
-          ? who + ' hasn' + '’' + 't started yet. A quick check-in could help.'
-          : who + ' is at ' + a.pct + '% while ' + esc(cs.lead.name) + ' is at ' + cs.lead.pct + '% — they may need a hand or a little more time.') + '</li>';
-      }).join('') + '</ul></div>';
-
-    var list = '<ul class="ov-progress">' + rows.map(function (a) {
-      var cls = (isCoordinator ? 'clickable' : '') + (a.flag ? ' flag' : '');
-      return '<li' + (cls ? ' class="' + cls.trim() + '"' : '') + (isCoordinator ? ' data-secdetail="' + a.id + '" title="See who' + '’' + 's still to do"' : '') + '>' +
-        '<span class="nm">' + esc(a.name) + '<small>' + esc(a.teacher) + '</small></span>' +
-        '<span class="ui-meter"><span style="width:' + a.pct + '%"></span></span>' +
-        '<b>' + a.completion.done + ' of ' + a.completion.total + '</b></li>';
-    }).join('') + '</ul>';
-    return '<div class="ui-card md tint-green"><div class="ui-eyebrow pill mb-3">Check-in open</div><h3 class="ui-title">' + esc(op.label) + ' is open</h3><p class="ov-card-line">' + esc(line) + '</p>' + status + list + '</div>';
-  }
-
-  // ---------- "Since your last visit" ----------
-  // Leaders visit a few times a year, so open with what changed since then.
-  // Read once per page load (the previous visit), then stamp this visit.
-  var LASTVISIT_KEY = 'tilliMeasures.adminLastVisit.' + String(email || '').toLowerCase();
-  var prevVisit = null;
-  try { prevVisit = JSON.parse(localStorage.getItem(LASTVISIT_KEY) || 'null'); } catch (e) {}
-  try { localStorage.setItem(LASTVISIT_KEY, JSON.stringify({ at: Date.now(), latest: AD.latestComplete ? AD.latestComplete.key : null })); } catch (e) {}
-  function sinceLastVisitHTML() {
-    if (!prevVisit || !prevVisit.at) return '';
-    var parts = [];
-    var cur = AD.latestComplete ? AD.latestComplete.key : null;
-    if (cur && cur !== prevVisit.latest) parts.push('<b>' + esc(AD.latestComplete.label) + ' results are in</b>');
-    var me = String(email || '').toLowerCase(), c = { add: 0, done: 0, link: 0, edit: 0 }, win = [];
-    schoolHistory({}).forEach(function (e) {
-      if (!e || e.at <= prevVisit.at || (e.actor && String(e.actor.email || '').toLowerCase() === me)) return;
-      var n = (e.students && e.students.length) || 1;
-      if (e.action === 'student.add') c.add += n;
-      else if (e.action === 'assessment.complete') c.done += n;
-      else if (e.action === 'parent.link') c.link += n;
-      else if (e.action === 'phase.deploy' || e.action === 'phase.update') { if (win.indexOf(e.phase + ' window scheduled') < 0) win.push(e.phase + ' window scheduled'); }
-      else if (e.action === 'phase.end') { if (win.indexOf(e.phase + ' window closed') < 0) win.push(e.phase + ' window closed'); }
-      else c.edit++;
-    });
-    win.forEach(function (w) { parts.push(esc(w)); });
-    if (c.done) parts.push(countNoun(c.done, 'assessment', 'assessments') + ' completed');
-    if (c.add) parts.push(countNoun(c.add, 'student', 'students') + ' added');
-    if (c.link) parts.push(countNoun(c.link, 'parent', 'parents') + ' linked');
-    if (c.edit) parts.push(countNoun(c.edit, 'roster edit', 'roster edits'));
-    if (!parts.length) return '';
-    var d = new Date(prevVisit.at), M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '<div class="ad-since"><span class="ad-since-h">Welcome back — since ' + d.getDate() + ' ' + M[d.getMonth()] + ':</span>' + parts.join('<span class="sep">·</span>') + '</div>';
-  }
 
   var cmpTwo = { a: null, b: null };  // "Compare two sections" picker state (Outcomes) — any two sections, school-wide
   var progSkill = '';                 // "Progress over time" chart — '' = all skills, else a skill key
@@ -2246,22 +2518,6 @@
       var v = document.getElementById('close-note').value.trim(); if (!v) { toast('Add an outcome note to close.'); return; }
       c.status = 'Closed'; c.outcome = v; toast('Concern closed.'); openConcernQueue();
     });
-  }
-
-  // ---- Completion detail (spec §5.2.4) — outstanding students, NO scores ----
-  function completionDetail(secId) {
-    var a = AD.progressFor(secId); if (!a) return;
-    var sd = AD.sections.find(function (s) { return s.id === secId; });
-    var students = AD.studentsInSection(sd);
-    // deterministic "outstanding" set sized to match the activity completion count
-    var outstandingN = a.completion.total - a.completion.done;
-    var outstanding = students.slice(students.length - outstandingN);
-    var winLabel = AD.openPoint ? AD.openPoint.label : 'Assessment';
-    openModal(modalHead(a.name + ' — ' + winLabel + ' completion') +
-      '<p class="ui-mod-note mb-3">' + a.completion.done + ' of ' + countNoun(a.completion.total, 'student', 'students') + ' complete. This is completion only — no scores, bands or skill data.</p>' +
-      (outstanding.length ? '<div class="ui-eyebrow dark mb-2">Still to complete</div><div class="ui-tablewrap"><table class="ui-table mw-360"><thead><tr><th>Student</th><th>Student ID</th></tr></thead><tbody>' +
-        outstanding.map(function (s) { return '<tr><td class="name">' + esc(s.name) + '</td><td class="ad-num">' + esc(s.adm) + '</td></tr>'; }).join('') + '</tbody></table></div>'
-        : stEmpty('All students complete.', 'Nothing outstanding for this window.', true)));
   }
 
   // ---- User invite ----

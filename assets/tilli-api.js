@@ -77,7 +77,7 @@
   'use strict';
 
   var STORE_KEY   = 'tilliMeasures.api.v1';
-  var SEED_VER    = 5;                 // bump to force a re-seed after data-shape changes (5: 25 kids per section)
+  var SEED_VER    = 6;                 // bump to force a re-seed after data-shape changes (6: demo school 6 grades × 5 sections × 30 kids)
 
   // Claim-flow tuning (spec §5 B2: rate-limit + lock).
   var MAX_ATTEMPTS = 5;                // lock after this many wrong second-factors
