@@ -29,6 +29,8 @@
   /* minmax(0,…) lets the content track shrink below its min-content, so a wide
      table scrolls inside its own .ui-tablewrap instead of forcing a page-wide
      horizontal scrollbar. */
+  /* --topbar-h = the sticky header's height (the Overview's full-height panel sits under it). */
+  :root { --topbar-h: var(--header-h); }
   .ad-app { min-height: 100dvh; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
   /* min-width:0 lets the content column shrink below its children's intrinsic
      min-width (tables carry min-width:520–640px). Without it a wide card forces
@@ -188,6 +190,12 @@
   .ad-kebab:hover, .ad-kebab.on { background: var(--surface-100); color: var(--ink-900); }
   .ad-kebab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .ad-rowmenu { position: fixed; z-index: 80; min-width: 180px; }
+  /* Quieter sidebar link to the Ask Tilli full screen (the main way in is the Overview) */
+  .ad-nav-mini { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 7px 13px; border: none; background: none; border-radius: var(--radius-md); cursor: pointer;
+    font: 600 var(--fs-xs) var(--font-body); color: var(--ink-450); text-align: left; }
+  .ad-nav-mini svg { width: 15px; height: 15px; flex: none; }
+  .ad-nav-mini:hover { background: var(--surface-100); color: var(--ink-900); }
+  .ad-nav-mini.on { color: var(--green-700); }
   .ad-tabalert { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--warn-700); vertical-align: 2px; }   /* "School admin", "No section yet" on one line */
   .ad-navcard .nc-pcts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
 
@@ -306,11 +314,38 @@
      the page (no cards). Plain white behind it (no wash). Type ramp:
      32 story headline · 15 body · 13 meta. SVG text = 11 / 13.
      ============================================================ */
-  .ov-dl { --dl-story-col: 0.95fr;
-    position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(280px, var(--dl-story-col)) minmax(0, 2fr); gap: 8px 32px; align-items: start; }
-  .dl-head { display: flex; margin: 8px 0 4px; align-items: center; justify-content: center; gap: 12px 20px; flex-wrap: wrap; }   /* centred over the dandelion */
+  /* Full-bleed: points on the left, the dandelion on a cream panel that runs to the right edge. */
+  .ad-app.ov-mode .ad-main { padding: 0; }
+  .ad-app.ov-mode .ad-wrap { max-width: none; margin: 0; }
+  .ov-dl { --dl-story-col: 0.85fr; --dl-panel: #FBF8EE;
+    position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(320px, var(--dl-story-col)) minmax(0, 1.45fr); align-items: stretch;
+    min-height: calc(100dvh - var(--topbar-h)); }
+  .dl-viz { min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 26px 40px 32px; background: var(--dl-panel); }
+  .dl-viz > #dl-viz { width: 100%; }
+  /* Desktop: the panel is exactly one screen tall; the dandelion fills what's left between
+     the ask box and the legend (the SVG letterboxes, so the whole tree stays in view). */
+  @media (min-width: 861px) {
+    .dl-viz { position: sticky; top: var(--topbar-h); height: calc(100dvh - var(--topbar-h)); }
+    .dl-viz > #dl-viz { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .dl-viz .dl-stage { flex: 1; min-height: 0; }
+    .dl-viz .dl-svg { height: 100%; }
+  }
+  .dl-head { display: flex; margin: 0 0 8px; align-items: center; justify-content: center; gap: 12px 20px; flex-wrap: wrap; }   /* zoomed: School › Grade (+ mode tabs) */
   .dl-head .ui-crumbs { margin: 0; }
-  .dl-viz { min-width: 0; }
+  .dl-hint { margin: 2px 0 12px; text-align: center; font-weight: 600; font-size: var(--fs-sm); color: var(--text-meta); }
+  /* "Or just ask Tilli": a soft pill search above the dandelion */
+  .dl-ask { display: flex; align-items: center; gap: 10px; width: min(100%, 520px); margin: 0 0 6px; padding: 10px 18px; border: 1px solid var(--line-200); border-radius: 999px; background: var(--white); }
+  .dl-ask:focus-within { border-color: var(--green-500); box-shadow: 0 0 0 3px var(--wash-green); }
+  .dl-ask-ic { display: grid; color: var(--ink-450); }
+  .dl-ask-input { flex: 1; min-width: 0; border: none; outline: none; background: none; text-align: center; font: 600 var(--fs-md) var(--font-body); color: var(--ink-900); }
+  .dl-ask-input::placeholder { color: var(--ink-450); }
+  /* Rotating suggestion, drawn over the empty input (fades between questions) */
+  .dl-ask { position: relative; }
+  .dl-ask-sug { position: absolute; left: 52px; right: 24px; top: 50%; transform: translateY(-50%); text-align: center; pointer-events: none;
+    font: 600 var(--fs-md) var(--font-body); color: var(--ink-450); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .25s; }
+  .dl-ask-sug.out { opacity: 0; }
+  .dl-ask.typing .dl-ask-sug { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .dl-ask-sug { transition: none; } }
   .dl-stage { position: relative; touch-action: none; }
   .dl-stage.can-up .dl-svg { cursor: zoom-out; }   /* zoomed in: empty space steps back a level */
   /* The dandelion stays inside its own column (nothing drifts behind the points), and
@@ -352,32 +387,30 @@
   .dl-tip em { display: block; font-style: normal; color: var(--green-500); margin-top: 2px; }
   .ui-legend i.ring { box-shadow: inset 0 0 0 2px var(--ink-300); }
   /* Guided story */
-  .dl-story { min-width: 0; padding-top: 8px; }
-  .dl-title { margin: 0 0 12px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.3; color: var(--ink-900); }
+  .dl-story { min-width: 0; padding: 40px 36px 48px 48px; }
+  /* "Currently selected" (follows the zoom) + headcounts + source */
+  .dl-sel-eyebrow { margin: 0 0 4px; font-weight: 700; font-size: var(--fs-sm); color: var(--lvl-2-ink); }
+  .dl-sel-name { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1.2; color: var(--ink-900); }
+  .dl-sel-sub { margin: 2px 0 0; font-weight: 600; font-size: var(--fs-md); color: var(--text-meta); }
+  .dl-counts { display: flex; flex-wrap: wrap; gap: 6px 28px; margin: 18px 0 0; padding-top: 18px; border-top: 1px solid var(--line-200); }
+  .dl-counts span { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 700; font-size: var(--fs-sm); color: var(--text-meta); }
+  .dl-counts b { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1; color: var(--ink-900); font-variant-numeric: tabular-nums; }
   .dl-headline { margin: 8px 0 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.15; color: var(--ink-900); letter-spacing: -.01em; }
   .dl-body { margin: 12px 0 0; font-weight: 600; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-600); }
   /* story points: hover / focus lights the dandelion, click pins */
-  /* Each point is a box: round check-off on the left, "Ignore" top-right. Done = ticked + faded. */
+  /* Each point is a card. All warnings share one card; "+ N more" expands the rest in place. */
   .dl-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-  .dl-points li { position: relative; padding: 12px 64px 12px 46px; border: 1px solid var(--line-200); border-radius: var(--radius-lg); background: var(--white);
+  .dl-points li { position: relative; padding: 14px 18px; border: 1px solid var(--line-200); border-radius: var(--radius-lg); background: var(--white);
     cursor: pointer; transition: border-color .2s, box-shadow .2s, background .2s, opacity .2s; }
   .dl-points li.on, .dl-points li.pinned { border-color: var(--accent); box-shadow: var(--shadow-card); }
   .dl-points li.warn { border-color: color-mix(in srgb, var(--attn) 30%, var(--line-200)); }
   .dl-points li.warn.on, .dl-points li.warn.pinned { border-color: var(--attn); }
-  .dl-check { position: absolute; left: 14px; top: 13px; width: 22px; height: 22px; display: grid; place-items: center; padding: 0;
-    border: 2px solid var(--ink-300); border-radius: 50%; background: var(--white); color: transparent; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
-  .dl-points li.warn .dl-check { border-color: var(--attn); }
-  .dl-check:hover { border-color: var(--green-500); color: var(--green-500); }
-  .dl-check:focus-visible, .dl-ignore:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .dl-points li.done .dl-check { border-color: var(--green-500); background: var(--green-500); color: var(--white); }
-  .dl-ignore { position: absolute; right: 10px; top: 10px; padding: 3px 8px; border: none; border-radius: 999px; background: none; cursor: pointer;
-    font: 600 var(--fs-xs) var(--font-body); color: var(--text-meta); }
-  .dl-ignore:hover { background: var(--surface-100); color: var(--ink-900); }
-  .dl-points li.done { background: var(--surface-100); opacity: .75; }
-  .dl-points li.done .dl-pt-head { text-decoration: line-through; text-decoration-color: var(--ink-300); color: var(--ink-450); }
-  .dl-donetag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; background: var(--wash-green); color: var(--green-700); letter-spacing: .03em; }
-  .dl-ignored { margin: 6px 0 0 2px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
-  .dl-ignored .btn-link { font-size: var(--fs-xs); font-weight: 700; }
+  .dl-points li.warn { padding-right: 96px; }
+  .dl-more { position: absolute; right: 14px; top: 12px; padding: 3px 6px; border: none; border-radius: 999px; background: none; cursor: pointer;
+    font: 700 var(--fs-sm) var(--font-body); color: var(--attn-ink); }
+  .dl-more:hover { background: var(--attn-wash); }
+  .dl-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .dl-stack-row { margin-top: 12px; padding-top: 12px; border-top: 1px dashed color-mix(in srgb, var(--attn) 25%, var(--line-200)); }
   .dl-points li:focus { outline: none; }
   .dl-points li:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   /* Point = small kind eyebrow · one-ink Montserrat headline · body. Warnings: amber eyebrow + icon. */
@@ -395,23 +428,23 @@
   /* point kinds: warnings get an amber dot (always listed first), the activity a green one */
   .dl-pt-body .dl-ptlink { font-weight: 700; font-size: var(--fs-sm); }
   .dl-sample { margin-left: 4px; vertical-align: 1px; }
-  .dl-source { margin: 8px 0 0 2px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  .dl-source { margin: 10px 0 22px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
   /* Legend + what a ring's colour means, under the actions (always in view) */
-  .dl-key { margin: 20px 0 0; padding-top: 14px; border-top: 1px solid var(--line-200); }
-  .dl-keynote { margin: 8px 0 0; font-weight: 600; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-meta); }
+  .dl-key { margin: 14px 0 0; text-align: center; }   /* under the dandelion */
+  .dl-key .ui-legend { justify-content: center; }
+  .dl-keynote { margin: 8px auto 0; max-width: 460px; font-weight: 600; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-meta); }
   /* Under the points: Ask Tilli (primary button) + See outcomes (text link — Outcomes isn't in the nav) */
   .dl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin: 16px 0 0; }
   .dl-out { font-weight: 700; font-size: var(--fs-sm); }
   /* Ask Tilli inside the Overview: a soft button under the story; open, the chat replaces the story */
-  .ov-dl { --dla-h: max(460px, calc(100dvh - 210px)); --dla-h-phone: 380px; --dla-col: 1fr; }   /* chat height (desktop / phone), chat column share */
+  .ov-dl { --dla-h: max(460px, calc(100dvh - var(--topbar-h) - 80px)); --dla-h-phone: 380px; --dla-col: 1fr; }   /* chat height (desktop / phone), chat column share */
   /* Asking: the chat takes a full-height column and the dandelion shrinks to fit the
      same height beside it (the SVG letterboxes inside, so the whole branch stays in view). */
-  .ov-dl.asking { grid-template-columns: minmax(340px, var(--dla-col)) minmax(0, 1.25fr); align-items: start; }
-  .ov-dl.asking .dl-viz { height: var(--dla-h); display: flex; flex-direction: column; }
+  .ov-dl.asking { grid-template-columns: minmax(340px, var(--dla-col)) minmax(0, 1.25fr); }
+  .ov-dl.asking .dl-viz { height: calc(100dvh - var(--topbar-h)); }
+  .ov-dl.asking .dl-viz > #dl-viz { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .ov-dl.asking .dl-stage { flex: 1; min-height: 0; }
   .ov-dl.asking .dl-svg { height: 100%; }
-  .dl-askbtn { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }   /* .btn.btn-primary.md + chat icon, one line */
-  .dl-askbtn svg { width: 18px; height: 18px; flex: none; }
   .dla { display: flex; flex-direction: column; height: var(--dla-h); background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; }
   .dla-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--line-200); }
   .dla-hmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -422,23 +455,17 @@
   .dla-note { margin-top: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--green-700); }
   .dla-compose { padding: 10px 12px 12px; border-top: 1px solid var(--line-200); }
   @media (prefers-reduced-motion: reduce) {
-    .dl-spoke, .dl-kid, .dl-hub, .dl-name, .dl-points li, .dl-check { transition: none; }
+    .dl-spoke, .dl-kid, .dl-hub, .dl-name, .dl-points li { transition: none; }
   }
   @media (max-width: 860px) {
-    .ov-dl { grid-template-columns: minmax(0, 1fr); }
-    .dl-viz { order: 1; }   /* phone: dandelion above the story */
-    .dl-story { order: 2; }
+    .ov-dl { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+    .dl-viz { order: 1; padding: 20px 16px 24px; }   /* phone: dandelion above the story */
+    .dl-story { order: 2; padding: 24px 16px 40px; }
     .dla { height: var(--dla-h-phone); }   /* phone: chat under the dandelion */
     .ov-dl.asking { grid-template-columns: minmax(0, 1fr); }
     .ov-dl.asking .dl-viz { height: auto; display: block; }
     .ov-dl.asking .dl-svg { height: auto; }
   }
-  /* Quieter sidebar link to the Ask Tilli full screen (the main way in is now the Overview) */
-  .ad-nav-mini { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 7px 13px; border: none; background: none; border-radius: var(--radius-md); cursor: pointer;
-    font: 600 var(--fs-xs) var(--font-body); color: var(--ink-450); text-align: left; }
-  .ad-nav-mini svg { width: 15px; height: 15px; flex: none; }
-  .ad-nav-mini:hover { background: var(--surface-100); color: var(--ink-900); }
-  .ad-nav-mini.on { color: var(--green-700); }
 
   /* Roster: Students / Your team tabs (.ui-tabs), with a small count after each label */
   .ad-rostertabs { margin: 4px 0 20px; }
@@ -502,6 +529,6 @@
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
 <script src="assets/admin-data.js?v=20261020ca"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261020ca"></script>
+<script src="assets/admin.js?v=20261020sug"></script>
 </body>
 </html>

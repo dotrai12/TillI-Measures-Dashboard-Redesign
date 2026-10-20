@@ -453,6 +453,7 @@
   //  CHROME (sidebar / header / bottom nav)
   // ========================================================
   var ICONS = {
+    search: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
     send: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/></svg>',
     asktilli: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg>',
     overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -598,6 +599,7 @@
     closeAcctMenu(); closeRowMenu();
     app.innerHTML = chromeHTML(r);
     app.classList.toggle('ask-mode', r.screen === 'asktilli');   // Ask Tilli is full-bleed, like the teacher view
+    app.classList.toggle('ov-mode', r.screen === 'overview');    // Overview is full-bleed too: points left, dandelion panel right
     placeStatePanel();
     var body = document.getElementById('ad-main-body');
     if (!loadedScreens[r.screen]) {
@@ -1420,65 +1422,50 @@
       hl: dlKidKeys(dlInBand(best.g.studs, best.sk.key, pt.scoreField, 'emerging')) };
   }
 
-  // ---- Checking off / ignoring points ----
-  // Each point has a stable id. "Done" keeps it in its slot, ticked and faded;
-  // "Ignore" removes it and the next point by priority moves up. Both last for
-  // today only (per person, in this browser) — tomorrow a point comes back if its
-  // problem is still there. A real deployment should keep this server-side.
-  var DL_MARKS_KEY = 'tilliMeasures.overviewMarks.' + String(email || '').toLowerCase();
-  function dlTodayKey() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
-  function dlMarks() {
-    var m = null; try { m = JSON.parse(localStorage.getItem(DL_MARKS_KEY) || 'null'); } catch (e) {}
-    if (!m || m.day !== dlTodayKey()) m = { day: dlTodayKey(), done: {}, ignored: {} };   // a new day starts clean
-    return m;
-  }
-  var dlMarksMem = null;   // fallback when storage is blocked (private mode)
-  function dlGetMarks() { return dlMarksMem && dlMarksMem.day === dlTodayKey() ? dlMarksMem : (dlMarksMem = dlMarks()); }
-  function dlSaveMarks(m) { dlMarksMem = m; try { localStorage.setItem(DL_MARKS_KEY, JSON.stringify(m)); } catch (e) {} }
-  function dlScopeKey(scope) { return scope.level === 'section' ? scope.sectionId : scope.level === 'grade' ? scope.grade : 'school'; }
-
+  // ---- The points (rule: spec §13) ----
+  // All warnings share ONE card (the most urgent, "+ N more" expands the rest in
+  // place); the other slots go to progress / results / the activity. Warnings are
+  // school-wide; the rest follow the zoom.
+  var dlWarnOpen = false;   // is the stacked warning card expanded?
   function dlStory(scope) {
     var root = dlTree(scope), studs = dlStudents(root), n = studs.length;
     var secs = AD.sections.filter(function (s) { return scope.level === 'school' || (scope.level === 'grade' ? s.grade === scope.grade : s.id === scope.sectionId); });
-    // Every candidate in priority order; ignored ones drop out and the rest move up.
-    var phase = dlPhase(), cands = dlWarnings(), src;
+    var phase = dlPhase(), warns = dlWarnings(), steps = [], src;
+    if (warns.length) steps.push(Object.assign({}, warns[0], { stack: warns }));   // one card for every warning
+    var room = DL_MAX_POINTS - steps.length;
     if (phase === 'collecting') {
-      cands = cands.concat(dlProgressPool(scope, studs, secs));
+      steps = steps.concat(dlProgressPool(scope, studs, secs).slice(0, room));
       src = AD.openPoint.label + ' check-in · n = ' + n;
     } else if (phase === 'results') {
       var pool = dlResultsPool(scope, studs, secs), day = dlDaysSinceClose();
-      for (var i = 0; i < pool.length; i++) cands.push(pool[(day + i) % pool.length]);   // today's order — a different lead set each day
+      for (var i = 0; i < Math.min(room, pool.length); i++) steps.push(pool[(day + i) % pool.length]);   // a different set each day
       src = AD.latestComplete.label + ' results · n = ' + n;
     } else if (phase === 'activity') {
       var a = dlActivity(scope);
-      if (a) cands.push(a);   // the activity is only ever one point
+      if (a) steps.push(a);   // the activity is only ever one point
       src = AD.latestComplete.label + ' results · n = ' + n;
     } else src = 'n = ' + n;
-    var marks = dlGetMarks(), sk = dlScopeKey(scope);
-    cands.forEach(function (x) { x.id = x.kind === 'warn' ? 'warn:' + x.eyebrow : x.kind + ':' + x.eyebrow + ':' + sk; x.done = !!marks.done[x.id]; x.source = src; });
-    var shown = cands.filter(function (x) { return !marks.ignored[x.id]; }).slice(0, DL_MAX_POINTS);
-    shown.ignoredCount = cands.filter(function (x) { return marks.ignored[x.id]; }).length;
-    return shown;
+    steps.source = src;
+    return steps;
   }
 
   var DL_WARN_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>';
-  // All story points as one list. Hovering / focusing a point lights up its part
+  // All points as one list of cards. Hovering / focusing a card lights up its part
   // of the dandelion; clicking pins it (click again to unpin).
   var dlPinned = { key: '', i: -1 };
-  var DL_TICK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-  // Each point is a box: a round check-off on the left, "Ignore" top-right.
+  function dlPointInner(x) {
+    return '<p class="dl-pt-kind">' + (x.kind === 'warn' ? '<span class="dl-attn">' + DL_WARN_ICON + 'Needs attention</span>' : '') + '<span>' + esc(x.eyebrow) + '</span></p>' +
+      '<p class="dl-pt-head">' + x.head + '</p><p class="dl-pt-body">' + x.body + '</p>';
+  }
   function dlStoryHTML(steps) {
-    var ign = steps.ignoredCount || 0;
     return '<ul class="dl-points">' + steps.map(function (x, j) {
-      var warn = x.kind === 'warn';
-      return '<li tabindex="0" class="' + (x.kind || '') + (x.done ? ' done' : '') + '" data-dl-pt="' + j + '" aria-label="' + esc((x.done ? 'Done: ' : warn ? 'Needs attention: ' : '') + x.eyebrow) + '">' +
-        '<button type="button" class="dl-check" role="checkbox" aria-checked="' + x.done + '" data-dl-done="' + esc(x.id) + '" title="' + (x.done ? 'Mark as not done' : 'Mark as done') + '" aria-label="' + (x.done ? 'Mark as not done' : 'Mark as done') + '">' + DL_TICK + '</button>' +
-        (x.done ? '' : '<button type="button" class="dl-ignore" data-dl-ignore="' + esc(x.id) + '" title="Hide this for today — the next point moves up">Ignore</button>') +
-        '<p class="dl-pt-kind">' + (x.done ? '<span class="dl-donetag">' + DL_TICK + 'Done</span>' : warn ? '<span class="dl-attn">' + DL_WARN_ICON + 'Needs attention</span>' : '') + '<span>' + esc(x.eyebrow) + '</span></p>' +
-        '<p class="dl-pt-head">' + x.head + '</p><p class="dl-pt-body">' + x.body + '</p></li>';
-    }).join('') + '</ul>' +
-      (steps.length ? '<p class="dl-source">' + esc(steps[0].source) + '</p>' : '') +
-      (ign ? '<p class="dl-ignored">' + countNoun(ign, 'point', 'points') + ' ignored today · <button type="button" class="btn-link" data-dl-unignore>Show again</button></p>' : '');
+      var more = x.stack ? x.stack.length - 1 : 0;
+      return '<li tabindex="0" class="' + (x.kind || '') + (more && dlWarnOpen ? ' open' : '') + '" data-dl-pt="' + j + '" aria-label="' + esc((x.kind === 'warn' ? 'Needs attention: ' : '') + x.eyebrow) + '">' +
+        (more ? '<button type="button" class="dl-more" data-dl-more aria-expanded="' + dlWarnOpen + '">' + (dlWarnOpen ? 'Show less' : '+ ' + more + ' more') + '</button>' : '') +
+        dlPointInner(x) +
+        (more && dlWarnOpen ? x.stack.slice(1).map(function (w) { return '<div class="dl-stack-row">' + dlPointInner(w) + '</div>'; }).join('') : '') +
+        '</li>';
+    }).join('') + '</ul>';
   }
   // Light up a step's nodes (plus their ancestors) and dim the rest.
   function dlApplyStep(stage, step) {
@@ -1606,6 +1593,48 @@
     return countNoun(t, 'teacher', 'teachers') + ' · ' + countNoun(secs.length, 'section', 'sections');
   }
 
+  // Headcounts for the selected level (left column, under "Currently selected").
+  function dlCountsHTML(scope) {
+    var secs = AD.sections.filter(function (s) { return scope.level === 'school' || (scope.level === 'grade' ? s.grade === scope.grade : s.id === scope.sectionId); });
+    var n = secs.reduce(function (a, s) { return a + AD.studentsInSection(s).length; }, 0);
+    var t = secs.reduce(function (a, s) { if (a.indexOf(s.teacherId) < 0) a.push(s.teacherId); return a; }, []).length;
+    var item = function (v, one, many) { return '<span><b>' + v + '</b> ' + (v === 1 ? one : many) + '</span>'; };
+    return '<div class="dl-counts">' + item(n, 'Student', 'Students') + item(t, 'Teacher', 'Teachers') + item(secs.length, 'Section', 'Sections') + '</div>';
+  }
+  // Rotating suggestions inside the empty ask box (questions Tilli can answer from this
+  // school's data). Shows "Or just ask Tilli" first, then a new suggestion every
+  // DL_SUG_MS with a soft fade; hidden while the box is focused with text in it.
+  var DL_SUG_MS = 3500, dlSugTimer = 0;
+  function dlSugList() {
+    var g = AD.grades, sd = AD.sections[Math.min(6, AD.sections.length - 1)];
+    var list = ['How is ' + (g[1] || g[0]) + ' doing?', 'Is the programme working?', 'Where are we weakest?', 'What is our strongest skill?'];
+    if (AD.openPoint) list.splice(2, 0, 'Who still needs to finish?');
+    if (g[3]) list.push('How is ' + g[3] + ' doing?');
+    if (sd) list.push('How is ' + sd.name + ' doing?');
+    list.push('Which skill needs the most help?', 'Draft a board paragraph');
+    return list;
+  }
+  function dlRotateSugs(form) {
+    clearInterval(dlSugTimer);
+    var el = form.querySelector('.dl-ask-sug'), inp = form.querySelector('input'), list = dlSugList(), i = -1;
+    var sync = function () { form.classList.toggle('typing', !!inp.value); };
+    inp.addEventListener('input', sync);
+    var next = function () {
+      if (!form.isConnected) { clearInterval(dlSugTimer); return; }
+      if (inp.value) return;   // don't change it under someone who's typing
+      i = (i + 1) % list.length;
+      el.classList.add('out');
+      setTimeout(function () { el.textContent = 'Try “' + list[i] + '”'; form.dataset.sug = list[i]; el.classList.remove('out'); }, DL_REDUCE.matches ? 0 : 250);
+    };
+    dlSugTimer = setInterval(next, DL_SUG_MS);
+  }
+  // One quiet line above the ask box: how to move around at this level.
+  function dlHint(scope) {
+    return scope.level === 'school' ? 'Tap a grade to see its children · drag to move'
+      : scope.level === 'grade' ? 'Tap a section to look closer · tap empty space to step back'
+      : 'Tap a child to see who it is · tap empty space to step back';
+  }
+
   function dandelionHTML(params) {
     var modes = dlModes();
     if (!modes.length) return '<div class="ov-dl"><div class="dl-story"><h2 class="dl-headline">Nothing to show yet</h2><p class="dl-body">Your school appears here once the first check-in opens.</p></div></div>';
@@ -1619,16 +1648,25 @@
     }).join('') + '</div>' : '';
     var steps = dlStory(scope), key = JSON.stringify([dlParamsForScope(scope), mode]);
     if (dlPinned.key !== key) dlPinned = { key: key, i: -1 };
-    // Ask Tilli is the main action under the points; Outcomes is a quieter text link beside it.
-    var askBtn = '<button class="btn btn-primary md dl-askbtn" data-dla-open title="Ask a question — the dandelion zooms to the grade or section you ask about">' + ICONS.asktilli + '<span>Ask Tilli about your school</span></button>';
     var outLink = '<button class="btn-link dl-out" data-tooutcomes="1">See outcomes →</button>';
+    // Left: what's selected (follows the zoom), its headcounts + source, then the cards.
+    var sd = scope.level === 'section' ? AD.sections.find(function (x) { return x.id === scope.sectionId; }) : null;
+    var selName = scope.level === 'school' ? root.name : scope.level === 'grade' ? scope.grade : root.name;
+    var selSub = scope.level === 'school' ? [AD.school.city, AD.school.country].filter(Boolean).join(', ')
+      : scope.level === 'grade' ? AD.school.name : (sd ? 'Teacher: ' + AD.teacherFor(sd) : '');
+    var selected = '<div class="dl-sel"><p class="dl-sel-eyebrow">Currently selected</p><h2 class="dl-sel-name">' + esc(selName) + '</h2>' +
+      (selSub ? '<p class="dl-sel-sub">' + esc(selSub) + '</p>' : '') + '</div>' + dlCountsHTML(scope) +
+      '<p class="dl-source">' + esc(steps.source || '') + '</p>';
+    // Right: hint + "Or just ask Tilli" box above the dandelion, legend under it.
+    var ask = '<form class="dl-ask" data-dl-askform role="search"><span class="dl-ask-ic" aria-hidden="true">' + ICONS.search + '</span>' +
+      '<input class="dl-ask-input" id="dl-ask-input" autocomplete="off" aria-label="Ask Tilli about your school — press Enter to ask the suggested question">' +
+      '<span class="dl-ask-sug" aria-hidden="true">Or just ask Tilli</span></form>';
+    var head = (scope.level !== 'school' || seg) ? '<div class="dl-head">' + (scope.level !== 'school' ? crumbs : '') + seg + '</div>' : '';
     return '<div class="ov-dl' + (dlAsk.open ? ' asking' : '') + '" id="ov-dl">' +
       '<div class="dl-story' + (dlAsk.open ? ' asking' : '') + '" id="dl-story">' + (dlAsk.open ? dlAskHTML() :
-        '<h2 class="dl-title">Right now ' + (scope.level === 'school' ? 'at ' + esc(root.name) : 'in ' + esc(root.name)) + '</h2>' +
-        dlStoryHTML(steps) + '<div class="dl-actions">' + askBtn + outLink + '</div>' + dlKeyHTML(mode)) + '</div>' +
-      // School › Grade crumbs (+ Check-in / Results) sit right above the dandelion they describe.
-      '<div class="dl-viz"><div class="dl-head">' + crumbs + seg + '</div><div id="dl-viz">' + dandelionSVG(scope, mode) + '</div>' +
-        '</div>' +
+        selected + dlStoryHTML(steps) + '<div class="dl-actions">' + outLink + '</div>') + '</div>' +
+      '<div class="dl-viz">' + head + '<p class="dl-hint">' + esc(dlHint(scope)) + '</p>' + ask +
+        '<div id="dl-viz">' + dandelionSVG(scope, mode) + '</div>' + dlKeyHTML(mode) + '</div>' +
     '</div>';
   }
 
@@ -1642,6 +1680,14 @@
       b.addEventListener('click', function () { go('overview', Object.assign({}, dlParamsForScope(scope), { view: b.dataset.dlMode }), { replace: true }); });
     });
     card.querySelectorAll('[data-dla-open]').forEach(function (b) { b.addEventListener('click', dlAskOpen); });
+    // "Or just ask Tilli": the question opens the chat in the left column (the cards step
+    // aside) and the dandelion zooms to whatever the answer is about.
+    var askForm = card.querySelector('[data-dl-askform]');
+    if (askForm) dlRotateSugs(askForm);
+    if (askForm) askForm.addEventListener('submit', function (e) {
+      e.preventDefault(); var q = askForm.querySelector('input').value.trim() || askForm.dataset.sug || ''; if (!q) return;   // empty box → ask the suggestion showing
+      dlAsk.open = true; dlAsk.focus = true; dlPinned.i = -1; render(); dlAskSend(q);
+    });
     card.querySelectorAll('[data-tooutcomes]').forEach(function (b) {
       b.addEventListener('click', function () { go('outcomes', Object.assign(AD.latestComplete ? { point: AD.latestComplete.key } : {}, dlParamsForScope(scope))); });
     });
@@ -1657,17 +1703,8 @@
     story.querySelectorAll('[data-goinvites]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); go('roster', { tab: 'team' }); }; });
     story.querySelectorAll('[data-goroster]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); go('roster', { tab: 'team' }); }; });
     story.querySelectorAll('[data-dlconcerns]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); openConcernQueue('New'); }; });
-    // Check off / ignore (their own clicks — they don't pin the point)
-    story.querySelectorAll('[data-dl-done]').forEach(function (b) { b.onclick = function (e) {
-      e.stopPropagation(); var m = dlGetMarks(), id = b.dataset.dlDone;
-      if (m.done[id]) delete m.done[id]; else m.done[id] = 1;
-      dlSaveMarks(m); dlPinned.i = -1; render();
-    }; });
-    story.querySelectorAll('[data-dl-ignore]').forEach(function (b) { b.onclick = function (e) {
-      e.stopPropagation(); var m = dlGetMarks(); m.ignored[b.dataset.dlIgnore] = 1;
-      dlSaveMarks(m); dlPinned.i = -1; render(); toast('Ignored for today — the next point moved up.');
-    }; });
-    story.querySelectorAll('[data-dl-unignore]').forEach(function (b) { b.onclick = function () { var m = dlGetMarks(); m.ignored = {}; dlSaveMarks(m); render(); }; });
+    // "+ N more" on the warning card expands / collapses the other warnings in place.
+    story.querySelectorAll('[data-dl-more]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); dlWarnOpen = !dlWarnOpen; render(); }; });
     function light(i) {
       pts.forEach(function (li) { li.classList.toggle('on', +li.dataset.dlPt === i); li.classList.toggle('pinned', +li.dataset.dlPt === dlPinned.i); });
       dlApplyStep(stage, i >= 0 ? steps[i] : NONE);

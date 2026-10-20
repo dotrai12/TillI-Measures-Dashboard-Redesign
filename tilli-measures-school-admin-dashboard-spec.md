@@ -377,14 +377,16 @@ The Overview shows **at most 3 points** beside the dandelion at any moment, fill
 
 | Priority | What | When | Scope |
 |---|---|---|---|
-| 1 | **Warnings** — window closing in ≤ 3 days with children unassessed · a section not started / far behind · a teacher invite expiring (≤ 2 days) or expired · setup gaps (section with no teacher, an *active* teacher with no section — invited teachers who haven't accepted don't count — new concerns to route) | Always, first. Fill up to all 3 slots. | Whole school, whatever the zoom |
+| 1 | **Warnings** — window closing in ≤ 3 days with children unassessed · a section not started / far behind · a teacher invite expiring (≤ 2 days) or expired · setup gaps (section with no teacher, an *active* teacher with no section — invited teachers who haven't accepted don't count — new concerns to route) | Always, first — **stacked into one card** ("+ N more"). | Whole school, whatever the zoom |
 | 2 | **Completion** — children assessed / in progress, still to start, sections moving together, part-way through | While an assessment window is open. **Never show results while a window is collecting.** | Grade / section in view |
 | 3 | **Results statistics** — % Blooming (+ change since Baseline), children Blooming overall, who was missed, strongest skill, where to help next, furthest-along section, movement since Baseline | For **14 days** after the window ends. The pool is larger than the free slots; it **rotates daily** (a different set each day). | Grade / section in view |
 | 4 | **One activity** — the weakest grade (or section) + skill in view, a classroom activity, and a talking point for that class's teacher | After the 14 days, until the next window opens. **Only ONE point**, below any warnings. | Grade / section in view |
 
 Server should compute all of this (platform spec principle 1); the client only renders.
 
-**Check off / ignore (added 2026-10-20).** Each point is a box with a round check-off and an *Ignore* link. *Done* keeps the point in its slot, ticked and faded. *Ignore* removes it and the next point by priority moves up ("N points ignored today · Show again"). Both last **for the day only**; the next day a point returns if its problem is still there. Point ids: `warn:<topic>` for warnings (school-wide), `<kind>:<topic>:<scope>` otherwise. ⚠ Demo stores this per person in localStorage (`tilliMeasures.overviewMarks.<email>`). The real build must store it server-side per user.
+**Warnings share one card (updated 2026-10-20).** All current warnings sit in ONE card showing the most urgent; "+ N more" expands the rest in place. So warnings take at most one slot and the other two always go to progress / results / the activity. There is no check-off or ignore on the cards.
+
+**Overview layout.** Left: "Currently selected" (school → grade → section, follows the zoom), its headcounts and the data source, then the cards and "See outcomes →". Right: a cream panel with the zoom crumbs / Check-in–Results tabs, a one-line hint, the "Or just ask Tilli" box (a question opens the chat in the left column and zooms the dandelion), the dandelion and its legend.
 
 **⚠ Dummy content — must be replaced:**
 - **Activity + talking point text is placeholder.** `ACTIVITY_BANK` / `activityFor()` in `assets/admin-data.js` hold sample copy per skill and render with a "Sample" tag. Connect the real activity library; keep the `{ activity, talk }` shape and drop `sample`.
