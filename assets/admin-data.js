@@ -392,6 +392,33 @@
     inhibition_response:    'Play "Simon says" for a few minutes — waiting for the cue builds self-control.',
     attention:              'Break tasks into short chunks with a quick movement break in between.',
   };
+  // ---------------------------------------------------------------
+  //  ACTIVITY BANK — DUMMY PLACEHOLDER COPY.
+  //  ⚠ For Mayur: this is NOT real content. It feeds the Overview's single
+  //  "Try this next" point (admin.js dlActivity) once results have been up for
+  //  14 days. Replace activityFor() with the real activity / talking-point
+  //  library when it exists (keep the { activity, talk } shape; drop `sample`
+  //  so the "Sample" tag disappears). See the admin spec, "Overview points".
+  // ---------------------------------------------------------------
+  var ACTIVITY_BANK = {
+    emotion_awareness:      { activity: 'Feelings check-in: each child picks a feelings card at the door and says one word about it.', talk: 'Which feelings words are children reaching for, and which ones are missing?' },
+    emotion_regulation:     { activity: 'Calm corner practice: a 2-minute "smell the flower, blow the candle" breathing game before transitions.', talk: 'When do big feelings show up most in the day, and what has helped so far?' },
+    empathy:                { activity: 'Story pause: stop a read-aloud and ask "How do you think they feel? How do you know?"', talk: 'Where have you seen children notice how a friend feels?' },
+    relationship_skills:    { activity: 'Partner build: pairs share one set of blocks and take turns adding a piece.', talk: 'Which children find joining in hard, and who could be a good buddy for them?' },
+    metacognition:          { activity: 'Show-me thumbs: after a task, children show how it went and say one thing they would try next time.', talk: 'How often do children get to talk about how they worked, not just what they made?' },
+    critical_thinking:      { activity: 'Odd one out: show four pictures and ask which doesn\'t belong, and why.', talk: 'Which open "why" questions get the best thinking from this class?' },
+    working_memory:         { activity: 'Grow the list: "I went to the market and bought…", each child repeats and adds one item.', talk: 'Are instructions given one step at a time, or several at once?' },
+    planning:               { activity: 'Picture plan: before free play, children draw or point to what they will do first and next.', talk: 'Where in the routine could children plan a small task for themselves?' },
+    cognitive_flexibility:  { activity: 'Switch it up: sort the same objects by colour, then by size, then by shape.', talk: 'How do children cope when a plan changes, and what helps them switch?' },
+    inhibition_distraction: { activity: 'Spot the sound: eyes closed, children raise a hand only when they hear the bell, not other sounds.', talk: 'What tends to pull attention away during focused work in this room?' },
+    inhibition_response:    { activity: 'Freeze dance: move to the music and freeze the moment it stops.', talk: 'What wait-your-turn moments are hardest, and how are they handled now?' },
+    attention:              { activity: 'Listening walk: a short walk where children count every sound they hear.', talk: 'How long can most children stay with one task, and when does it drop off?' },
+  };
+  function activityFor(skillKey) {
+    var a = ACTIVITY_BANK[skillKey] || { activity: 'A short daily practice game for this skill.', talk: 'What have you tried for this skill so far?' };
+    return { activity: a.activity, talk: a.talk, sample: true };   // sample: true → shows the "Sample" tag
+  }
+
   function helpStep(skillKey) { return HELP_STEPS[skillKey] || '[Help step pending sign-off]'; }
 
   function interpret(skillKey, gradeBand, pointKey, shape) {
@@ -581,7 +608,7 @@
       return STUDENTS;
     },
     // periodic
-    distribution: distribution, movement: movement, shapeOf: shapeOf, interpret: interpret,
+    activityFor: activityFor, distribution: distribution, movement: movement, shapeOf: shapeOf, interpret: interpret,
     targets: TARGETS, targetsSet: TARGETS_SET,
     // leadership verdict + targets (feedback §1/§2/§3)
     leadershipVerdict: leadershipVerdict, pooledSecurePct: pooledSecurePct,

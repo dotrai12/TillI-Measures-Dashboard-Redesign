@@ -188,12 +188,28 @@
     return out;
   }
 
+  // ---- demo class mix: some classes mostly Blooming, some mostly Sprouting ----
+  // Without this every child averages out to Growing and every class looks alike.
+  // A per-grade + per-section tilt (score points) shifts the placeholder children
+  // only; the 24 hand-written children keep their scores (parent.html agrees with
+  // them) and Kindergarten A — the teacher demo's class — stays untilted.
+  // Rough guide: tilt ≥ +14 → mostly Blooming, ≤ −20 → mostly Sprouting.
+  const GRADE_TILT = { 'Kindergarten': 0, 'Grade 1': 8, 'Grade 2': -8, 'Grade 3': 14, 'Grade 4': -14, 'Grade 5': 4 };
+  const SECTION_TILTS = [24, 0, -22, 10, -8];   // rotated per grade so it isn't always section A that blooms
+  function classTilt(grade, section) {
+    if (grade === 'Kindergarten' && section === 'A') return 0;
+    const gi = GRADES.indexOf(grade), si = SECTION_LETTERS.indexOf(section);
+    if (gi < 0 || si < 0) return 0;
+    return (GRADE_TILT[grade] || 0) + SECTION_TILTS[(si + gi * 2) % SECTION_TILTS.length];
+  }
+
   function buildSkills(stu) {
     // Placeholder kids seed by admission no. (first names can repeat across the pools).
     const post = currentSnapshot(stu.filler ? stu.adm : stu.first);
+    const tilt = stu.filler ? classTilt(stu.grade, stu.section) : 0;
     const rnd = mulberry32(hashStr(stu.adm + ':assess'));
     return SKILLS.map((sk) => {
-      const p = post[sk.key];
+      const p = clamp(post[sk.key] + tilt, 2, 99);
       const growth = Math.round(rnd() * 22);                 // improvement since baseline
       const mid = clamp(p - Math.round(growth * 0.55), 2, 99);
       const pre = clamp(mid - Math.round(growth * 0.45), 2, 99);

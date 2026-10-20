@@ -368,3 +368,24 @@ The content table needs a signed-off entry for every `(skill, grade_band, assess
 - In-dashboard messaging beyond the single `Message teacher` action in §5.1
 - Custom report builder
 - The UI unlocked by `leadership_student_results_visible` — build the flag and log, defer the interface
+
+---
+
+## 13. Overview points — the 3-point rule (added 2026-10-20, for Mayur)
+
+The Overview shows **at most 3 points** beside the dandelion at any moment, filled strictly by priority. Code: `dlStory()` and its helpers in `assets/admin.js`.
+
+| Priority | What | When | Scope |
+|---|---|---|---|
+| 1 | **Warnings** — window closing in ≤ 3 days with children unassessed · a section not started / far behind · a teacher invite expiring (≤ 2 days) or expired · setup gaps (section with no teacher, an *active* teacher with no section — invited teachers who haven't accepted don't count — new concerns to route) | Always, first. Fill up to all 3 slots. | Whole school, whatever the zoom |
+| 2 | **Completion** — children assessed / in progress, still to start, sections moving together, part-way through | While an assessment window is open. **Never show results while a window is collecting.** | Grade / section in view |
+| 3 | **Results statistics** — % Blooming (+ change since Baseline), children Blooming overall, who was missed, strongest skill, where to help next, furthest-along section, movement since Baseline | For **14 days** after the window ends. The pool is larger than the free slots; it **rotates daily** (a different set each day). | Grade / section in view |
+| 4 | **One activity** — the weakest grade (or section) + skill in view, a classroom activity, and a talking point for that class's teacher | After the 14 days, until the next window opens. **Only ONE point**, below any warnings. | Grade / section in view |
+
+Server should compute all of this (platform spec principle 1); the client only renders.
+
+**⚠ Dummy content — must be replaced:**
+- **Activity + talking point text is placeholder.** `ACTIVITY_BANK` / `activityFor()` in `assets/admin-data.js` hold sample copy per skill and render with a "Sample" tag. Connect the real activity library; keep the `{ activity, talk }` shape and drop `sample`.
+- **Window dates.** Demo assessment points have no `start` / `end`, so "days left" and "days since close" come from two demo sliders in the Dandelion controls (*Demo: Days Left In Window*, *Demo: Days Since Window Closed*). Real windows must carry `end` dates; the sliders are then ignored.
+- **"Missed" children at a closed window** are read from TilliAPI completions for created schools only; the demo school reports none missed.
+- **Invite resend** only restarts the 14-day clock in memory (see Roster › Your team); it must update the invite server-side.

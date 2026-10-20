@@ -140,7 +140,8 @@
   /* Roster grade cards: one brand colour per grade — a stripe down the left, a dot by
      the name and a faint wash. */
   /* grade colours live on :root so the dandelion (Overview) uses the very same ones */
-  :root { --grade-1: #FCC30B; --grade-2: #26BDE2; --grade-3: #F99B1C; --grade-4: #E866B0; --grade-5: #56C02B; --grade-6: #8E6CD8; }
+  /* Hues the bands never use (bands = cyan / amber / green), so a grade can't be mistaken for a result. */
+  :root { --grade-1: #E866B0; --grade-2: #8E6CD8; --grade-3: #F06A3B; --grade-4: #2A78D6; --grade-5: #B5487E; --grade-6: #6B7A90; }
   .ad-navcards { --grade-wash: 7%; --grade-stripe: 6px; }
   .ui-card.tight.ad-gradecard { position: relative; overflow: hidden; padding-left: calc(18px + var(--grade-stripe));
     background: color-mix(in srgb, var(--grade-c) var(--grade-wash), var(--white)); border-color: color-mix(in srgb, var(--grade-c) 35%, var(--line-200)); }
@@ -305,8 +306,9 @@
      the page (no cards). A soft wash sits behind it. Type ramp:
      32 story headline · 15 body · 13 meta. SVG text = 11 / 13.
      ============================================================ */
-  .ov-dl { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(240px, 0.8fr) minmax(0, 2fr); gap: 8px 32px; align-items: center; }
-  .ov-dl::before { content: ''; position: absolute; inset: -32px 0; z-index: -1; pointer-events: none; filter: blur(30px); opacity: .9;
+  .ov-dl { --dl-story-col: 0.95fr; --dl-wash: .4;
+    position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(280px, var(--dl-story-col)) minmax(0, 2fr); gap: 8px 32px; align-items: start; }
+  .ov-dl::before { content: ''; position: absolute; inset: -32px 0; z-index: -1; pointer-events: none; filter: blur(30px); opacity: var(--dl-wash);
     background: radial-gradient(40% 50% at 22% 40%, var(--wash-green), transparent 70%),
                 radial-gradient(35% 45% at 70% 25%, var(--wash-yellow), transparent 70%),
                 radial-gradient(40% 50% at 55% 85%, var(--wash-cyan), transparent 70%),
@@ -347,22 +349,38 @@
   .dl-hint { font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
   .ui-legend i.ring { box-shadow: inset 0 0 0 2px var(--ink-300); }
   /* Guided story */
-  .dl-story { min-width: 0; }
+  .dl-story { min-width: 0; padding-top: 8px; }
+  .dl-title { margin: 0 0 10px 12px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.3; color: var(--ink-900); }
   .dl-headline { margin: 8px 0 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.15; color: var(--ink-900); letter-spacing: -.01em; }
   .dl-body { margin: 12px 0 0; font-weight: 600; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-600); }
   /* story points: hover / focus lights the dandelion, click pins */
   .dl-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   .dl-points li { position: relative; padding: 10px 12px 10px 28px; border-radius: var(--radius-md); cursor: pointer; transition: background .2s; }
-  .dl-points li::before { content: ''; position: absolute; left: 10px; top: 19px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-300); transition: background .2s; }
+  .dl-points li::before { content: ''; position: absolute; left: 10px; top: 15px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-300); transition: background .2s; }
   .dl-points li.on { background: color-mix(in srgb, var(--white) 70%, transparent); }
   .dl-points li.on::before, .dl-points li.pinned::before { background: var(--accent); }
   .dl-points li:focus { outline: none; }
   .dl-points li:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .dl-pt-head { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.3; color: var(--ink-900); }
-  .dl-pt-head em { font-style: normal; }
+  /* Point = small kind eyebrow · one-ink Montserrat headline · body. Warnings: amber eyebrow + icon. */
+  .dl-pt-kind { display: flex; align-items: center; gap: 5px; margin: 0 0 3px; font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-meta); }
+  .dl-points li.warn .dl-pt-kind { color: var(--warn-700); }
+  .dl-points li.activity .dl-pt-kind { color: var(--green-700); }
+  .dl-pt-kind svg { flex: none; }
+  .dl-pt-head { margin: 0; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-md); line-height: 1.4; color: var(--ink-900); }
+  .dl-pt-head em { font-style: normal; color: inherit; }
   .dl-pt-body { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-600); }
-  .dl-source { margin: 10px 0 0 12px; font-weight: 700; font-size: var(--fs-xs); color: var(--text-meta); }
-  .dl-out { margin-top: 18px; }   /* .btn.btn-primary — the way into Outcomes (not in the nav) */
+  /* point kinds: warnings get an amber dot (always listed first), the activity a green one */
+  .dl-points li.warn::before, .dl-points li.warn.on::before { background: var(--warn-700); }
+  .dl-points li.activity::before { background: var(--green-500); }
+  .dl-pt-body .dl-ptlink { font-weight: 700; font-size: var(--fs-sm); }
+  .dl-sample { margin-left: 4px; vertical-align: 1px; }
+  .dl-source { margin: 6px 0 0 12px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  /* Legend + what a ring's colour means, under the actions (always in view) */
+  .dl-key { margin: 20px 0 0 12px; padding-top: 14px; border-top: 1px solid var(--line-200); }
+  .dl-keynote { margin: 8px 0 0; font-weight: 600; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-meta); }
+  /* Under the points: Ask Tilli (primary button) + See outcomes (text link — Outcomes isn't in the nav) */
+  .dl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin: 16px 0 0 12px; }
+  .dl-out { font-weight: 700; font-size: var(--fs-sm); }
   /* Ask Tilli inside the Overview: a soft button under the story; open, the chat replaces the story */
   .ov-dl { --dla-h: max(460px, calc(100dvh - 210px)); --dla-h-phone: 380px; --dla-col: 1fr; }   /* chat height (desktop / phone), chat column share */
   /* Asking: the chat takes a full-height column and the dandelion shrinks to fit the
@@ -371,10 +389,7 @@
   .ov-dl.asking .dl-viz { height: var(--dla-h); display: flex; flex-direction: column; }
   .ov-dl.asking .dl-stage { flex: 1; min-height: 0; }
   .ov-dl.asking .dl-svg { height: 100%; }
-  .dl-askbtn { display: flex; align-items: center; gap: 8px; margin: 14px 0 0 2px; padding: 9px 16px 9px 12px; border: 1px solid var(--line-200); border-radius: 999px;
-    background: var(--white); color: var(--green-700); font: 700 var(--fs-sm) var(--font-body); cursor: pointer; transition: border-color .15s, background .15s; }
-  .dl-askbtn:hover { border-color: var(--green-500); background: var(--wash-green); }
-  .dl-askbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .dl-askbtn { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }   /* .btn.btn-primary.md + chat icon, one line */
   .dl-askbtn svg { width: 18px; height: 18px; flex: none; }
   .dla { display: flex; flex-direction: column; height: var(--dla-h); background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; }
   .dla-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--line-200); }
@@ -476,12 +491,12 @@
 <div id="ad-modal-root"></div>
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261020ce"></script>
+<script src="assets/school-data.js?v=20261020mx"></script>
 <script src="assets/tilli-api.js?v=20261020ce"></script>
 <script src="assets/tilli-history.js?v=20261020ce"></script>
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
-<script src="assets/admin-data.js?v=20261020ce"></script>
+<script src="assets/admin-data.js?v=20261020op"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261020hr"></script>
+<script src="assets/admin.js?v=20261020dd"></script>
 </body>
 </html>

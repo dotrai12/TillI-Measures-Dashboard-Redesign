@@ -708,7 +708,10 @@
     breatheSpeed: 0.7,   // idle float speed
     storySpread: 1.15,   // how far groups pull apart on story steps that compare them
     dimOpacity: 0.14,    // opacity of parts a story step is not about
-    gradeTint: 1,        // strength of the grade colours on hubs and spokes (0 = plain white hubs, grey spokes)
+    gradeTint: 0.6,      // strength of the grade colours on the spokes (0 = grey spokes)
+    ringRule: 'majority', // hub ring: 'majority' = one solid colour for what most children are · 'mix' = split by share
+    demoDaysLeft: 6,     // demo only (no window end date): days left in the open window — ≤ 3 raises the "closing soon" warning
+    demoDaysSinceClose: 3, // demo only (no window end date): days since the last window closed — results for 14, then the activity
   };
   var DL_DEFAULTS = Object.assign({}, DL_CFG);
   var DL_W = 600;   // viewBox width; height follows the tree's aspect
@@ -831,22 +834,30 @@
       if (!moved) break;
     }
     // 2) whole grades as rigid discs: centre = mean of the grade hub and its classes,
-    //    radius reaches the far edge of its furthest class burst.
+    //    radius reaches the far edge of its furthest class burst. A grade only ever
+    //    slides OUTWARD along its own spoke — never sideways — so it can't be pushed
+    //    across the centre and end up with its classes fanned back over the school hub.
     var discs = grades.map(function (g) {
       var pts = [{ x: g.lx, y: g.ly, r: DL_CFG.gradeR }].concat((g.children || []).map(function (c) { return { x: c.lx, y: c.ly, r: R }; }));
       var cx = pts.reduce(function (a, p) { return a + p.x; }, 0) / pts.length, cy = pts.reduce(function (a, p) { return a + p.y; }, 0) / pts.length;
-      return { g: g, ox: cx - g.lx, oy: cy - g.ly, r: pts.reduce(function (m, p) { return Math.max(m, Math.hypot(p.x - cx, p.y - cy) + p.r); }, 0) };
+      var rad = g.dir * Math.PI / 180;
+      return { g: g, ox: cx - g.lx, oy: cy - g.ly, ux: Math.cos(rad), uy: Math.sin(rad),
+        r: pts.reduce(function (m, p) { return Math.max(m, Math.hypot(p.x - cx, p.y - cy) + p.r); }, 0) };
     });
+    var out = function (D, by) { shift(D.g, D.ux * by, D.uy * by); };
+    var rootClear = DL_CFG.rootR + DL_CFG.gradeGap * 0.5;
     for (it = 0; it < 600; it++) {
       moved = false;
+      discs.forEach(function (D) {   // clear of the school hub
+        var d = Math.hypot(D.g.lx + D.ox, D.g.ly + D.oy), need = D.r + rootClear;
+        if (d < need - 0.05) { out(D, need - d); moved = true; }
+      });
       for (var i = 0; i < discs.length; i++) for (var j = i + 1; j < discs.length; j++) {
         var A = discs[i], B = discs[j];
-        var ax = A.g.lx + A.ox, ay = A.g.ly + A.oy, bx = B.g.lx + B.ox, by = B.g.ly + B.oy;
-        var dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy), min = A.r + B.r + DL_CFG.gradeGap;
-        if (d >= min - 0.05) continue;
-        if (d < 0.01) { dx = 1; dy = 0; d = 1; }
-        var push = (min - d) / 2;
-        shift(A.g, -dx / d * push, -dy / d * push); shift(B.g, dx / d * push, dy / d * push);
+        var d2 = Math.hypot((B.g.lx + B.ox) - (A.g.lx + A.ox), (B.g.ly + B.oy) - (A.g.ly + A.oy)), min = A.r + B.r + DL_CFG.gradeGap;
+        if (d2 >= min - 0.05) continue;
+        var step = Math.max(0.5, (min - d2) / 2);   // both grades step out along their own spokes
+        out(A, step); out(B, step);
         moved = true;
       }
       if (!moved) break;
@@ -898,15 +909,27 @@
     return c;
   }
   // Segments [{color, share}] for a hub's donut ring + its tooltip line.
+  // Ring rule (DL_CFG.ringRule): 'majority' = ONE solid colour, whatever most children
+  // in the group are — their overall band in Results, their status in Check-in. A tie
+  // goes to the lower band / less-finished status (the cautious reading). 'mix' = the
+  // old split ring showing every share. The tooltip always lists the full counts.
+  function dlMajority(order, counts) {   // `order` lowest → highest; strict > keeps the lower on a tie
+    return order.reduce(function (best, k) { return best == null || counts[k] > counts[best] ? k : best; }, null);
+  }
   function dlSummary(node, mode) {
-    var studs = dlStudents(node), n = studs.length;
+    var studs = dlStudents(node), n = studs.length, mix = DL_CFG.ringRule === 'mix';
     if (mode === 'checkin') {
-      var c = dlCheckinCounts(studs);
+      var c = dlCheckinCounts(studs), top = dlMajority(['none', 'draft', 'done'], c);
       return { n: n, text: c.done + ' of ' + n + ' assessed' + (c.draft ? ' · ' + c.draft + ' in progress' : ''),
-        segs: ['done', 'draft', 'none'].map(function (k) { return { color: DL_STATUS[k].color, share: n ? c[k] / n : 0 }; }) };
+        segs: mix ? ['done', 'draft', 'none'].map(function (k) { return { color: DL_STATUS[k].color, share: n ? c[k] / n : 0 }; })
+          : [{ color: DL_STATUS[top].color, share: n ? 1 : 0 }] };
     }
-    var d = dlDist(studs, AD.latestComplete.key);
-    return { n: n, text: d.pct.secure + '% Blooming', segs: AD.bands.map(function (b) { return { color: b.color, share: d.n ? d.counts[b.key] / d.n : 0 }; }) };
+    var pt = AD.latestComplete, kc = { emerging: 0, developing: 0, secure: 0 };
+    studs.forEach(function (st) { kc[dlKidBand(st, pt)]++; });
+    var topB = dlMajority(['emerging', 'developing', 'secure'], kc);
+    var text = 'Mostly ' + AD.bandMeta(topB).label + ' · ' + ['secure', 'developing', 'emerging'].map(function (k) { return kc[k] + ' ' + AD.bandMeta(k).label; }).join(' · ');
+    if (mix) { var d = dlDist(studs, pt.key); return { n: n, text: text, segs: AD.bands.map(function (b) { return { color: b.color, share: d.n ? d.counts[b.key] / d.n : 0 }; }) }; }
+    return { n: n, text: text, segs: [{ color: AD.bandMeta(topB).color, share: n ? 1 : 0 }] };
   }
   function dlArc(r, a0, a1) {
     if (a1 - a0 >= Math.PI * 2 - 1e-6) a1 = a0 + Math.PI * 2 - 1e-4;
@@ -918,6 +941,8 @@
     var a = -Math.PI / 2, rr = r - ring / 2;
     segs.forEach(function (s) {
       if (s.share <= 0) return;
+      // A whole ring (one solid colour) is a circle: an arc whose rounded start and end coincide draws nothing.
+      if (s.share >= 0.9999) { out += '<circle r="' + rr.toFixed(2) + '" fill="none" stroke-width="' + ring.toFixed(2) + '" style="stroke:' + s.color + '"/>'; return; }
       var b = a + s.share * Math.PI * 2;
       out += '<path d="' + dlArc(rr, a, b) + '" fill="none" stroke-width="' + ring.toFixed(2) + '" style="stroke:' + s.color + '"/>';
       a = b;
@@ -1003,9 +1028,9 @@
       }
       var sum = dlSummary(n, mode), nav = ctx ? null : dlNav(n, focusKey, scope);
       n.base = dlHubR(n);
-      // Grade colours (same as the Roster): grade hubs filled, section hubs a light tint, spokes in the grade's colour.
+      // Grade colour (same as the Roster) only tints the spokes — hub colours are kept for the data.
       var gc = n.type === 'grade' ? gradeColor(n.id) : n.type === 'section' ? gradeColor(n.grade) : '';
-      var core = n.depth === 0 && n.type === 'school' ? PAL.RING_PETALS[0] : !gc ? 'var(--white)' : tint(gc, DL_CFG.gradeTint * (n.type === 'grade' ? 1 : 0.35), 'var(--white)');
+      var core = 'var(--white)';   // neutral cores: the ring carries the data, grade colour lives on the spokes only
       var htip = '<b>' + esc(n.name) + '</b>' + (n.teacher ? '<span>' + esc(n.teacher) + '</span>' : '') +
         '<span>' + countNoun(sum.n, 'child', 'children') + ' · ' + esc(sum.text) + '</span>' +
         (nav === 'down' ? '<em>Click to look closer</em>' : nav === 'up' ? '<em>Click to step back</em>' : '');
@@ -1148,86 +1173,216 @@
     dlDraw(sc); dlWake();
   }
 
-  // ---- the guided story ----
-  // Steps written from the data for the focused level + mode. Each step:
-  // eyebrow, headline (with coloured key words), body, source line,
-  // `hl` (node keys to keep lit; ancestors are added) and `sep` (pull groups apart).
-  function dlHl(text, color) { return '<em style="color:' + color + '">' + esc(text) + '</em>'; }
-  function dlStory(scope, mode) {
-    var root = dlTree(scope), studs = dlStudents(root), n = studs.length, steps = [];
-    var secs = AD.sections.filter(function (s) { return scope.level === 'school' || (scope.level === 'grade' ? s.grade === scope.grade : s.id === scope.sectionId); });
-    var kidKeys = function (list) { return list.map(function (s) { return 'kid:' + s.adm; }); };
-    var secKeys = function (sd) { return ['section:' + sd.id].concat(kidKeys(AD.studentsInSection(sd))); };
-    var ink = 'var(--accent-ink)';
-    var src = mode === 'checkin' ? AD.openPoint.label + ' check-in · n = ' + n : AD.latestComplete.label + ' results · n = ' + n;
+  // ---- the guided story: always at most 3 points, filled by priority ----
+  // PRODUCT RULE (2026-10-20 — goes in the admin dev handoff, see the spec doc's
+  // "Overview points" section):
+  //   1. Warnings first, school-wide, whatever the zoom: window closing soon,
+  //      sections not started / far behind, invites expiring or expired, setup
+  //      gaps (section with no teacher, teacher with no section, new concerns).
+  //      Up to all 3 slots.
+  //   2. While a window is open: completion only (who's assessed, who's still to
+  //      start) for the grade / section in view. Never results while collecting.
+  //   3. Window closed, for DL_RESULTS_DAYS after it ends: results statistics for
+  //      the scope in view, from a larger pool that rotates every day.
+  //   4. After that: ONE activity point (weakest skill → an activity + a talking
+  //      point for that class's teacher), below any warnings.
+  // Each step: kind ('warn' | 'progress' | 'result' | 'activity'), eyebrow, head
+  // (coloured key words), body, `hl` (node keys to light; ancestors added), `sep`.
+  var DL_MAX_POINTS = 3, DL_RESULTS_DAYS = 14, DL_CLOSING_DAYS = 3;
+  // Key words stay in the headline's own ink (no mid-sentence colour); the eyebrow carries the kind.
+  function dlHl(text) { return '<em>' + esc(text) + '</em>'; }
+  function dlKidKeys(list) { return list.map(function (s) { return 'kid:' + s.adm; }); }
+  function dlSecKeys(sd) { return ['section:' + sd.id].concat(dlKidKeys(AD.studentsInSection(sd))); }
+  function dlInBand(studs, skillKey, field, band) {
+    return studs.filter(function (s) { var sk = s.skills.find(function (x) { return x.key === skillKey; }); return sk && AD.bandOf(sk[field]) === band; });
+  }
+  // Whole days (no end date set → the demo value from the Dandelion controls).
+  function dlToday() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  function dlDateOf(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function dlDaysLeft() { var l = AD.openPoint ? AD.daysLeft(AD.openPoint) : null; return l != null ? l : DL_CFG.demoDaysLeft; }
+  function dlDaysSinceClose() {
+    var end = AD.latestComplete && dlDateOf(AD.latestComplete.end);
+    return end ? Math.max(0, Math.round((dlToday() - end) / 864e5)) : DL_CFG.demoDaysSinceClose;
+  }
+  function dlPhase() {
+    if (AD.openPoint) return 'collecting';
+    if (!AD.latestComplete) return 'none';
+    return dlDaysSinceClose() <= DL_RESULTS_DAYS ? 'results' : 'activity';
+  }
+  // Children with no completed check-in at a closed point. Created schools read
+  // TilliAPI completions; the demo has none missing (every child has scores).
+  function dlMissed(studs, pt) {
+    var A = window.TilliAPI;
+    if (!window.TILLI_CREATED || !A || !A.completionStats) return [];
+    return studs.filter(function (s) { var c = A.completionStats(currentSchoolId(), pt.label, 'Teacher', [s.adm]); return c.expected && c.done < c.expected; });
+  }
 
-    if (mode === 'checkin') {
-      var op = AD.openPoint, left = AD.daysLeft(op), c = dlCheckinCounts(studs);
-      steps.push({ eyebrow: op.label + ' check-in',
-        head: dlHl(c.done + ' of ' + n, DL_STATUS.done.ink) + ' children assessed' + (c.draft ? ', ' + dlHl(c.draft + ' in progress', DL_STATUS.draft.ink) : '') + '.',
-        body: (c.none ? countNoun(c.none, 'child hasn' + '’' + 't', 'children haven' + '’' + 't') + ' been started yet' : 'Everyone has been started') + (left != null ? ' · ' + countNoun(left, 'day', 'days') + ' to go.' : '.'),
-        hl: kidKeys(studs.filter(function (s) { return AD.checkinStatus(s) !== 'none'; })) });
-      if (secs.length > 1) {
-        var rows = AD.collectionStatus().rows.filter(function (r) { return secs.some(function (s) { return s.id === r.id; }); });
-        var lead = rows.reduce(function (b, r) { return !b || r.pct > b.pct ? r : b; }, null);
-        var back = rows.reduce(function (b, r) { return !b || r.pct < b.pct ? r : b; }, null);
-        var sdOf = function (r) { return AD.sections.find(function (s) { return s.id === r.id; }); };
-        if (lead && back && lead.pct - back.pct >= AD.collectionStatus().gapPts) steps.push({ eyebrow: 'A section that may need a hand',
-          head: back.completion.done === 0 ? dlHl(back.name, 'var(--warn-700)') + ' hasn' + '’' + 't started yet.' : dlHl(back.name, 'var(--warn-700)') + ' is at ' + back.pct + '% while ' + esc(lead.name) + ' is at ' + lead.pct + '%.',
-          body: esc(back.teacher) + ' may need a hand or a little more time. A quick check-in could help.',
-          hl: secKeys(sdOf(back)).concat(secKeys(sdOf(lead))), sep: true });
-        else steps.push({ eyebrow: 'Moving together',
-          head: 'Every section is within ' + dlHl((lead.pct - back.pct) + ' points', ink) + ' of the one furthest along.',
-          body: 'Data is coming in steadily across ' + countNoun(rows.length, 'section', 'sections') + '.', sep: true });
-      }
-      var waiting = studs.filter(function (s) { return (AD.checkinStatus(s) || 'none') === 'none'; });
-      if (waiting.length) steps.push({ eyebrow: 'Still to start',
-        head: dlHl(countNoun(waiting.length, 'child', 'children'), DL_STATUS.none.ink) + (waiting.length === 1 ? ' hasn' + '’' + 't' : ' haven' + '’' + 't') + ' been started yet.',
-        body: !isCoordinator ? 'Teachers can pick these up next.' : dlKidsShown(scope) ? 'Hover a hollow dot to see who, so teachers can pick them up next.' : 'Look closer at a grade to see who, so teachers can pick them up next.',
-        hl: kidKeys(waiting) });
-    } else {
-      var pt = AD.latestComplete, d = dlDist(studs, pt.key), first = AD.completedPoints[0], line;
-      if (AD.completedPoints.length < 2) line = 'Your starting point. Everything from here is growth you' + '’' + 'll be able to see.';
-      else {
-        var delta = d.pct.secure - dlDist(studs, first.key).pct.secure;
-        line = delta > 0 ? 'Up ' + delta + ' points since ' + first.label + '.' : delta < 0 ? 'Down ' + Math.abs(delta) + ' points since ' + first.label + '. Dips happen mid-year.' : 'Holding steady since ' + first.label + '.';
-      }
-      var blm = AD.bandMeta('secure'), spr = AD.bandMeta('emerging');
-      steps.push({ eyebrow: pt.label + ' results',
-        head: dlHl(d.pct.secure + '%', blm.ink) + ' of skill ratings are ' + dlHl('Blooming', blm.ink) + '.',
-        body: line + ' The ring round each hub shows its whole mix.' });
-      if (secs.length > 1) {
-        var ranked = secs.map(function (s) { return { sd: s, pct: dlDist(AD.studentsInSection(s), pt.key).pct.secure }; }).sort(function (a, b) { return b.pct - a.pct; });
-        var top = ranked[0], low = ranked[ranked.length - 1];
-        steps.push({ eyebrow: 'Furthest along',
-          head: dlHl(top.sd.name, blm.ink) + ' has the most Blooming, at ' + top.pct + '%.',
-          body: esc(low.sd.name) + ' is at ' + low.pct + '%. Groups grow at different speeds; both are worth a look.',
-          hl: secKeys(top.sd).concat(secKeys(low.sd)), sep: true });
-      }
-      var gs = AD.growthStrength(studs, pt.key, 1).growth[0];
-      if (gs) steps.push({ eyebrow: 'Where to help next',
-        head: dlHl(gs.name, spr.ink) + ' has the most children Sprouting: ' + gs.emerging + '%.',
-        body: esc(AD.helpStep(gs.key)),
-        hl: kidKeys(studs.filter(function (s) { var sk = s.skills.find(function (x) { return x.key === gs.key; }); return sk && AD.bandOf(sk[pt.scoreField]) === 'emerging'; })) });
-      if (AD.completedPoints.length >= 2) {
-        var m = AD.overallBandMovement(studs), idx = { emerging: 0, developing: 1, secure: 2 };
-        var up = studs.filter(function (s) { return idx[AD.bandOf(AD.meanScore(s, pt.scoreField))] > idx[AD.bandOf(AD.meanScore(s, first.scoreField))]; });
-        steps.push({ eyebrow: 'Since ' + first.label,
-          head: dlHl(m.up + ' of ' + m.n + ' children', blm.ink) + ' moved up a band.',
-          body: m.down ? countNoun(m.down, 'child', 'children') + ' moved down. Dips happen; a second look helps.' : 'No child moved down a band.',
-          hl: kidKeys(up) });
+  // Priority 1 — warnings for the whole school, most urgent first.
+  function dlWarnings() {
+    var out = [], warn = 'var(--warn-700)', op = AD.openPoint;
+    if (op) {
+      var left = dlDaysLeft(), notDone = AD.students.filter(function (s) { return AD.checkinStatus(s) !== 'done'; });
+      if (left <= DL_CLOSING_DAYS && notDone.length) out.push({ kind: 'warn', eyebrow: op.label + ' closing soon',
+        head: dlHl(op.label + (left === 0 ? ' closes today' : ' closes in ' + countNoun(left, 'day', 'days')), warn) + ' and ' + countNoun(notDone.length, 'child is', 'children are') + ' still to assess.',
+        body: 'A nudge to the teachers now saves a scramble at the end.', hl: dlKidKeys(notDone) });
+      var cs = AD.collectionStatus(), stalled = cs.rows.filter(function (r) { return r.flag === 'stalled'; }), slow = cs.rows.filter(function (r) { return r.flag === 'slow'; });
+      var sdOf = function (r) { return AD.sections.find(function (x) { return x.id === r.id; }); };
+      if (stalled.length) out.push({ kind: 'warn', eyebrow: 'Not started',
+        head: stalled.length === 1 ? dlHl(stalled[0].name, warn) + ' hasn' + '’' + 't started ' + esc(op.label) + ' yet.' : dlHl(countNoun(stalled.length, 'section hasn', 'sections haven') + '’' + 't started', warn) + ' ' + esc(op.label) + ' yet.',
+        body: stalled.length === 1 ? esc(stalled[0].teacher) + ' may need a hand getting going.' : stalled.slice(0, 4).map(function (r) { return esc(r.name) + ' (' + esc(r.teacher) + ')'; }).join(', ') + (stalled.length > 4 ? ' and more.' : '.'),
+        hl: stalled.reduce(function (a, r) { return a.concat(dlSecKeys(sdOf(r))); }, []), sep: true });
+      else if (slow.length && cs.lead) {
+        var back = slow.reduce(function (b, r) { return !b || r.pct < b.pct ? r : b; }, null);
+        out.push({ kind: 'warn', eyebrow: 'Falling behind',
+          head: dlHl(back.name, warn) + ' is at ' + back.pct + '% while ' + esc(cs.lead.name) + ' is at ' + cs.lead.pct + '%.',
+          body: esc(back.teacher) + ' may need a hand or a little more time.' + (slow.length > 1 ? ' ' + countNoun(slow.length - 1, 'other section is', 'other sections are') + ' behind too.' : ''),
+          hl: dlSecKeys(sdOf(back)).concat(dlSecKeys(sdOf(cs.lead))), sep: true });
       }
     }
-    steps.forEach(function (s) { s.source = src; });
+    var inv = inviteAlerts();
+    if (inv.length) out.push({ kind: 'warn', eyebrow: 'Invites',
+      head: inv.length === 1 ? dlHl(inv[0].u.name, warn) + '’' + 's invite ' + inviteLeftText(inv[0].inf) + '.' : dlHl(inviteWhoText(inv), warn) + ' haven' + '’' + 't accepted their invites.',
+      body: (inv.length === 1 ? (inv[0].inf.expired ? 'They can' + '’' + 't sign in until it' + '’' + 's resent.' : 'It runs out on ' + esc(fmtInvDate(inv[0].inf.expires)) + '.') : inviteSplitText(inv)) +
+        ' <button type="button" class="btn-link dl-ptlink" data-goinvites>Resend from Your team →</button>' });
+    var noTeacher = AD.sections.filter(function (sd) { return !AD.teachers.some(function (t) { return t.id === sd.teacherId; }); });
+    // Only teachers who have joined count: someone still at "Invited" hasn't accepted yet
+    // (their own warning is the invite expiry), and invites already carry a section.
+    var invited = {}; seedUsers().forEach(function (u) { if (u.status === 'Invited') invited[String(u.email || '').toLowerCase()] = 1; });
+    var noSection = AD.teachers.filter(function (t) { return !invited[String(t.email || '').toLowerCase()] && !AD.sections.some(function (sd) { return sd.teacherId === t.id; }); });
+    var newConcerns = AD.concernCounts().New, gaps = [];
+    if (noTeacher.length) gaps.push(noTeacher.length === 1 ? esc(noTeacher[0].name) + ' has no teacher' : countNoun(noTeacher.length, 'section has', 'sections have') + ' no teacher');
+    if (noSection.length) gaps.push(noSection.length === 1 ? esc(noSection[0].name) + ' has no section' : countNoun(noSection.length, 'teacher has', 'teachers have') + ' no section');
+    if (newConcerns) gaps.push(countNoun(newConcerns, 'new concern', 'new concerns') + ' to route');
+    if (gaps.length) out.push({ kind: 'warn', eyebrow: 'Needs a look',
+      head: dlHl(gaps.length === 1 ? 'One thing needs a look' : gaps.length + ' things need a look', warn) + ': ' + gaps[0] + '.',
+      body: (gaps.length > 1 ? gaps.slice(1).join(' · ') + '. ' : '') +
+        (newConcerns ? '<button type="button" class="btn-link dl-ptlink" data-dlconcerns>Open concerns →</button> ' : '') +
+        (noTeacher.length || noSection.length ? '<button type="button" class="btn-link dl-ptlink" data-goroster>Open Roster →</button>' : ''),
+      hl: noTeacher.length ? noTeacher.reduce(function (a, sd) { return a.concat(dlSecKeys(sd)); }, []) : null });
+    return out;
+  }
+
+  // Priority 2 — completion for the scope in view, while a window is open.
+  function dlProgressPool(scope, studs, secs) {
+    var op = AD.openPoint, n = studs.length, c = dlCheckinCounts(studs), left = dlDaysLeft(), ink = 'var(--accent-ink)', out = [];
+    out.push({ kind: 'progress', eyebrow: op.label + ' check-in',
+      head: dlHl(c.done + ' of ' + n, DL_STATUS.done.ink) + ' children assessed' + (c.draft ? ', ' + dlHl(c.draft + ' in progress', DL_STATUS.draft.ink) : '') + '.',
+      body: (c.done >= n ? 'Everyone is done' : Math.round(c.done / (n || 1) * 100) + '% complete') + ' · ' + countNoun(left, 'day', 'days') + ' left in the window.',
+      hl: dlKidKeys(studs.filter(function (s) { return AD.checkinStatus(s) !== 'none'; })) });
+    var waiting = studs.filter(function (s) { return (AD.checkinStatus(s) || 'none') === 'none'; });
+    if (waiting.length) out.push({ kind: 'progress', eyebrow: 'Still to start',
+      head: dlHl(countNoun(waiting.length, 'child', 'children'), DL_STATUS.none.ink) + (waiting.length === 1 ? ' hasn' + '’' + 't' : ' haven' + '’' + 't') + ' been started yet.',
+      body: dlKidsShown(scope) ? 'Hover a hollow dot to see who, so teachers can pick them up next.' : 'Look closer at a grade to see who, so teachers can pick them up next.',
+      hl: dlKidKeys(waiting) });
+    if (secs.length > 1) {
+      var rows = AD.collectionStatus().rows.filter(function (r) { return secs.some(function (s) { return s.id === r.id; }); });
+      var lead = rows.reduce(function (b, r) { return !b || r.pct > b.pct ? r : b; }, null), back = rows.reduce(function (b, r) { return !b || r.pct < b.pct ? r : b; }, null);
+      if (lead && !rows.some(function (r) { return r.flag; })) out.push({ kind: 'progress', eyebrow: 'Moving together',
+        head: 'Every section is within ' + dlHl((lead.pct - back.pct) + ' points', ink) + ' of the one furthest along.',
+        body: esc(lead.name) + ' leads at ' + lead.pct + '%.', sep: true });
+    }
+    var drafts = studs.filter(function (s) { return AD.checkinStatus(s) === 'draft'; });
+    if (drafts.length) out.push({ kind: 'progress', eyebrow: 'Almost there',
+      head: dlHl(countNoun(drafts.length, 'child is', 'children are'), DL_STATUS.draft.ink) + ' part-way through.',
+      body: 'Started but not finished — the quickest wins before the window closes.', hl: dlKidKeys(drafts) });
+    return out;
+  }
+
+  // Priority 3 — results statistics for the scope in view (pool; rotates daily).
+  function dlResultsPool(scope, studs, secs) {
+    var pt = AD.latestComplete, d = dlDist(studs, pt.key), first = AD.completedPoints[0], out = [];
+    var blm = AD.bandMeta('secure'), spr = AD.bandMeta('emerging'), n = studs.length;
+    var line = AD.completedPoints.length < 2 ? 'Your starting point. Everything from here is growth you' + '’' + 'll be able to see.' : (function () {
+      var delta = d.pct.secure - dlDist(studs, first.key).pct.secure;
+      return delta > 0 ? 'Up ' + delta + ' points since ' + first.label + '.' : delta < 0 ? 'Down ' + Math.abs(delta) + ' points since ' + first.label + '. Dips happen mid-year.' : 'Holding steady since ' + first.label + '.';
+    })();
+    out.push({ kind: 'result', eyebrow: pt.label + ' results',
+      head: dlHl(d.pct.secure + '%', blm.ink) + ' of skill ratings are ' + dlHl('Blooming', blm.ink) + '.', body: line + ' Each ring shows the band most of its children are in.' });
+    var bloomKids = studs.filter(function (s) { return dlKidBand(s, pt) === 'secure'; }), sproutKids = studs.filter(function (s) { return dlKidBand(s, pt) === 'emerging'; });
+    out.push({ kind: 'result', eyebrow: 'Children Blooming',
+      head: dlHl(bloomKids.length + ' of ' + n + ' children', blm.ink) + ' are Blooming overall.',
+      body: countNoun(sproutKids.length, 'child is', 'children are') + ' Sprouting overall and could use a little extra.', hl: dlKidKeys(bloomKids) });
+    var missed = dlMissed(studs, pt);
+    out.push({ kind: 'result', eyebrow: 'Who was assessed',
+      head: missed.length ? dlHl(countNoun(missed.length, 'child was', 'children were'), DL_STATUS.none.ink) + ' missed in ' + esc(pt.label) + '.' : 'Every child was assessed in ' + dlHl(pt.label, blm.ink) + '.',
+      body: missed.length ? 'Their results are missing from these numbers; the next window is a chance to include them.' : 'These numbers cover all ' + countNoun(n, 'child', 'children') + '.', hl: missed.length ? dlKidKeys(missed) : null });
+    var gsAll = AD.growthStrength(studs, pt.key, 1), st = gsAll.strength[0], gr = gsAll.growth[0];
+    var STRONG_PCT = 40;   // below this, the top skill is "furthest along", not something to celebrate
+    if (st) out.push({ kind: 'result', eyebrow: st.secure >= STRONG_PCT ? 'Strongest skill' : 'Furthest along',
+      head: st.secure >= STRONG_PCT ? dlHl(st.name, blm.ink) + ' is the strongest skill: ' + st.secure + '% Blooming.' : dlHl(st.name, blm.ink) + ' is furthest along, at ' + st.secure + '% Blooming.',
+      body: st.secure >= STRONG_PCT ? 'Worth celebrating with teachers and families.' : 'Every skill is early on; this is the best one to build from.',
+      hl: dlKidKeys(dlInBand(studs, st.key, pt.scoreField, 'secure')) });
+    if (gr) out.push({ kind: 'result', eyebrow: 'Where to help next',
+      head: dlHl(gr.name, spr.ink) + ' has the most children Sprouting: ' + gr.emerging + '%.', body: esc(AD.helpStep(gr.key)),
+      hl: dlKidKeys(dlInBand(studs, gr.key, pt.scoreField, 'emerging')) });
+    if (secs.length > 1) {
+      var ranked = secs.map(function (x) { return { sd: x, pct: dlDist(AD.studentsInSection(x), pt.key).pct.secure }; }).sort(function (a, b) { return b.pct - a.pct; });
+      var top = ranked[0], low = ranked[ranked.length - 1];
+      out.push({ kind: 'result', eyebrow: 'Furthest along',
+        head: dlHl(top.sd.name, blm.ink) + ' has the most Blooming, at ' + top.pct + '%.',
+        body: esc(low.sd.name) + ' is at ' + low.pct + '%. Groups grow at different speeds; both are worth a look.',
+        hl: dlSecKeys(top.sd).concat(dlSecKeys(low.sd)), sep: true });
+    }
+    if (AD.completedPoints.length >= 2) {
+      var m = AD.overallBandMovement(studs), idx = { emerging: 0, developing: 1, secure: 2 };
+      var up = studs.filter(function (x) { return idx[AD.bandOf(AD.meanScore(x, pt.scoreField))] > idx[AD.bandOf(AD.meanScore(x, first.scoreField))]; });
+      out.push({ kind: 'result', eyebrow: 'Since ' + first.label,
+        head: dlHl(m.up + ' of ' + m.n + ' children', blm.ink) + ' moved up a band.',
+        body: m.down ? countNoun(m.down, 'child', 'children') + ' moved down. Dips happen; a second look helps.' : 'No child moved down a band.', hl: dlKidKeys(up) });
+    }
+    return out;
+  }
+
+  // Priority 4 — one activity: the weakest grade/section + skill in view, and its teacher.
+  function dlActivity(scope) {
+    var pt = AD.latestComplete, best = null;
+    var pct = function (studs, key) { return AD.distribution(studs, key, pt.key).pct.secure; };
+    var groups = scope.level === 'school' ? AD.grades.map(function (g) { return { label: g, grade: g, studs: AD.studentsInGrade(g) }; })
+      : scope.level === 'grade' ? [{ label: scope.grade, grade: scope.grade, studs: AD.studentsInGrade(scope.grade) }]
+      : (function () { var sd = AD.sections.find(function (x) { return x.id === scope.sectionId; }); return [{ label: sd.name, grade: sd.grade, sd: sd, studs: AD.studentsInSection(sd) }]; })();
+    groups.forEach(function (g) { AD.skills.forEach(function (sk) { var v = pct(g.studs, sk.key); if (!best || v < best.v) best = { g: g, sk: sk, v: v }; }); });
+    if (!best) return null;
+    // The class to talk to: the section itself, or the section in that grade with the least Blooming in this skill.
+    var sd = best.g.sd || AD.sections.filter(function (x) { return x.grade === best.g.grade; })
+      .map(function (x) { return { sd: x, v: pct(AD.studentsInSection(x), best.sk.key) }; }).sort(function (a, b) { return a.v - b.v; })[0].sd;
+    var teacher = AD.teacherFor(sd), act = AD.activityFor(best.sk.key), spr = AD.bandMeta('emerging');
+    return { kind: 'activity', eyebrow: 'Try this next',
+      head: 'From ' + esc(pt.label) + ', ' + dlHl(best.g.label, spr.ink) + ' needs the most help with ' + dlHl(best.sk.name, spr.ink) + ' (' + best.v + '% Blooming).',
+      body: '<b>Activity:</b> ' + esc(act.activity) + '<br><b>Talk it through with ' + esc(teacher) + '</b> (' + esc(sd.name) + '): ' + esc(act.talk) +
+        (act.sample ? ' <span class="ui-tag dl-sample" title="Placeholder copy until the real activity library is connected">Sample</span>' : ''),
+      hl: dlKidKeys(dlInBand(best.g.studs, best.sk.key, pt.scoreField, 'emerging')) };
+  }
+
+  function dlStory(scope) {
+    var root = dlTree(scope), studs = dlStudents(root), n = studs.length;
+    var secs = AD.sections.filter(function (s) { return scope.level === 'school' || (scope.level === 'grade' ? s.grade === scope.grade : s.id === scope.sectionId); });
+    var phase = dlPhase(), steps = dlWarnings().slice(0, DL_MAX_POINTS), room = DL_MAX_POINTS - steps.length, src;
+    if (phase === 'collecting') {
+      steps = steps.concat(dlProgressPool(scope, studs, secs).slice(0, room));
+      src = AD.openPoint.label + ' check-in · n = ' + n;
+    } else if (phase === 'results') {
+      var pool = dlResultsPool(scope, studs, secs), day = dlDaysSinceClose(), k = Math.min(room, pool.length), pick = [];
+      for (var i = 0; i < k; i++) pick.push(pool[(day + i) % pool.length]);   // a different set each day
+      steps = steps.concat(pick);
+      src = AD.latestComplete.label + ' results · n = ' + n;
+    } else if (phase === 'activity') {
+      var a = room > 0 ? dlActivity(scope) : null;
+      if (a) steps.push(a);
+      src = AD.latestComplete.label + ' results · n = ' + n;
+    } else src = 'n = ' + n;
+    steps.forEach(function (x) { x.source = src; });
     return steps;
   }
 
+  var DL_WARN_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>';
   // All story points as one list. Hovering / focusing a point lights up its part
   // of the dandelion; clicking pins it (click again to unpin).
   var dlPinned = { key: '', i: -1 };
   function dlStoryHTML(steps) {
     return '<ul class="dl-points">' + steps.map(function (x, j) {
-      return '<li tabindex="0" data-dl-pt="' + j + '" aria-label="' + esc(x.eyebrow) + '">' +
+      var warn = x.kind === 'warn';
+      return '<li tabindex="0" class="' + (x.kind || '') + '" data-dl-pt="' + j + '" aria-label="' + esc((warn ? 'Needs attention: ' : '') + x.eyebrow) + '">' +
+        '<p class="dl-pt-kind">' + (warn ? DL_WARN_ICON + 'Needs attention · ' : '') + esc(x.eyebrow) + '</p>' +
         '<p class="dl-pt-head">' + x.head + '</p><p class="dl-pt-body">' + x.body + '</p></li>';
     }).join('') + '</ul>' +
       (steps.length ? '<p class="dl-source">' + esc(steps[0].source) + '</p>' : '');
@@ -1267,7 +1422,7 @@
   // What the dandelion should be lighting right now: the answer's view (chat open) or the pinned story point.
   function dlCurrentStep(params) {
     if (dlAsk.open) return dlAskView() || {};
-    return dlStory(dlScope(params), dlMode(params))[dlPinned.i] || {};
+    return dlStory(dlScope(params))[dlPinned.i] || {};
   }
   function dlAskSugs() {
     var g = AD.grades[Math.min(1, AD.grades.length - 1)];
@@ -1334,6 +1489,12 @@
     }, 600);
   }
 
+  // Legend + what the ring colour means — under the points, so it's always in view.
+  function dlKeyHTML(mode) {
+    var note = DL_CFG.ringRule === 'mix' ? 'Each ring is split by how many children are in each ' + (mode === 'checkin' ? 'status.' : 'band.')
+      : 'A ring' + '’' + 's colour is the ' + (mode === 'checkin' ? 'status' : 'band') + ' most children in that group are in. Hover a hub for the full count.';
+    return '<div class="dl-key">' + dlLegendHTML(mode) + '<p class="dl-keynote">' + note + '</p></div>';
+  }
   function dlLegendHTML(mode) {
     if (mode === 'checkin') return '<div class="ui-legend">' + ['done', 'draft', 'none'].map(function (k) {
       return '<span><i class="' + (k === 'none' ? 'ring' : '') + '" style="background:' + (k === 'none' ? 'var(--white)' : DL_STATUS[k].color) + '"></i>' + DL_STATUS[k].label + '</span>';
@@ -1369,15 +1530,18 @@
     var seg = modes.length > 1 ? '<div class="ui-seg dl-seg" role="tablist" aria-label="What the dandelion shows">' + modes.map(function (m) {
       return '<button role="tab" aria-selected="' + (m === mode) + '" class="' + (m === mode ? 'on' : '') + '" data-dl-mode="' + m + '">' + (m === 'checkin' ? 'Check-in' : 'Results') + '</button>';
     }).join('') + '</div>' : '';
-    var steps = dlStory(scope, mode), key = JSON.stringify([dlParamsForScope(scope), mode]);
+    var steps = dlStory(scope), key = JSON.stringify([dlParamsForScope(scope), mode]);
     if (dlPinned.key !== key) dlPinned = { key: key, i: -1 };
-    var outLink = '<button class="btn btn-primary dl-out" data-tooutcomes="1">See outcomes →</button>';
-    var askBtn = '<button class="dl-askbtn" data-dla-open title="Ask a question — the dandelion zooms to the grade or section you ask about">' + ICONS.asktilli + '<span>Ask Tilli about your school</span></button>';
+    // Ask Tilli is the main action under the points; Outcomes is a quieter text link beside it.
+    var askBtn = '<button class="btn btn-primary md dl-askbtn" data-dla-open title="Ask a question — the dandelion zooms to the grade or section you ask about">' + ICONS.asktilli + '<span>Ask Tilli about your school</span></button>';
+    var outLink = '<button class="btn-link dl-out" data-tooutcomes="1">See outcomes →</button>';
     return '<div class="ov-dl' + (dlAsk.open ? ' asking' : '') + '" id="ov-dl">' +
       '<div class="dl-head">' + crumbs + seg + '</div>' +
-      '<div class="dl-story' + (dlAsk.open ? ' asking' : '') + '" id="dl-story">' + (dlAsk.open ? dlAskHTML() : dlStoryHTML(steps) + askBtn + outLink) + '</div>' +
+      '<div class="dl-story' + (dlAsk.open ? ' asking' : '') + '" id="dl-story">' + (dlAsk.open ? dlAskHTML() :
+        '<h2 class="dl-title">Right now ' + (scope.level === 'school' ? 'at ' + esc(root.name) : 'in ' + esc(root.name)) + '</h2>' +
+        dlStoryHTML(steps) + '<div class="dl-actions">' + askBtn + outLink + '</div>' + dlKeyHTML(mode)) + '</div>' +
       '<div class="dl-viz"><div id="dl-viz">' + dandelionSVG(scope, mode) + '</div>' + dlCountsHTML(scope) +
-        '<div class="dl-foot">' + dlLegendHTML(mode) + '<span class="dl-hint">' + esc(dlHint(scope, mode)) + '</span></div></div>' +
+        '<div class="dl-foot"><span class="dl-hint">' + esc(dlHint(scope, mode)) + '</span></div></div>' +
     '</div>';
   }
 
@@ -1400,8 +1564,12 @@
   function wireStory(card, scope, mode) {
     var story = card.querySelector('#dl-story'), stage = card.querySelector('.dl-stage');
     if (dlAsk.open) { wireDlAsk(card, stage); return; }   // chat stands in for the story
-    var steps = dlStory(scope, mode);
+    var steps = dlStory(scope);
     var pts = story.querySelectorAll('[data-dl-pt]'), NONE = {};
+    // Links inside a point act on their own (they don't pin the point).
+    story.querySelectorAll('[data-goinvites]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); go('roster', { tab: 'team' }); }; });
+    story.querySelectorAll('[data-goroster]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); go('roster', { tab: 'team' }); }; });
+    story.querySelectorAll('[data-dlconcerns]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); openConcernQueue('New'); }; });
     function light(i) {
       pts.forEach(function (li) { li.classList.toggle('on', +li.dataset.dlPt === i); li.classList.toggle('pinned', +li.dataset.dlPt === dlPinned.i); });
       dlApplyStep(stage, i >= 0 ? steps[i] : NONE);
@@ -1488,7 +1656,10 @@
     { key: 'kidScatter',    label: 'Child Scatter',        min: 0,   max: 1,    step: 0.05,  tip: 'How unevenly children are spaced round their section: 0 = evenly spaced, 1 = clumps and gaps. Fan width also varies per section with Asymmetry.' },
     { key: 'sectionGap',    label: 'Class Gap',            min: 0,   max: 120,  step: 1,     tip: 'Minimum clear space between two class (section) bursts, in layout units. Bursts closer than this are pushed apart so each class reads as its own group.' },
     { key: 'gradeGap',      label: 'Grade Gap',            min: -100, max: 200, step: 1,     tip: 'Minimum clear space between two grades. Each grade (its hub, classes and children) is kept together as one group, and groups are pushed apart by at least this much so one grade\'s classes never mix in with another\'s. Negative lets groups tuck into each other\'s gaps.' },
-    { key: 'gradeTint',     label: 'Grade Colour Strength', min: 0,  max: 1,    step: 0.05,  fresh: true, tip: 'How strongly each grade\'s colour (the same colours as the Roster cards) shows on the dandelion: grade hubs are filled with it, section hubs get a light tint and the spokes take it on. 0 = plain white hubs and grey spokes.' },
+    { key: 'demoDaysLeft',  label: 'Demo: Days Left In Window', min: 0, max: 30, step: 1,  tip: 'Demo only — used when the open assessment window has no end date. Days left before it closes; 3 or fewer (with children still to assess) raises the "closing soon" warning in the Overview points.' },
+    { key: 'demoDaysSinceClose', label: 'Demo: Days Since Window Closed', min: 0, max: 30, step: 1, tip: 'Demo only — used when the last completed window has no end date. 0–14 days: the Overview points show results statistics (a different set each day). After 14: one activity recommendation instead.' },
+    { key: 'ringRule',      label: 'Ring Colour', options: [['majority', 'Most children (one colour)'], ['mix', 'Full mix (split ring)']], fresh: true, tip: 'What each hub\'s ring shows. Most children: one solid colour for the band (Results) or status (Check-in) most of its children are in — a tie shows the lower one. Full mix: the ring is split by the share of each.' },
+    { key: 'gradeTint',     label: 'Grade Colour Strength', min: 0,  max: 1,    step: 0.05,  tip: 'How strongly each grade\'s colour (the same colours as the Roster cards) tints its spokes. Hubs stay white so their rings carry the data. 0 = grey spokes.' },
     { key: 'rootR',         label: 'School Hub Size',      min: 6,   max: 50,   step: 0.5,   tip: 'Radius of the school hub — the biggest ball.' },
     { key: 'gradeR',        label: 'Grade Hub Size',       min: 3,   max: 40,   step: 0.5,   tip: 'Radius of each grade hub. Always kept below the school hub (max 90% of it).' },
     { key: 'sectionR',      label: 'Section Hub Size',     min: 2,   max: 30,   step: 0.5,   tip: 'Radius of each section (class) hub when its children are showing. Always kept below the grade hub (max 85% of it) and above a child dot.' },
@@ -1534,6 +1705,7 @@
     // Layout keys rebuild the graph; physics/story keys apply live.
     var LIVE = { targetPull: 1, linkPull: 1, repel: 1, damping: 1, breatheAmp: 1, breatheSpeed: 1, storySpread: 1, dimOpacity: 1, zoomMs: 1, contextOpacity: 1 };
     function apply(key) {
+      if (key === 'demoDaysLeft' || key === 'demoDaysSinceClose' || key === 'ringRule') { render(); return; }   // changes the points / ring note too
       if (!LIVE[key]) { dlRedraw(); return; }
       var card = document.getElementById('ov-dl'); if (!card) return;
       if (key === 'storySpread' || key === 'dimOpacity' || key === 'contextOpacity') dlApplyStep(card.querySelector('.dl-stage'), dlCurrentStep(currentRoute().params));
@@ -1568,8 +1740,7 @@
 
   // Overview = the living dandelion + its guided story, free-flowing on the page (no cards).
   SCREEN.overview = function (params, body) {
-    body.innerHTML = inviteAlertHTML(false) + dandelionHTML(params);
-    body.querySelectorAll('[data-goinvites]').forEach(function (b) { b.addEventListener('click', function () { go('roster', { tab: 'team' }); }); });
+    body.innerHTML = dandelionHTML(params);   // invite / setup warnings live in the 3 points (dlWarnings)
     wireDandelion(body, params);
     ensureDlGUI();
   };
@@ -1825,7 +1996,9 @@
       var dash = '';
       var boardCell = multiBoard ? '<td>' + (u.board ? esc(u.board) : dash) + '</td>' : '';
       return '<tr><td class="name"><button class="btn-link text-strong" data-userdetail="' + i + '" style="font:inherit;text-align:left" title="View details">' + esc(u.name) + '</button></td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td>' +
-        '<td>' + (isTeacher && u.grade ? esc(u.grade) : isTeacher ? '<span class="text-muted nowrap">No section yet</span>' : dash) + '</td>' +
+        // Invited teachers add their own sections after accepting, so they show nothing here yet;
+        // "No section yet" is only for a teacher who has joined and still has none.
+        '<td>' + (isTeacher && u.grade ? esc(u.grade) : isTeacher && u.status === 'Active' ? '<span class="text-muted nowrap">No section yet</span>' : dash) + '</td>' +
         '<td>' + (isTeacher && u.section ? esc(u.section) : dash) + '</td>' + boardCell +
         '<td>' + statusCellHTML(u) + '</td>' +
         // Row actions live in a ⋮ menu (View details, Show password, Resend, Revoke).
@@ -1888,7 +2061,7 @@
       root.querySelectorAll('[data-userdetail]').forEach(function (b) { b.addEventListener('click', function () { showUserDetail(users[+b.dataset.userdetail]); }); });
     }
     wireUserRows(body);
-    body.querySelectorAll('[data-resend-email]').forEach(function (b) { b.addEventListener('click', function () { resendInvite(b.dataset.resendEmail); }); });
+    body.querySelectorAll('[data-resend-email]').forEach(function (b) { b.addEventListener('click', function () { resendInvite(b.dataset.resendEmail.split(',')); }); });
     var teamRows = body.querySelector('#team-rows');
     function redrawUserRows() { teamRows.innerHTML = userRowsHTML(); wireUserRows(teamRows); }
     var teamQ = body.querySelector('#team-q');
@@ -2313,6 +2486,15 @@
     return { sent: sent, expires: expires, left: left, expired: left <= 0, soon: left > 0 && left <= INVITE_WARN_DAYS };
   }
   function inviteLeftText(inf) { return inf.expired ? 'expired' : 'expires in ' + countNoun(inf.left, 'day', 'days'); }
+  // Several invites → name the most urgent one + a count ("Nadia Fernando and 4 more"),
+  // and split the rest into expiring vs already expired.
+  function inviteWhoText(list) { return list.length === 1 ? list[0].u.name : list[0].u.name + ' and ' + (list.length - 1) + ' more'; }
+  function inviteSplitText(list) {
+    var gone = list.filter(function (x) { return x.inf.expired; }).length, soon = list.length - gone, bits = [];
+    if (soon) bits.push(soon + (soon === 1 ? ' expires' : ' expire') + ' within ' + countNoun(INVITE_WARN_DAYS, 'day', 'days'));
+    if (gone) bits.push(gone + (gone === 1 ? ' has' : ' have') + ' already expired');
+    return bits.join(' · ') + '.';
+  }
   // Invites that need attention now (expiring within INVITE_WARN_DAYS, or expired).
   function inviteAlerts() {
     return seedUsers().map(function (u) { return { u: u, inf: inviteInfo(u) }; })
@@ -2325,15 +2507,16 @@
     var one = list.length === 1, x = list[0];
     var msg = one
       ? '<b>' + esc(x.u.name) + '</b>' + '’' + 's invite ' + inviteLeftText(x.inf) + (x.inf.expired ? '' : ' (' + esc(fmtInvDate(x.inf.expires)) + ')') + '.'
-      : '<b>' + list.length + ' invites</b> need attention: ' + list.map(function (y) { return esc(y.u.name) + ' (' + inviteLeftText(y.inf) + ')'; }).join(', ') + '.';
+      : '<b>' + esc(inviteWhoText(list)) + '</b> haven' + '’' + 't accepted their invites. ' + inviteSplitText(list);
     var act = onTeam
-      ? list.map(function (y) { return '<button class="btn-link" data-resend-email="' + esc(y.u.email) + '">Resend' + (one ? '' : ' to ' + esc(y.u.name.split(' ')[0])) + '</button>'; }).join(' · ')
+      ? '<button class="btn-link" data-resend-email="' + esc(list.map(function (y) { return y.u.email; }).join(',')) + '">' + (one ? 'Resend' : 'Resend all ' + list.length) + '</button>'
       : '<button class="btn-link" data-goinvites="1">Review invites →</button>';
     return '<div class="ui-note warn ad-invalert" role="status"><span aria-hidden="true">⏳</span><span>' + msg + ' ' + act + '</span></div>';
   }
-  function resendInvite(emailAddr) {
-    inviteResentAt[String(emailAddr || '').toLowerCase()] = Date.now();
-    toast('Invitation resent — it’s valid for another ' + INVITE_DAYS + ' days.');
+  function resendInvite(emails) {   // one address or a list
+    var list = [].concat(emails).filter(Boolean);
+    list.forEach(function (e) { inviteResentAt[String(e).toLowerCase()] = Date.now(); });
+    toast((list.length > 1 ? list.length + ' invitations resent' : 'Invitation resent') + ' — valid for another ' + INVITE_DAYS + ' days.');
     render();
   }
 
@@ -2359,7 +2542,8 @@
     }
     // Demo school: leadership + every teacher, with grade/section read from the
     // live section → teacher mapping (the same source the section cards use), so
-    // the two never disagree. A teacher with no section shows "No section yet".
+    // the two never disagree. A joined teacher with no section shows "No section yet";
+    // an invited one shows nothing (they add their own sections after accepting).
     // Demo: Nadia's invite went out 12 days ago, so it is 2 days from expiring (shows the alert).
     var INVITED = { 'nadia.fernando@littlesprouts.edu': Date.now() - 12 * DAY_MS };
     var demo = ((window.TILLI_SCHOOL || {}).admins || []).filter(function (a) { return a.role !== 'tilli'; }).map(function (a) {
@@ -2866,7 +3050,8 @@
   }
   function syncFab() {
     var scr = currentRoute().screen;
-    if (window.TilliFloat) TilliFloat.hideAsk(askState.open || scr === 'asktilli' || (scr === 'overview' && dlAsk.open));
+    // Overview has its own Ask Tilli button beside the points, so the floating bubble steps aside there.
+    if (window.TilliFloat) TilliFloat.hideAsk(askState.open || scr === 'asktilli' || scr === 'overview');
   }
 
   // ========================================================
