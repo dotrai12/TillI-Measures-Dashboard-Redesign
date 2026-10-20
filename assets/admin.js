@@ -598,7 +598,6 @@
     closeAcctMenu(); closeRowMenu();
     app.innerHTML = chromeHTML(r);
     app.classList.toggle('ask-mode', r.screen === 'asktilli');   // Ask Tilli is full-bleed, like the teacher view
-    if (r.screen !== 'overview') removeDlGUI();   // dandelion tuning panel lives on Overview only
     placeStatePanel();
     var body = document.getElementById('ad-main-body');
     if (!loadedScreens[r.screen]) {
@@ -713,7 +712,6 @@
     demoDaysLeft: 6,     // demo only (no window end date): days left in the open window — ≤ 3 raises the "closing soon" warning
     demoDaysSinceClose: 3, // demo only (no window end date): days since the last window closed — results for 14, then the activity
   };
-  var DL_DEFAULTS = Object.assign({}, DL_CFG);
   var DL_W = 600;   // viewBox width; height follows the tree's aspect
 
   // Scope from route params → { level, grade, sectionId }.
@@ -1196,7 +1194,7 @@
   function dlInBand(studs, skillKey, field, band) {
     return studs.filter(function (s) { var sk = s.skills.find(function (x) { return x.key === skillKey; }); return sk && AD.bandOf(sk[field]) === band; });
   }
-  // Whole days (no end date set → the demo value from the Dandelion controls).
+  // Whole days (no end date set → the demo value DL_CFG.demoDaysLeft / demoDaysSinceClose).
   function dlToday() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
   function dlDateOf(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
   function dlDaysLeft() { var l = AD.openPoint ? AD.daysLeft(AD.openPoint) : null; return l != null ? l : DL_CFG.demoDaysLeft; }
@@ -1451,7 +1449,7 @@
   function dlAskWireThread(card) {
     var th = card.querySelector('#dla-thread'); if (!th) return;
     th.scrollTop = th.scrollHeight;
-    // onX handlers (not addEventListener): a GUI redraw re-wires without rebuilding the chat
+    // onX handlers (not addEventListener): safe to re-wire without doubling up
     th.querySelectorAll('[data-dla-sug]').forEach(function (b) { b.onclick = function () { dlAskSend(b.dataset.dlaSug); }; });
     th.querySelectorAll('[data-askgo]').forEach(function (b) {
       b.onclick = function () { go(b.dataset.askgo, b.dataset.askparams ? JSON.parse(b.dataset.askparams) : {}); };
@@ -1575,7 +1573,7 @@
       dlApplyStep(stage, i >= 0 ? steps[i] : NONE);
     }
     function rest() { light(dlPinned.i); }
-    // onX handlers (not addEventListener) so re-wiring after a GUI redraw never doubles them
+    // onX handlers (not addEventListener) so re-wiring never doubles them
     pts.forEach(function (li) {
       var i = +li.dataset.dlPt;
       li.onmouseenter = li.onfocus = function () { light(i); };
@@ -1633,116 +1631,11 @@
       }
     });
   }
-  // GUI tweak → rebuild just the graph from the current positions (no page re-render).
-  function dlRedraw() {
-    var viz = document.getElementById('dl-viz'), card = document.getElementById('ov-dl'); if (!viz || !card) return;
-    var params = currentRoute().params;
-    viz.innerHTML = dandelionSVG(dlScope(params), dlMode(params));
-    wireStory(card, dlScope(params), dlMode(params));
-    wireGraph(card, params);
-  }
-
-  // ---------- Dandelion tuning GUI (dev tooling — leave in place) ----------
-  // `fresh: true` = added in the latest change (orange label + *).
-  var DL_CONTROLS = [
-    { key: 'gradeDist',     label: 'Grade Spoke Length',   min: 40,  max: 260,  step: 1,     tip: 'Distance from the school hub to each grade hub (layout units).' },
-    { key: 'sectionDist',   label: 'Section Spoke Length', min: 30,  max: 200,  step: 1,     tip: 'Distance from a grade hub to each of its section hubs.' },
-    { key: 'kidDist',       label: 'Child Spoke Length',   min: 14,  max: 120,  step: 1,     tip: 'Distance from a section hub to each child dot.' },
-    { key: 'sectionSpread', label: 'Section Fan Angle',    min: 20,  max: 360,  step: 1,     tip: 'How widely sections fan out around their grade, in degrees.' },
-    { key: 'kidSpread',     label: 'Child Fan Angle',      min: 60,  max: 360,  step: 1,     tip: 'How widely children fan out around their section, in degrees. 360 = full dandelion burst.' },
-    { key: 'rootAngle',     label: 'Start Angle',          min: 0,   max: 359,  step: 1,     tip: 'Direction of the first branch from the centre, in degrees (0 = right, 90 = down, 180 = left).' },
-    { key: 'kidJitter',     label: 'Child Spoke Jitter',   min: 0,   max: 0.6,  step: 0.01,  tip: 'Random ± variation in child spoke length, as a share of the length. 0 = perfect circle.' },
-    { key: 'asymmetry',     label: 'Asymmetry',            min: 0,   max: 1,    step: 0.05,  tip: 'How lopsided the dandelion is: grade and section hubs drift off their even angles and their spokes vary in length. 0 = perfectly symmetrical.' },
-    { key: 'kidScatter',    label: 'Child Scatter',        min: 0,   max: 1,    step: 0.05,  tip: 'How unevenly children are spaced round their section: 0 = evenly spaced, 1 = clumps and gaps. Fan width also varies per section with Asymmetry.' },
-    { key: 'sectionGap',    label: 'Class Gap',            min: 0,   max: 120,  step: 1,     tip: 'Minimum clear space between two class (section) bursts, in layout units. Bursts closer than this are pushed apart so each class reads as its own group.' },
-    { key: 'gradeGap',      label: 'Grade Gap',            min: -100, max: 200, step: 1,     tip: 'Minimum clear space between two grades. Each grade (its hub, classes and children) is kept together as one group, and groups are pushed apart by at least this much so one grade\'s classes never mix in with another\'s. Negative lets groups tuck into each other\'s gaps.' },
-    { key: 'demoDaysLeft',  label: 'Demo: Days Left In Window', min: 0, max: 30, step: 1,  tip: 'Demo only — used when the open assessment window has no end date. Days left before it closes; 3 or fewer (with children still to assess) raises the "closing soon" warning in the Overview points.' },
-    { key: 'demoDaysSinceClose', label: 'Demo: Days Since Window Closed', min: 0, max: 30, step: 1, tip: 'Demo only — used when the last completed window has no end date. 0–14 days: the Overview points show results statistics (a different set each day). After 14: one activity recommendation instead.' },
-    { key: 'ringRule',      label: 'Ring Colour', options: [['majority', 'Most children (one colour)'], ['mix', 'Full mix (split ring)']], fresh: true, tip: 'What each hub\'s ring shows. Most children: one solid colour for the band (Results) or status (Check-in) most of its children are in — a tie shows the lower one. Full mix: the ring is split by the share of each.' },
-    { key: 'gradeTint',     label: 'Grade Colour Strength', min: 0,  max: 1,    step: 0.05,  tip: 'How strongly each grade\'s colour (the same colours as the Roster cards) tints its spokes. Hubs stay white so their rings carry the data. 0 = grey spokes.' },
-    { key: 'rootR',         label: 'School Hub Size',      min: 6,   max: 50,   step: 0.5,   tip: 'Radius of the school hub — the biggest ball.' },
-    { key: 'gradeR',        label: 'Grade Hub Size',       min: 3,   max: 40,   step: 0.5,   tip: 'Radius of each grade hub. Always kept below the school hub (max 90% of it).' },
-    { key: 'sectionR',      label: 'Section Hub Size',     min: 2,   max: 30,   step: 0.5,   tip: 'Radius of each section (class) hub when its children are showing. Always kept below the grade hub (max 85% of it) and above a child dot.' },
-    { key: 'hubRing',       label: 'Hub Ring Width',       min: 1,   max: 10,   step: 0.5,   tip: 'Thickness of the coloured mix ring on a section-sized hub; bigger hubs get a proportionally thicker ring.' },
-    { key: 'kidR',          label: 'Child Dot Size',       min: 1,   max: 10,   step: 0.1,   tip: 'Radius of each child dot at whole-school zoom.' },
-    { key: 'sizeBoost',     label: 'Zoom Size Boost',      min: 0,   max: 1,    step: 0.05,  tip: 'How much dots and hubs grow as the camera zooms into a grade or section. 0 = same on-screen size, 1 = grow fully with the zoom.' },
-    { key: 'lineW',         label: 'Spoke Width',          min: 0.2, max: 4,    step: 0.1,   tip: 'Stroke width of the spokes (child spokes are drawn at 60%).' },
-    { key: 'childRule',     label: 'Child Colour Rule',    options: [['mean', 'Average score'], ['mode', 'Most common band']], tip: 'Results mode: colour each child by the band of their average score, or by the band most of their 12 skills fall in.' },
-    { key: 'targetPull',    label: 'Shape Pull',           min: 0.005, max: 0.15, step: 0.005, tip: 'Physics: how strongly each node is pulled back to its place in the dandelion. Low = loose and floaty, high = snaps into shape.' },
-    { key: 'linkPull',      label: 'Spoke Spring',         min: 0,   max: 0.3,  step: 0.005, tip: 'Physics: spring strength of each spoke. Higher keeps children close to their hub when it moves or is dragged.' },
-    { key: 'repel',         label: 'Overlap Push',         min: 0,   max: 1.5,  step: 0.05,  tip: 'Physics: how hard overlapping dots push each other apart.' },
-    { key: 'damping',       label: 'Damping',              min: 0.02, max: 0.6, step: 0.01,  tip: 'Physics: share of speed lost each frame. Higher = calmer, slower glides; lower = bouncier.' },
-    { key: 'breatheAmp',    label: 'Float Distance',       min: 0,   max: 8,    step: 0.1,   tip: 'How far nodes drift while idle, in viewBox units. 0 = completely still (and the animation loop sleeps).' },
-    { key: 'breatheSpeed',  label: 'Float Speed',          min: 0,   max: 3,    step: 0.05,  tip: 'How fast the idle drift moves.' },
-    { key: 'storySpread',   label: 'Story Spread',         min: 1,   max: 2,    step: 0.05,  tip: 'How far the groups pull apart on story steps that compare two groups (1 = no change).' },
-    { key: 'dimOpacity',    label: 'Story Fade',           min: 0,   max: 1,    step: 0.01,  tip: 'Opacity of the parts of the dandelion a story step is not about. 0 = hidden, 1 = no fading.' },
-    { key: 'zoomMs',        label: 'Zoom Duration',        min: 0,   max: 2500, step: 10,    tip: 'Milliseconds for the camera to glide into a grade or section (or back out).' },
-    { key: 'contextOpacity', label: 'Context Fade',        min: 0,   max: 1,    step: 0.01,  tip: 'Opacity of the parts of the school outside the grade or section you are zoomed into. 0 = hidden, 1 = no fading.' },
-    { key: 'sectionLabelMax', label: 'Section Label Limit', min: 0, max: 40,  step: 1,     tip: 'If the school has more sections than this, section names are hidden at whole-school zoom (grade names only) and appear once you zoom into a grade. Keeps big schools readable.' },
-    { key: 'kidDotMax',     label: 'Child Dot Limit',      min: 0,   max: 1000, step: 10,    tip: 'If the grade, section or school you are looking at has more children than this, child dots are hidden and each class shows as one summary hub. Zoom in (to a grade or class) to see the children.' },
-    { key: 'classHubR',     label: 'Class Hub Size',       min: 4,   max: 40,   step: 0.5,   tip: 'Radius of a class (section) hub while its child dots are hidden. Its ring still shows the class mix. Capped below the grade hub size.' },
-  ];
-  var DL_GUI_KEY = 'tilliMeasures.dlGuiCollapsed';
-  function ensureDlGUI() {
-    var panel = document.getElementById('dl-gui');
-    if (panel) return;
-    panel = document.createElement('div');
-    panel.id = 'dl-gui';
-    var collapsed = false; try { collapsed = localStorage.getItem(DL_GUI_KEY) === '1'; } catch (e) {}
-    if (collapsed) panel.classList.add('collapsed');
-    function row(c) {
-      var input = c.options
-        ? '<select data-dlg-input="' + c.key + '">' + c.options.map(function (o) { return '<option value="' + o[0] + '"' + (DL_CFG[c.key] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'
-        : '<input type="range" data-dlg-input="' + c.key + '" min="' + c.min + '" max="' + c.max + '" step="' + c.step + '" value="' + DL_CFG[c.key] + '">';
-      return '<label title="' + esc(c.tip) + '"><span class="dlg-row"><span' + (c.fresh ? ' class="dlg-new"' : '') + '>' + esc(c.label) + (c.fresh ? ' <span title="Newly added control">*</span>' : '') + '</span>' +
-        (c.options ? '' : '<span class="dlg-val" data-dlg-val="' + c.key + '">' + DL_CFG[c.key] + '</span>') + '</span>' + input + '</label>';
-    }
-    panel.innerHTML = '<button class="dlg-head" data-dlg="toggle" title="Tuning controls for the Overview dandelion. Dev only. Click to show / hide."><b>Dandelion controls</b><span>▾</span></button>' +
-      '<div class="dlg-body">' + DL_CONTROLS.map(row).join('') +
-      '<div class="dlg-actions"><button data-dlg="reset" title="Reset every dandelion control to its default value">Reset</button>' +
-      '<button data-dlg="copy" class="primary" title="Copy the current dandelion values to the clipboard as JSON, ready to bake into DL_CFG">Copy values</button></div></div>';
-    document.body.appendChild(panel);
-    // Layout keys rebuild the graph; physics/story keys apply live.
-    var LIVE = { targetPull: 1, linkPull: 1, repel: 1, damping: 1, breatheAmp: 1, breatheSpeed: 1, storySpread: 1, dimOpacity: 1, zoomMs: 1, contextOpacity: 1 };
-    function apply(key) {
-      if (key === 'demoDaysLeft' || key === 'demoDaysSinceClose' || key === 'ringRule') { render(); return; }   // changes the points / ring note too
-      if (!LIVE[key]) { dlRedraw(); return; }
-      var card = document.getElementById('ov-dl'); if (!card) return;
-      if (key === 'storySpread' || key === 'dimOpacity' || key === 'contextOpacity') dlApplyStep(card.querySelector('.dl-stage'), dlCurrentStep(currentRoute().params));
-      dlWake();
-    }
-    function refresh() {
-      DL_CONTROLS.forEach(function (c) {
-        var inp = panel.querySelector('[data-dlg-input="' + c.key + '"]'), val = panel.querySelector('[data-dlg-val="' + c.key + '"]');
-        if (inp) inp.value = DL_CFG[c.key]; if (val) val.textContent = DL_CFG[c.key];
-      });
-    }
-    panel.querySelectorAll('[data-dlg-input]').forEach(function (inp) {
-      inp.addEventListener(inp.tagName === 'SELECT' ? 'change' : 'input', function () {
-        var key = inp.dataset.dlgInput;
-        DL_CFG[key] = inp.tagName === 'SELECT' ? inp.value : parseFloat(inp.value);
-        var val = panel.querySelector('[data-dlg-val="' + key + '"]'); if (val) val.textContent = DL_CFG[key];
-        apply(key);
-      });
-    });
-    panel.querySelector('[data-dlg="toggle"]').addEventListener('click', function () {
-      panel.classList.toggle('collapsed');
-      try { localStorage.setItem(DL_GUI_KEY, panel.classList.contains('collapsed') ? '1' : '0'); } catch (e) {}
-    });
-    panel.querySelector('[data-dlg="reset"]').addEventListener('click', function () { Object.assign(DL_CFG, DL_DEFAULTS); refresh(); dlRedraw(); });
-    panel.querySelector('[data-dlg="copy"]').addEventListener('click', function (ev) {
-      try { navigator.clipboard.writeText(JSON.stringify(DL_CFG, null, 2)); } catch (e) {}
-      var b = ev.currentTarget, old = b.textContent; b.textContent = 'Copied ✓';
-      setTimeout(function () { b.textContent = old; }, 1200);
-    });
-  }
-  function removeDlGUI() { var p = document.getElementById('dl-gui'); if (p) p.remove(); }
 
   // Overview = the living dandelion + its guided story, free-flowing on the page (no cards).
   SCREEN.overview = function (params, body) {
     body.innerHTML = dandelionHTML(params);   // invite / setup warnings live in the 3 points (dlWarnings)
     wireDandelion(body, params);
-    ensureDlGUI();
   };
 
   var cmpTwo = { a: null, b: null };  // "Compare two sections" picker state (Outcomes) — any two sections, school-wide

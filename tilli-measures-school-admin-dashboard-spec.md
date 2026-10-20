@@ -386,6 +386,6 @@ Server should compute all of this (platform spec principle 1); the client only r
 
 **⚠ Dummy content — must be replaced:**
 - **Activity + talking point text is placeholder.** `ACTIVITY_BANK` / `activityFor()` in `assets/admin-data.js` hold sample copy per skill and render with a "Sample" tag. Connect the real activity library; keep the `{ activity, talk }` shape and drop `sample`.
-- **Window dates.** Demo assessment points have no `start` / `end`, so "days left" and "days since close" come from two demo sliders in the Dandelion controls (*Demo: Days Left In Window*, *Demo: Days Since Window Closed*). Real windows must carry `end` dates; the sliders are then ignored.
+- **Window dates.** Demo assessment points have no `start` / `end`, so "days left" and "days since close" come from two demo values in `DL_CFG` (`demoDaysLeft`, `demoDaysSinceClose`, in `assets/admin.js`). Real windows must carry `end` dates; the demo values are then ignored.
 - **"Missed" children at a closed window** are read from TilliAPI completions for created schools only; the demo school reports none missed.
 - **Invite resend** only restarts the 14-day clock in memory (see Roster › Your team); it must update the invite server-side.
