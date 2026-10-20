@@ -60,6 +60,8 @@ Colour is semantic. A colour may only mean one thing per screen.
 
 Fonts: **Quicksand** for headings, **Montserrat** for everything else. Sizes come only from the 6-step `--fs-*` scale. No `font-size: Npx` in CSS or inline styles (SVG text attributes excepted, and those must use 11 or 13).
 
+**Weights: 500 / 600 / 700 only. No ExtraBold (800) or Black (900) anywhere** — CSS, inline styles, SVG `font-weight` attributes — unless a design note explicitly calls for it. Bold emphasis (`<b>`, names, links, numbers) is 700. Google Fonts loads Montserrat at 500;600;700 only.
+
 | Element | Class | Size | Colour |
 |---|---|---|---|
 | Page title | `.ui-screen-title` | `--fs-2xl` (32) | `--ink-900` |

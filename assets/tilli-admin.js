@@ -447,7 +447,7 @@
     var schools = ORG.activeSchools();
     function regionAvg(region, key) { var xs = schools.filter(function (s) { return s.region === region && s[key] != null; }); return xs.length ? Math.round(sum(xs, function (s) { return s[key]; }) / xs.length) : 0; }
     var regionCard = ['India', 'Sri Lanka'].map(function (rg) {
-      return '<div style="margin-bottom:6px;font-weight:800;font-size:var(--fs-sm);color:var(--ink-700)">' + rg + '</div>' +
+      return '<div style="margin-bottom:6px;font-weight:700;font-size:var(--fs-sm);color:var(--ink-700)">' + rg + '</div>' +
         bar('Social-Emotional', regionAvg(rg, 'sel'), 'sel') + bar('Cognitive', regionAvg(rg, 'cog'), 'cog');
     }).join('<div style="height:10px"></div>');
     var boards = {}; schools.forEach(function (s) { boards[s.board] = (boards[s.board] || 0) + 1; });

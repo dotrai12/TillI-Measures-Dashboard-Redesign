@@ -210,7 +210,7 @@
   </span>`;
 
   // ---- navigation actions ----
-  // School leadership accounts (coordinator / principal) resolve by email —
+  // School admin accounts resolve by email —
   // the "School" role card is shared with teachers; the email decides which
   // dashboard opens (spec: "Route by email/account", like the teacher path).
   const admin = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.findAdmin) ? window.TILLI_SCHOOL.findAdmin : () => null;
@@ -277,8 +277,8 @@
         ? window.TilliAPI.resolveSchool(state.school) : null;
       if (created && created.source === 'created') {
         const role = window.TilliAPI.roleOf(state.email, created.school_id);
-        if (role === 'admin' || role === 'principal_view') {
-          setSession(role === 'admin' ? 'coordinator' : 'principal', state.email);
+        if (role === 'admin') {
+          setSession('coordinator', state.email);
           window.location.href = 'admin.html?school=' + encodeURIComponent(created.school_id)
             + '&email=' + encodeURIComponent(state.email) + '&from=login';
           return;

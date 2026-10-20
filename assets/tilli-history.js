@@ -13,7 +13,7 @@
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
   var low = function (s) { return String(s == null ? '' : s).trim().toLowerCase(); };
 
-  var ROLE = { teacher: 'Teacher', admin: 'School admin', principal: 'Principal', parent: 'Parent', tilli: 'Tilli Team', group: 'Group admin', system: 'System' };
+  var ROLE = { teacher: 'Teacher', admin: 'School admin', parent: 'Parent', tilli: 'Tilli Team', group: 'School group admin', system: 'System' };
   var AUD = { 'Teacher': 'teacher observation', 'Parent': 'parent report', 'Direct Assessment': 'student assessment' };
   var NAMES_SHOWN = 8;   // bulk rows list this many children before "+N more"
 

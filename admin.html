@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tilli Measures — Leadership</title>
-<link rel="stylesheet" href="_ds/tilli/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/tilli/tokens/fonts.css?v=20261020nb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261019d">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tilli.css?v=20261020nb">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -83,7 +83,7 @@
   .ad-bucket:last-child { margin-bottom: 0; }
   .ad-bucket-sum { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface-100); user-select: none; }
   .ad-bucket-sum::-webkit-details-marker { display: none; }
-  .ad-bucket-title { font-weight: 800; font-size: var(--fs-md); color: var(--ink-900); letter-spacing: .01em; }
+  .ad-bucket-title { font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); letter-spacing: .01em; }
   .ad-bucket-count { font-weight: 700; font-size: var(--fs-xs); color: var(--text-meta); text-transform: uppercase; letter-spacing: .04em; margin-left: auto; }
   .ad-bucket-chev { font-size: var(--fs-sm); color: var(--ink-450); transition: transform .18s var(--ease); }
   .ad-bucket[open] .ad-bucket-chev { transform: rotate(0deg); }
@@ -99,7 +99,7 @@
   .ad-progchart svg { display: block; width: 100%; overflow: hidden; }
   .ad-progfuts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 12px; }
   .ad-progfut { gap: 6px; }   /* .ui-metachip.dashed */
-  .ad-progfut i { font-style: normal; font-weight: 800; color: var(--ink-450); }
+  .ad-progfut i { font-style: normal; font-weight: 700; color: var(--ink-450); }
 
   /* ---- Filters bar ---- */
   .ad-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: var(--page-gap); }
@@ -137,6 +137,57 @@
   .ad-navcard { display: block; width: 100%; text-align: left; font: inherit; }   /* .ui-card.tight.link */
   .ad-navcard .nc-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .ad-navcard .nc-meta { margin: 4px 0 12px; }   /* .ui-meta */
+  /* Roster grade cards: one brand colour per grade — a stripe down the left, a dot by
+     the name and a faint wash. */
+  /* grade colours live on :root so the dandelion (Overview) uses the very same ones */
+  :root { --grade-1: #FCC30B; --grade-2: #26BDE2; --grade-3: #F99B1C; --grade-4: #E866B0; --grade-5: #56C02B; --grade-6: #8E6CD8; }
+  .ad-navcards { --grade-wash: 7%; --grade-stripe: 6px; }
+  .ui-card.tight.ad-gradecard { position: relative; overflow: hidden; padding-left: calc(18px + var(--grade-stripe));
+    background: color-mix(in srgb, var(--grade-c) var(--grade-wash), var(--white)); border-color: color-mix(in srgb, var(--grade-c) 35%, var(--line-200)); }
+  .ad-gradecard::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--grade-stripe); background: var(--grade-c); }
+  .ui-card.ad-gradecard:hover { border-color: var(--grade-c); }
+  .ad-teamtable td:nth-child(3), .ad-teamtable .nowrap { white-space: nowrap; }
+  /* Your team: search box beside Invite, sortable column heads */
+  .ad-teamtop { justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ad-teamq { flex: 1 1 240px; max-width: 360px; }
+  .ad-sortbtn { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: none; cursor: pointer; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
+  .ad-sortbtn:hover, .ad-sortbtn.on { color: var(--ink-900); }
+  .ad-sortbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+  .ad-sortic { font-size: 10px; color: var(--ink-300); }
+  .ad-sortbtn.on .ad-sortic { color: var(--green-600); }
+  .ad-teamnone { padding: 24px 16px; text-align: center; }
+  /* Invite status tooltip (hover / tap) + expiring-invite alert */
+  .ad-statustip { display: inline-flex; cursor: help; --tip-max-w: 280px; }
+  .ad-statustip:focus { outline: none; }
+  .ad-statustip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 999px; }
+  .ad-invalert { margin-bottom: 16px; align-items: center; }
+  .ad-invalert .btn-link { font-weight: 700; white-space: nowrap; }
+  /* History: date range (Past 7 / 30 days / Custom) + Download CSV, above the type chips */
+  .hist-range { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
+  .hist-dates { display: inline-flex; flex-wrap: wrap; gap: 8px 12px; }
+  .hist-dates[hidden] { display: none; }
+  .hist-dates label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); }
+  .hist-dates .input { width: auto; }
+  .hist-csv { margin-left: auto; }
+  @media (max-width: 640px) { .hist-csv { margin-left: 0; } }
+  /* Student details: a second pop-up stacked over the grade roster */
+  .overlay.ad-stack { z-index: 60; }
+  .ad-stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .ad-stage { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; border: 1px solid var(--line-200); border-radius: var(--radius-md); background: var(--white); }
+  .ad-stage.later { background: var(--surface-100); border-style: dashed; }
+  .ad-stage-h { display: flex; align-items: center; gap: 8px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
+  .ad-stage-s { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); }
+  .ad-stage.done .ad-stage-s { color: var(--green-700); }
+  .ad-stage.prog .ad-stage-s { color: var(--lvl-2-ink); }
+  .ad-stage-none { font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  .ad-stutabs { margin-bottom: 14px; }
+  @media (max-width: 560px) { .ad-stages { grid-template-columns: minmax(0, 1fr); } }
+  /* ⋮ row-actions menu on Your team */
+  .ad-kebab { display: inline-grid; place-items: center; width: 34px; height: 34px; border: none; border-radius: 50%; background: none; color: var(--ink-450); cursor: pointer; }
+  .ad-kebab:hover, .ad-kebab.on { background: var(--surface-100); color: var(--ink-900); }
+  .ad-kebab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .ad-rowmenu { position: fixed; z-index: 80; min-width: 180px; }
+  .ad-tabalert { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--warn-700); vertical-align: 2px; }   /* "School admin", "No section yet" on one line */
   .ad-navcard .nc-pcts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
 
   /* ---- Per-grade breakdown (Outcomes school scope — Overview snapshot format) ---- */
@@ -167,7 +218,7 @@
   .ad-gs h4 { margin: 0 0 10px; }   /* .ui-title.md */
   .ad-gs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
   .ad-gs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); }
-  .ad-gs li .p { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-450); }
+  .ad-gs li .p { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
   /* Overview growth/strength header: scope pill + drill-in link */
 
   /* ---- Compare two classes (Outcomes) — two full section reads, side by side ---- */
@@ -286,7 +337,7 @@
   .dl-tip { position: absolute; z-index: 5; transform: translate(-50%, calc(-100% - 16px)); pointer-events: none; background: var(--ink-900); color: var(--white);
     border-radius: var(--radius-sm); padding: 8px 12px; box-shadow: var(--shadow-pop); font-size: var(--fs-sm); font-weight: 600; line-height: 1.45; white-space: nowrap; }
   .dl-tip.below { transform: translate(-50%, 16px); }
-  .dl-tip b { display: block; font-weight: 800; }
+  .dl-tip b { display: block; font-weight: 700; }
   .dl-tip span { display: block; color: var(--ink-300); }
   .dl-tip em { display: block; font-style: normal; color: var(--green-500); margin-top: 2px; }
   .dl-counts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 28px; margin-top: 10px; }
@@ -312,6 +363,28 @@
   .dl-pt-body { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-600); }
   .dl-source { margin: 10px 0 0 12px; font-weight: 700; font-size: var(--fs-xs); color: var(--text-meta); }
   .dl-out { margin-top: 18px; }   /* .btn.btn-primary — the way into Outcomes (not in the nav) */
+  /* Ask Tilli inside the Overview: a soft button under the story; open, the chat replaces the story */
+  .ov-dl { --dla-h: max(460px, calc(100dvh - 210px)); --dla-h-phone: 380px; --dla-col: 1fr; }   /* chat height (desktop / phone), chat column share */
+  /* Asking: the chat takes a full-height column and the dandelion shrinks to fit the
+     same height beside it (the SVG letterboxes inside, so the whole branch stays in view). */
+  .ov-dl.asking { grid-template-columns: minmax(340px, var(--dla-col)) minmax(0, 1.25fr); align-items: start; }
+  .ov-dl.asking .dl-viz { height: var(--dla-h); display: flex; flex-direction: column; }
+  .ov-dl.asking .dl-stage { flex: 1; min-height: 0; }
+  .ov-dl.asking .dl-svg { height: 100%; }
+  .dl-askbtn { display: flex; align-items: center; gap: 8px; margin: 14px 0 0 2px; padding: 9px 16px 9px 12px; border: 1px solid var(--line-200); border-radius: 999px;
+    background: var(--white); color: var(--green-700); font: 700 var(--fs-sm) var(--font-body); cursor: pointer; transition: border-color .15s, background .15s; }
+  .dl-askbtn:hover { border-color: var(--green-500); background: var(--wash-green); }
+  .dl-askbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .dl-askbtn svg { width: 18px; height: 18px; flex: none; }
+  .dla { display: flex; flex-direction: column; height: var(--dla-h); background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-pop); overflow: hidden; }
+  .dla-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--line-200); }
+  .dla-hmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .dla-hmeta b { display: flex; align-items: center; gap: 7px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--ink-900); }
+  .dla-hmeta > span { font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); }
+  .dla-thread { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .dla-thread [data-askgo="overview"] { display: none; }   /* already here */
+  .dla-note { margin-top: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--green-700); }
+  .dla-compose { padding: 10px 12px 12px; border-top: 1px solid var(--line-200); }
   @media (prefers-reduced-motion: reduce) {
     .dl-spoke, .dl-kid, .dl-hub, .dl-name, .dl-points li, .dl-points li::before { transition: none; }
   }
@@ -319,7 +392,17 @@
     .ov-dl { grid-template-columns: minmax(0, 1fr); }
     .dl-viz { order: 1; }   /* phone: dandelion above the story */
     .dl-story { order: 2; }
+    .dla { height: var(--dla-h-phone); }   /* phone: chat under the dandelion */
+    .ov-dl.asking { grid-template-columns: minmax(0, 1fr); }
+    .ov-dl.asking .dl-viz { height: auto; display: block; }
+    .ov-dl.asking .dl-svg { height: auto; }
   }
+  /* Quieter sidebar link to the Ask Tilli full screen (the main way in is now the Overview) */
+  .ad-nav-mini { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 7px 13px; border: none; background: none; border-radius: var(--radius-md); cursor: pointer;
+    font: 600 var(--fs-xs) var(--font-body); color: var(--ink-450); text-align: left; }
+  .ad-nav-mini svg { width: 15px; height: 15px; flex: none; }
+  .ad-nav-mini:hover { background: var(--surface-100); color: var(--ink-900); }
+  .ad-nav-mini.on { color: var(--green-700); }
   /* Dandelion tuning GUI (dev tooling) */
   #dl-gui { position: fixed; top: 76px; right: 16px; z-index: 9999; width: 260px; max-height: calc(100dvh - 96px); overflow: auto; background: var(--white);
     border: 1px solid var(--line-200); border-radius: 14px; box-shadow: var(--shadow-pop); font-family: var(--font-body); }
@@ -337,12 +420,14 @@
   #dl-gui .dlg-actions button { flex: 1; font-family: var(--font-body); font-weight: 700; font-size: 12px; border-radius: 999px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--line-200); background: var(--white); color: var(--ink-450); }
   #dl-gui .dlg-actions button.primary { border: none; background: var(--green-500); color: var(--white); }
 
-  /* Roster: quiet year-end row + neutral user actions */
+  /* Roster: Students / Your team tabs (.ui-tabs), with a small count after each label */
+  .ad-rostertabs { margin: 4px 0 20px; }
+  .ad-rostertabs .ui-tab { font-size: var(--fs-md); padding: 10px 16px; }
+  .ad-tabn { margin-left: 4px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  /* Roster: quiet year-end row */
   .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
   .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }
   .ad-yearend span { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; }
-  .ad-useracts .btn-link.muted { color: var(--ink-450); }
-  .ad-useracts .ad-revoke:hover { color: var(--danger-700); }
 
   /* ---- Band-bar target marker (feedback §2) — "compared to what?" ----
      Secure is the right-most segment, so a target of N% Secure sits at
@@ -391,12 +476,12 @@
 <div id="ad-modal-root"></div>
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
-<script src="assets/school-data.js?v=20261019sz"></script>
-<script src="assets/tilli-api.js?v=20261019sz"></script>
-<script src="assets/tilli-history.js?v=20261016zx"></script>
+<script src="assets/school-data.js?v=20261020ce"></script>
+<script src="assets/tilli-api.js?v=20261020ce"></script>
+<script src="assets/tilli-history.js?v=20261020ce"></script>
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
-<script src="assets/admin-data.js?v=20261019sz"></script>
+<script src="assets/admin-data.js?v=20261020ce"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261019dz"></script>
+<script src="assets/admin.js?v=20261020hr"></script>
 </body>
 </html>

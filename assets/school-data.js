@@ -64,7 +64,13 @@
   // ---- the school ----
   // joinCode = the school code a self-registering teacher enters to verify
   // their school at sign-up (matches the code shown in the Platform Admin).
-  const SCHOOL = { id: 'little-sprouts', name: 'Little Sprouts School', city: 'Bengaluru', country: 'India', term: 'Term One', joinCode: 'LSPR-2210' };
+  // Two boards run side by side: `board` is the main one, `boards` lists all. With more than
+  // one, invites ask for each teacher's board and the team table shows a Board column.
+  const SCHOOL = { id: 'little-sprouts', name: 'Little Sprouts School', city: 'Bengaluru', country: 'India', term: 'Term One', joinCode: 'LSPR-2210',
+    board: 'CBSE', boards: ['CBSE', 'IB'] };
+  // Which board each section follows: sections D and E in every grade are the IB stream.
+  const IB_SECTIONS = ['D', 'E'];
+  const boardOf = (section) => (IB_SECTIONS.includes(section) ? 'IB' : 'CBSE');
 
   // ---- hand-written class teachers (more are generated with the placeholder sections below) ----
   const TEACHERS = [
@@ -112,10 +118,10 @@
   // sections A + B so the "Compare my sections" Insights tab has 2 same-grade
   // sections to compare. Nadia stays in TEACHERS but doesn't own a section.
   const SECTION_DEFS = [
-    { id: 'kg_a', name: 'Kindergarten A', grade: 'Kindergarten', section: 'A', teacherId: 't-kga' },
-    { id: 'kg_b', name: 'Kindergarten B', grade: 'Kindergarten', section: 'B', teacherId: 't-kga' },
-    { id: 'g1_a', name: 'Grade 1 A',      grade: 'Grade 1',      section: 'A', teacherId: 't-g1a' },
-    { id: 'g1_b', name: 'Grade 1 B',      grade: 'Grade 1',      section: 'B', teacherId: 't-g1b' },
+    { id: 'kg_a', name: 'Kindergarten A', grade: 'Kindergarten', section: 'A', teacherId: 't-kga', board: boardOf('A') },
+    { id: 'kg_b', name: 'Kindergarten B', grade: 'Kindergarten', section: 'B', teacherId: 't-kga', board: boardOf('B') },
+    { id: 'g1_a', name: 'Grade 1 A',      grade: 'Grade 1',      section: 'A', teacherId: 't-g1a', board: boardOf('A') },
+    { id: 'g1_b', name: 'Grade 1 B',      grade: 'Grade 1',      section: 'B', teacherId: 't-g1b', board: boardOf('B') },
   ];
 
   // ---- placeholder school size: GRADES × SECTION_LETTERS × SECTION_SIZE ----
@@ -145,7 +151,7 @@
       usedTeacher.add(name);
       const tid = 't-' + id.replace('_', '');
       TEACHERS.push({ id: tid, name, email: name.toLowerCase().replace(/\s+/g, '.') + '@littlesprouts.edu', grade, section, role: 'Class Teacher', filler: true });
-      SECTION_DEFS.push({ id, name: grade + ' ' + section, grade, section, teacherId: tid });
+      SECTION_DEFS.push({ id, name: grade + ' ' + section, grade, section, teacherId: tid, board: boardOf(section) });
     }));
     // 2) children: pad every section to SECTION_SIZE (unique full names; ADM per grade from 6001, 7001, …)
     const usedName = new Set(ROSTER.map((r) => r.first + ' ' + r.last));
@@ -224,25 +230,16 @@
   // ---- school leadership (admin dashboard) ----
   // The Coordinator/Admin sees the whole school. Routed by email at login
   // (landing.js) to admin.html, the same way the teacher is routed to
-  // teacher.html. A Principal (view-only) can be added here later with
-  // role:'principal'; the admin dashboard already understands both roles.
+  // teacher.html. School roles are Teacher, School admin and School group
+  // admin only — there is no Principal / view-only role.
   const ADMINS = [
     {
       id: 'a-coord',
       name: 'Meera Krishnan',
       email: 'meera.krishnan@littlesprouts.edu',
       password: 'Tilli@Admin1',
-      role: 'coordinator',            // 'coordinator' (full) | 'principal' (view-only) | 'tilli' (full, internal)
+      role: 'coordinator',            // 'coordinator' (School admin) | 'tilli' (full, internal)
       title: 'Programme Coordinator',
-    },
-    {
-      // View-only school leadership (spec §2): sees aggregates + counts, no names
-      // in completion lists, no roster / history / invites.
-      id: 'a-principal',
-      name: 'A. Wanigasuriya',
-      email: 'principal@littlesprouts.edu',
-      role: 'principal',
-      title: 'Principal',
     },
     {
       // Tilli's own team — internal staff who log in to view a partner school.

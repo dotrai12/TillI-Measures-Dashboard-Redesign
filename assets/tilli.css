@@ -176,6 +176,10 @@ a { color: var(--cyan-500); }
 /* Headings use Quicksand; body + supporting text use Montserrat (set on body above) */
 h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 
+/* No ExtraBold anywhere (design rule): the browser default for <b>/<strong> is
+   "bolder", which turns 600 text into 900. Pin emphasis to 700 instead. */
+b, strong { font-weight: 700; }
+
 /* ---- Brand vertical rail (left edge) ---- */
 .brand-rail {
   position: fixed;
@@ -611,7 +615,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
   display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
   padding: 8px 12px; background: var(--surface-100); border: none; cursor: pointer; font-family: inherit; text-align: left;
 }
-.ui-devpanel-title { font-size: 12px; font-weight: 800; color: var(--ink-700); letter-spacing: .02em; }
+.ui-devpanel-title { font-size: 12px; font-weight: 700; color: var(--ink-700); letter-spacing: .02em; }
 .ui-devpanel-chev { font-size: 11px; color: var(--ink-450); }
 .ui-devpanel-body { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-top: 1px solid var(--line-200); }
 .ui-devpanel.collapsed .ui-devpanel-body { display: none; }
@@ -638,7 +642,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 .ui-rolebadge {
   display: inline-flex; align-items: center; gap: 7px; background: var(--accent-wash);
   color: var(--accent-ink); border-radius: var(--radius-pill); padding: 6px 13px;
-  font-weight: 800; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase;
+  font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase;
 }
 .ui-avatar {
   width: 38px; height: 38px; flex: none; border-radius: 50%; border: 1px solid var(--line-200);
@@ -700,7 +704,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 .ui-meta { font-weight: 600; font-size: var(--fs-sm); color: var(--text-meta); }
 .ui-meta.xs { font-size: var(--fs-xs); }
 .ui-eyebrow {
-  display: block; font-family: var(--font-body); font-weight: 800; font-size: var(--fs-xs);
+  display: block; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-xs);
   letter-spacing: .05em; text-transform: uppercase; color: var(--text-meta);
 }
 .ui-eyebrow.dark { color: var(--ink-450); }
@@ -743,7 +747,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 /* ---- Chips (status, with optional dot) ---- */
 .ui-chip {
   display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-pill); padding: 4px 11px;
-  font-weight: 800; font-size: var(--fs-xs); letter-spacing: .02em; white-space: nowrap;
+  font-weight: 700; font-size: var(--fs-xs); letter-spacing: .02em; white-space: nowrap;
   background: var(--surface-100); color: var(--ink-600);
 }
 .ui-chip .dot { width: var(--dot-sm); height: var(--dot-sm); border-radius: 50%; background: currentColor; }
@@ -760,7 +764,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 /* Tiny uppercase tag ("SOON", "BETA", "SAMPLE") */
 .ui-tag {
   display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-pill); padding: 2px 8px;
-  font-weight: 800; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase;
+  font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase;
   background: var(--surface-100); color: var(--ink-450);
 }
 .ui-tag.cyan { background: var(--wash-cyan); color: var(--cyan-700); }
@@ -810,7 +814,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 .ui-filterchip.dark:hover { border-color: var(--ink-300); color: var(--ink-900); }
 .ui-filterchip.dark.on { background: var(--ink-900); border-color: var(--ink-900); color: var(--white); }
 .ui-filterchip.sm { padding: 4px 11px; font-weight: 600; color: var(--ink-700); }   /* small pill (child names in a list) */
-.ui-filterchip b { font-weight: 800; color: var(--ink-900); }                    /* count inside a chip */
+.ui-filterchip b { font-weight: 700; color: var(--ink-900); }                    /* count inside a chip */
 .ui-filterchip.on b { color: inherit; }
 .ui-filterchip:disabled { opacity: .45; cursor: default; pointer-events: none; }
 .ui-filterchip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -836,7 +840,7 @@ h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 table.ui-table { width: 100%; border-collapse: collapse; }
 .ui-table th, .ui-table td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--line-200); font-size: var(--fs-sm); }
 .ui-table th {
-  font-family: var(--font-body); font-weight: 800; font-size: var(--fs-xs); letter-spacing: .04em;
+  font-family: var(--font-body); font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em;
   text-transform: uppercase; color: var(--ink-450); background: var(--surface-100); white-space: nowrap;
 }
 .ui-table td.name { font-weight: 700; color: var(--ink-900); }
@@ -905,7 +909,7 @@ table.ui-table { width: 100%; border-collapse: collapse; }
   background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md);
   box-shadow: var(--shadow-pop); padding: 11px 13px; font-size: var(--fs-sm);
 }
-.ui-tip .nm { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-900); }
+.ui-tip .nm { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
 
 /* ---- Toast ---- */
 .ui-toast {
@@ -938,7 +942,7 @@ table.ui-table { width: 100%; border-collapse: collapse; }
 .ui-check {
   width: 20px; height: 20px; border-radius: var(--radius-xs); flex: none;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: var(--fs-sm); font-weight: 800; color: var(--white);
+  font-size: var(--fs-sm); font-weight: 700; color: var(--white);
   background: var(--white); border: 1.5px solid var(--line-200); transition: background .15s, border-color .15s;
 }
 .ui-check.on { background: var(--green-500); border-color: var(--green-600); }
@@ -1036,7 +1040,7 @@ table.ui-table { width: 100%; border-collapse: collapse; }
 .ask-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
 .ask-ctx { align-self: flex-start; white-space: normal; --badge-bg: var(--wash-green); --badge-fg: var(--green-700); }   /* .ui-badge */
 .ask-msg { max-width: 85%; padding: 10px 14px; font-size: var(--fs-sm); line-height: 1.45; }
-.ask-msg b { font-weight: 800; }
+.ask-msg b { font-weight: 700; }
 .ask-msg.user { align-self: flex-end; background: var(--green-500); color: var(--white); border-radius: 14px 14px 4px 14px; }
 .ask-msg.tilli { align-self: flex-start; background: var(--surface-100); color: var(--ink-700); border-radius: 14px 14px 14px 4px; }
 .ask-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: auto 0; text-align: center; color: var(--text-meta); font-size: var(--fs-sm); max-width: 240px; align-self: center; line-height: 1.5; }
@@ -1170,7 +1174,7 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 }
 .tf-pop-item:hover { border-color: var(--tf-accent); background: var(--white); }
 .tf-pop-item svg { width: 20px; height: 20px; flex: none; color: var(--tf-accent); }
-.tf-pop-item b { display: block; font-size: var(--fs-sm); font-weight: 800; }
+.tf-pop-item b { display: block; font-size: var(--fs-sm); font-weight: 700; }
 .tf-pop-item small { display: block; font-size: var(--fs-xs); color: var(--ink-450); font-weight: 600; }
 
 @media (max-width: 640px) {
@@ -1190,7 +1194,7 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
   --hist-rail: var(--line-200);             /* vertical timeline line between rows */
   --hist-dot-size: 10px;                    /* timeline dot diameter */
 }
-.hist-day { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-meta); margin: 18px 0 6px; }
+.hist-day { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-meta); margin: 18px 0 6px; }
 .hist-day:first-child { margin-top: 2px; }
 .hist-list { display: flex; flex-direction: column; }
 .hist-item { position: relative; display: flex; gap: 12px; padding: 10px 0 12px; }
@@ -1203,10 +1207,10 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 .hist-body { flex: 1; min-width: 0; }
 .hist-line { font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-700); }
 .hist-line b { color: var(--ink-900); font-weight: 700; }
-.hist-who { font-weight: 800 !important; }
+.hist-who { font-weight: 700 !important; }
 .hist-changes { list-style: none; margin: 6px 0 0; padding: 7px 10px; background: var(--surface-100); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 3px; }
 .hist-changes li { font-size: var(--fs-sm); line-height: 1.4; color: var(--ink-700); overflow-wrap: anywhere; }
-.hist-k { display: inline-block; min-width: 96px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-450); }
+.hist-k { display: inline-block; min-width: 96px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-450); }
 .hist-from { color: var(--ink-300); }
 .hist-to { color: var(--ink-900); font-weight: 700; }
 .hist-arw { color: var(--ink-300); margin: 0 2px; }
@@ -1264,7 +1268,7 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
   .askx.collapsed .askx-histbtn { display: grid; }
 }
 .askx-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; border-top: 1px solid var(--line-200); }
-.askx-gh { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
+.askx-gh { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-450); padding: 16px 8px 6px; }
 .askx-item { display: flex; align-items: center; border-radius: var(--radius-md); }
 .askx-item:hover { background: var(--white); }
 .askx-item.on { background: var(--white); box-shadow: inset 3px 0 0 var(--green-500); }

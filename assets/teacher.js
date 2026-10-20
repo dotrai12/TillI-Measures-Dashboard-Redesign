@@ -505,7 +505,7 @@
         return `<button class="onb-check focus" data-sec="${gi}-${sx}"><span class="ui-check${on ? ' on' : ''}">${on ? '✓' : ''}</span>${sx}</button>`;
       }).join('');
       return `<div class="ui-card sm subtle onb-seccard">
-        <div class="onb-sechead"><span style="font-size:var(--fs-sm);font-weight:800;color:var(--ink-700)">${esc(name)}</span>
+        <div class="onb-sechead"><span style="font-size:var(--fs-sm);font-weight:700;color:var(--ink-700)">${esc(name)}</span>
           ${count ? `<span class="ui-chip ok">${count} selected</span>` : ''}</div>
         <div class="onb-secgrid">${secs}</div>
       </div>`;

@@ -288,7 +288,7 @@
 
   // ---------------------------------------------------------------
   //  CONTINUOUS: teacher-raised concerns queue (spec §6.4).
-  //  Coordinator sees names + notes; a principal would see counts only
+  //  The school admin sees names + notes
   //  (enforced in the UI layer). `routed_to` accommodates the open
   //  counsellor decision (spec §11.1) either way.
   // ---------------------------------------------------------------

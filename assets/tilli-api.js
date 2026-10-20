@@ -166,7 +166,7 @@
       schools: {},            // school_id -> { school_id, name, board, verified, status, claimMethod }
       sections: {},           // section_id -> { section_id, school_id, grade, section, name, teacherId }
       teacherMemberships: [], // { user_id(email), school_id, section_ids[], status }
-      adminMemberships: [],   // { user_id(email), school_id, role:'admin'|'principal_view', status }
+      adminMemberships: [],   // { user_id(email), school_id, role:'admin', status }
       students: {},           // keyOf() -> record (see seedFromSchool)
       parentLinks: [],        // { parent_user_id(email), school_id, student_id, status, verified_at }
       claimChallenges: {},    // challengeId -> { school_id, student_id, exists, created }
@@ -212,7 +212,7 @@
 
     var sc = SRC.school;
     db.schools[sc.id] = {
-      school_id: sc.id, name: sc.name, board: sc.board || 'CBSE',
+      school_id: sc.id, name: sc.name, board: sc.board || 'CBSE', boards: sc.boards || null,
       city: sc.city || '', country: sc.country || '',
       joinCode: sc.joinCode || '',    // teacher self-sign-up verification code
       verified: true,                 // Tilli verified this demo school (spec A1)
@@ -230,10 +230,9 @@
       db.teacherMemberships.push({ user_id: low(t.email), school_id: sc.id, section_ids: secs.map(function(s){ return s.id; }), status:'active' });
     });
 
-    // Mock Admin + Principal so the Flow-C guards are testable in the data layer.
-    // (No admin UI in v1 — these exist purely so role checks resolve.)
-    db.adminMemberships.push({ user_id:'admin@littlesprouts.edu',     school_id:sc.id, role:'admin',          status:'active' });
-    db.adminMemberships.push({ user_id:'principal@littlesprouts.edu', school_id:sc.id, role:'principal_view', status:'active' });
+    // Mock Admin so the Flow-C guards are testable in the data layer.
+    // (School roles: Teacher, School admin, School group admin — no Principal.)
+    db.adminMemberships.push({ user_id:'admin@littlesprouts.edu', school_id:sc.id, role:'admin', status:'active' });
 
     // Students — one canonical record per (school_id, student_id). student_id = admission no.
     (SRC.students||SRC.roster||[]).forEach(function(r){
@@ -293,7 +292,7 @@
     var e = low(email);
     if (!e) return null;
     var a = db.adminMemberships.find(function(m){ return m.user_id===e && m.school_id===schoolId && m.status==='active'; });
-    if (a) return a.role;                        // 'admin' | 'principal_view'
+    if (a) return a.role;                        // 'admin'
     var t = db.teacherMemberships.find(function(m){ return m.user_id===e && m.school_id===schoolId && m.status==='active'; });
     if (t) return 'teacher';
     if (db.parentLinks.some(function(l){ return l.parent_user_id===e && l.school_id===schoolId && l.status==='active'; })) return 'parent';
@@ -360,7 +359,7 @@
     var all = Object.keys(db.students).map(function(k){ return db.students[k]; })
                     .filter(function(s){ return s.school_id===schoolId; });
     var scoped;
-    if (role==='admin' || role==='principal_view') scoped = all;         // whole school (spec §7)
+    if (role==='admin') scoped = all;                                    // whole school (spec §7)
     else if (role==='teacher'){ var mine = teacherScope(db, email, schoolId);
       scoped = all.filter(function(s){ return mine.indexOf(s.section_id)>=0; }); }  // own sections only
     else scoped = [];                                                    // parents don't list rosters
@@ -1154,7 +1153,7 @@
          students:[{id,name}],            // [] for school-wide events
          kind:'student'|'assessment', action, phase?, audience?,
          changes:[{label,from,to}], items:[string],
-         actor:{email,name,role} }        // role: teacher|admin|principal|parent|tilli|group|system
+         actor:{email,name,role} }        // role: teacher|admin|parent|tilli|group|system
 
      NEVER put scores / SEL levels in an event: leadership reads this log and
      must only ever see WHO, not HOW (admin spec §2).
@@ -1192,7 +1191,6 @@
   function roleKeyFor(db, email, schoolId){
     var e = low(email), r = roleOf(db, e, schoolId);
     if (r==='admin') return 'admin';
-    if (r==='principal_view') return 'principal';
     if (r) return r;
     var lbl = low(db.accounts[e] && db.accounts[e].role);
     if (lbl.indexOf('group')>=0) return 'group';
@@ -1295,7 +1293,7 @@
     return out.map(clone);
   }
   // One school's history, scoped by the caller's role there (spec §7):
-  // admin / principal → whole school; teacher → their sections + school-wide
+  // admin → whole school; teacher → their sections + school-wide
   // assessment events. Returns null when the caller has no role at the school.
   // filter: { kind, student_id, section_id, since, q, limit }
   // SERVER-SIDE: scope comes from the session, never from the client.
@@ -1303,7 +1301,7 @@
     var db = getDB(), f = filter || {};
     var all = (db.history||[]).filter(function(e){ return e.school_id===schoolId; });
     var role = roleOf(db, actorEmail, schoolId);
-    if (role==='admin' || role==='principal_view') return historyPage(all, f);
+    if (role==='admin') return historyPage(all, f);
     if (role==='teacher'){
       var mine = teacherScope(db, actorEmail, schoolId);
       var myKids = Object.keys(db.students).map(function(k){ return db.students[k]; })
@@ -1352,7 +1350,7 @@
     (SRC.admins||[]).forEach(function(a){
       var e = low(a.email);
       if (db.adminMemberships.some(function(m){ return m.user_id===e && m.school_id===sid; })) return;
-      db.adminMemberships.push({ user_id:e, school_id:sid, role: a.role==='principal' ? 'principal_view' : 'admin', name:a.name, status:'active' });
+      db.adminMemberships.push({ user_id:e, school_id:sid, role:'admin', name:a.name, status:'active' });
     });
   }
   // Sample history for the demo school so every role has something to read on

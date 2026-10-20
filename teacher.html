@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tilli Measures — Teacher</title>
-<link rel="stylesheet" href="_ds/tilli/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/tilli/tokens/fonts.css?v=20261020nb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261019d">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tilli.css?v=20261020nb">
 <style>
   /* ============================================================
      Teacher onboarding — screen chrome (live design system).
@@ -133,7 +133,7 @@
   .onb-sel.open .onb-sel-trigger::after { transform: rotate(180deg); }
   .onb-sel-opt { justify-content: space-between; }
   .onb-sel-opt.on { color: var(--green-700); }
-  .onb-sel-tick { flex: none; color: var(--green-600); font-weight: 800; }
+  .onb-sel-tick { flex: none; color: var(--green-600); font-weight: 700; }
 
   /* Student roster sheet (manual "type them in") — one aligned grid drives
      the column headers AND every row, so labels and fields share edges. */
@@ -176,7 +176,7 @@
   }
   .roster-head {
     margin-bottom: 8px; padding: 0 6px;
-    font-weight: 800; font-size: var(--fs-xs); letter-spacing: .04em;
+    font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em;
     text-transform: uppercase; color: var(--text-meta);
   }
   .roster-sheet-row { padding: 7px 6px; border-radius: var(--radius-md); transition: background .15s; }
@@ -236,7 +236,7 @@
   }
   .onb-method:hover { border-color: var(--green-500); background: var(--wash-green); }
   .onb-method .ic { font-size: var(--fs-xl); }
-  .onb-method .lb { font-weight: 800; font-size: var(--fs-sm); color: var(--ink-700); line-height: 1.3; text-align: center; }
+  .onb-method .lb { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); line-height: 1.3; text-align: center; }
   /* File drop zones (CSV / picture) */
   .onb-drop {
     display: block; border: 1.5px dashed var(--line-200); border-radius: var(--radius-lg); padding: 26px; text-align: center;
@@ -245,7 +245,7 @@
   .onb-drop:hover { border-color: var(--green-500); }
   .onb-drop.compact { padding: 22px 12px; }
   .onb-drop-ic { font-size: var(--fs-xl); margin-bottom: 6px; }
-  .onb-drop-t { font-weight: 800; font-size: var(--fs-md); color: var(--ink-700); }
+  .onb-drop-t { font-weight: 700; font-size: var(--fs-md); color: var(--ink-700); }
   .onb-drop.compact .onb-drop-t { font-size: var(--fs-sm); }
   .onb-drop-s { font-size: var(--fs-sm); color: var(--text-meta); margin-top: 4px; }
   /* Note with stacked action buttons (roster conflict note) */
@@ -275,14 +275,14 @@
 <!-- Dashboard mounts here after onboarding (Phase 2). Hidden until then. -->
 <div id="dash-root" style="display:none"></div>
 
-<script src="assets/school-data.js?v=20261019sz"></script>
-<script src="assets/tilli-api.js?v=20261019sz"></script>
-<script src="assets/tilli-history.js?v=20261016zx"></script>
+<script src="assets/school-data.js?v=20261020ce"></script>
+<script src="assets/tilli-api.js?v=20261020ce"></script>
+<script src="assets/tilli-history.js?v=20261020ce"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Teacher' });</script>
 <script src="assets/dashboard-data.js?v=20261016zx"></script>
 <script src="assets/flower-band.js?v=20261016zx"></script>
-<script src="assets/teacher-dashboard.js?v=20261019d"></script>
-<script src="assets/teacher.js?v=20261019b"></script>
+<script src="assets/teacher-dashboard.js?v=20261020fw"></script>
+<script src="assets/teacher.js?v=20261020fw"></script>
 </body>
 </html>
