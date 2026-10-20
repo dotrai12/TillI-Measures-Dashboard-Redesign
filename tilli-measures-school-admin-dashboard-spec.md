@@ -384,6 +384,8 @@ The Overview shows **at most 3 points** beside the dandelion at any moment, fill
 
 Server should compute all of this (platform spec principle 1); the client only renders.
 
+**Check off / ignore (added 2026-10-20).** Each point is a box with a round check-off and an *Ignore* link. *Done* keeps the point in its slot, ticked and faded. *Ignore* removes it and the next point by priority moves up ("N points ignored today · Show again"). Both last **for the day only**; the next day a point returns if its problem is still there. Point ids: `warn:<topic>` for warnings (school-wide), `<kind>:<topic>:<scope>` otherwise. ⚠ Demo stores this per person in localStorage (`tilliMeasures.overviewMarks.<email>`). The real build must store it server-side per user.
+
 **⚠ Dummy content — must be replaced:**
 - **Activity + talking point text is placeholder.** `ACTIVITY_BANK` / `activityFor()` in `assets/admin-data.js` hold sample copy per skill and render with a "Sample" tag. Connect the real activity library; keep the `{ activity, talk }` shape and drop `sample`.
 - **Window dates.** Demo assessment points have no `start` / `end`, so "days left" and "days since close" come from two demo values in `DL_CFG` (`demoDaysLeft`, `demoDaysSinceClose`, in `assets/admin.js`). Real windows must carry `end` dates; the demo values are then ignored.

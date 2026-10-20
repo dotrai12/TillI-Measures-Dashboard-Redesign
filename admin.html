@@ -303,24 +303,28 @@
 
   /* ============================================================
      OVERVIEW — the living dandelion + guided story, free-flowing on
-     the page (no cards). A soft wash sits behind it. Type ramp:
+     the page (no cards). Plain white behind it (no wash). Type ramp:
      32 story headline · 15 body · 13 meta. SVG text = 11 / 13.
      ============================================================ */
-  .ov-dl { --dl-story-col: 0.95fr; --dl-wash: .4;
+  .ov-dl { --dl-story-col: 0.95fr;
     position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(280px, var(--dl-story-col)) minmax(0, 2fr); gap: 8px 32px; align-items: start; }
-  .ov-dl::before { content: ''; position: absolute; inset: -32px 0; z-index: -1; pointer-events: none; filter: blur(30px); opacity: var(--dl-wash);
-    background: radial-gradient(40% 50% at 22% 40%, var(--wash-green), transparent 70%),
-                radial-gradient(35% 45% at 70% 25%, var(--wash-yellow), transparent 70%),
-                radial-gradient(40% 50% at 55% 85%, var(--wash-cyan), transparent 70%),
-                radial-gradient(30% 40% at 90% 70%, var(--wash-pink), transparent 70%); }
-  .dl-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .dl-head { display: flex; margin-bottom: 8px; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .dl-head .ui-crumbs { margin: 0; }
   .dl-viz { min-width: 0; }
   .dl-stage { position: relative; touch-action: none; }
-  .dl-svg { display: block; width: 100%; height: auto; overflow: visible; user-select: none; }
-  .dl-spoke { stroke-linecap: round; transition: opacity .35s; }
-  .dl-spoke.hub { stroke: var(--ink-300); }
-  .dl-spoke.kid { opacity: .45; }
+  .dl-stage.can-up .dl-svg { cursor: zoom-out; }   /* zoomed in: empty space steps back a level */
+  /* The dandelion stays inside its own column (nothing drifts behind the points), and
+     fades out softly over its left edge (--dl-edge-fade) instead of being cut off hard. */
+  .ov-dl { --dl-edge-fade: 64px; }
+  .dl-svg { display: block; width: 100%; height: auto; overflow: hidden; user-select: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--dl-edge-fade));
+            mask-image: linear-gradient(to right, transparent 0, #000 var(--dl-edge-fade)); }
+  /* Dotted spokes: zero-length dashes + round caps = round dots, spaced --dl-dot-gap apart
+     (screen pixels — spokes use non-scaling-stroke, so dots stay the same size at every zoom). */
+  .ov-dl { --dl-dot-gap: 5px; --dl-dot-hub: 2.2px; --dl-dot-kid: 1.6px; }
+  .dl-spoke { stroke-linecap: round; stroke-dasharray: 0 var(--dl-dot-gap); transition: opacity .35s; }
+  .dl-spoke.hub { stroke-width: var(--dl-dot-hub); }   /* colour = gradient parent → child, set inline */
+  .dl-spoke.kid { opacity: .45; stroke-width: var(--dl-dot-kid); }
   .dl-hit { fill: transparent; }
   .dl-kid { cursor: grab; transition: opacity .35s; }
   .dl-hub { cursor: grab; transition: opacity .35s; }
@@ -334,52 +338,65 @@
   .dl-stage [data-dl-i].dim { opacity: var(--dl-dim, .14); }
   .dl-spoke.kid.dim { opacity: calc(var(--dl-dim, .14) * .45); }
   /* outside the zoomed-in grade/section: faded context, not interactive */
-  .dl-stage [data-dl-i].ctx { opacity: var(--dl-ctx, .18); pointer-events: none; }
-  .dl-spoke.kid.ctx { opacity: calc(var(--dl-ctx, .18) * .45); }
+  .dl-stage [data-dl-i].ctx { opacity: var(--dl-ctx, .05); pointer-events: none; }
+  .dl-spoke.kid.ctx { opacity: calc(var(--dl-ctx, .05) * .45); }
   .dl-tip { position: absolute; z-index: 5; transform: translate(-50%, calc(-100% - 16px)); pointer-events: none; background: var(--ink-900); color: var(--white);
     border-radius: var(--radius-sm); padding: 8px 12px; box-shadow: var(--shadow-pop); font-size: var(--fs-sm); font-weight: 600; line-height: 1.45; white-space: nowrap; }
   .dl-tip.below { transform: translate(-50%, 16px); }
   .dl-tip b { display: block; font-weight: 700; }
   .dl-tip span { display: block; color: var(--ink-300); }
   .dl-tip em { display: block; font-style: normal; color: var(--green-500); margin-top: 2px; }
-  .dl-counts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 28px; margin-top: 10px; }
-  .dl-counts span { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 700; font-size: var(--fs-sm); color: var(--text-meta); }
-  .dl-counts b { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl); line-height: 1; color: var(--ink-900); font-variant-numeric: tabular-nums; }
-  .dl-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin-top: 6px; }
-  .dl-hint { font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
   .ui-legend i.ring { box-shadow: inset 0 0 0 2px var(--ink-300); }
   /* Guided story */
   .dl-story { min-width: 0; padding-top: 8px; }
-  .dl-title { margin: 0 0 10px 12px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.3; color: var(--ink-900); }
+  .dl-title { margin: 0 0 12px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.3; color: var(--ink-900); }
   .dl-headline { margin: 8px 0 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.15; color: var(--ink-900); letter-spacing: -.01em; }
   .dl-body { margin: 12px 0 0; font-weight: 600; font-size: var(--fs-md); line-height: 1.55; color: var(--ink-600); }
   /* story points: hover / focus lights the dandelion, click pins */
-  .dl-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-  .dl-points li { position: relative; padding: 10px 12px 10px 28px; border-radius: var(--radius-md); cursor: pointer; transition: background .2s; }
-  .dl-points li::before { content: ''; position: absolute; left: 10px; top: 15px; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-300); transition: background .2s; }
-  .dl-points li.on { background: color-mix(in srgb, var(--white) 70%, transparent); }
-  .dl-points li.on::before, .dl-points li.pinned::before { background: var(--accent); }
+  /* Each point is a box: round check-off on the left, "Ignore" top-right. Done = ticked + faded. */
+  .dl-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .dl-points li { position: relative; padding: 12px 64px 12px 46px; border: 1px solid var(--line-200); border-radius: var(--radius-lg); background: var(--white);
+    cursor: pointer; transition: border-color .2s, box-shadow .2s, background .2s, opacity .2s; }
+  .dl-points li.on, .dl-points li.pinned { border-color: var(--accent); box-shadow: var(--shadow-card); }
+  .dl-points li.warn { border-color: color-mix(in srgb, var(--attn) 30%, var(--line-200)); }
+  .dl-points li.warn.on, .dl-points li.warn.pinned { border-color: var(--attn); }
+  .dl-check { position: absolute; left: 14px; top: 13px; width: 22px; height: 22px; display: grid; place-items: center; padding: 0;
+    border: 2px solid var(--ink-300); border-radius: 50%; background: var(--white); color: transparent; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+  .dl-points li.warn .dl-check { border-color: var(--attn); }
+  .dl-check:hover { border-color: var(--green-500); color: var(--green-500); }
+  .dl-check:focus-visible, .dl-ignore:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .dl-points li.done .dl-check { border-color: var(--green-500); background: var(--green-500); color: var(--white); }
+  .dl-ignore { position: absolute; right: 10px; top: 10px; padding: 3px 8px; border: none; border-radius: 999px; background: none; cursor: pointer;
+    font: 600 var(--fs-xs) var(--font-body); color: var(--text-meta); }
+  .dl-ignore:hover { background: var(--surface-100); color: var(--ink-900); }
+  .dl-points li.done { background: var(--surface-100); opacity: .75; }
+  .dl-points li.done .dl-pt-head { text-decoration: line-through; text-decoration-color: var(--ink-300); color: var(--ink-450); }
+  .dl-donetag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; background: var(--wash-green); color: var(--green-700); letter-spacing: .03em; }
+  .dl-ignored { margin: 6px 0 0 2px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  .dl-ignored .btn-link { font-size: var(--fs-xs); font-weight: 700; }
   .dl-points li:focus { outline: none; }
   .dl-points li:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   /* Point = small kind eyebrow · one-ink Montserrat headline · body. Warnings: amber eyebrow + icon. */
-  .dl-pt-kind { display: flex; align-items: center; gap: 5px; margin: 0 0 3px; font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-meta); }
-  .dl-points li.warn .dl-pt-kind { color: var(--warn-700); }
+  .dl-pt-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 5px; font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase; color: var(--text-meta); }
+  /* "Needs attention" = a small red pill (icon + label); the topic follows it in grey */
+  /* "Needs attention": super-light warm red pill, darker warm red text (4.97:1, AA) + a bright red dot */
+  .ov-dl { --attn: #D9361F; --attn-ink: #C2361C; --attn-wash: #FFF1EE; }
+  .dl-attn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 7px; border-radius: 999px;
+    background: var(--attn-wash); color: var(--attn-ink); letter-spacing: .03em; }
   .dl-points li.activity .dl-pt-kind { color: var(--green-700); }
   .dl-pt-kind svg { flex: none; }
   .dl-pt-head { margin: 0; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-md); line-height: 1.4; color: var(--ink-900); }
   .dl-pt-head em { font-style: normal; color: inherit; }
   .dl-pt-body { margin: 4px 0 0; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-600); }
   /* point kinds: warnings get an amber dot (always listed first), the activity a green one */
-  .dl-points li.warn::before, .dl-points li.warn.on::before { background: var(--warn-700); }
-  .dl-points li.activity::before { background: var(--green-500); }
   .dl-pt-body .dl-ptlink { font-weight: 700; font-size: var(--fs-sm); }
   .dl-sample { margin-left: 4px; vertical-align: 1px; }
-  .dl-source { margin: 6px 0 0 12px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  .dl-source { margin: 8px 0 0 2px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
   /* Legend + what a ring's colour means, under the actions (always in view) */
-  .dl-key { margin: 20px 0 0 12px; padding-top: 14px; border-top: 1px solid var(--line-200); }
+  .dl-key { margin: 20px 0 0; padding-top: 14px; border-top: 1px solid var(--line-200); }
   .dl-keynote { margin: 8px 0 0; font-weight: 600; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-meta); }
   /* Under the points: Ask Tilli (primary button) + See outcomes (text link — Outcomes isn't in the nav) */
-  .dl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin: 16px 0 0 12px; }
+  .dl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin: 16px 0 0; }
   .dl-out { font-weight: 700; font-size: var(--fs-sm); }
   /* Ask Tilli inside the Overview: a soft button under the story; open, the chat replaces the story */
   .ov-dl { --dla-h: max(460px, calc(100dvh - 210px)); --dla-h-phone: 380px; --dla-col: 1fr; }   /* chat height (desktop / phone), chat column share */
@@ -401,7 +418,7 @@
   .dla-note { margin-top: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--green-700); }
   .dla-compose { padding: 10px 12px 12px; border-top: 1px solid var(--line-200); }
   @media (prefers-reduced-motion: reduce) {
-    .dl-spoke, .dl-kid, .dl-hub, .dl-name, .dl-points li, .dl-points li::before { transition: none; }
+    .dl-spoke, .dl-kid, .dl-hub, .dl-name, .dl-points li, .dl-check { transition: none; }
   }
   @media (max-width: 860px) {
     .ov-dl { grid-template-columns: minmax(0, 1fr); }
@@ -481,6 +498,6 @@
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
 <script src="assets/admin-data.js?v=20261020op"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261020ng"></script>
+<script src="assets/admin.js?v=20261020cr"></script>
 </body>
 </html>
