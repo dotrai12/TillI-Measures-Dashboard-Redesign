@@ -107,8 +107,8 @@
       status: { baseline: 'open',     midline: 'upcoming', endline: 'upcoming' } },
     { key: 'baseline', label: 'Baseline done', hint: 'Baseline is complete. The first skill bands appear; movement still waits on a second point.',
       status: { baseline: 'complete', midline: 'upcoming', endline: 'upcoming' } },
-    { key: 'between',  label: 'Midline open',  hint: 'The Midline window is open and collecting. Baseline results stay visible alongside a live completion count.',
-      status: { baseline: 'complete', midline: 'open',     endline: 'upcoming' } },
+    { key: 'between',  label: 'Midline open',  hint: 'The Midline window is open and collecting. Baseline results stay visible alongside a live completion count. Demo: no setup issues (no expiring invite, no new concern), so the Overview shows completion.',
+      status: { baseline: 'complete', midline: 'open',     endline: 'upcoming' }, calm: true },
     { key: 'midline',  label: 'Midline done',  hint: 'Baseline + Midline complete. Movement since Baseline now populates.',
       status: { baseline: 'complete', midline: 'complete', endline: 'upcoming' } },
     { key: 'endline',  label: 'Endline done',  hint: 'All three points complete. The full-year arc is filled in and no window is open.',
@@ -238,7 +238,9 @@
       return out;
     }
     var rnd = mulberry32(hashStr(secDef.id + ':' + OPEN_POINT.key + ':progress'));
-    var done = Math.round(students.length * (0.3 + rnd() * 0.7));
+    // Demo: Baseline sections spread 30–100% done (shows a lagging section); Midline sections
+    // move together at 62–74% (within COLLECT_GAP_PTS), so Midline open raises no "falling behind" warning.
+    var done = Math.round(students.length * (OPEN_POINT.key === 'midline' ? 0.62 + rnd() * 0.12 : 0.3 + rnd() * 0.7));
     var rank = function (s) { return hashStr(s.adm + ':' + OPEN_POINT.key + ':order'); };
     students.slice().sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (s, i) {
       out[s.adm] = i < done ? 'done' : mulberry32(hashStr(s.adm + ':' + OPEN_POINT.key + ':draft'))() < DRAFT_SHARE ? 'draft' : 'none';
@@ -312,6 +314,17 @@
   // Created schools have no raised concerns yet, and the demo entries above point
   // at demo students that don't exist in a real roster — so start empty for them.
   if (window.TILLI_CREATED) CONCERNS = [];
+  // Demo stages marked `calm` (Midline open) have no setup issues: the demo's new
+  // concern counts as already routed there. Re-applied whenever the stage changes.
+  function demoCalm() { var st = LIFECYCLE_STATES.find(function (x) { return x.key === ACTIVE_LIFECYCLE; }); return !window.TILLI_CREATED && !!(st && st.calm); }
+  function applyDemoCalm() {
+    var calm = demoCalm();
+    CONCERNS.forEach(function (c) {
+      if (c.demoNew == null) c.demoNew = c.status === 'New';
+      if (c.demoNew) { c.status = calm ? 'Routed' : 'New'; c.routed_to = calm ? 'Counsellor' : null; }
+    });
+  }
+  applyDemoCalm();
   function concernCounts() {
     return {
       New: CONCERNS.filter(function (c) { return c.status === 'New'; }).length,
@@ -583,9 +596,9 @@
     points: POINTS, completedPoints: COMPLETED_POINTS, latestComplete: LATEST_COMPLETE,
     openPoint: OPEN_POINT, pointRange: pointRange, daysLeft: daysLeft,
     // lifecycle preview state (demo tooling; see LIFECYCLE_STATES above)
-    lifecycleStates: LIFECYCLE_STATES, lifecycleState: ACTIVE_LIFECYCLE,
+    lifecycleStates: LIFECYCLE_STATES, lifecycleState: ACTIVE_LIFECYCLE, demoCalm: demoCalm,
     setLifecycleState: function (key) {
-      applyLifecycle(key);
+      applyLifecycle(key); applyDemoCalm();
       try { localStorage.setItem('tilliMeasures.lifecycleState', ACTIVE_LIFECYCLE); } catch (e) {}
       var AD = window.ADMIN_DATA;
       AD.points = POINTS; AD.completedPoints = COMPLETED_POINTS;

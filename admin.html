@@ -326,7 +326,7 @@
   .dl-spoke.hub { stroke-width: var(--dl-dot-hub); }   /* colour = gradient parent → child, set inline */
   .dl-spoke.kid { opacity: .45; stroke-width: var(--dl-dot-kid); }
   .dl-hit { fill: transparent; }
-  .dl-kid { cursor: grab; transition: opacity .35s; }
+  .dl-kid { cursor: pointer; transition: opacity .35s; }   /* click = who is this + Open profile */
   .dl-hub { cursor: grab; transition: opacity .35s; }
   .dl-hub.nav { cursor: pointer; }
   .dl-hub.nav:hover .dl-hit, .dl-hub.nav:focus-visible .dl-hit { fill: var(--accent-wash); stroke: var(--accent); stroke-width: 1.5; }
@@ -343,6 +343,10 @@
   .dl-tip { position: absolute; z-index: 5; transform: translate(-50%, calc(-100% - 16px)); pointer-events: none; background: var(--ink-900); color: var(--white);
     border-radius: var(--radius-sm); padding: 8px 12px; box-shadow: var(--shadow-pop); font-size: var(--fs-sm); font-weight: 600; line-height: 1.45; white-space: nowrap; }
   .dl-tip.below { transform: translate(-50%, 16px); }
+  .dl-tip.pinned { pointer-events: auto; }   /* clicked child: the card stays and its button works */
+  .dl-tip-open { display: block; margin-top: 8px; padding: 6px 12px; border: none; border-radius: 999px; background: var(--green-500); color: var(--white);
+    font: 700 var(--fs-xs) var(--font-body); cursor: pointer; white-space: nowrap; }
+  .dl-tip-open:hover { background: var(--green-600); }
   .dl-tip b { display: block; font-weight: 700; }
   .dl-tip span { display: block; color: var(--ink-300); }
   .dl-tip em { display: block; font-style: normal; color: var(--green-500); margin-top: 2px; }
@@ -496,8 +500,8 @@
 <script src="assets/tilli-api.js?v=20261020ce"></script>
 <script src="assets/tilli-history.js?v=20261020ce"></script>
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
-<script src="assets/admin-data.js?v=20261020op"></script>
+<script src="assets/admin-data.js?v=20261020ca"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261020cr"></script>
+<script src="assets/admin.js?v=20261020ca"></script>
 </body>
 </html>

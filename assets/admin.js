@@ -999,7 +999,8 @@
     dlSpokeDefs += '<linearGradient id="' + id + '" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:' + a + '"/><stop offset="1" style="stop-color:' + b + '"/></linearGradient>';
     return '<line class="dl-spoke ' + cls + '" data-dl-i="' + i + '" vector-effect="non-scaling-stroke" stroke-width="' + w + '" style="stroke:url(#' + id + ')"/>';
   }
-  function dlKidNames(mode) { return isCoordinator && (mode === 'checkin' || AD.leadershipStudentResultsVisible); }
+  // School admins can see which child a dot is (hover, or click for a card with "Open profile"), in both modes.
+  function dlKidNames(mode) { return isCoordinator; }
 
   // ---- the living graph ----
   // ONE whole-school layout (world units, school hub at 0,0). Every level is a
@@ -1696,7 +1697,19 @@
       tipEl.style.left = (p.x - box.left) + 'px'; tipEl.style.top = py + 'px';
       tipEl.classList.toggle('below', py < 90);
     }
-    function hideTip() { tipEl.hidden = true; }
+    function hideTip() { if (!pinned) tipEl.hidden = true; }
+    // Click a child dot → a card that stays open: who it is + "Open profile" (the student pop-up).
+    var pinned = null;
+    function unpin() { pinned = null; tipEl.classList.remove('pinned'); tipEl.hidden = true; }
+    function pinKid(el) {
+      if (pinned === el) { unpin(); return; }
+      var n = dlSim.g.nodes[el.dataset.dlI], st = n.student; if (!st || !dlKidNames(mode)) return;
+      pinned = null; showTip(el);
+      tipEl.innerHTML += '<span>' + esc(st.adm) + ' · ' + esc(st.grade + ' ' + st.section) + '</span>' +
+        '<button type="button" class="dl-tip-open" data-open-stu="' + esc(st.adm) + '">Open profile →</button>';
+      tipEl.classList.add('pinned'); pinned = el;
+      tipEl.querySelector('[data-open-stu]').onclick = function (e) { e.stopPropagation(); var adm = this.dataset.openStu; unpin(); openStudentHistory(adm); };
+    }
     function navigate(el) {
       var nav = el.dataset.dlNav, n = dlSim.g.nodes[el.dataset.dlI];
       var next = nav === 'up' ? dlUpParams(scope) : dlParamsFor(n);
@@ -1704,7 +1717,7 @@
       hideTip(); go('overview', next);
     }
     stage.querySelectorAll('.dl-hub:not(.ctx), .dl-kid:not(.ctx)').forEach(function (el) {
-      el.addEventListener('pointerenter', function () { if (!drag) showTip(el); });
+      el.addEventListener('pointerenter', function () { if (!drag && !pinned) showTip(el); });
       el.addEventListener('pointerleave', hideTip);
       el.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;
@@ -1715,13 +1728,14 @@
       el.addEventListener('pointermove', function (e) {
         if (!drag || drag.el !== el) return;
         if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
-        drag.moved = true; hideTip(); stage.classList.add('dragging');
+        drag.moved = true; unpin(); hideTip(); stage.classList.add('dragging');
         var p = toSvg(e); drag.n.fixed = true; drag.n.x = p.x + drag.ox; drag.n.y = p.y + drag.oy; dlWake();
       });
       function end() {
         if (!drag || drag.el !== el) return;
         var d = drag; drag = null; d.n.fixed = false; stage.classList.remove('dragging'); dlWake();
-        if (!d.moved && el.dataset.dlNav) navigate(el);
+        if (!d.moved && el.dataset.dlNav) { unpin(); navigate(el); }
+        else if (!d.moved && el.classList.contains('dl-kid')) pinKid(el);
       }
       el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
       if (el.dataset.dlNav) {
@@ -1729,15 +1743,16 @@
         el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(el); } });
       }
     });
-    // Zoomed in: a click on empty space (or on the faded rest of the school) steps back one level.
-    if (scope.level !== 'school') {
-      stage.classList.add('can-up');
-      stage.addEventListener('click', function (e) {
-        if (e.button !== 0 || e.target.closest('.dl-hub:not(.ctx), .dl-kid:not(.ctx)')) return;
-        var next = dlUpParams(scope); if (params.view) next.view = mode;
-        hideTip(); go('overview', next);
-      });
-    }
+    // Empty-space click: first closes an open child card; otherwise, when zoomed in,
+    // steps back one level (the faded rest of the school counts as empty space).
+    if (scope.level !== 'school') stage.classList.add('can-up');
+    stage.addEventListener('click', function (e) {
+      if (e.button !== 0 || e.target.closest('.dl-tip, .dl-hub:not(.ctx), .dl-kid:not(.ctx)')) return;
+      if (pinned) { unpin(); return; }
+      if (scope.level === 'school') return;
+      var next = dlUpParams(scope); if (params.view) next.view = mode;
+      hideTip(); go('overview', next);
+    });
   }
 
   // Overview = the living dandelion + its guided story, free-flowing on the page (no cards).
@@ -2546,7 +2561,8 @@
     // the two never disagree. A joined teacher with no section shows "No section yet";
     // an invited one shows nothing (they add their own sections after accepting).
     // Demo: Nadia's invite went out 12 days ago, so it is 2 days from expiring (shows the alert).
-    var INVITED = { 'nadia.fernando@littlesprouts.edu': Date.now() - 12 * DAY_MS };
+    // In a calm demo stage (Midline open) it went out 3 days ago, so it isn't close to expiring.
+    var INVITED = { 'nadia.fernando@littlesprouts.edu': Date.now() - (AD.demoCalm && AD.demoCalm() ? 3 : 12) * DAY_MS };
     var demo = ((window.TILLI_SCHOOL || {}).admins || []).filter(function (a) { return a.role !== 'tilli'; }).map(function (a) {
       return { name: a.name, email: a.email, role: a.role === 'group' ? 'School group admin' : 'School admin', status: INVITED[a.email] ? 'Invited' : 'Active', invitedAt: INVITED[a.email] || null };
     });
