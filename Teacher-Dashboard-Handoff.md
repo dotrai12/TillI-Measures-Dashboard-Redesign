@@ -96,7 +96,7 @@ Section chips (top) stay on every page except Profile and Ask Tilli.
 
 From top to bottom:
 1. **Greeting** ("Good morning/afternoon/evening, [first name]") + "Your [class] garden".
-2. **Garden picture** — tappable, opens the class garden. "See each child's plant →" link underneath.
+2. **Garden picture** — a picture only. The separate class-garden and all-classes pages were removed on 21 Oct 2026; teachers switch class with the header chips.
 3. **Caption** for the state (e.g. "Your garden is resting — scores next update at Midline (Jun 18)").
 4. **Celebration line** — only when children genuinely grew (see rules).
 5. **Level mix** — Blooming / Growing / Sprouting counts (+ "Not assessed yet" if any). Hidden at Baseline.
@@ -110,7 +110,9 @@ From top to bottom:
 |---|---|
 | ![Class garden](handoff-screens/08-class-garden.jpg) | ![All classes](handoff-screens/09-all-classes.jpg) |
 
-- **Class garden:** one plant per child (hover / tap ⓘ for name, level, skill counts, "View [name] →"; tap the plant to open the child). Legend, "N children could use a little extra" cards, Garden highlights (2 strongest skills), Growing areas (3 weakest skills, each with "Ask Tilli for a class activity").
+> **Removed 21 Oct 2026:** both pages below (Class garden and All classes) no longer exist — see the decision log in Teacher-Dashboard-Tasks.md. Kept here for history.
+
+- ~~**Class garden:**~~ one plant per child (hover / tap ⓘ for name, level, skill counts, "View [name] →"; tap the plant to open the child). Legend, "N children could use a little extra" cards, Garden highlights (2 strongest skills), Growing areas (3 weakest skills, each with "Ask Tilli for a class activity").
 - **All classes** (only linked when the teacher has 2+ sections): one bush per section; tap a bush → pop-up listing every child with "Good at / Next to practise" → "Open [class] garden". "Plant a new bush" adds a class.
 
 ### 4.4 Students

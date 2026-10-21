@@ -336,7 +336,8 @@
     root = mountEl;
     S = {
       data: ctx.data, baseData: ctx.data, teacher: ctx.teacher || {},
-      nav: (ctx.teacher && ctx.teacher.startNav) || 'garden', sectionId: (ctx.data.sections[0] || {}).id,
+      // A teacher with 2+ classes starts on "All" (every class together); one class → that class.
+      nav: (ctx.teacher && ctx.teacher.startNav) || 'garden', sectionId: ctx.data.sections.length > 1 ? 'all' : (ctx.data.sections[0] || {}).id,
       mirrorIdx: null,   // Teaching Mirror timeline: selected snapshot (null = latest)
       gardenLevel: 'landing', classModal: null, studentId: null,
       // A first-time class (built from onboarding) opens on Baseline — no prior
@@ -348,6 +349,7 @@
       trackerStu: null,   // Tracker: child opened from a row (their all-windows timeline) | null
       todoView: null, todoSearch: '',   // Assess → To-do: 'pending' = who's still to observe (opened from the active step)
       todoDoneOpen: false,   // …and its "Done (n)" fold
+      redoAsk: null,         // { id, mute } while the Redo confirm is open
       perspChartOpen: false,   // Child → Perspectives: "See it as a chart" fold
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       ovBand: null, ovSkill: null,
@@ -520,9 +522,9 @@
         </div>
         ${bottomNav}
         ${S.ask.open ? askPanel() : ''}
-        ${S.classModal ? classModalView() : ''}
         ${S.histOpen ? histModalView() : ''}
         ${reportPreviewView()}
+        ${redoModalView()}
         ${addModal()}
         ${sideWide ? '' : stateSwitcherGUI(true)}
       </div>`;
@@ -563,7 +565,7 @@
     if (S.nav === 'profile') return profilePanel();
     if (S.nav === 'ask') return askScreenView();
     if (!hasStudents()) return emptyClassView();
-    if (S.nav === 'garden') return S.gardenLevel === 'beds' ? bedsView() : S.gardenLevel === 'section' ? sectionGardenView() : landingView();
+    if (S.nav === 'garden') return landingView();   // the class-garden and all-classes pages were removed (21 Oct 2026); switch class with the header chips
     if (S.nav === 'students') return S.studentId ? studentDetailView() : rosterView();
     if (S.nav === 'assess') return assessView();
     if (S.nav === 'insights') return insightsView();
@@ -769,9 +771,8 @@
         <button class="ui-avatar focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
       </div>
 
-      <button class="mg-scene-btn focus" data-garden-level="section" aria-label="Open your ${esc(sec.name)} garden — one plant per child" title="See each child's plant">${gardenScene(st.maturity)}</button>
+      <div class="mg-scene-wrap">${gardenScene(st.maturity)}</div>
       <p class="mg-caption">${esc(fill(st.caption, { next: nextWindow }))}</p>
-      <div class="mg-garden-link"><button class="btn-link focus" data-garden-level="section">See each child&rsquo;s plant →</button></div>
       ${celebration}
       ${bandBlock}
 
@@ -804,215 +805,6 @@
   // Collapsed/expanded is shared with the school-admin panel (same key).
   const DEV_COLLAPSED_KEY = 'tilliMeasures.devPanelCollapsed';
   function devCollapsed() { try { return localStorage.getItem(DEV_COLLAPSED_KEY) === '1'; } catch (e) { return false; } }
-
-  // ---------------- My Garden: beds overview ----------------
-  function computeBeds() {
-    const secs = S.data.sections;
-    const { isPhone, isDesktop, isTablet } = bp();
-    const scale = 1;
-    const avail = Math.min(1180, S.vw - (isDesktop ? 300 : isTablet ? 250 : 44));
-    const cols = isPhone ? 1 : 2;
-    const maxW = secs.length <= 2 ? 560 : 460;
-    const bedW = Math.max(240, Math.min(maxW, Math.floor((avail - 26 * (cols - 1)) / cols)));
-    const bushH = Math.round(bedW * 0.38);
-    const pad = Math.round(bushH * 0.4);
-    const svgH = bushH + pad;
-    const dome = (t) => Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, t))), 0.55);
-    const surfaceY = (t) => pad + bushH - (0.3 + 0.7 * dome(t)) * bushH;
-
-    const beds = secs.map((sec, si) => {
-      const color = ART.bedBlooms[si % ART.bedBlooms.length];
-      const rnd = (a, b) => { const v = Math.sin((si * 31 + a * 7 + 1) * (b * 12.9898 + 4.1414)) * 43758.5453; return v - Math.floor(v); };
-      const mk = (level, r0, fill, key) => {
-        const cnt = Math.max(4, Math.round(bedW / (bushH * 0.36)));
-        const out = [];
-        for (let i = 0; i < cnt; i++) {
-          const t = (i + 0.5) / cnt;
-          const r = Math.round(r0 * (0.62 + 0.38 * dome(t)) * (0.88 + rnd(i + key, 7) * 0.26));
-          const span = Math.max(1, bedW - 2 * r);
-          const cx = Math.round(r + t * span + (rnd(i + key, 3) - 0.5) * (span / cnt) * 0.4);
-          const cy = Math.round(pad + bushH - level * (0.3 + 0.7 * dome(t)) * bushH + (rnd(i + key, 5) - 0.5) * bushH * 0.07);
-          out.push({ cx: Math.min(bedW - r, Math.max(r, cx)), cy: Math.max(r, Math.min(svgH, cy)), r, fill });
-        }
-        return out;
-      };
-      const lobesBack = [...mk(0.92, bushH * 0.25, ART.bushBack, 1), ...mk(0.66, bushH * 0.28, ART.bushBack2, 40)];
-      const lobesFront = [...mk(0.38, bushH * 0.3, ART.bushFront, 80), ...mk(0.14, bushH * 0.26, ART.bushFront2, 120)];
-      const sprigs = [];
-      for (let i = 0; i < 14; i++) {
-        const t = (i + 0.5) / 14;
-        const x = Math.round(t * bedW + (rnd(i, 11) - 0.5) * 30);
-        const sy = surfaceY(t);
-        const y = Math.round(sy + (svgH - sy) * (0.2 + rnd(i, 13) * 0.6));
-        sprigs.push(`M${x} ${y} q5 -7 10 -2`);
-      }
-      const baseFor = (st) => (st === 'expert' ? 0.34 : st === 'learner' ? 0.23 : 0.15);
-      const states = sec.students.map((stu) => TO_BLOOM[stu.state] || 'learner');
-      const place = (mult) => {
-        const items = states.map((st, i) => ({ i, st, size: Math.max(14, Math.round(bushH * baseFor(st) * mult)) }));
-        const order = [...items].sort((p, q) => q.size - p.size);
-        let seedN = si * 7919 + 13;
-        const rng = () => { seedN = (seedN * 1103515245 + 12345) & 0x7fffffff; return seedN / 0x7fffffff; };
-        const placed = [];
-        for (const it of order) {
-          const rad = it.size / 2;
-          let ok = false;
-          for (let tries = 0; tries < 260 && !ok; tries++) {
-            const t = 0.04 + rng() * 0.92;
-            const cx = t * bedW;
-            if (cx - rad < 2 || cx + rad > bedW - 2) continue;
-            const sy = surfaceY(t);
-            const yMin = sy + rad * 0.85;
-            const yMax = svgH - rad * 0.8;
-            if (yMax <= yMin) continue;
-            const cy = yMin + rng() * (yMax - yMin);
-            let clash = false;
-            for (const p of placed) { if (Math.hypot(p.cx - cx, p.cy - cy) < (p.size / 2 + rad) * 1.04) { clash = true; break; } }
-            if (!clash) { placed.push(Object.assign({}, it, { cx, cy })); ok = true; }
-          }
-          if (!ok) return null;
-        }
-        return placed;
-      };
-      let placed = null;
-      for (let mult = scale, k = 0; k < 9 && !placed; k++, mult *= 0.9) placed = place(mult);
-      if (!placed) placed = place(0.42) || [];
-      const byIndex = [];
-      placed.forEach((p) => { byIndex[p.i] = p; });
-      const plants = sec.students.map((stu, i) => {
-        const p = byIndex[i] || { size: 16, cx: bedW / 2, cy: svgH * 0.6 };
-        const size = p.size;
-        const st = states[i];
-        return {
-          state: st, color, size, seed: (i * 7 + si * 13) % 97,
-          name: stu.name, bandLabel: st === 'expert' ? 'Blooming' : st === 'learner' ? 'Growing' : 'Sprouting',
-          goodSkill: bestOf(stu), helpSkill: weakOf(stu),
-          left: Math.round(p.cx - size / 2), bottom: Math.round(svgH - p.cy - size / 2), z: 10 + Math.round(p.cy),
-        };
-      });
-      return {
-        isAdd: false, id: sec.id, name: sec.name, count: sec.students.length, plants,
-        bedW, svgH, viewBox: '0 0 ' + bedW + ' ' + svgH,
-        baseTop: Math.round(pad + bushH * 0.72), baseH: Math.round(bushH * 0.28), baseX: Math.round(bushH * 0.24), baseW: Math.round(bedW - bushH * 0.48),
-        lobesBack, lobesFront, sprigs,
-      };
-    });
-    beds.push({ isAdd: true, bedW, svgH });
-    return beds;
-  }
-
-  function bedsView() {
-    const beds = computeBeds();
-    const bedsHTML = beds.map((bd) => {
-      if (bd.isAdd) {
-        return `<button class="bed-wrap" data-add-class="1">
-          <div class="bed-stage" style="width:${bd.bedW}px;height:${bd.svgH}px">
-            <div class="bed-add"><span class="plus">+</span><span>Plant a new bush</span></div>
-          </div></button>`;
-      }
-      const circles = (arr) => arr.map((lo) => `<circle cx="${lo.cx}" cy="${lo.cy}" r="${lo.r}" fill="${lo.fill}"></circle>`).join('');
-      const sprigs = bd.sprigs.map((d) => `<path d="${d}" stroke="${ART.sprig}" stroke-width="2" stroke-linecap="round" opacity="0.45" fill="none"></path>`).join('');
-      const plants = bd.plants.map((pl) => `
-        <div class="bed-plant" style="left:${pl.left}px;bottom:${pl.bottom}px;z-index:${pl.z}">
-          ${bloomSVG(pl.state, pl.color, pl.size, pl.seed)}
-          <div class="ui-tip bed-tip">
-            <div class="nm">${esc(pl.name)}</div>
-            <div class="ui-eyebrow bl">${esc(pl.bandLabel)}</div>
-            <div class="rw"><b class="td-good">Good at</b> <span>${esc(pl.goodSkill)}</span></div>
-            <div class="rw"><b class="td-help">Next to practise</b> <span>${esc(pl.helpSkill)}</span></div>
-          </div>
-        </div>`).join('');
-      return `<button class="bed-wrap" data-open-class="${bd.id}">
-        <div class="bed-stage" style="width:${bd.bedW}px;height:${bd.svgH}px">
-          <svg width="${bd.bedW}" height="${bd.svgH}" viewBox="${bd.viewBox}" fill="none" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;bottom:0;z-index:1;overflow:visible;clip-path:inset(-400px -400px 0 -400px)">
-            ${circles(bd.lobesBack)}
-            <rect x="${bd.baseX}" y="${bd.baseTop}" width="${bd.baseW}" height="${bd.baseH}" rx="26" fill="${ART.bushBase}"></rect>
-            ${circles(bd.lobesFront)}
-            ${sprigs}
-          </svg>
-          ${plants}
-        </div>
-        <div class="bed-label"><span class="nm">${esc(bd.name)}</span><span class="ct">${countNoun(bd.count, 'student', 'students')}</span></div>
-      </button>`;
-    }).join('');
-
-    const key = [
-      { state: 'beginner', title: 'Sprouting', desc: 'a tiny bud', size: 18 },
-      { state: 'learner', title: 'Growing', desc: 'a small flower', size: 26 },
-      { state: 'expert', title: 'Blooming', desc: 'a big open flower', size: 38 },
-    ].map((k) => `<span>${bloomSVG(k.state, ART.keyBloom, k.size, 5)}<span class="lg-t"><b>${k.title}</b> · ${k.desc}</span></span>`).join('');
-
-    return `<div class="dash-wrap garden-beds">
-      <button class="btn-link mb-3 focus" data-garden-level="landing">← My Garden</button>
-      <div class="garden-head">
-        <div>
-          <h1 class="ui-screen-title">My garden</h1>
-          <p class="ui-screen-sub flush">Good morning, ${esc(firstName())} 🌱 — every bloom is one of your students. Pick a bush to tend.</p>
-        </div>
-        <div class="garden-head-right">
-          <button class="ui-avatar focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
-          ${gardenerSVG()}
-        </div>
-      </div>
-      <div class="beds-grid">${bedsHTML}</div>
-      <div class="ui-legend garden-key">${key}</div>
-    </div>`;
-  }
-
-  function gardenerSVG() {
-    const hair = S.gardener === 'm'
-      ? `<path d="M47 46 q2 -26 27 -26 q25 0 27 26 q-10 -10 -27 -10 q-17 0 -27 10 Z" fill="${ART.hairM}"></path>`
-      : `<g><path d="M47 48 q0 -30 27 -30 q27 0 27 30 q0 -14 -27 -14 q-27 0 -27 14 Z" fill="${ART.hairF}"></path><path d="M100 52 q12 14 6 34 q-8 -4 -10 -18" fill="${ART.hairF}"></path></g>`;
-    return `<div class="gardener" aria-hidden="true"><svg width="92" height="132" viewBox="0 0 148 212" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="74" cy="203" rx="40" ry="7" fill="${ART.shadow}" opacity="0.06"></ellipse>
-      <path d="M56 118 Q52 156 50 198" stroke="${ART.trousers}" stroke-width="9" stroke-linecap="round"></path>
-      <path d="M92 118 Q96 156 98 198" stroke="${ART.trousers}" stroke-width="9" stroke-linecap="round"></path>
-      <path d="M44 200 h20 M84 200 h20" stroke="${ART.boots}" stroke-width="9" stroke-linecap="round"></path>
-      <path d="M48 78 h52 q10 0 10 12 v28 q0 10 -10 10 h-52 q-10 0 -10 -10 v-28 q0 -12 10 -12 Z" fill="${ART.green}"></path>
-      <path d="M62 78 v42 M86 78 v42" stroke="${ART.shirtSeam}" stroke-width="3"></path>
-      <path d="M38 86 Q22 104 20 128" stroke="${ART.yellow}" stroke-width="9" stroke-linecap="round"></path>
-      <path d="M110 86 Q126 102 128 122" stroke="${ART.yellow}" stroke-width="9" stroke-linecap="round"></path>
-      <path d="M46 84 h56 v-6 q0 -8 -8 -8 h-40 q-8 0 -8 8 Z" fill="${ART.yellow}"></path>
-      <circle cx="74" cy="48" r="27" fill="${ART.skin}"></circle>
-      ${hair}
-      <ellipse cx="74" cy="32" rx="46" ry="11" fill="${ART.brim}"></ellipse>
-      <path d="M50 32 q0 -20 24 -20 q24 0 24 20 Z" fill="${ART.yellow}"></path>
-      <path d="M50 30 q24 8 48 0" stroke="${ART.hatBand}" stroke-width="4" stroke-linecap="round" fill="none"></path>
-      <circle cx="64" cy="48" r="3" fill="${ART.face}"></circle><circle cx="84" cy="48" r="3" fill="${ART.face}"></circle>
-      <path d="M66 58 q8 6 16 0" stroke="${ART.face}" stroke-width="2.6" stroke-linecap="round" fill="none"></path>
-      <circle cx="56" cy="55" r="4" fill="${ART.blush}" opacity="0.5"></circle><circle cx="92" cy="55" r="4" fill="${ART.blush}" opacity="0.5"></circle>
-      <g transform="translate(112 118)"><path d="M0 4 h20 a4 4 0 0 1 4 4 v12 a5 5 0 0 1 -5 5 h-18 a5 5 0 0 1 -5 -5 v-12 a4 4 0 0 1 4 -4 Z" fill="${ART.cyan}"></path><path d="M20 6 l10 -5 v6 Z" fill="${ART.cyan}"></path><path d="M-4 8 q-8 -3 -9 5" stroke="${ART.cyan}" stroke-width="3" stroke-linecap="round" fill="none"></path></g>
-    </svg></div>`;
-  }
-
-  // ---------------- class roster modal ----------------
-  function classModalView() {
-    const sec = S.data.sections.find((s) => s.id === S.classModal);
-    if (!sec) return '';
-    const idx = S.data.sections.findIndex((s) => s.id === S.classModal);
-    const color = ART.bedBlooms[idx % ART.bedBlooms.length];
-    const rows = [...sec.students].sort((a, b) => a.name.localeCompare(b.name)).map((stu, i) => {
-      const st = TO_BLOOM[stu.state] || 'learner';
-      const size = st === 'expert' ? 34 : st === 'learner' ? 26 : 20;
-      const label = st === 'expert' ? 'Blooming' : st === 'learner' ? 'Growing' : 'Sprouting';
-      return `<button class="cm-row" data-open-student="${esc(stu.id)}">
-        <span class="ui-icontile cm-bloom">${bloomSVG(st, color, size, (i * 11) % 97)}</span>
-        <span class="cm-info"><span class="nm">${esc(stu.name)}</span>
-          <span class="sk"><span><b>Good at</b> ${esc(bestOf(stu))}</span><span class="td-help"><b>Next to practise</b> ${esc(weakOf(stu))}</span></span></span>
-        <span class="cm-band">${label}</span>
-      </button>`;
-    }).join('');
-    return `<div class="ui-scrim cm-backdrop" data-close-modal>
-      <div class="ui-modal-card cm-card" data-stop>
-        <div class="cm-head">
-          <div><div class="ui-title xl cm-title">${esc(sec.name)}</div><div class="ui-meta cm-sub">${countNoun(sec.students.length, 'student', 'students')} · one bloom each</div></div>
-          <button class="btn-icon" data-close-modal>✕</button>
-        </div>
-        <div class="cm-list">${rows}</div>
-        <div class="cm-foot"><button class="btn btn-primary md focus" data-open-bed="${esc(sec.id)}">Open ${esc(sec.name)} garden →</button></div>
-      </div>
-    </div>`;
-  }
 
   // ---------------- change history ----------------
   // Reads go through TilliAPI.historyFor, which scopes to this teacher's
@@ -1063,95 +855,6 @@
         </div>
         <div class="hist-tools">${HU.kindChipsHTML(S.histKind, 'dark')}<span class="hist-count">${countNoun(list.length, 'change', 'changes')}</span></div>
         <div class="hist-scroll">${HU.listHTML(list, histOpts({ showSection: sec.id === 'all', empty: 'Nothing has changed in ' + sec.name + ' yet.' }))}</div>
-      </div>
-    </div>`;
-  }
-
-  // ---------------- My Garden: section view ----------------
-  function sectionGardenView() {
-    const sec = section();
-    const { isPhone } = bp();
-    const order = { tending: 0, waiting: 1, growing: 2, blossoming: 3 };
-    const sorted = [...sec.students].sort((a, b) => order[a.state] - order[b.state]);
-    const sizeFor = (st) => ({ blossoming: isPhone ? 74 : 88, growing: isPhone ? 66 : 80, tending: isPhone ? 60 : 72, waiting: isPhone ? 54 : 64 }[st]);
-    const offs = ['10px', '0px', '16px', '6px', '20px', '2px', '12px'];
-    const plantCol = (isPhone ? 72 : 94) + 'px';
-
-    const bed = sorted.map((st, i) => `
-      <div class="pg-cell tip-host" style="transform:translateY(${offs[i % offs.length]})">
-        <button class="pg-plant" data-open-student="${esc(st.id)}" title="${esc(st.name)}">${flowerArt(st.state, sizeFor(st.state), i)}</button>
-        <button type="button" class="ui-info lg tip-i focus" data-tip-open aria-expanded="false" aria-label="About ${esc(st.name)}">i</button>
-        <div class="ui-tip pg-tip">
-          <div class="nm">${esc(st.name)}</div><div class="sl">${esc(bandLine(st))}</div>
-          <div class="ch">${chipHTML(st.chips)}</div>
-          <div class="vw">View ${esc(st.dispFirst)} →</div>
-        </div>
-      </div>`).join('');
-
-    const legend = [
-      { title: 'Blooming', desc: 'thriving overall', dot: TP.level(3).soft },
-      { title: 'Growing', desc: 'on track', dot: TP.level(2).soft },
-      { title: 'Sprouting', desc: 'start with one focus skill', dot: TP.level(1).soft },
-      { title: 'Not assessed yet', desc: 'start their baseline', dot: STATE_DOT.waiting },
-    ].map((l) => `<span><i class="round" style="background:${l.dot}"></i><span class="lg-t"><b>${l.title}</b> · ${l.desc}</span></span>`).join('');
-
-    const blossomed = sec.students.filter((s) => s.state === 'blossoming').length;
-    const cs = classSkills().filter((c) => c.total > 0);
-    const top = [...cs].sort((a, b) => b.now - a.now).slice(0, 2);
-    const low = [...cs].sort((a, b) => a.now - b.now).slice(0, 3);
-    const grade = sec.grade;
-
-    const tendList = sorted.filter((st) => st.state === 'tending').slice(0, 3);
-    const nTend = sorted.filter((st) => st.state === 'tending').length;
-    const tendCards = tendList.map((st, i) => `
-      <div class="ui-card sm tend-card">
-        <div class="tend-top"><span class="pl">${flowerArt('tending', 52, i)}</span>
-          <span><span class="nm">${esc(st.dispFirst)}</span><span class="bd">${esc(st.band)} overall</span></span></div>
-        <p class="reason">${esc(st.tendReason)}</p>
-        <button class="btn btn-primary sm btn-ask-a focus" data-ask="activity" data-skill="${esc(st.lowestSkill.name)}" data-band="${esc(st.lowestSkill.band)}">
-          ${chatIcon('var(--white)')} Ask Tilli for an activity</button>
-        <button class="btn-link mt-2 focus" data-open-student="${esc(st.id)}">See ${esc(st.dispFirst)}'s skills →</button>
-      </div>`).join('');
-
-    const highlights = top.map((t) => `<span class="hl-chip">${esc(t.name)} · ${t.now}%</span>`).join('');
-    const growingRows = low.map((l) => `
-      <div class="grow-row"><div class="gm"><div class="nm">${esc(l.name)}</div><div class="sub">${countNoun(l.beginner, 'student', 'students')} at Sprouting level</div></div>
-      <button class="btn-soft grow-ask focus" data-ask="class" data-skill="${esc(l.name)}" data-beg="${l.beginner}">Ask Tilli for a class activity</button></div>`).join('');
-
-    return `<div class="dash-wrap section-garden">
-      <div class="sg-nav mb-3">
-        <button class="btn-link focus" data-garden-level="landing">← My Garden</button>
-        ${S.data.sections.length > 1 ? '<button class="btn-link focus" data-garden-level="beds">All my classes →</button>' : ''}
-      </div>
-      <div class="garden-head" style="margin-bottom:6px">
-        <div>
-          <h1 class="ui-screen-title">Good morning, ${esc(firstName())} 🌱</h1>
-          <p class="ui-screen-sub flush">Your <b>${esc(sec.name)}</b> garden.</p>
-        </div>
-        <div class="blossom-pill">${sunSmall()} ${blossomed} student${blossomed === 1 ? '' : 's'} reached Blooming since baseline</div>
-      </div>
-
-      <section class="plant-bed">
-        <div class="pg-grid" style="grid-template-columns:repeat(auto-fill,minmax(${plantCol},1fr))">${bed}</div>
-        <div class="ui-legend garden-key">${legend}</div>
-      </section>
-
-      <section style="margin-top:26px">
-        <h2 class="ui-title mb-3">🌱 ${countNoun(nTend, 'child', 'children')} could use a little extra</h2>
-        <div class="tend-grid">${tendCards || '<p class="ui-screen-sub flush">No students need tending right now — lovely. 🌼</p>'}</div>
-      </section>
-
-      <div class="two-col" style="margin-top:26px">
-        <section class="hl-card">
-          <div class="ui-eyebrow mb-2">Garden highlights</div>
-          <p class="td-lead">Your class's strongest skills right now:</p>
-          <div class="hl-chips">${highlights}</div>
-          <button class="hl-more focus" data-nav="insights">See all in Insights →</button>
-        </section>
-        <section class="grow-card">
-          <div class="ui-eyebrow mb-2">Growing areas</div>
-          <div class="grow-list">${growingRows}</div>
-        </section>
       </div>
     </div>`;
   }
@@ -1842,13 +1545,21 @@
   // Questions shown per page in the observation flow (21 → pages of 6, 6, 6, 3).
   const OBS_PAGE_SIZE = 6;
   // First unanswered question → its page (all answered → last page).
+  // An answer is 1–4, or 'na' = "Haven't seen yet" (counts as answered, never scored).
+  const isAns = (v) => v != null && v !== '';
   function firstOpenPage(ratings) {
-    const Q = obsQuestions(), i = Q.findIndex((q) => !ratings[q.id]);
+    const Q = obsQuestions(), i = Q.findIndex((q) => !isAns(ratings[q.id]));
     return Math.floor((i < 0 ? Q.length - 1 : i) / OBS_PAGE_SIZE);
   }
   // Observation rating scale (4 points). "Seed" appears ONLY here — everywhere else
   // (lists, Insights, parent report) uses the 3 levels Sprouting / Growing / Blooming.
-  const STAR_LABELS = ['Seed', 'Sprouting', 'Growing', 'Blooming'];
+  const STAR_LABELS = ['Seed', 'Sprouting', 'Growing', 'Blooming'];   // kept: the garden word under each answer
+  // Answer options = how often the teacher sees the behaviour (observable, so two
+  // teachers mean the same thing). ⚠ For Mayur / assessment owners: wording pending
+  // sign-off; values stay 1–4 (+ 'na' = Haven't seen yet, excluded from scoring).
+  const OBS_SCALE = [
+    { v: 1, freq: 'Rarely' }, { v: 2, freq: 'Sometimes' }, { v: 3, freq: 'Usually' }, { v: 4, freq: 'Almost always' },
+  ];
 
   // Merged destination: Observations + Completion are now one "Assess" place
   // with three sub-tabs — To-do (the journey/what's next), Enter (record an
@@ -1866,6 +1577,12 @@
     else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
     else if (S.todoView === 'pending') { body = pendingView(); subtitle = 'Who still needs a teacher observation in this window.'; }
     else { body = obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
+    // Recording a child is a focused mode: no big "Assess" title or tabs — a way back,
+    // then the child is the page heading (inside obsEnter).
+    if (tab === 'enter') return `<div class="dash-wrap" style="max-width:1080px">
+      <button class="btn-link focus obs-backlink" data-assesstab="todo">← Back to To-do</button>
+      <div class="mt-3">${body}</div>
+    </div>`;
     return `<div class="dash-wrap" style="max-width:1080px">
       <h1 class="ui-screen-title">Assess</h1>
       <p class="ui-screen-sub flush" style="max-width:560px">${esc(subtitle)}</p>
@@ -1979,11 +1696,21 @@
         <button class="btn btn-primary sm focus" data-continue-assess="${esc(st.id)}">${dr ? 'Continue' : 'Start'}</button>
       </div>`;
     }).join('');
-    const search = ordered.length > 8 ? `<div class="roster-search mb-3">${SEARCH_ICON}<input id="todo-search" value="${esc(S.todoSearch || '')}" placeholder="Find a child…" autocomplete="off"></div>` : '';
-    const doneFold = done.length ? `<details class="todo-done"${S.todoDoneOpen ? ' open' : ''}><summary>Done (${done.length})</summary>
-        <div class="todo-done-list">${done.map((st) => `<span>${esc(st.dispFirst || st.first)}</span>`).join('')}</div></details>` : '';
+    const shownDone = q ? done.filter((st) => st.name.toLowerCase().includes(q)) : done;
+    const search = ordered.length + done.length > 8 ? `<div class="roster-search mb-3">${SEARCH_ICON}<input id="todo-search" value="${esc(S.todoSearch || '')}" placeholder="Find a child…" autocomplete="off"></div>` : '';
+    // Finished children: each can be redone (confirm first — the new answers replace the old).
+    // A search that only matches finished children opens the fold.
+    const doneOpen = S.todoDoneOpen || (q && shownDone.length);
+    const doneFold = shownDone.length ? `<details class="todo-done"${doneOpen ? ' open' : ''}><summary>Done (${q ? shownDone.length + ' of ' + done.length : done.length})</summary>
+        <div class="todo-list todo-done-list">${shownDone.map((st, i) => { const dt = doneDate(st, wk, 'teacher'); return `<div class="todo-row">
+          <span class="todo-pl">${flowerArt(st.state, 24, i)}</span>
+          <span class="todo-nm">${esc(st.name)}</span>
+          <span class="todo-st done">✓ Done${dt ? ' · ' + esc(dt) : ''}</span>
+          <button class="todo-redo focus" data-redo-obs="${esc(st.id)}" aria-label="Redo ${esc(st.name)}'s observation">↻ Redo</button>
+        </div>`; }).join('')}</div></details>` : '';
     const list = !ordered.length ? `<div class="todo-h">Everyone is observed for ${esc(winLabel)} 🌸</div>`
       : rows ? `<div class="todo-list">${rows}</div>`
+      : q && shownDone.length ? `<p class="ui-screen-sub flush" style="padding:6px 2px">Nobody still to do matches “${esc(S.todoSearch)}” — see Done below.</p>`
       : `<p class="ui-screen-sub flush" style="padding:6px 2px">No child matches “${esc(S.todoSearch)}”.</p>`;
     return `<button class="btn-link mb-3 focus" data-todo-back>← Back to the journey</button>
       <div class="todo-head">
@@ -2025,45 +1752,57 @@
     const Q = obsQuestions(), nQ = Q.length, pages = Math.ceil(nQ / OBS_PAGE_SIZE);
     const page = Math.min(e.page || 0, pages - 1), from = page * OBS_PAGE_SIZE;
     const onPage = Q.slice(from, from + OBS_PAGE_SIZE);
-    const leftOnPage = onPage.filter((q) => !e.ratings[q.id]).length;
-    const answered = Q.filter((q) => e.ratings[q.id]).length;
+    const leftOnPage = onPage.filter((q) => !isAns(e.ratings[q.id])).length;
+    const answered = Q.filter((q) => isAns(e.ratings[q.id])).length;
+    // The child's OWN class (the header chips may say "All").
+    const stuSec = S.data.sections.find((x) => x.students.some((y) => y.id === stu.id)) || sec;
     const skillOf = (key) => S.data.skills.find((x) => x.key === key) || { name: key, group: 'sel' };
     const saved = e.justDone ? `<div class="ui-note ok mb-3"><span>✓ ${esc(e.justDone)}&rsquo;s observation is saved — next up: <b>${esc(stu.dispFirst || stu.first)}</b></span></div>` : '';
+    const redoNote = e.redo ? `<div class="ui-note mb-3"><span>↻ Redoing <b>${esc(stu.dispFirst || stu.first)}</b>&rsquo;s observation — the previous one stays saved until you finish.</span></div>` : '';
     const resumed = e.resumed ? `<div class="ui-note mb-3"><span>↺ Picked up where you left off with <b>${esc(stu.dispFirst || stu.first)}</b> — your earlier answers are kept.</span></div>` : '';
-    // Class progress for this window — completed vs still pending.
-    const total = sec.students.length, doneN = total - left;
-    const progress = `<div class="obs-prog" title="Teacher observations for ${esc(winLabel)} in ${esc(sec.name)}">
-        <div class="obs-prog-txt"><b>${doneN}</b> out of <b>${total}</b> completed <span class="obs-prog-pend">· ${left} pending</span></div>
-        <div class="ui-meter obs-prog-bar"><div style="width:${total ? Math.round((doneN / total) * 100) : 0}%"></div></div>
-      </div>`;
-    // One dot per question: answered = green, this page = amber, rest = grey.
-    const dots = Q.map((q, i) => `<div class="obs-dot" style="background:${e.ratings[q.id] ? 'var(--green-500)' : i >= from && i < from + OBS_PAGE_SIZE ? 'var(--lvl-2-soft)' : 'var(--line-200)'}"></div>`).join('');
-    const star = (j, i) => `<svg width="15" height="15" viewBox="0 0 24 24" style="fill:${j <= i ? 'var(--lvl-2-soft)' : 'var(--line-200)'}"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z"/></svg>`;
+    // ONE progress ring for this child (answered / total). It sweeps from where it was on the
+    // last render to the new value, so each answer visibly fills it a little.
+    const pct = nQ ? answered / nQ : 0, prevPct = e.ringFor === stu.id ? e.ringPct : pct;
+    e.ringPct = pct; e.ringFor = stu.id;
+    const gc = gradedCount(wk);
+    const ring = `<svg class="obs-ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="trk" cx="22" cy="22" r="19"/>
+      <circle class="arc${answered ? '' : ' zero'}" cx="22" cy="22" r="19" pathLength="100" style="--from:${(100 - prevPct * 100).toFixed(1)};--to:${(100 - pct * 100).toFixed(1)}"/></svg>`;
+    const pips = (n) => `<span class="obs-pips" aria-hidden="true">${[1, 2, 3, 4].map((j) => `<i class="${j <= n ? 'on' : ''}"></i>`).join('')}</span>`;
     const cards = onPage.map((q, k) => {
-      const sk = skillOf(q.skill);
-      const opts = STAR_LABELS.map((lbl, i) => {
-        const picked = e.ratings[q.id] === i + 1;
-        return `<button class="ui-pick obs-star${picked ? ' on' : ''}" data-star="${i + 1}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}"><div class="row">${[0, 1, 2, 3].map((j) => star(j, i)).join('')}</div><div class="lb">${lbl}</div></button>`;
+      // The teacher rates the behaviour only — no skill name or skill group on the card,
+      // so the rating isn't anchored to a label. (q.skill still maps the answer to its skill.)
+      const cur = e.ratings[q.id];
+      const opts = OBS_SCALE.map((o, i) => {
+        const picked = cur === o.v;
+        return `<button class="ui-pick obs-star${picked ? ' on' : ''}" data-star="${o.v}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}">${pips(o.v)}<div class="lb">${o.freq}</div><div class="gw">${STAR_LABELS[i]}</div></button>`;
       }).join('');
-      return `<div class="ui-card sm obs-qcard${e.ratings[q.id] ? ' done' : ''}">
-        <div class="obs-q">Question ${from + k + 1} of ${nQ} · ${sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive'}</div>
-        <div class="ui-title obs-skill">${esc(sk.name)}</div>
+      const na = cur === 'na';
+      return `<div class="ui-card sm obs-qcard${isAns(cur) ? ' done' : ''}" data-qcard="${esc(q.id)}">
+        <div class="obs-q">Question ${from + k + 1} of ${nQ}</div>
         <p class="obs-anchor">${esc(q.text)}</p>
-        <div class="obs-stars" role="radiogroup" aria-label="${esc(sk.name)}">${opts}</div>
+        <div class="obs-stars" role="radiogroup" aria-label="Question ${from + k + 1}: ${esc(q.text)}">${opts}</div>
+        <button class="obs-na${na ? ' on' : ''}" data-star="na" data-qid="${esc(q.id)}" role="radio" aria-checked="${na}" title="Not counted in their scores">Haven&rsquo;t seen this yet</button>
       </div>`;
     }).join('');
     const last = page >= pages - 1;
     const nextLbl = last ? (left > 1 ? 'Finish → next child' : 'Finish 🌱') : 'Next page →';
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
-    return `${saved}${resumed}<div class="ui-card obs-enter">
-      <div class="obs-enter-head"><span class="pl">${flowerArt(stu.state, 46, 0)}</span><div><div class="nm">${esc(stu.first)}</div><div class="sub">${esc(sec.name)} · ${esc(winLabel)} observation</div></div>${progress}</div>
-      <div class="obs-dots">${dots}</div>
-      <div class="obs-page">Page ${page + 1} of ${pages} · ${answered} of ${nQ} answered</div>
+    const ini = ((stu.first || '')[0] || '') + ((stu.last || '')[0] || '');
+    return `${saved}${redoNote}${resumed}<div class="obs-enter">
+      <div class="obs-enter-head"><span class="ui-avatar obs-av" aria-hidden="true">${esc(ini.toUpperCase())}</span>
+        <div><h1 class="obs-name">${esc(stu.dispFirst || stu.first)}</h1><div class="sub">${esc(stuSec.name)} · ${esc(winLabel)} observation</div></div></div>
+      <div class="obs-progwrap" role="progressbar" aria-valuemin="0" aria-valuemax="${nQ}" aria-valuenow="${answered}" aria-label="${esc(stu.dispFirst || stu.first)}: ${answered} of ${nQ} answered">   <!-- sticks under the header while you scroll the questions -->
+        <div class="obs-ringbox">${ring}<span class="obs-ringnum">${answered}</span></div>
+        <div class="obs-progtxt"><div class="obs-progname">${esc(stu.dispFirst || stu.first)}</div>
+          <div class="obs-page">${answered} of ${nQ} answered · Page ${page + 1} of ${pages}${answered ? ' · <span class="obs-saved" aria-live="polite">✓ Saved</span>' : ''}</div></div>
+        <div class="obs-graded" title="Students you've finished observing for ${esc(winLabel)}, across all your classes"><span><b>${gc.done}</b> of ${gc.total} students done</span>
+          <span class="obs-graded-bar" aria-hidden="true"><i style="width:${gc.total ? Math.round(gc.done / gc.total * 100) : 0}%"></i></span></div>
+      </div>
       <div class="obs-qcards">${cards}</div>
       <div class="obs-nav">
-        <button class="btn-soft focus" data-enter-prev${page === 0 ? ' disabled' : ''}>← Back</button>
-        <div class="obs-nav-r">${leftOnPage ? `<span class="obs-need">${leftOnPage} left on this page</span>` : ''}
-          <button class="btn btn-primary md focus" data-enter-next${leftOnPage ? ' disabled' : ''}>${nextLbl}</button></div>
+        ${page === 0 ? '<span></span>' : '<button class="btn-soft focus" data-enter-prev>← Back</button>'}
+        <div class="obs-nav-r"><span class="obs-need" aria-live="polite">${leftOnPage ? leftOnPage + ' left on this page' : ''}</span>
+          <button class="btn btn-primary md focus" data-enter-next>${nextLbl}</button></div>
       </div>
     </div>${celebrate}`;
   }
@@ -2075,8 +1814,29 @@
     const dr = stu && !teacherDone(stu, wk) ? draftOf(stu, wk) : null;
     const ratings = dr ? Object.assign({}, dr.ratings) : {};
     const page = dr ? firstOpenPage(ratings) : 0;
-    const resumed = obsQuestions().some((q) => ratings[q.id]);
+    const resumed = obsQuestions().some((q) => isAns(ratings[q.id]));
     return Object.assign({ studentId: stuId, page, ratings, done: false, resumed }, extra || {});
+  }
+  // Redo a finished child's observation. Starts blank; the old answers stay saved until
+  // Finish, which overwrites them. Confirm first unless the teacher muted it (5 days).
+  const REDO_MUTE_DAYS = 5;
+  const redoMuteKey = () => 'tilliMeasures.redoConfirmMutedUntil.' + (S.teacher.email || 'teacher');
+  function redoMuted() { try { return Date.now() < +(localStorage.getItem(redoMuteKey()) || 0); } catch (e) { return false; } }
+  function askRedo(id) { if (redoMuted()) startRedo(id); else { S.redoAsk = { id, mute: false }; render(); } }
+  function startRedo(id) { S.redoAsk = null; S.assessTab = 'enter'; S.enter = enterFor(id, activeWindowKey() || 'baseline', { redo: true }); render(); }
+  function redoModalView() {
+    const r = S.redoAsk; if (!r) return '';
+    const st = S.data.sections.flatMap((x) => x.students).find((x) => x.id === r.id);
+    if (!st) { S.redoAsk = null; return ''; }
+    return `<div class="ui-scrim" data-redo-cancel>
+      <div class="ui-modal-card redo-card" role="alertdialog" aria-modal="true" aria-labelledby="redo-t" aria-describedby="redo-d">
+        <div class="ui-modal-h"><h3 id="redo-t">Redo ${esc(st.dispFirst || st.first)}&rsquo;s observation?</h3></div>
+        <p id="redo-d" class="redo-msg">The previous score will be overwritten.</p>
+        <label class="redo-mute"><input type="checkbox" data-redo-mute${r.mute ? ' checked' : ''}><span class="ui-check${r.mute ? ' on' : ''}" aria-hidden="true">${r.mute ? '✓' : ''}</span>Don&rsquo;t show this to me for the next ${REDO_MUTE_DAYS} days</label>
+        <div class="ui-modal-foot"><button class="btn btn-ghost focus" data-redo-cancel>Cancel</button>
+          <button class="btn btn-primary md focus" data-redo-go>↻ Redo observation</button></div>
+      </div>
+    </div>`;
   }
   function startEnter(id) { S.assessTab = 'enter'; S.enter = enterFor(id, activeWindowKey() || 'baseline'); render(); }
   function continueAssess() {
@@ -2088,6 +1848,13 @@
   function enterStudent() {
     const sec = section(), e = S.enter;
     return (e.studentId && sec.students.find((x) => x.id === e.studentId)) || sec.students[0];
+  }
+  // Children this teacher has finished observing in window `wk`, across ALL their classes
+  // (deduped — a child can sit in more than one section list).
+  function gradedCount(wk) {
+    const seen = new Set(); let done = 0;
+    S.data.sections.forEach((x) => x.students.forEach((y) => { if (seen.has(y.id)) return; seen.add(y.id); if (teacherDone(y, wk)) done++; }));
+    return { done, total: seen.size };
   }
   function pendingIn(list, wk) { return list.filter((s) => !teacherDone(s, wk)).length; }
   // Next child still waiting on a teacher observation in this window: the rest of
@@ -2121,11 +1888,52 @@
     S.teacher.observations = obs;
     if (window.TilliOnboarding && window.TilliOnboarding.saveObservation) window.TilliOnboarding.saveObservation(wk, key, e.ratings);
     recordTeacherCompletion(stu, wk);
+    const wasRedo = !!e.redo;
     const who = stu.dispFirst || stu.first;
     const next = nextPending(stu.id, wk);
     if (next) { S.sectionId = next.sectionId; S.enter = enterFor(next.stu.id, wk, { justDone: who }); }
     else S.enter = { studentId: null, page: 0, ratings: {}, done: false, allDone: true, justDone: who };
     render();
+    // Milestones: the 1st child, then every 10th (across all this teacher's classes, this window).
+    const nDone = gradedCount(wk).done;
+    if (!wasRedo && (nDone === 1 || nDone % 10 === 0)) celebrateMilestone(nDone);
+  }
+  // Confetti burst + a short message. Canvas overlay, removed when the burst ends;
+  // with reduced motion only the message shows.
+  const CONFETTI = { count: 140, burstMs: 2600, msgMs: 3200, spread: 1.15, power: 15 };
+  function celebrateMilestone(n) {
+    const msg = document.createElement('div');
+    msg.className = 'ms-toast'; msg.setAttribute('role', 'status');
+    msg.innerHTML = `<span class="ms-emoji" aria-hidden="true">🎉</span>You have completed <b>${n}</b> ${n === 1 ? 'student&rsquo;s' : 'students&rsquo;'} grading`;
+    document.body.appendChild(msg);
+    const close = () => { msg.classList.add('out'); setTimeout(() => msg.remove(), 300); };
+    msg.addEventListener('click', close); setTimeout(close, CONFETTI.msgMs);
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cv = document.createElement('canvas'); cv.className = 'ms-confetti';
+    const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; document.body.appendChild(cv);
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    const css = getComputedStyle(document.documentElement);
+    const cols = ['--green-500', '--pink-400', '--yellow-500', '--orange-500', '--green-700'].map((v) => css.getPropertyValue(v).trim() || '#7bc96f');
+    // Two cannons from the lower corners, aimed up and inwards.
+    const bits = Array.from({ length: CONFETTI.count }, (_, i) => {
+      const left = i % 2 === 0, a = -Math.PI / 2 + (left ? 1 : -1) * (0.35 + Math.random() * 0.35) * CONFETTI.spread, v = CONFETTI.power * (0.6 + Math.random() * 0.6);
+      return { x: left ? 0 : W, y: H * 0.85, vx: Math.cos(a) * v, vy: Math.sin(a) * v, w: 6 + Math.random() * 6, h: 4 + Math.random() * 4,
+        r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.4, c: cols[i % cols.length], round: Math.random() < 0.3 };
+    });
+    const t0 = performance.now();
+    (function frame(t) {
+      const k = (t - t0) / CONFETTI.burstMs;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = k > 0.75 ? Math.max(0, (1 - k) / 0.25) : 1;
+      bits.forEach((b) => {
+        b.vy += 0.32; b.vx *= 0.985; b.vy *= 0.985; b.x += b.vx; b.y += b.vy; b.r += b.vr;
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c;
+        if (b.round) { ctx.beginPath(); ctx.arc(0, 0, b.h / 1.6, 0, 6.28); ctx.fill(); } else ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.abs(Math.cos(b.r * 2)) + 1);
+        ctx.restore();
+      });
+      if (k < 1) requestAnimationFrame(frame); else cv.remove();
+    })(t0);
   }
   // Mirror the completion into the shared lifecycle store (Teacher lane) so the
   // school/platform admin dashboards count it. Best effort — no-op without a school.
@@ -3209,7 +3017,7 @@
     if (fin) fin.addEventListener('click', () => {
       S.sectionId = S.add.sectionId || S.sectionId;
       if (S.add.from === 'students') { S.nav = 'students'; S.studentId = null; }
-      else { S.nav = 'garden'; S.gardenLevel = 'section'; }
+      else { S.nav = 'garden'; S.gardenLevel = 'landing'; }
       S.add = Object.assign({}, S.add, { active: false });
       render();
     });
@@ -3733,7 +3541,6 @@
       S.studentId = null; S.trackerStu = null; S.todoView = null; render();
     }));
     root.querySelectorAll('[data-section]').forEach((b) => b.addEventListener('click', () => { S.sectionId = b.dataset.section; S.studentId = null; render(); }));
-    root.querySelectorAll('[data-open-class]').forEach((b) => b.addEventListener('click', () => { S.classModal = b.dataset.openClass; render(); }));
     // My Garden landing: dev state switch, hero/tend Ask-Tilli prompts, assess CTA, doorways.
     root.querySelectorAll('[data-devpanel-toggle]').forEach((b) => b.addEventListener('click', () => {
       try { localStorage.setItem(DEV_COLLAPSED_KEY, devCollapsed() ? '0' : '1'); } catch (e) {}
@@ -3747,7 +3554,6 @@
     root.querySelectorAll('[data-ask-prompt]').forEach((b) => b.addEventListener('click', () => openAsk(b.dataset.askCtx || '', b.dataset.askPrompt || '')));
     root.querySelectorAll('[data-continue-assess]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'assess'; startEnter(b.dataset.continueAssess); }));
     root.querySelectorAll('[data-garden-level]').forEach((b) => b.addEventListener('click', () => { S.ask.open = false; S.nav = 'garden'; S.gardenLevel = b.dataset.gardenLevel; render(); }));
-    root.querySelectorAll('[data-add-class]').forEach((b) => b.addEventListener('click', () => openAddFlow()));
     // Empty-state CTA → back to onboarding's "add students" step (re-mounts on finish).
     root.querySelectorAll('[data-onb-add]').forEach((b) => b.addEventListener('click', () => {
       if (window.TilliOnboarding && window.TilliOnboarding.addStudents) window.TilliOnboarding.addStudents();
@@ -3758,7 +3564,6 @@
     root.querySelectorAll('[data-close-modal]').forEach((b) => b.addEventListener('click', (e) => { if (e.target === b) { S.classModal = null; render(); } }));
     const cmStop = root.querySelector('[data-stop]');
     if (cmStop) cmStop.addEventListener('click', (e) => e.stopPropagation());
-    root.querySelectorAll('[data-open-bed]').forEach((b) => b.addEventListener('click', () => { S.sectionId = b.dataset.openBed; S.classModal = null; S.nav = 'garden'; S.gardenLevel = 'section'; render(); }));
     root.querySelectorAll('[data-open-student]').forEach((b) => b.addEventListener('click', () => openStudent(b.dataset.openStudent)));
 
     // students: live roster filter + sort (rebuild just the list, keep caret)
@@ -3848,11 +3653,19 @@
     root.querySelectorAll('[data-obs-continue]').forEach((b) => b.addEventListener('click', () => continueAssess()));
     root.querySelectorAll('[data-obs-report]').forEach((b) => b.addEventListener('click', () => { S.assessTab = 'completed'; render(); }));
     root.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => {
-      S.enter = Object.assign({}, S.enter, { ratings: Object.assign({}, S.enter.ratings, { [b.dataset.qid]: +b.dataset.star }) });
+      const v = b.dataset.star === 'na' ? 'na' : +b.dataset.star;   // 'na' = Haven't seen yet
+      S.enter = Object.assign({}, S.enter, { ratings: Object.assign({}, S.enter.ratings, { [b.dataset.qid]: v }) });
       const stu = enterStudent();
       if (stu) saveDraft(stu, activeWindowKey() || 'baseline', S.enter.ratings);
       render();
     }));
+    // Sticky progress bar: add .stuck once it has pinned under the header (sentinel just above it).
+    const pw = root.querySelector('.obs-progwrap');
+    if (pw && 'IntersectionObserver' in window) {
+      const sent = document.createElement('div'); sent.style.height = '1px'; pw.parentNode.insertBefore(sent, pw);
+      const hh = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--header-h'), 10) || 66;
+      new IntersectionObserver(([en]) => pw.classList.toggle('stuck', !en.isIntersecting), { rootMargin: '-' + (hh + 1) + 'px 0px 0px 0px' }).observe(sent);
+    }
     // Observation pages: Back / Next page move a whole page and bring its top into view.
     const toPage = (p) => {
       S.enter = Object.assign({}, S.enter, { page: p, done: false, resumed: false, justDone: '' });
@@ -3861,6 +3674,13 @@
     };
     root.querySelectorAll('[data-enter-prev]').forEach((b) => b.addEventListener('click', () => toPage(Math.max(0, (S.enter.page || 0) - 1))));
     root.querySelectorAll('[data-enter-next]').forEach((b) => b.addEventListener('click', () => {
+      // Gaps on this page → jump to the first unanswered question instead of a dead button.
+      const pg = S.enter.page || 0, gap = obsQuestions().slice(pg * OBS_PAGE_SIZE, (pg + 1) * OBS_PAGE_SIZE).find((q) => !isAns(S.enter.ratings[q.id]));
+      if (gap) {
+        const card = root.querySelector('[data-qcard="' + gap.id + '"]');
+        if (card) { card.scrollIntoView({ block: 'center', behavior: 'smooth' }); card.classList.remove('nudge'); void card.offsetWidth; card.classList.add('nudge'); const f = card.querySelector('[data-star]'); if (f) f.focus({ preventScroll: true }); }
+        return;
+      }
       const pages = Math.ceil(obsQuestions().length / OBS_PAGE_SIZE);
       if ((S.enter.page || 0) >= pages - 1) { finishObservation(); return; }
       toPage((S.enter.page || 0) + 1);
@@ -3897,6 +3717,20 @@
     root.querySelectorAll('.persp-chart').forEach((d) => d.addEventListener('toggle', () => { S.perspChartOpen = d.open; }));
     root.querySelectorAll('[data-obs-pending]').forEach((b) => b.addEventListener('click', () => { S.todoView = 'pending'; S.todoSearch = ''; render(); }));
     root.querySelectorAll('[data-todo-back]').forEach((b) => b.addEventListener('click', () => { S.todoView = null; render(); }));
+    root.querySelectorAll('[data-redo-obs]').forEach((b) => b.addEventListener('click', () => askRedo(b.dataset.redoObs)));   // not [data-redo] — that's the profile's Redo reflection
+    root.querySelectorAll('[data-redo-cancel]').forEach((b) => b.addEventListener('click', (e) => { if (e.target === b) { S.redoAsk = null; render(); } }));
+    const rscrim = root.querySelector('.ui-scrim[data-redo-cancel]');
+    if (rscrim) rscrim.addEventListener('keydown', (e) => { if (e.key === 'Escape') { S.redoAsk = null; render(); } });
+    const rmute = root.querySelector('[data-redo-mute]');
+    if (rmute) rmute.addEventListener('change', () => { S.redoAsk.mute = rmute.checked; render(); });
+    const rgo = root.querySelector('[data-redo-go]');
+    if (rgo) {
+      rgo.focus();
+      rgo.addEventListener('click', () => {
+        if (S.redoAsk.mute) { try { localStorage.setItem(redoMuteKey(), String(Date.now() + REDO_MUTE_DAYS * 864e5)); } catch (e) {} }
+        startRedo(S.redoAsk.id);
+      });
+    }
     const tds = root.querySelector('#todo-search');
     if (tds) tds.addEventListener('input', (e) => { S.todoSearch = e.target.value; S._refocus = 'todo-search'; render(); });
 
@@ -4290,7 +4124,21 @@
   .todo-row .btn { flex: none; }
   .todo-done { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-200); font-size: var(--fs-sm); color: var(--text-meta); }
   .todo-done summary { cursor: pointer; font-weight: 700; }
-  .todo-done-list { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
+  /* Done fold = the same one-child-per-row list as To-do: name, status and Redo share a row */
+  .todo-done-list { margin-top: 6px; }
+  .todo-done-list .todo-row:hover { background: var(--surface-100); }
+  .todo-done-list .todo-row { padding-left: 4px; padding-right: 4px; border-radius: var(--radius-xs); }
+  .todo-st.done { color: var(--green-700); }
+  .todo-done-list .todo-nm { color: var(--ink-900); }   /* .todo-done greys its text; the names stay readable */
+  .todo-redo { flex: none; padding: 3px 10px; border: 1.5px solid var(--green-500); border-radius: 999px; background: var(--white); cursor: pointer;
+    font: 700 var(--fs-xs) var(--font-body); color: var(--green-700); }
+  .todo-redo:hover { background: var(--accent-wash); }
+  /* Redo confirm (ui-scrim + ui-modal-card) */
+  .redo-card { max-width: 440px; }
+  .redo-msg { margin: 4px 0 16px; font-size: var(--fs-md); color: var(--ink-600); }
+  .redo-mute { display: flex; align-items: center; gap: 10px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-600); cursor: pointer; }
+  .redo-mute input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .redo-mute input:focus-visible + .ui-check { outline: 2px solid var(--accent); outline-offset: 2px; }
   .log-tabs-row.end { justify-content: flex-end; }
   /* Done so far → parents still to finish (T18) — "par-" so it never mixes with the .pr- report styles */
   .par-remind { margin-bottom: 16px; }   /* .ui-card.sm */
@@ -4335,20 +4183,50 @@
   .obs-enter-head .pl { flex: none; }
   .obs-enter-head .nm { font-weight: 700; font-size: var(--fs-md); }
   .obs-enter-head .sub { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
-  .obs-prog { margin-left: auto; min-width: 190px; text-align: right; }
-  .obs-prog-txt { font-size: var(--fs-sm); font-weight: 600; color: var(--text-meta); }
-  .obs-prog-txt b { color: var(--ink-900); font-weight: 700; }
-  .obs-prog-pend { color: var(--lvl-2-ink); font-weight: 700; }
-  .obs-prog-bar { margin-top: 6px; }
-  @media (max-width: 640px) { .obs-enter-head { flex-wrap: wrap; } .obs-prog { margin-left: 0; width: 100%; text-align: left; } }
-  .obs-dots { display: flex; gap: 3px; margin: 14px 0 18px; }
-  .obs-dot { flex: 1; height: 5px; border-radius: 3px; }
+  @media (max-width: 640px) { .obs-enter-head { flex-wrap: wrap; } }
+  /* Progress stays in view: sticky just under the dashboard header. The child's name
+     shows in it only once it's stuck (the big heading has scrolled away). */
+  .obs-enter { --obs-ring-size: 44px; --obs-ring-stroke: 5px; --obs-graded-w: 120px; }
+  .obs-progwrap { position: sticky; top: var(--header-h); z-index: 20; display: flex; align-items: center; gap: 12px;
+    margin: 0 -12px 14px; padding: 10px 12px; background: var(--white); }
+  .obs-progwrap.stuck { box-shadow: 0 6px 10px -8px rgba(0,0,0,.18); }
+  .obs-progname { display: none; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
+  .obs-progwrap.stuck .obs-progname { display: block; }
+  .obs-ringbox { position: relative; width: var(--obs-ring-size); height: var(--obs-ring-size); flex: none; }
+  .obs-ring { width: 100%; height: 100%; transform: rotate(-90deg); }   /* start at 12 o'clock */
+  .obs-ring circle { fill: none; stroke-width: var(--obs-ring-stroke); }
+  .obs-ring .trk { stroke: var(--line-200); }
+  .obs-ring .arc { stroke: var(--green-500); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: calc(var(--to) * 1px); animation: obsRing .45s ease-out; }
+  .obs-ring .arc.zero { stroke-opacity: 0; }   /* round cap would otherwise paint a dot at 0 */
+  @keyframes obsRing { from { stroke-dashoffset: calc(var(--from) * 1px); } to { stroke-dashoffset: calc(var(--to) * 1px); } }
+  @media (prefers-reduced-motion: reduce) { .obs-ring .arc { animation: none; } }
+  .obs-ringnum { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
+  .obs-backlink { font-size: var(--fs-sm); }
+  .obs-av { width: 48px; height: 48px; flex: none; font-size: var(--fs-md); }
+  .obs-name { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-2xl); line-height: 1.1; color: var(--ink-900); }
+  .obs-saved { color: var(--green-700); font-weight: 700; }
+  /* Right side of the sticky bar: how many students this teacher has finished (all classes, this window) */
+  .obs-graded { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-meta); white-space: nowrap; }
+  .obs-graded b { font-weight: 700; color: var(--ink-900); }
+  .obs-graded-bar { width: var(--obs-graded-w); height: 5px; border-radius: 3px; background: var(--line-200); overflow: hidden; }
+  @media (max-width: 480px) { .obs-graded-bar { display: none; } .obs-graded { white-space: normal; text-align: right; } }
+  .obs-graded-bar i { display: block; height: 100%; border-radius: inherit; background: var(--green-500); }
+  /* answer: four filled pips (how often), frequency word, the garden word small underneath */
+  .obs-pips { display: inline-flex; gap: 4px; }
+  .obs-pips i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-200); }
+  .obs-pips i.on { background: var(--green-500); }
+  .obs-star .gw { font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  .obs-na { margin-top: 10px; padding: 4px 10px; border: 1px dashed var(--line-200); border-radius: 999px; background: none; cursor: pointer;
+    font: 600 var(--fs-sm) var(--font-body); color: var(--text-meta); }
+  .obs-na:hover { border-color: var(--ink-300); color: var(--ink-900); }
+  .obs-na.on { border-style: solid; border-color: var(--ink-450); background: var(--surface-100); color: var(--ink-900); }
+  .obs-qcard.nudge { animation: obsNudge 1.2s ease; }
+  @keyframes obsNudge { 0%, 100% { box-shadow: none; } 25%, 60% { box-shadow: 0 0 0 3px var(--lvl-2-soft); } }
+  @media (prefers-reduced-motion: reduce) { .obs-qcard.nudge { animation: none; outline: 3px solid var(--lvl-2-soft); } }
   .obs-q { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 700; margin-bottom: 4px; }
-  .obs-skill { margin-bottom: 6px; }   /* .ui-title */
   .obs-anchor { margin: 0 0 20px; font-size: var(--fs-md); color: var(--text-meta); line-height: 1.5; }
   .obs-stars { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: 10px; }
   .obs-star { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; border-radius: var(--radius-md); padding: 13px 15px; min-height: 58px; }   /* .ui-pick */
-  .obs-star .row { display: flex; gap: 2px; }
   .obs-star .lb { font-weight: 700; font-size: var(--fs-md); }
   .obs-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 22px; }
   .obs-nav .btn-soft:disabled { opacity: .45; cursor: default; }
@@ -4356,17 +4234,28 @@
   .obs-need { font-size: var(--fs-sm); font-weight: 700; color: var(--lvl-2-ink); }
   /* One page = OBS_PAGE_SIZE question cards stacked */
   .obs-enter { scroll-margin-top: 90px; }
-  .obs-page { font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); margin: -6px 0 14px; }
+  .obs-page { font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); }
   .obs-qcards { display: flex; flex-direction: column; gap: 14px; }
   /* .obs-qcard = .ui-card.sm */
   .obs-qcard.done { border-color: var(--lvl-3-wash); background: color-mix(in srgb, var(--wash-green) 45%, transparent); }
-  .obs-qcard .obs-anchor { margin-bottom: 14px; }
+  .obs-qcard .obs-anchor { margin-bottom: 14px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); line-height: 1.35; color: var(--ink-900); }   /* the behaviour is the question now */
   /* Phone: the 4 rating options sit 2 × 2 so a page of 6 questions isn't 24 stacked buttons */
   @media (max-width: 640px) {
     .obs-stars { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .obs-star { padding: 10px 12px; }
     .obs-qcard { padding: 14px; }
   }
+  /* Milestone (1st child, then every 10th): confetti canvas + message pill */
+  .ms-confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1000; }
+  .ms-toast { position: fixed; left: 50%; top: 22%; transform: translate(-50%, 0); z-index: 1001; display: flex; align-items: center; gap: 10px;
+    padding: 14px 22px; border-radius: 999px; background: var(--white); box-shadow: 0 12px 32px -10px rgba(0,0,0,.28); cursor: pointer;
+    font: 700 var(--fs-lg) var(--font-heading); color: var(--ink-900); white-space: nowrap; animation: msIn .35s cubic-bezier(.2,1.4,.4,1); }
+  .ms-toast b { color: var(--green-700); }
+  .ms-toast .ms-emoji { font-size: 1.4em; }
+  .ms-toast.out { opacity: 0; transform: translate(-50%, -8px); transition: opacity .3s, transform .3s; }
+  @keyframes msIn { from { opacity: 0; transform: translate(-50%, 12px) scale(.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+  @media (max-width: 640px) { .ms-toast { white-space: normal; text-align: left; border-radius: 18px; width: max-content; max-width: calc(100vw - 32px); font-size: var(--fs-md); } }
+  @media (prefers-reduced-motion: reduce) { .ms-toast { animation: none; } }
   .obs-celebrate { text-align: center; padding: 26px; margin-top: 16px; background: var(--wash-pink); border-radius: var(--radius-card); }
   .obs-celebrate .msg { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-lg); color: var(--pink-600); margin-top: 8px; }
 
@@ -4502,8 +4391,7 @@
 
   /* Slot 3 — caption · Slot 4 — celebration */
   /* Landing garden scene is a doorway to the class garden (one plant per child) */
-  .mg-scene-btn { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: var(--radius-card); text-align: inherit; }
-  .mg-scene-btn:hover .mg-scene { border-color: var(--green-500); }
+  .mg-scene-wrap { display: block; width: 100%; }   /* the landing garden is a picture now (the class-garden page was removed) */
   .mg-garden-link { text-align: center; margin-top: -12px; }
   .sg-nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .mg-caption { margin: 0; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-700); text-align: center; }
