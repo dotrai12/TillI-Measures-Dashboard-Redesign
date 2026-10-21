@@ -30,6 +30,20 @@
   var addDays = function (n) { return new Date(TODAY.getTime() + n * DAY); };
   var iso = function (d) { return new Date(d).toISOString().slice(0, 10); };
 
+  // Grades / sections that still have no students this many days after they
+  // were added are removed automatically (daily system job). Each grade and
+  // section keeps its own clock (addedAt), so one a school asks to add back
+  // gets a fresh window instead of being removed again the next day.
+  var EMPTY_STRUCTURE_TTL_DAYS = 60;
+  var EMPTY_STRUCTURE_WARN_DAYS = 14;   // flag the school this close to removal
+  var SYSTEM_ACTOR = 'System / Service Role';
+  var MONTH_IDX = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  // 'Aug 2025' → '2025-08-01' (the mock only knows the month a school joined).
+  function joinedISO(j) {
+    var m = /^([A-Z][a-z]{2}) (\d{4})$/.exec(String(j || ''));
+    return m && MONTH_IDX[m[1]] != null ? iso(new Date(Date.UTC(+m[2], MONTH_IDX[m[1]], 1))) : iso(TODAY);
+  }
+
   // Tiny seeded PRNG so generated schools are stable across reloads.
   function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
   var pick = function (r, arr) { return arr[Math.floor(r() * arr.length)]; };
@@ -64,13 +78,15 @@
     : { name: 'Meera Krishnan', email: 'meera.krishnan@littlesprouts.edu' };
 
   // ---- School groups (parallels the current admin's group chips) ----
+  // code: stable public slug used in group links (measures.tilli.app/g/<code>/…).
   var GROUPS = [
-    { id: 'g-none',       name: 'No group' },
-    { id: 'g-vidya',      name: 'Vidya Trust' },
-    { id: 'g-lanka',      name: 'Lanka Learning Network' },
-    { id: 'g-brightpath', name: 'BrightPath Foundation' },
-    { id: 'g-metro',      name: 'Metro Public Schools' },
+    { id: 'g-none',       name: 'No group',               code: '' },
+    { id: 'g-vidya',      name: 'Vidya Trust',            code: 'vidya' },
+    { id: 'g-lanka',      name: 'Lanka Learning Network', code: 'lanka' },
+    { id: 'g-brightpath', name: 'BrightPath Foundation',  code: 'brightpath' },
+    { id: 'g-metro',      name: 'Metro Public Schools',   code: 'metro' },
   ];
+  GROUPS.forEach(function (g) { g.archived = false; g.archivedAt = null; });
 
   // Build a plausible grades/sections tree for a school of `n` students.
   function makeStructure(r, n) {
@@ -91,6 +107,22 @@
     }
     return { grades: grades, sections: sectionTotal };
   }
+  // Give every grade/section without a clock the school's creation date.
+  function stampStructure(struct, addedAt) {
+    struct.grades.forEach(function (g) {
+      if (!g.addedAt) g.addedAt = addedAt;
+      g.sections.forEach(function (sec) { if (!sec.addedAt) sec.addedAt = addedAt; });
+    });
+    return struct;
+  }
+  // First letter not already used in this grade (A, B, … — survives gaps left by removals).
+  function nextSectionName(g) {
+    for (var c = 0; c < 26; c++) {
+      var n = String.fromCharCode(65 + c);
+      if (!g.sections.some(function (sec) { return sec.name === n; })) return n;
+    }
+    return String(g.sections.length + 1);
+  }
 
   // ---- Hand-authored "hero" schools (cover every Control-Room example case) ----
   var HERO = [
@@ -98,12 +130,14 @@
       city: 'Bengaluru', country: 'India', region: 'India', board: 'CBSE', groupId: 'g-none',
       students: liveStudents, staff: liveTeachers, coordinator: liveCoord, joined: 'Apr 2025',
       stage: 'midline', status: 'active', sessionsPerWeek: 96, completion: 71, sel: 64, cog: 61 },
+    // emptySections: demo-only extra empty sections added `ago` days before TODAY
+    // (12 → still inside the window; 75 → already auto-removed at load).
     { id: 'greenfield', name: 'Greenfield International School', code: 'GRNF-4041', type: 'IB World School',
-      city: 'Mumbai', country: 'India', region: 'India', board: 'IB', groupId: 'g-vidya',
+      city: 'Mumbai', country: 'India', region: 'India', board: 'IB', groupId: 'g-vidya', emptySections: [{ ago: 12 }],
       students: 540, staff: 32, coordinator: { name: 'Rita Fernandes', email: 'rita.f@greenfield.edu' }, joined: 'Jan 2025',
       stage: 'endline', status: 'active', sessionsPerWeek: 512, completion: 88, sel: 69, cog: 66 },
     { id: 'sunrise', name: 'Sunrise Public School', code: 'SNRS-1180', type: 'CBSE school',
-      city: 'Delhi', country: 'India', region: 'India', board: 'CBSE', groupId: 'g-metro',
+      city: 'Delhi', country: 'India', region: 'India', board: 'CBSE', groupId: 'g-metro', emptySections: [{ ago: 75 }],
       students: 820, staff: 45, coordinator: { name: 'Anil Mehta', email: 'anil.mehta@sunrisepublic.edu' }, joined: 'Jul 2025',
       stage: 'baseline', status: 'active', sessionsPerWeek: 610, completion: 42, sel: 58, cog: 55 },
     { id: 'lotus-valley', name: 'Lotus Valley School', code: 'LOTS-3390', type: 'CBSE school',
@@ -115,9 +149,12 @@
       students: 430, staff: 27, coordinator: { name: 'Suresh Raman', email: 'suresh.r@banyantree.edu' }, joined: 'Jan 2025',
       stage: 'endline', status: 'active', sessionsPerWeek: 388, completion: 84, sel: 67, cog: 63 },
     // ---- Onboarding stalls: 0 students (feeds the Control Room "0 students" card) ----
+    // seedGrades: grades/sections set up in the wizard but never filled. Asian
+    // Grammar is 50 days in (auto-removal warning); Royal College is long past it.
     { id: 'asian-grammar', name: 'Asian Grammar School', code: 'ARUG-4164', type: 'Independent school',
       city: 'Hyderabad', country: 'India', region: 'India', board: 'CBSE', groupId: 'g-none',
-      students: 0, staff: 2, coordinator: { name: 'Farah Sheikh', email: 'farah.s@asiangrammar.edu' }, joined: 'Aug 2025',
+      createdAt: iso(addDays(-50)), seedGrades: [['Grade 1', ['A', 'B']], ['Grade 2', ['A']]],
+      students: 0, staff: 2, coordinator: { name: 'Farah Sheikh', email: 'farah.s@asiangrammar.edu' }, joined: 'Jul 2026',
       stage: 'onboarding', status: 'quiet', sessionsPerWeek: 0, completion: 0, sel: null, cog: null },
     { id: 'compassion-intl', name: 'Compassion International', code: 'CMPS-9032', type: 'NGO programme',
       city: 'Kolkata', country: 'India', region: 'India', board: 'National', groupId: 'g-brightpath',
@@ -125,6 +162,7 @@
       stage: 'mou', status: 'quiet', sessionsPerWeek: 0, completion: 0, sel: null, cog: null },
     { id: 'royal-colombo', name: 'Royal College Colombo', code: 'RYCL-5521', type: 'National school',
       city: 'Colombo', country: 'Sri Lanka', region: 'Sri Lanka', board: 'National', groupId: 'g-lanka',
+      seedGrades: [['Grade 1', ['A', 'B']], ['Grade 2', ['A', 'B']]],
       students: 0, staff: 3, coordinator: { name: 'Nimal Gunasekara', email: 'nimal.g@royalcollege.lk' }, joined: 'Jul 2025',
       stage: 'onboarding', status: 'quiet', sessionsPerWeek: 0, completion: 0, sel: null, cog: null },
     // ---- Sri Lanka spread ----
@@ -198,7 +236,16 @@
     if (s.archived == null) s.archived = false;
     if (s.groupId == null) s.groupId = 'g-none';
     var r = rng(1000 + i);
-    var struct = makeStructure(r, s.students);
+    if (!s.createdAt) s.createdAt = joinedISO(s.joined);
+    var struct = s.seedGrades
+      ? { grades: s.seedGrades.map(function (g) { return { grade: g[0], sections: g[1].map(function (n) { return { name: n, students: 0 }; }) }; }), sections: 0 }
+      : makeStructure(r, s.students);
+    stampStructure(struct, s.createdAt);
+    (s.emptySections || []).forEach(function (x) {
+      var g = struct.grades[0]; if (!g) return;
+      g.sections.push({ name: nextSectionName(g), students: 0, addedAt: iso(addDays(-x.ago)) });
+    });
+    struct.sections = struct.grades.reduce(function (a, g) { return a + g.sections.length; }, 0);
     s.structure = struct;
     s.gradeCount = struct.grades.length;
     s.sectionCount = struct.sections;
@@ -232,7 +279,8 @@
       joinCode: api.joinCode || '',
       joined: 'Sep 2025', stage: 'baseline', status: 'active',
       sessionsPerWeek: 0, completion: 0, sel: null, cog: null, archived: false,
-      structure: { grades: grades, sections: st.sections },
+      createdAt: iso(api.createdAt || TODAY),
+      structure: stampStructure({ grades: grades, sections: st.sections }, iso(api.createdAt || TODAY)),
       gradeCount: grades.length, sectionCount: st.sections,
     };
   }
@@ -365,14 +413,23 @@
   var ISSUES = buildIssues();
 
   // ---- Assessment templates (some Draft — feeds the "Draft assessments" card) ----
+  // Who made / last touched each template, and when it was last published
+  // (ms). publishedAt decides the "Latest" template per phase + audience.
+  function tplMeta(createdAgo, by, editedAgo, editor, publishedAgo) {
+    var at = function (d) { return d == null ? null : TODAY.getTime() - d * DAY; };
+    return { createdAt: at(createdAgo), createdBy: by, updatedAt: at(editedAgo), updatedBy: editor || by, publishedAt: at(publishedAgo), archived: false };
+  }
   var TEMPLATES = [
-    { id: 'tpl-base-t', title: 'Baseline · Teacher Report', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '21-item teacher observation, start of term.' },
-    { id: 'tpl-base-p', title: 'Baseline · Parent Report', audience: 'Parent', phase: 'Baseline', status: 'Published', desc: 'Home-context parent survey.' },
-    { id: 'tpl-mid-t', title: 'Midline · Teacher Report', audience: 'Teacher', phase: 'Midline', status: 'Draft', desc: 'Mid-term teacher self-report.' },
-    { id: 'tpl-end-t', title: 'Endline · Teacher Report', audience: 'Teacher', phase: 'Endline', status: 'Draft', desc: 'End-of-term teacher self-report.' },
-    { id: 'tpl-direct-emt', title: 'EMT · Direct Assessment', audience: 'Direct Assessment', phase: 'Baseline', status: 'Published', desc: 'Gamified executive-function task.' },
-    { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', phase: 'Midline', status: 'Published', desc: 'Inhibition / flexibility task.' },
+    { id: 'tpl-base-t', title: 'Baseline · Teacher Report', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '21-item teacher observation, start of term.', meta: tplMeta(40, 'Meera Krishnan', 9, 'Masoomi Shah', 9) },
+    { id: 'tpl-base-p', title: 'Baseline · Parent Report', audience: 'Parent', phase: 'Baseline', status: 'Published', desc: 'Home-context parent survey.', meta: tplMeta(52, 'Meera Krishnan', 30, null, 30) },
+    { id: 'tpl-mid-t', title: 'Midline · Teacher Report', audience: 'Teacher', phase: 'Midline', status: 'Draft', desc: 'Mid-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 3, null, null) },
+    { id: 'tpl-end-t', title: 'Endline · Teacher Report', audience: 'Teacher', phase: 'Endline', status: 'Draft', desc: 'End-of-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 14, null, null) },
+    { id: 'tpl-direct-emt', title: 'EMT · Direct Assessment', audience: 'Direct Assessment', phase: 'Baseline', status: 'Published', desc: 'Gamified executive-function task.', meta: tplMeta(120, 'Ishani Rao', 60, null, 60) },
+    { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', phase: 'Midline', status: 'Published', desc: 'Inhibition / flexibility task.', meta: tplMeta(120, 'Ishani Rao', 75, null, 75) },
+    // Last year's version — still published, so it shows as "Older version" next to tpl-base-t.
+    { id: 'tpl-base-t-2025', title: 'Baseline · Teacher Report (2025)', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '18-item teacher observation used in the 2025 cohort.', meta: tplMeta(400, 'Meera Krishnan', 380, null, 380) },
   ];
+  TEMPLATES.forEach(function (t) { Object.assign(t, t.meta); delete t.meta; });
 
   // ---- Deployments (status server-derived from window + publish state) ----
   function deriveDeploymentStatus(d) {
@@ -451,6 +508,11 @@
     ],
   };
   function masterLinkUrl(schoolCode, slug) { return 'https://measures.tilli.app/' + String(schoolCode).toLowerCase() + '/' + slug; }
+  // One link for a whole school group: opens a pick-your-school page listing the
+  // group's active schools, then continues to that school's normal flow.
+  function groupLinkUrl(group, slug) { return 'https://measures.tilli.app/g/' + group.code + '/' + slug; }
+  // Local prototype of that page (index.html reads ?group=&as=).
+  function groupLinkPreview(group, role) { return 'index.html?group=' + encodeURIComponent(group.code) + '&as=' + role; }
 
   // ---- Results & Data (§6.6, formerly "AMES Data"): one inspectable row per deployment ----
   function buildResults() {
@@ -544,6 +606,56 @@
   // ============================================================
   var sum = function (arr, f) { return arr.reduce(function (a, x) { return a + (f ? f(x) : x); }, 0); };
 
+  // ---- Empty grade / section auto-removal ----
+  function sectionHeadcount(g) { return g.sections.length ? sum(g.sections, function (x) { return x.students || 0; }) : (parseInt(g.students, 10) || 0); }
+  function removalDueMs(item) { return new Date(item.addedAt).getTime() + EMPTY_STRUCTURE_TTL_DAYS * DAY; }
+  function structureDaysLeft(item) { return Math.max(0, Math.min(EMPTY_STRUCTURE_TTL_DAYS, Math.ceil((removalDueMs(item) - TODAY.getTime()) / DAY))); }
+  // Empty sections (and section-less empty grades) still inside their window.
+  function emptyStructure(s) {
+    var out = [];
+    ((s.structure && s.structure.grades) || []).forEach(function (g) {
+      if (g.sections.length) g.sections.forEach(function (sec) { if (!sec.students) out.push({ grade: g.grade, section: sec.name, daysLeft: structureDaysLeft(sec) }); });
+      else if (!sectionHeadcount(g)) out.push({ grade: g.grade, section: null, daysLeft: structureDaysLeft(g) });
+    });
+    return out;
+  }
+  // The daily job, run once at load against TODAY. Removes expired empty
+  // sections; a grade goes too once it has no sections and no students left.
+  // Each removal is logged to the audit trail (dated when it was due) and kept
+  // on structure.removed so the hub can offer "Add back".
+  function pruneEmptyStructure(s) {
+    if (s.created || s.archived || !s.structure) return;   // created schools live in TilliAPI — see tracker
+    var removed = s.structure.removed || (s.structure.removed = []);
+    var now = TODAY.getTime();
+    s.structure.grades = s.structure.grades.filter(function (g) {
+      var gone = g.sections.filter(function (sec) { return !sec.students && removalDueMs(sec) <= now; });
+      var keep = g.sections.filter(function (sec) { return gone.indexOf(sec) < 0; });
+      var wholeGrade = !keep.length && !sectionHeadcount({ sections: [], students: g.students }) && removalDueMs(g) <= now;
+      if (!gone.length && !wholeGrade) return true;
+      var dueMs = Math.max.apply(null, gone.map(removalDueMs).concat(wholeGrade ? [removalDueMs(g)] : []));
+      var names = gone.map(function (x) { return x.name; });
+      removed.push({ grade: g.grade, sections: names, wholeGrade: wholeGrade, removedAt: iso(dueMs) });
+      AUDIT.push({ at: dueMs, actor: SYSTEM_ACTOR, action: 'school.structure.auto', entityType: 'school', schoolId: s.id,
+        entity: (wholeGrade ? g.grade : g.grade + ' · ' + names.join(', ')) + ' (empty ' + EMPTY_STRUCTURE_TTL_DAYS + ' days)' });
+      g.sections = keep;
+      return !wholeGrade;
+    });
+    recomputeStructure(s);
+  }
+  SCHOOLS.forEach(pruneEmptyStructure);
+  AUDIT.sort(function (a, b) { return b.at - a.at; });
+
+  // Open issues for a school: each human report counts once, auto-crash reports
+  // count once per crash signature (they're grouped the same way on Issue Reports).
+  function openIssueCount(schoolId) {
+    var sigs = {}, n = 0;
+    ISSUES.forEach(function (i) {
+      if (i.schoolId !== schoolId || i.status !== 'open') return;
+      if (i.autoCrash) { if (!sigs[i.crashSig]) { sigs[i.crashSig] = 1; n++; } } else n++;
+    });
+    return n;
+  }
+
   // Onboarding flags for a single school (mirrors Control-Room logic, scoped).
   function schoolFlags(s) {
     var f = [];
@@ -551,6 +663,11 @@
     if (!s.archived && s.staff === 0)    f.push({ key: 'no-staff',    label: '0 staff' });
     var live = DEPLOYMENTS.some(function (d) { return d.schoolId === s.id && d.status === 'Live'; });
     if (!s.archived && !live)            f.push({ key: 'no-deployment', label: 'No active deployment' });
+    var soon = s.archived ? [] : emptyStructure(s).filter(function (x) { return x.daysLeft <= EMPTY_STRUCTURE_WARN_DAYS; });
+    if (soon.length) {
+      var first = Math.min.apply(null, soon.map(function (x) { return x.daysLeft; }));
+      f.push({ key: 'empty-structure', label: soon.length + ' empty section' + (soon.length === 1 ? '' : 's') + ' · auto-remove in ' + first + ' day' + (first === 1 ? '' : 's') });
+    }
     return f;
   }
 
@@ -565,7 +682,7 @@
       var d = daysFromNow(i.expires);
       return i.status === 'Expired' || (d >= 0 && d <= 7);
     });
-    var draftTpls = TEMPLATES.filter(function (t) { return t.status === 'Draft'; });
+    var draftTpls = TEMPLATES.filter(function (t) { return t.status === 'Draft' && !t.archived; });
     var depsAttn = DEPLOYMENTS.filter(function (d) {
       if (d.status === 'Live') return daysFromNow(d.end) <= 3;
       if (d.status === 'Scheduled') return daysFromNow(d.start) < 0; // start passed, not flipped
@@ -598,12 +715,14 @@
     return ({
       'template.publish': 'published template', 'template.create': 'created template',
       'template.duplicate': 'duplicated template', 'template.delete': 'deleted template', 'template.edit': 'edited template',
+      'template.archive': 'archived template', 'template.unarchive': 'restored template',
       'student.merge': 'merged students', 'student.delete': 'deleted students', 'student.add': 'imported students', 'student.edit': 'edited student',
-      'school.add': 'added school', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections',
+      'school.add': 'added school', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
       'role.change': 'changed role', 'deployment.create': 'created deployment', 'deployment.end': 'ended deployment',
       'observation.publish': 'published observation phase', 'observation.access': 'changed form access',
       'selfguided.publish': 'published self-guided game', 'selfguided.edit': 'edited self-guided game',
       'group.create': 'created group', 'group.rename': 'renamed group', 'group.delete': 'deleted group',
+      'group.archive': 'archived group', 'group.unarchive': 'restored group',
       'invitation.resend': 'resent invitation', 'invitation.send': 'sent invitation', 'invitation.revoke': 'revoked invitation',
     })[a] || a;
   }
@@ -696,7 +815,9 @@
   // ---- Write helpers (§9 gated actions; v1 always-pass). Server owns derivation. ----
   function createGroup(name) {
     var id = 'g-' + normName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + GROUPS.length;
-    var g = { id: id, name: name };
+    var base = normName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group', code = base, n = 1;
+    while (GROUPS.some(function (x) { return x.code === code; })) code = base + '-' + (++n);
+    var g = { id: id, name: name, code: code, archived: false, archivedAt: null };
     GROUPS.push(g);
     return g;
   }
@@ -788,15 +909,36 @@
     }
     return s;
   }
-  function createTemplate(t) {
-    var tpl = { id: 'tpl-' + Date.now(), title: t.title, audience: t.audience, phase: t.phase,
-      status: t.status || 'Draft', desc: t.desc || '' };
+  // Template writes stamp who/when (actor = the signed-in Tilli team member).
+  function touchTemplate(t, actor) { t.updatedAt = Date.now(); t.updatedBy = actor || 'Tilli Team'; }
+  function createTemplate(t, actor) {
+    var now = Date.now(), status = t.status || 'Draft';
+    var tpl = { id: 'tpl-' + now, title: t.title, audience: t.audience, phase: t.phase,
+      status: status, desc: t.desc || '', createdAt: now, createdBy: actor || 'Tilli Team',
+      updatedAt: now, updatedBy: actor || 'Tilli Team', publishedAt: status === 'Published' ? now : null, archived: false };
     TEMPLATES.unshift(tpl);
     return tpl;
   }
-  function publishTemplate(id, publish) {
+  function publishTemplate(id, publish, actor) {
     var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
-    t.status = publish ? 'Published' : 'Draft'; return t;
+    t.status = publish ? 'Published' : 'Draft';
+    if (publish) t.publishedAt = Date.now();
+    touchTemplate(t, actor); return t;
+  }
+  function archiveTemplate(id, on, actor) {
+    var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
+    t.archived = !!on; touchTemplate(t, actor); return t;
+  }
+  // phase|audience → id of the newest published, non-archived template.
+  function latestTemplateIds() {
+    var best = {};
+    TEMPLATES.forEach(function (t) {
+      if (t.archived || t.status !== 'Published') return;
+      var k = t.phase + '|' + t.audience, cur = best[k];
+      if (!cur || (t.publishedAt || 0) > (cur.publishedAt || 0)) best[k] = t;
+    });
+    var out = {}; Object.keys(best).forEach(function (k) { out[k] = best[k].id; });
+    return out;
   }
   function deleteTemplate(id) { var i = TEMPLATES.findIndex(function (x) { return x.id === id; }); if (i >= 0) TEMPLATES.splice(i, 1); }
   function createDeployment(d) {
@@ -819,15 +961,33 @@
   function obsAccessCount() { return activeSchools().filter(function (s) { return OBSERVATION.access[s.id]; }).length; }
 
   // ---- Super-Admin edit helpers (v1 has full access; these do the real write) ----
-  function updateTemplate(id, patch) {
+  function updateTemplate(id, patch, actor) {
     var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
+    var wasPublished = t.status === 'Published';
     ['title', 'audience', 'phase', 'status', 'desc'].forEach(function (k) { if (patch[k] != null) t[k] = patch[k]; });
+    if (!wasPublished && t.status === 'Published') t.publishedAt = Date.now();
+    touchTemplate(t, actor);
     return t;
   }
   function renameGroup(id, name) {
     var g = GROUPS.find(function (x) { return x.id === id; }); if (!g) return null;
     g.name = name; SCHOOLS.forEach(function (s) { if (s.groupId === id) s.groupName = name; }); return g;
   }
+  // Archive / restore a whole group. Archiving takes every school in it down
+  // with it (marked archivedByGroup); restoring brings back only those, so a
+  // school that was archived on its own beforehand stays archived.
+  function archiveGroup(id, on) {
+    var g = GROUPS.find(function (x) { return x.id === id; }); if (!g || id === 'g-none') return null;
+    g.archived = !!on; g.archivedAt = on ? iso(Date.now()) : null;
+    SCHOOLS.forEach(function (s) {
+      if (s.groupId !== id) return;
+      if (on && !s.archived) { s.archived = true; s.archivedByGroup = true; }
+      else if (!on && s.archivedByGroup) { s.archived = false; s.archivedByGroup = false; }
+    });
+    return g;
+  }
+  var activeGroups = function () { return GROUPS.filter(function (g) { return !g.archived; }); };
+  var groupByCode = function (code) { return GROUPS.find(function (g) { return g.code && g.code === code; }) || null; };
   function deleteGroup(id) {
     if (id === 'g-none') return;
     SCHOOLS.forEach(function (s) {
@@ -863,19 +1023,32 @@
     s.structure.sections = s.structure.grades.reduce(function (a, g) { return a + g.sections.length; }, 0);
     s.gradeCount = s.structure.grades.length; s.sectionCount = s.structure.sections;
   }
-  function addSection(schoolId, gradeName) {
+  // New grades/sections start their own empty-structure clock today.
+  function addSection(schoolId, gradeName, sectionName) {
     var s = byId(schoolId); if (!s) return null;
     var g = s.structure.grades.find(function (x) { return x.grade === gradeName; }); if (!g) return null;
-    g.sections.push({ name: String.fromCharCode(65 + g.sections.length), students: 0 });
+    var nm = sectionName && !g.sections.some(function (x) { return x.name === sectionName; }) ? sectionName : nextSectionName(g);
+    g.sections.push({ name: nm, students: 0, addedAt: iso(TODAY) });
     recomputeStructure(s); return s;
   }
-  function addGrade(schoolId, name) {
+  function addGrade(schoolId, name, sectionNames) {
     var s = byId(schoolId); if (!s) return null;
     if (!s.structure.grades.some(function (g) { return g.grade === name; })) {
-      s.structure.grades.push({ grade: name, sections: [{ name: 'A', students: 0 }] });
+      s.structure.grades.push({ grade: name, addedAt: iso(TODAY),
+        sections: (sectionNames && sectionNames.length ? sectionNames : ['A']).map(function (n) { return { name: n, students: 0, addedAt: iso(TODAY) }; }) });
       recomputeStructure(s);
     }
     return s;
+  }
+  // Put back a grade/section the system auto-removed (school asked for it again).
+  function restoreStructure(schoolId, idx) {
+    var s = byId(schoolId); if (!s || !s.structure.removed) return null;
+    var x = s.structure.removed[idx]; if (!x) return null;
+    var g = s.structure.grades.find(function (v) { return v.grade === x.grade; });
+    if (!g) addGrade(schoolId, x.grade, x.sections);
+    else x.sections.forEach(function (n) { addSection(schoolId, x.grade, n); });
+    s.structure.removed.splice(idx, 1);
+    return x;
   }
   function updateGame(id, patch) {
     var g = SELF_GUIDED.find(function (x) { return x.id === id; }); if (!g) return null;
@@ -969,6 +1142,7 @@
     schools: SCHOOLS, groups: GROUPS,
     stageIndex: stageIndex, stageMeta: stageMeta, byId: byId,
     groupById: groupById, activeSchools: activeSchools, people: people,
+    activeGroups: activeGroups, groupByCode: groupByCode,
     // raw entities (list screens)
     users: USERS, invitations: INVITATIONS, issues: ISSUES, templates: TEMPLATES,
     deployments: DEPLOYMENTS, deletionLogs: DELETION_LOGS, duplicates: DUPLICATES,
@@ -977,11 +1151,13 @@
     roles: ROLES,
     // helpers the client needs but must not re-derive
     daysFromNow: daysFromNow, iso: iso, normName: normName, masterLinkUrl: masterLinkUrl,
+    groupLinkUrl: groupLinkUrl, groupLinkPreview: groupLinkPreview,
+    emptyStructureTtlDays: EMPTY_STRUCTURE_TTL_DAYS, emptyStructureWarnDays: EMPTY_STRUCTURE_WARN_DAYS,
     // server-computed views
     server: {
       controlRoom: controlRoom,
       schoolSummary: schoolSummary,
-      schoolFlags: schoolFlags,
+      schoolFlags: schoolFlags, openIssueCount: openIssueCount,
       studentDirectory: studentDirectory,
       recentActivity: recentActivity,
       logAudit: logAudit,
@@ -989,13 +1165,15 @@
       // §9 write helpers (gated in the client, computed here)
       createGroup: createGroup, createSchool: createSchool,
       createTemplate: createTemplate, publishTemplate: publishTemplate, deleteTemplate: deleteTemplate,
+      archiveTemplate: archiveTemplate, latestTemplateIds: latestTemplateIds,
       createDeployment: createDeployment, endDeployment: endDeployment,
       setObsPhasePublish: setObsPhasePublish, setObsAccess: setObsAccess,
       setObsAccessAll: setObsAccessAll, obsAccessCount: obsAccessCount,
       // Super-Admin edits
-      updateTemplate: updateTemplate, renameGroup: renameGroup, deleteGroup: deleteGroup,
+      updateTemplate: updateTemplate, renameGroup: renameGroup, deleteGroup: deleteGroup, archiveGroup: archiveGroup,
       updateSchool: updateSchool, deleteSchool: deleteSchool, setUserRole: setUserRole,
       addSection: addSection, addGrade: addGrade, updateGame: updateGame,
+      emptyStructure: emptyStructure, restoreStructure: restoreStructure,
       addInvitation: addInvitation,
     },
   };

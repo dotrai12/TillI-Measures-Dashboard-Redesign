@@ -478,9 +478,11 @@
   function schoolView() {
     const isTeacher = state.role !== 'parent';   // teacher + Tilli Team see the school-facing wording
     const q = (state.schoolQuery || '').trim().toLowerCase();
+    // Group link: the list is just that group's schools, so show it all up front.
+    const GL = state.groupLink;
     // Only search once the user has typed enough — no full-list-on-focus.
-    const enoughChars = q.length >= SCHOOL_MIN_CHARS;
-    const ALL = schoolNames();
+    const enoughChars = GL ? true : q.length >= SCHOOL_MIN_CHARS;
+    const ALL = GL ? GL.schools : schoolNames();
     const matches = enoughChars ? ALL.filter((x) => x.toLowerCase().includes(q)) : [];
     const exactish = ALL.some((x) => x.toLowerCase() === q);
     const canContinue = !!(state.school || state.schoolQuery.trim());
@@ -494,11 +496,13 @@
     const noMatch = enoughChars && !exactish && matches.length === 0;
 
     // School path: we only get here for an email with no account yet.
-    const sub = state.role === 'teacher'
-      ? `No account yet for <b class="break-all">${esc(state.email)}</b>. Pick your school to join it.`
-      : 'Start typing to find it in the list.';
+    const sub = GL
+      ? `This link was shared by <b>${esc(GL.name)}</b>. Pick your school to continue.`
+      : state.role === 'teacher'
+        ? `No account yet for <b class="break-all">${esc(state.email)}</b>. Pick your school to join it.`
+        : 'Start typing to find it in the list.';
     return `
-      <h2 class="dlg-title">${isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
+      <h2 class="dlg-title">${GL ? `Pick your school in ${esc(GL.name)}` : isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
       <p class="dlg-sub">${sub}</p>
       <div>
         <span class="select-wrap">
@@ -762,6 +766,7 @@
     scope.querySelectorAll('[data-role]').forEach((b) =>
       b.addEventListener('click', () => {
         const role = b.dataset.role;
+        state.groupLink = null;   // picking a role by hand leaves any group-link scope
         // Tilli Team is internal — it doesn't belong to a school, so skip the
         // school picker and go straight to the email/password step.
         // Same for a School Group Admin: their scope is a group, not one school.
@@ -1058,5 +1063,23 @@
 
   // ---- boot ----
   document.getElementById('get-started').addEventListener('click', () =>
-    set({ step: 'role', role: null, school: '', schoolQuery: '', schoolListOpen: false }));
+    set({ step: 'role', role: null, school: '', schoolQuery: '', schoolListOpen: false, groupLink: null }));
+
+  // School-group link (index.html?group=<code>&as=parent|teacher, from Platform
+  // Admin → Deployments → Master Links): skip the role step and limit the school
+  // picker to that group's active schools. Parents land on the picker; teachers
+  // keep their email-first flow and meet the same short list if they're new.
+  (function openGroupLink() {
+    const qp = new URLSearchParams(location.search);
+    const code = qp.get('group'), as = qp.get('as');
+    const ORG = window.TILLI_ORG;
+    if (!code || !ORG || !ORG.groupByCode || (as !== 'parent' && as !== 'teacher')) return;
+    const g = ORG.groupByCode(code);
+    if (!g || g.archived) return;
+    const schools = ORG.schools.filter((s) => s.groupId === g.id && !s.archived).map((s) => s.name).sort();
+    if (!schools.length) return;
+    const groupLink = { name: g.name, schools };
+    if (as === 'parent') set({ step: 'school', role: 'parent', groupLink, school: '', schoolQuery: '', schoolListOpen: true });
+    else set({ step: 'email', role: 'teacher', groupLink, school: '', schoolQuery: '', schoolListOpen: false, email: '', password: '', found: null });
+  })();
 })();

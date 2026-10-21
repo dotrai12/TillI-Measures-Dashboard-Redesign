@@ -207,11 +207,10 @@
           '<span class="meta"><b>' + esc(me.name) + '</b><span>' + roleLabel + '</span></span><span class="chev">⋯</span>' +
         '</button></div></aside>';
 
-    // Group mode drops the portfolio-wide search (it would reach other groups' schools).
-    var header = '<header class="ui-header tl-header">' +
-      (GROUP ? '<div class="tl-search tl-group-title">' + esc(GROUP.name) + '</div>'
-        : '<form class="tl-search" id="tl-search"><span class="ic">' + ICONS.search + '</span>' +
-          '<input id="tl-search-in" placeholder="Search schools, students, users, invitations, deployments…" autocomplete="off"></form>') +
+    // No top-bar search (finding a school lives in the Control Room). Without a
+    // group title the header only carries the phone avatar, so it hides on desktop.
+    var header = '<header class="ui-header tl-header' + (GROUP ? '' : ' tl-header-bare') + '">' +
+      (GROUP ? '<div class="tl-search tl-group-title">' + esc(GROUP.name) + '</div>' : '') +
       '<div class="tl-h-actions">' +
         // Phone only (sidebar hidden): the avatar stands in for the sidebar profile.
         '<button class="ui-avatar tl-acct-m" id="tl-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
@@ -229,20 +228,83 @@
     return '';
   }
 
+  // Group-admin console for an archived group: nothing to manage, just say so.
+  function archivedGroupNotice(body) {
+    body.innerHTML = '<div class="ui-card tl-archived-notice"><div class="ui-eyebrow">Group archived</div>' +
+      '<h1 class="ui-screen-title">' + esc(GROUP.name) + ' has been archived</h1>' +
+      '<p class="tl-muted">Its schools, deployments and links are paused' + (GROUP.archivedAt ? ' since ' + esc(fmtJoined(GROUP.archivedAt)) : '') + '. Your data is safe. If this is a mistake or you’re starting a new term, contact the Tilli team at <a href="mailto:info@tillikids.com">info@tillikids.com</a>.</p>' +
+      (groupPreview ? '<a class="btn btn-outline btn-sm" href="tilli.html#/group?id=' + encodeURIComponent(GROUP.id) + '" style="text-decoration:none">← Back to Platform Admin</a>' : '') + '</div>';
+  }
+
   function render() {
     var r = currentRoute();
     app.innerHTML = chrome(r);
     var body = document.getElementById('tl-body');
-    SCREEN[r.screen](r.params, body);
+    app.classList.toggle('tl-ask-mode', r.screen === 'ask-tilli' && !GROUP);   // full-height chat layout
+    if (GROUP && GROUP.archived) archivedGroupNotice(body);
+    else SCREEN[r.screen](r.params, body);
     // wire chrome
     app.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
     ['tl-acct-btn', 'tl-acct-btn-m'].forEach(function (id) {
       var b = document.getElementById(id); if (b) b.addEventListener('click', function (ev) { ev.stopPropagation(); openAcctMenu(b); });
     });
-    var sform = document.getElementById('tl-search'); var sin = document.getElementById('tl-search-in');
-    if (sform) sform.addEventListener('submit', function (ev) { ev.preventDefault(); go('search', { q: (sin.value || '').trim() }); });
-    if (sin && r.screen === 'search') sin.value = r.params.q || '';
     if (window.TilliFloat) TilliFloat.hideAsk(r.screen === 'ask-tilli');
+  }
+
+  // ---------- school typeahead (top-bar search + Control Room "Find a school") ----------
+  var TA_MAX = 6;   // schools shown in the suggestion list
+  function schoolMatches(q) {
+    q = q.trim().toLowerCase(); if (!q) return [];
+    var starts = function (sc) { return sc.name.toLowerCase().indexOf(q) === 0 ? 0 : 1; };
+    return ORG.schools.filter(function (sc) { return (sc.name + ' ' + sc.code + ' ' + (sc.city || '')).toLowerCase().indexOf(q) >= 0; })
+      .sort(function (a, b) { return starts(a) - starts(b) || (a.archived ? 1 : 0) - (b.archived ? 1 : 0) || a.name.localeCompare(b.name); })
+      .slice(0, TA_MAX);
+  }
+  // opts.onPick(school) — a school row was chosen. opts.onSubmit(q) — optional
+  // "See all results" row; without it, plain Enter picks the first match.
+  function schoolTypeahead(input, opts) {
+    var host = input.parentNode, menu = null, hits = [], idx = -1;
+    var rowCount = function () { return hits.length + (opts.onSubmit ? 1 : 0); };
+    function close() { if (menu) { menu.remove(); menu = null; } idx = -1; input.setAttribute('aria-expanded', 'false'); }
+    function draw() {
+      var q = input.value.trim();
+      if (!q) { close(); return; }
+      hits = schoolMatches(q);
+      if (!menu) {
+        menu = document.createElement('div'); menu.className = 'ui-menu tl-ta-menu'; menu.setAttribute('role', 'listbox');
+        menu.addEventListener('mousedown', function (ev) { ev.preventDefault(); });   // keep focus in the input
+        menu.addEventListener('click', function (ev) { var b = ev.target.closest('[data-ta]'); if (b) choose(+b.dataset.ta); });
+        host.appendChild(menu);
+      }
+      menu.innerHTML = (hits.length ? hits.map(function (sc, i) {
+        return '<button type="button" role="option" class="ui-menu-item tl-ta-item' + (i === idx ? ' on' : '') + '" data-ta="' + i + '">' +
+          '<span class="tl-ta-name">' + esc(sc.name) + (sc.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '</span>' +
+          '<span class="tl-ta-sub">' + esc([sc.code, sc.city, sc.country].filter(Boolean).join(' · ')) + '</span></button>';
+      }).join('') : '<div class="tl-ta-empty">No school matches “' + esc(q) + '”.</div>') +
+        (opts.onSubmit ? '<button type="button" role="option" class="ui-menu-item tl-ta-all' + (idx === hits.length ? ' on' : '') + '" data-ta="' + hits.length + '">See all results for “' + esc(q) + '” →</button>' : '');
+      input.setAttribute('aria-expanded', 'true');
+    }
+    function choose(i) {
+      var q = input.value.trim(); close();
+      if (i < hits.length) opts.onPick(hits[i]); else if (opts.onSubmit) opts.onSubmit(q);
+    }
+    input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false');
+    input.addEventListener('input', function () { idx = -1; draw(); });
+    input.addEventListener('focus', function () { if (input.value.trim()) draw(); });
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault(); if (!menu) draw(); var n = rowCount(); if (!n) return;
+        idx = ev.key === 'ArrowDown' ? (idx + 1) % n : (idx <= 0 ? n - 1 : idx - 1); draw();
+      } else if (ev.key === 'Escape') { close(); }
+      else if (ev.key === 'Enter') {
+        ev.preventDefault(); var q = input.value.trim(); if (!q) return;
+        if (!menu) draw();
+        if (idx >= 0) choose(idx);
+        else if (opts.onSubmit) { close(); opts.onSubmit(q); }
+        else if (hits.length) choose(0);
+      }
+    });
   }
 
   function openAcctMenu(anchor) {
@@ -361,16 +423,6 @@
   }
   function wireCrumbs(body) { body.querySelectorAll('[data-crumb]').forEach(function (b) { b.addEventListener('click', function () { var pr = {}; if (b.dataset.crumbParams) { try { pr = JSON.parse(decodeURIComponent(b.dataset.crumbParams)); } catch (e) {} } go(b.dataset.crumb, pr); }); }); }
 
-  // A tasteful placeholder (never a blank dead-end). Now used only for the
-  // cross-product AI Assistant surfaces, which are deliberately not built here.
-  function phase2(title, sub, bullets) {
-    return screenHead(title, sub) +
-      '<div class="ui-card"><div class="tl-phase2"><div class="ui-tag cyan mb-3">Cross-product</div>' +
-      '<p class="tl-phase2-lead">Deliberately out of scope for the Measures admin (spec §10.1):</p>' +
-      '<ul class="tl-phase2-list">' + bullets.map(function (b) { return '<li>' + esc(b) + '</li>'; }).join('') + '</ul>' +
-      '<p class="tl-phase2-note">All Measures surfaces are built. This configures the separate Ask Tilli product.</p></div></div>';
-  }
-
   var SCREEN = {};
 
   // ============================================================
@@ -421,6 +473,8 @@
         '<button class="btn btn-outline btn-sm" data-qa="invite">+ Invite User</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="deployment">+ Deployment</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="template">+ Template</button>') +
+      '<div class="tl-findschool"><span class="ic">' + ICONS.search + '</span>' +
+        '<input id="cr-find" class="tl-findschool-in" placeholder="Find a school — name, code or city" autocomplete="off" aria-label="Find a school and open it" title="Type a school name, code or city, then pick it (or press Enter) to open its hub."></div>' +
       (anyQueue ? '' : '<div class="tl-allclear">Nothing needs your attention right now. 🌱</div>') +
       '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Needs attention</h3><p class="ui-mod-note">Each card links to the pre-filtered list that produced it.</p></div></div>' +
         '<div class="tl-queue-grid">' + cards + '</div></div>' +
@@ -430,6 +484,7 @@
         '<a class="btn-link" href="' + href('audit', {}) + '">View all →</a></div>' + recent + '</div>';
 
     body.querySelectorAll('[data-qa]').forEach(function (b) { b.addEventListener('click', function () { quickAction(b.dataset.qa); }); });
+    var crFind = body.querySelector('#cr-find'); if (crFind) schoolTypeahead(crFind, { onPick: function (sc) { go('school', { id: sc.id }); } });
     body.querySelectorAll('[data-open-school]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: b.dataset.openSchool }); }); });
   };
 
@@ -474,20 +529,36 @@
   // ============================================================
   //  3) ALL SCHOOLS  (spec §4.1)
   // ============================================================
-  var schState = { tab: 'active', view: 'list', q: '', flag: '' };
+  var schState = { tab: 'active', view: 'list', q: '', flag: '', country: '' };
   SCREEN.schools = function (params, body) {
     if (params.flag != null) { schState.flag = params.flag; schState.tab = 'active'; }
-    var all = ORG.schools;
+    var tabActive = schState.tab === 'active';
+    // Country switch (school-success feedback: "divide into countries"). Counts
+    // follow the Active/Archived tab; every other filter applies inside the country.
+    var inTab = ORG.schools.filter(function (s) { return tabActive ? !s.archived : s.archived; });
+    var countryCounts = {};
+    inTab.forEach(function (s) { var c = s.country || 'Unspecified'; countryCounts[c] = (countryCounts[c] || 0) + 1; });
+    var countries = Object.keys(countryCounts).sort(function (a, b) { return countryCounts[b] - countryCounts[a] || a.localeCompare(b); });
+    if (schState.country && !countryCounts[schState.country]) schState.country = '';
+    var inCountry = function (s) { return !schState.country || (s.country || 'Unspecified') === schState.country; };
+    var all = ORG.schools.filter(inCountry);
     var counts = { active: all.filter(function (s) { return !s.archived; }).length, archived: all.filter(function (s) { return s.archived; }).length };
 
     var q = schState.q.trim().toLowerCase();
-    var tabActive = schState.tab === 'active';
     // Top level shows groups + independent schools; searching / archived / flags flatten to a plain list.
-    var grouped = tabActive && !q && schState.flag !== 'zero-students';
+    var grouped = !q && schState.flag !== 'zero-students';
 
+    // Every school in the current view (tab + country + flag + search) — the flat
+    // list, and what the Schools CSV exports even when the screen shows groups.
+    var rows = all.filter(function (s) {
+      if (tabActive ? s.archived : !s.archived) return false;
+      if (schState.flag === 'zero-students' && s.students !== 0) return false;
+      if (q && (s.name + ' ' + s.code).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
     var content;
-    if (grouped) {
-      var groups = ORG.groups.filter(function (g) { return g.id !== 'g-none'; }).map(function (g) {
+    if (grouped && tabActive) {
+      var groups = ORG.groups.filter(function (g) { return g.id !== 'g-none' && !g.archived; }).map(function (g) {
         return { g: g, schools: all.filter(function (s) { return !s.archived && s.groupId === g.id; }) };
       }).filter(function (x) { return x.schools.length; });
       var indep = all.filter(function (s) { return !s.archived && s.groupId === 'g-none'; });
@@ -495,13 +566,18 @@
         (groups.length ? '<div class="tl-listgroup-h">School groups <b>' + groups.length + '</b></div>' + groupListHtml(groups, schState.view) : '') +
         '<div class="tl-listgroup-h">Independent schools <b>' + indep.length + '</b></div>' +
         schoolListHtml(indep, schState.view);
+    } else if (grouped) {
+      // Archived tab: whole archived groups first, then schools archived on their own.
+      var agroups = ORG.groups.filter(function (g) { return g.archived; }).map(function (g) {
+        return { g: g, schools: all.filter(function (s) { return s.archived && s.groupId === g.id; }) };
+      }).filter(function (x) { return x.schools.length || !schState.country; });
+      var aGroupIds = agroups.map(function (x) { return x.g.id; });
+      var loose = rows.filter(function (s) { return aGroupIds.indexOf(s.groupId) < 0; });
+      content = (agroups.length || loose.length)
+        ? (agroups.length ? '<div class="tl-listgroup-h">Archived groups <b>' + agroups.length + '</b></div>' + groupListHtml(agroups, schState.view) : '') +
+          '<div class="tl-listgroup-h">Archived schools <b>' + loose.length + '</b></div>' + schoolListHtml(loose, schState.view)
+        : '<div class="ui-empty">Nothing archived.</div>';
     } else {
-      var rows = all.filter(function (s) {
-        if (tabActive ? s.archived : !s.archived) return false;
-        if (schState.flag === 'zero-students' && s.students !== 0) return false;
-        if (q && (s.name + ' ' + s.code).toLowerCase().indexOf(q) < 0) return false;
-        return true;
-      });
       content = rows.length ? schoolListHtml(rows, schState.view)
         : '<div class="ui-empty">' + (all.length ? 'No schools match.' : 'No schools yet — add your first school.') + '</div>';
     }
@@ -509,35 +585,53 @@
     var flagBanner = schState.flag === 'zero-students'
       ? '<div class="tl-filterbanner">Filtered to <b>schools with 0 students</b> · <button class="btn-link" id="sch-clearflag">clear</button></div>' : '';
 
-    body.innerHTML = screenHead('All Schools', ORG.activeSchools().length + ' active partner schools across the portfolio.',
+    var countrySeg = countries.length > 1 ? '<div class="ui-seg tl-country-seg" role="group" aria-label="Filter by country">' +
+      '<button class="' + (!schState.country ? 'on' : '') + '" data-country="" title="Schools in every country">All countries <b>' + inTab.length + '</b></button>' +
+      countries.map(function (c) { return '<button class="' + (schState.country === c ? 'on' : '') + '" data-country="' + esc(c) + '" title="Only schools in ' + esc(c) + '">' + esc(c) + ' <b>' + countryCounts[c] + '</b></button>'; }).join('') +
+      '</div>' : '';
+    body.innerHTML = screenHead('All Schools', ORG.activeSchools().filter(inCountry).length + ' active partner schools ' + (schState.country ? 'in ' + esc(schState.country) + '.' : 'across the portfolio.'),
+      '<button class="btn btn-outline btn-sm" id="sch-csv" title="Download every school in this view (tab, country and search apply) as a CSV.">↓ Schools CSV</button>' +
       '<button class="btn btn-outline btn-sm" id="sch-newgroup">New Group</button><button class="btn btn-primary btn-sm" id="sch-add">+ Add School</button>') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (tabActive ? ' on' : '') + '" data-tab="active">Active <b>' + counts.active + '</b></button>' +
         '<button class="ui-tab' + (!tabActive ? ' on' : '') + '" data-tab="archived">Archived <b>' + counts.archived + '</b></button>' +
         '<div class="tl-viewtoggle"><button class="' + (schState.view === 'grid' ? 'on' : '') + '" data-view="grid" title="Grid">▦</button><button class="' + (schState.view === 'list' ? 'on' : '') + '" data-view="list" title="List">☰</button></div>' +
       '</div>' + flagBanner +
-      '<div class="tl-filters"><input class="input grow tl-filter-q" id="sch-q" placeholder="Search by school name or code…" value="' + esc(schState.q) + '"></div>' +
+      '<div class="tl-filters">' + countrySeg + '<input class="input grow tl-filter-q" id="sch-q" placeholder="Search by school name or code…" value="' + esc(schState.q) + '"></div>' +
       content;
 
     body.querySelectorAll('[data-group-open]').forEach(function (b) { b.addEventListener('click', function (ev) { if (ev.target.dataset.gmenu) return; go('group', { id: b.dataset.groupOpen }); }); });
     body.querySelectorAll('[data-gmenu]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); openGroupMenu(b.dataset.gmenu); }); });
     body.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { schState.tab = b.dataset.tab; SCREEN.schools({}, body); }); });
     body.querySelectorAll('[data-view]').forEach(function (b) { b.addEventListener('click', function () { schState.view = b.dataset.view; SCREEN.schools({}, body); }); });
+    body.querySelectorAll('[data-country]').forEach(function (b) { b.addEventListener('click', function () { schState.country = b.dataset.country; SCREEN.schools({}, body); }); });
     body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); go('school', { id: b.dataset.open }); }); });
+    wireIssueChips(body);
     var cf = body.querySelector('#sch-clearflag'); if (cf) cf.addEventListener('click', function () { schState.flag = ''; go('schools', {}); SCREEN.schools({}, body); });
     var addb = body.querySelector('#sch-add'); if (addb) addb.addEventListener('click', openAddSchool);
     var ng = body.querySelector('#sch-newgroup'); if (ng) ng.addEventListener('click', openNewGroup);
+    var csvb = body.querySelector('#sch-csv'); if (csvb) csvb.addEventListener('click', function () {
+      var name = 'schools-' + (tabActive ? 'active' : 'archived') + (schState.country ? '-' + schState.country.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '') + '.csv';
+      exportSchools(rows, name);
+    });
     var qi = body.querySelector('#sch-q'); if (qi) qi.addEventListener('input', function () { schState.q = qi.value; var pos = qi.selectionStart; SCREEN.schools({}, body); var nq = body.querySelector('#sch-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
   };
 
   // ---- shared list renderers (schools + groups) ----
+  // Red "N open issues" marker — opens the school's Issues & Logs tab.
+  function issueChip(id, n) {
+    return n ? '<button class="ui-chip danger tl-issue-chip" data-issues-of="' + esc(id) + '" title="' + n + ' open issue' + (n === 1 ? '' : 's') + ' reported from this school — open Issues & Logs">⚠ ' + n + ' open issue' + (n === 1 ? '' : 's') + '</button>' : '';
+  }
+  function wireIssueChips(root) {
+    root.querySelectorAll('[data-issues-of]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); go('school', { id: b.dataset.issuesOf, tab: 'issues' }); }); });
+  }
   function schoolListHtml(rows, view) {
     if (!rows.length) return '<div class="ui-empty">No schools here yet.</div>';
     if (view === 'grid') return '<div class="tl-school-grid">' + rows.map(schoolCard).join('') + '</div>';
-    return '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Grades</th><th>Students</th><th>Staff</th><th>Stage</th><th></th></tr></thead><tbody>' +
+    return '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Location</th><th>Grades</th><th>Students</th><th>Staff</th><th>Stage</th><th></th></tr></thead><tbody>' +
       rows.map(function (s) {
-        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '<small>' + esc(s.type) + ' · ' + esc(s.code) + '</small></td>' +
-          '<td>' + esc(s.groupName) + '</td><td class="tl-num">' + s.gradeCount + '</td><td class="tl-num">' + s.students.toLocaleString() + '</td>' +
+        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + ' ' + issueChip(s.id, ORG.server.openIssueCount(s.id)) + '<small>' + esc(s.type) + ' · ' + esc(s.code) + '</small></td>' +
+          '<td>' + esc(s.groupName) + '</td><td>' + esc([s.city, s.country].filter(Boolean).join(', ') || '—') + '</td><td class="tl-num">' + s.gradeCount + '</td><td class="tl-num">' + s.students.toLocaleString() + '</td>' +
           '<td class="tl-num">' + s.staff + '</td><td>' + stageChip(s.stage) + '</td><td class="r text-muted">›</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -552,7 +646,7 @@
     return '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Group</th><th>Schools</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
       groups.map(function (x) {
         var a = groupAgg(x.schools);
-        return '<tr class="clickable" data-group-open="' + x.g.id + '"><td class="name">' + esc(x.g.name) + '<small>School group</small></td>' +
+        return '<tr class="clickable" data-group-open="' + x.g.id + '"><td class="name">' + esc(x.g.name) + (x.g.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '<small>School group</small></td>' +
           '<td class="tl-num">' + a.schools + '</td><td class="tl-num">' + a.students.toLocaleString() + '</td><td class="tl-num">' + a.staff + '</td>' +
           '<td class="r" style="white-space:nowrap"><span class="chip-menu" data-gmenu="' + x.g.id + '">⋮</span> <span class="text-muted">›</span></td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -560,7 +654,7 @@
   function groupCard(x) {
     var a = groupAgg(x.schools);
     return '<div class="tl-school-card is-group" data-group-open="' + x.g.id + '">' +
-      '<div class="sc-top"><div class="sc-name">' + esc(x.g.name) + '</div><span class="ui-chip ok">Group</span></div>' +
+      '<div class="sc-top"><div class="sc-name">' + esc(x.g.name) + '</div>' + (x.g.archived ? '<span class="ui-chip muted">Archived group</span>' : '<span class="ui-chip ok">Group</span>') + '</div>' +
       '<div class="sc-meta">School group · ' + a.schools + ' school' + (a.schools === 1 ? '' : 's') + '</div>' +
       '<div class="sc-stats"><div><b>' + a.schools + '</b><span>schools</span></div><div><b>' + a.students.toLocaleString() + '</b><span>students</span></div><div><b>' + a.staff + '</b><span>staff</span></div></div>' +
       '<div class="sc-actions"><button class="btn-link" data-gmenu="' + x.g.id + '">Manage</button><span class="sc-open">Open →</span></div></div>';
@@ -571,6 +665,7 @@
   SCREEN.group = function (params, body) {
     var g = ORG.groupById(params.id);
     if (!g || g.id === 'g-none') { go('schools', {}); return; }
+    if (g.archived) grpState.tab = 'archived';   // nothing is active in an archived group
     var q = grpState.q.trim().toLowerCase();
     var inGroup = ORG.schools.filter(function (s) { return s.groupId === g.id; });
     var counts = { active: inGroup.filter(function (s) { return !s.archived; }).length, archived: inGroup.filter(function (s) { return s.archived; }).length };
@@ -585,7 +680,10 @@
         '<a class="btn btn-outline btn-sm" href="tilli.html?group=' + encodeURIComponent(g.id) + '&from=tilli&email=' + encodeURIComponent(me.email) + '" style="text-decoration:none" title="Open the School Group Admin view of this group — what its group admin sees">Group admin view →</a>' +
         '<button class="btn btn-outline btn-sm" id="grp-dl-assess" title="Assessment completion log for every school in this group — responses vs expected per teacher / parent / student assessment.">↓ Assessments CSV</button>' +
         '<button class="btn btn-outline btn-sm" id="grp-dl-staff" title="Every staff member across this group — name, email, role and sections.">↓ Staff CSV</button>' +
-        '<button class="btn btn-primary btn-sm" id="grp-add">+ Add School</button>') +
+        '<button class="btn btn-outline btn-sm" id="grp-manage" title="Rename, archive or delete this group.">Manage ⋯</button>' +
+        (g.archived ? '' : '<button class="btn btn-primary btn-sm" id="grp-add">+ Add School</button>')) +
+      (g.archived ? '<div class="tl-filterbanner">This group was <b>archived</b>' + (g.archivedAt ? ' on ' + esc(fmtJoined(g.archivedAt)) : '') + ' — its schools are archived and its group admin sees an archived notice. <button class="btn-link" id="grp-unarch">Un-archive group</button></div>' : '') +
+      (g.archived || !counts.active ? '' : '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Group links</h3><p class="ui-mod-note">Share one link with the whole group — each person picks their school first.</p></div></div>' + groupLinksHtml(g) + '</div>') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (grpState.tab === 'active' ? ' on' : '') + '" data-gtab="active">Active <b>' + counts.active + '</b></button>' +
         '<button class="ui-tab' + (grpState.tab === 'archived' ? ' on' : '') + '" data-gtab="archived">Archived <b>' + counts.archived + '</b></button>' +
@@ -599,7 +697,11 @@
     body.querySelectorAll('[data-gtab]').forEach(function (b) { b.addEventListener('click', function () { grpState.tab = b.dataset.gtab; SCREEN.group(params, body); }); });
     body.querySelectorAll('[data-view]').forEach(function (b) { b.addEventListener('click', function () { schState.view = b.dataset.view; SCREEN.group(params, body); }); });
     body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); go('school', { id: b.dataset.open }); }); });
+    wireIssueChips(body);
     var ab = body.querySelector('#grp-add'); if (ab) ab.addEventListener('click', openAddSchool);
+    var ua = body.querySelector('#grp-unarch'); if (ua) ua.addEventListener('click', function () { archiveGroupFlow(g); });
+    var gm = body.querySelector('#grp-manage'); if (gm) gm.addEventListener('click', function () { openGroupMenu(g.id); });
+    body.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy); }); });
     // Group-wide CSV exports — active schools in this group, regardless of the search filter.
     var groupSchools = inGroup.filter(function (s) { return !s.archived; });
     var slug = g.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group';
@@ -608,6 +710,15 @@
     var qi = body.querySelector('#grp-q'); if (qi) qi.addEventListener('input', function () { grpState.q = qi.value; var pos = qi.selectionStart; SCREEN.group(params, body); var nq = body.querySelector('#grp-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
   };
 
+  // All Schools CSV — one row per school in the current view.
+  function exportSchools(list, filename) {
+    downloadCsv(filename,
+      ['School', 'Code', 'Group', 'City', 'Country', 'Type', 'Board', 'Stage', 'Students', 'Staff', 'Grades', 'Sections', 'Completion %', 'Engagement', 'Joined', 'Archived'],
+      list.map(function (s) {
+        return [s.name, s.code, s.groupName, s.city, s.country, s.type, s.board, ORG.stageMeta(s.stage).label, s.students, s.staff,
+          s.gradeCount, s.sectionCount, s.completion || 0, (ORG.status[s.status] || ORG.status.quiet).label, s.joined, s.archived ? 'Yes' : 'No'];
+      }));
+  }
   // Group CSV builders — one row per (school × assessment) and one per staff member.
   function exportGroupAssessments(schools, slug) {
     var ids = {}; schools.forEach(function (s) { ids[s.id] = s; });
@@ -660,6 +771,98 @@
     });
     return rows;
   }
+  // ---- Per-teacher assessment log (school hub → Assessments) ----
+  // One row per teacher, one column per teacher-audience deployment. Status per
+  // cell follows the check-in rule: Completed = every student in the teacher's
+  // sections rated; In progress = at least one; Not started = none.
+  var TEACHER_FIRSTS = ['Anita', 'Deepa', 'Farah', 'Kavitha', 'Lakshmi', 'Meena', 'Nalini', 'Priya', 'Revathi', 'Sunita', 'Tharushi', 'Nadeesha', 'Ishara', 'Rekha', 'Shalini', 'Geetha'];
+  var TEACHERLOG_TONE = { 'Completed': 'ok', 'In progress': 'warn', 'Not started': 'danger', 'No students': 'muted' };
+  var TL_PHASE_ORDER = ['Baseline', 'Midline', 'Endline'];
+  function teacherCell(done, expected) {
+    var st = !expected ? 'No students' : done >= expected ? 'Completed' : done > 0 ? 'In progress' : 'Not started';
+    return { status: st, done: done, expected: expected };
+  }
+  // → { cols:[{label, phase}], teachers:[{name, email, sections[], students, cells[]}], live:bool }
+  function teacherRosterFor(s, d) {
+    var API = window.TilliAPI;
+    var liveData = (s.created || s.live) && API && API.teachersFor;
+    var apiDeps = liveData ? API.getDeployments(s.id).filter(function (x) { return x.audience === 'Teacher' && x.deployed !== false; })
+      .sort(function (a, b) { return TL_PHASE_ORDER.indexOf(a.phase) - TL_PHASE_ORDER.indexOf(b.phase); }) : [];
+    var mockDeps = (d.deployments || []).filter(function (x) { return x.audience === 'Teacher'; });
+
+    // Teachers + their students: real for live / created schools, generated otherwise.
+    var teachers;
+    if (liveData) {
+      var studs = API.studentsForSchool(s.id), secs = API.sectionsForSchool(s.id);
+      teachers = API.teachersFor(s.id).map(function (t) {
+        var mine = studs.filter(function (x) { return t.section_ids.indexOf(x.section_id) >= 0; });
+        return { name: t.name, email: t.email, ids: mine.map(function (x) { return x.student_id; }), students: mine.length,
+          sections: t.section_ids.map(function (id) { var v = secs.find(function (x) { return x.section_id === id; }); return v ? v.name : null; }).filter(Boolean) };
+      });
+    } else {
+      var secList = [];
+      ((s.structure && s.structure.grades) || []).forEach(function (g) {
+        if (g.sections.length) g.sections.forEach(function (sec) { secList.push({ label: g.grade + ' ' + sec.name, students: sec.students || 0 }); });
+        else secList.push({ label: g.grade, students: parseInt(g.students, 10) || 0 });
+      });
+      var n = Math.min(secList.length, Math.max(1, (s.staff || 1) - 1)), rnd = seededRng(strSeed(s.code + '|teachers')), used = {};
+      teachers = [];
+      for (var i = 0; i < n; i++) {
+        var nm; do { nm = TEACHER_FIRSTS[Math.floor(rnd() * TEACHER_FIRSTS.length)] + ' ' + ROSTER_LASTS[Math.floor(rnd() * ROSTER_LASTS.length)]; } while (used[nm] && Object.keys(used).length < 200);
+        used[nm] = 1;
+        teachers.push({ name: nm, email: nm.toLowerCase().replace(/\s+/g, '.') + '@' + s.code.toLowerCase().split('-')[0] + '.edu', sections: [], students: 0 });
+      }
+      secList.forEach(function (sec, k) { if (!teachers.length) return; var t = teachers[k % teachers.length]; t.sections.push(sec.label); t.students += sec.students; });
+    }
+
+    var cols, rnd2 = seededRng(strSeed(s.code + '|teacherlog'));
+    if (apiDeps.length) {
+      cols = apiDeps.map(function (x) { return { label: x.phase + ' · Teacher', phase: x.phase }; });
+      teachers.forEach(function (t) {
+        t.cells = apiDeps.map(function (x) { var c = API.completionStats(s.id, x.phase, 'Teacher', t.ids || []); return teacherCell(c.done, c.expected); });
+      });
+    } else {
+      cols = mockDeps.map(function (x) { return { label: x.assessment, phase: x.phase }; });
+      teachers.forEach(function (t) {
+        t.cells = mockDeps.map(function (x) {
+          if (x.status === 'Scheduled') return teacherCell(0, t.students);
+          var res = ORG.results.find(function (r) { return r.schoolId === s.id && r.assessment === x.assessment && r.audience === 'Teacher'; });
+          var frac = res ? Math.max(0, Math.min(1, res.completion / 100)) : 0.5, u = rnd2();
+          var done = u < frac ? t.students : (u < frac + 0.25 * (1 - frac) ? Math.max(1, Math.round(t.students * rnd2() * 0.9)) : 0);
+          return teacherCell(Math.min(done, t.students), t.students);
+        });
+      });
+    }
+    return { cols: cols, teachers: teachers, live: !!apiDeps.length };
+  }
+  function renderTeacherAssessmentLog(d, mount) {
+    var s = d.school, tr = teacherRosterFor(s, d);
+    if (!tr.cols.length) { mount.innerHTML = '<div class="ui-card mt-gap"><div class="ui-empty">No teacher assessments deployed for this school yet.</div></div>'; return; }
+    if (!tr.teachers.length) { mount.innerHTML = '<div class="ui-card mt-gap"><div class="ui-empty">No teachers on record for this school yet.</div></div>'; return; }
+    var summary = tr.cols.map(function (c, ci) {
+      var counted = tr.teachers.filter(function (t) { return t.cells[ci].status !== 'No students'; });
+      var done = counted.filter(function (t) { return t.cells[ci].status === 'Completed'; }).length;
+      return '<span class="tl-tlog-sum"><b>' + done + '</b> of ' + counted.length + ' teachers done with ' + esc(c.label) + '</span>';
+    }).join('');
+    var head = '<tr><th>Teacher</th><th>Sections</th>' + tr.cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr>';
+    var rows = tr.teachers.map(function (t) {
+      return '<tr><td class="name">' + esc(t.name) + '<small>' + esc(t.email) + '</small></td><td>' + esc(t.sections.join(', ') || '—') + '<small>' + t.students + ' students</small></td>' +
+        t.cells.map(function (c) {
+          return '<td>' + statusPill(c.status === 'In progress' ? 'In progress · ' + c.done + '/' + c.expected : c.status, TEACHERLOG_TONE[c.status]) + '</td>';
+        }).join('') + '</tr>';
+    }).join('');
+    mount.innerHTML = '<div class="ui-card mt-gap">' +
+      '<div class="ui-mod-h"><div><h3 class="ui-mod-title">Teacher assessment log</h3><p class="ui-mod-note">' + tr.teachers.length + ' teachers · ' +
+        (tr.live ? 'live completion from the teacher app' : 'demo data') + ' · Completed = every student in their sections rated.</p></div>' +
+        '<button class="btn btn-outline btn-sm" data-tlog-csv>↓ CSV</button></div>' +
+      '<div class="tl-tlog-sums">' + summary + '</div>' +
+      '<div class="ui-tablewrap"><table class="ui-table" style="min-width:' + (380 + tr.cols.length * 190) + 'px"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div></div>';
+    mount.querySelector('[data-tlog-csv]').addEventListener('click', function () {
+      downloadCsv(s.code.toLowerCase() + '-teacher-assessment-log.csv', ['Teacher', 'Email', 'Sections', 'Students'].concat(tr.cols.map(function (c) { return c.label; })),
+        tr.teachers.map(function (t) { return [t.name, t.email, t.sections.join('; '), t.students].concat(t.cells.map(function (c) { return c.status + (c.expected ? ' (' + c.done + '/' + c.expected + ')' : ''); })); }));
+    });
+  }
+
   var STUDENTLOG_TONE = { 'Completed': 'ok', 'In Progress': 'warn', 'Not Started': 'danger' };
   function renderStudentAssessmentLog(d, mount) {
     var s = d.school;
@@ -698,10 +901,11 @@
 
   function schoolCard(s) {
     var flags = ORG.server.schoolFlags(s);
-    var warn = flags.length ? '<div class="sc-flags">' + flags.map(function (f) { return '<span class="ui-chip warn">' + esc(f.label) + '</span>'; }).join('') + '</div>' : '';
+    var nIss = ORG.server.openIssueCount(s.id);
+    var warn = (flags.length || nIss) ? '<div class="sc-flags">' + issueChip(s.id, nIss) + flags.map(function (f) { return '<span class="ui-chip warn">' + esc(f.label) + '</span>'; }).join('') + '</div>' : '';
     return '<div class="tl-school-card" data-open="' + s.id + '">' +
       '<div class="sc-top"><div class="sc-name">' + esc(s.name) + (s.live ? ' <span class="ui-chip active" style="padding:2px 7px"><span class="dot"></span>Live</span>' : '') + '</div>' + stageChip(s.stage) + '</div>' +
-      '<div class="sc-meta">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + '</div>' +
+      '<div class="sc-meta">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + (s.country ? ' · ' + esc(s.country) : '') + '</div>' +
       '<div class="sc-stats"><div><b>' + s.gradeCount + '</b><span>grades</span></div><div><b>' + s.students.toLocaleString() + '</b><span>students</span></div><div><b>' + s.staff + '</b><span>staff</span></div></div>' +
       warn +
       '<div class="sc-actions"><button class="btn-link" data-edit="' + s.id + '">Edit</button>' +
@@ -709,10 +913,27 @@
         '<span class="sc-open">Open →</span></div></div>';
   }
 
+  function archiveGroupFlow(g) {
+    var inGroup = ORG.schools.filter(function (s) { return s.groupId === g.id; });
+    if (g.archived) {
+      var back = inGroup.filter(function (s) { return s.archivedByGroup; }).length;
+      gated({ title: 'Un-archive ' + g.name, body: '<p>Restore <b>' + esc(g.name) + '</b> and the <b>' + back + '</b> school' + (back === 1 ? '' : 's') + ' archived with it. Schools that were archived on their own stay archived.</p>',
+        confirmLabel: 'Un-archive group', audit: { action: 'group.unarchive', entity: g.name, entityType: 'group' },
+        onConfirm: function () { ORG.server.archiveGroup(g.id, false); toast(g.name + ' restored.'); grpState.tab = 'active'; go('group', { id: g.id }); } });
+      return;
+    }
+    var live = inGroup.filter(function (s) { return !s.archived; }).length;
+    gated({ title: 'Archive ' + g.name, danger: true, typed: 'ARCHIVE',
+      body: '<p>Archive <b>' + esc(g.name) + '</b> and its <b>' + live + '</b> active school' + (live === 1 ? '' : 's') + '. They leave the active lists and their deployments and master links are suspended. The group admin sees an “archived” notice. Nothing is deleted — un-archive restores it all.</p>',
+      confirmLabel: 'Archive group', audit: { action: 'group.archive', entity: g.name, entityType: 'group' },
+      onConfirm: function () { ORG.server.archiveGroup(g.id, true); toast(g.name + ' archived.'); schState.tab = 'archived'; go('schools', {}); } });
+  }
+
   function openGroupMenu(gid) {
     var g = ORG.groupById(gid);
-    openModal('Group · ' + g.name, '<p class="tl-muted">Group-level actions are gated structure changes.</p>' +
+    openModal('Group · ' + g.name, '<p class="tl-muted">Group-level actions are gated structure changes.' + (g.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '</p>' +
       '<div class="tl-stack"><button class="btn btn-outline block" id="gm-rename">Rename group</button>' +
+      '<button class="btn btn-outline block" id="gm-archive" title="' + (g.archived ? 'Restore the group and the schools that were archived with it.' : 'Archive the group and every school in it. Nothing is deleted.') + '">' + (g.archived ? 'Un-archive group' : 'Archive group') + '</button>' +
       '<button class="btn btn-danger block" id="gm-empty">Delete / empty group</button></div>', function (close) {
       close(); return true;
     }, 'Done');
@@ -723,6 +944,10 @@
           ORG.server.renameGroup(g.id, nm); ORG.server.logAudit(me.name, 'group.rename', nm, 'group');
           close(); toast('Group renamed.'); go('schools', {});
         }, 'Save');
+      });
+      var ga = document.getElementById('gm-archive'); if (ga) ga.addEventListener('click', function () {
+        document.getElementById('tl-modal-root').innerHTML = '';
+        archiveGroupFlow(g);
       });
       var em = document.getElementById('gm-empty'); if (em) em.addEventListener('click', function () {
         document.getElementById('tl-modal-root').innerHTML = '';
@@ -827,7 +1052,7 @@
         return '<label class="ws-board-opt"><input class="ws-board" type="checkbox" value="' + esc(b) + '"' + (on ? ' checked' : '') + '> ' + esc(b) + '</label>';
       }).join('');
       var countryOpts = ADD_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.country ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
-      var groupOpts = ORG.groups.map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
+      var groupOpts = ORG.activeGroups().map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
         '<option value="__new">＋ New group…</option>';
       return '<p class="tl-muted">The basics. Only the name is required — everything else can change later.</p>' +
         '<div class="tl-stack">' +
@@ -875,7 +1100,7 @@
             '<button class="ws-grade-del" type="button" data-delgrade="' + gi + '" title="Remove grade">Remove</button>' +
           '</div></div>';
       }).join('') : '<div class="ui-empty">No grades yet — add one below, or tap a preset.</div>';
-      return '<p class="tl-muted">Add grades, rename any inline, and set how many students sit in each section. Grades sort automatically (early years first). Totals update as you type.</p>' +
+      return '<p class="tl-muted">Add grades, rename any inline, and set how many students sit in each section. Grades sort automatically (early years first). Totals update as you type. Any grade or section still without students ' + ORG.emptyStructureTtlDays + ' days after it’s added is removed automatically (it can be added back).</p>' +
         '<div class="ws-grades">' + list + '</div>' +
         '<div class="ws-addbar">' +
           (presetBtns ? '<div class="ws-addbar-lbl">Quick add</div><div class="ws-presets">' + presetBtns + '</div>' : '') +
@@ -1141,6 +1366,8 @@
   }
 
   function archiveSchool(s) {
+    var sg = ORG.groupById(s.groupId);
+    if (s.archived && sg && sg.id === s.groupId && sg.archived) { toast(sg.name + ' is archived — un-archive the group first (or move the school to another group).'); return; }
     if (s.archived) { gated({ title: 'Un-archive ' + s.name, body: '<p>Restore this school to the active list and its deployments/master links.</p>', confirmLabel: 'Un-archive', audit: { action: 'school.archive', entity: s.name, entityType: 'school', schoolId: s.id }, onConfirm: function () { s.archived = false; toast(s.name + ' restored.'); go('school', { id: s.id }); } }); return; }
     gated({ title: 'Archive ' + s.name, danger: true, typed: 'ARCHIVE',
       body: '<p>Archiving hides the school from active lists and <b>suspends its deployments and master links</b>. Students and data are kept and can be restored.</p>',
@@ -1654,13 +1881,14 @@
 
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Deployments</h3></div>' +
         '<div class="tl-inline-actions">' +
+          '<button class="btn btn-outline btn-sm" data-teacherlog title="Per-teacher status for every teacher assessment deployed to this school — Completed when every student in their sections is rated.">Teacher assessment log</button>' +
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
           '<button class="btn btn-outline btn-sm" data-newdep>+ New deployment</button></div></div>' +
         '<div id="dep-timeline"></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Master Links</h3><p class="ui-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
         '<div class="mt-3"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
-      '<div id="hub-studentlog"></div>';
+      '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>';
     el.querySelector('[data-newdep]').addEventListener('click', function () { openNewDeployment(s.id, true); });
     renderDeploymentTimeline(d, el.querySelector('#dep-timeline'));
     renderPlanner(d, el.querySelector('#dep-planner'));
@@ -1670,6 +1898,13 @@
       renderStudentAssessmentLog(d, slMount);
       slBtn.textContent = 'Hide student assessment log'; slBtn.classList.add('on');
       slMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    var tlBtn = el.querySelector('[data-teacherlog]'), tlMount = el.querySelector('#hub-teacherlog');
+    tlBtn.addEventListener('click', function () {
+      if (tlMount.innerHTML) { tlMount.innerHTML = ''; tlBtn.textContent = 'Teacher assessment log'; tlBtn.classList.remove('on'); return; }
+      renderTeacherAssessmentLog(d, tlMount);
+      tlBtn.textContent = 'Hide teacher assessment log'; tlBtn.classList.add('on');
+      tlMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
     el.querySelector('[data-dlcsv]').addEventListener('click', function () {
       var rows = ORG.results.filter(function (r) { return r.schoolId === s.id; });
@@ -2041,7 +2276,7 @@
     var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
     var invRoles = ORG.roles.filter(function (r) { return r !== 'none'; });
     var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '">' + esc(r) + '</option>'; }).join('');
-    var groupOpts = '<option value="">— Select group —</option>' + ORG.groups.filter(function (g) { return g.id !== 'g-none'; })
+    var groupOpts = '<option value="">— Select group —</option>' + ORG.activeGroups().filter(function (g) { return g.id !== 'g-none'; })
       .map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('');
     openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
       '<label class="field">Recipient email<input class="input" id="iv-email" type="email" placeholder="name@school.edu"></label>' +
@@ -2147,11 +2382,28 @@
   function issueStatusPill(st) { var m = { open: 'danger', investigating: 'warn', resolved: 'ok' }; return statusPill(st.charAt(0).toUpperCase() + st.slice(1), m[st] || ''); }
   SCREEN.issues = function (params, body) {
     var st = params.status || 'all';
-    var counts = { all: ORG.issues.length, open: 0, investigating: 0, resolved: 0 };
-    ORG.issues.forEach(function (i) { counts[i.status]++; });
-    var human = ORG.issues.filter(function (i) { return !i.autoCrash; });
-    var crashes = ORG.issues.filter(function (i) { return i.autoCrash; });
+    var schF = params.school || '';
+    // School filter scopes everything below (tabs, table, crash group).
+    var scoped = ORG.issues.filter(function (i) { return !schF || i.schoolId === schF; });
+    var counts = { all: scoped.length, open: 0, investigating: 0, resolved: 0 };
+    scoped.forEach(function (i) { counts[i.status]++; });
+    var human = scoped.filter(function (i) { return !i.autoCrash; });
+    var crashes = scoped.filter(function (i) { return i.autoCrash; });
     var list = human.filter(function (i) { return st === 'all' || i.status === st; });
+
+    // Schools ranked by open issues (portfolio-wide) — the "highlight by school" strip.
+    var openBySchool = {};
+    ORG.schools.forEach(function (sc) { var n = ORG.server.openIssueCount(sc.id); if (n) openBySchool[sc.id] = n; });
+    var ranked = Object.keys(openBySchool).sort(function (a, b) { return openBySchool[b] - openBySchool[a]; });
+    var strip = ranked.length ? '<div class="tl-issue-strip"><span class="ui-eyebrow">Most open issues</span>' +
+      ranked.slice(0, 6).map(function (id) { var sc = ORG.byId(id);
+        return '<button class="ui-filterchip' + (schF === id ? ' on' : '') + '" data-isch="' + esc(id) + '" title="Show only ' + esc(sc ? sc.name : id) + '’s issues">' + esc(sc ? sc.name : id) + ' <b>' + openBySchool[id] + '</b></button>';
+      }).join('') + '</div>' : '';
+    var withIssues = ORG.schools.filter(function (sc) { return ORG.issues.some(function (i) { return i.schoolId === sc.id; }); })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var schoolSel = '<label class="select-wrap"><select class="select" id="is-school" title="Show issues from one school only"><option value="">All schools</option>' +
+      withIssues.map(function (sc) { return '<option value="' + esc(sc.id) + '"' + (schF === sc.id ? ' selected' : '') + '>' + esc(sc.name) + (openBySchool[sc.id] ? ' (' + openBySchool[sc.id] + ' open)' : '') + '</option>'; }).join('') +
+      '</select></label>';
 
     var rows = list.map(function (i) {
       var s = ORG.byId(i.schoolId);
@@ -2164,12 +2416,17 @@
         crashes.map(function (c) { var s = ORG.byId(c.schoolId); return '<tr><td>' + esc(c.device) + '</td><td>' + esc(c.page) + '</td><td>' + esc(c.date) + '</td><td>' + (s ? esc(s.name) : '—') + '</td></tr>'; }).join('') +
       '</tbody></table></div></details></div>' : '';
 
-    body.innerHTML = screenHead('Issue Reports', counts.open + ' open · ' + crashes.length + ' auto-crash grouped.') +
-      '<div class="ui-card"><div class="ui-tabs">' +
+    var schName = schF && ORG.byId(schF) ? ORG.byId(schF).name : '';
+    body.innerHTML = screenHead('Issue Reports', counts.open + ' open · ' + crashes.length + ' auto-crash grouped' + (schName ? ' · ' + esc(schName) : '') + '.') +
+      strip +
+      '<div class="ui-card"><div class="tl-filters">' + schoolSel + (schF ? '<button class="btn-link" id="is-clear">Clear school filter</button>' : '') + '</div><div class="ui-tabs">' +
         ['all', 'open', 'investigating', 'resolved'].map(function (k) { return '<button class="ui-tab' + (st === k ? ' on' : '') + '" data-istab="' + k + '">' + k.charAt(0).toUpperCase() + k.slice(1) + ' <b>' + (k === 'all' ? counts.all : counts[k]) + '</b></button>'; }).join('') + '</div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Reporter</th><th>School</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
       crashGroup;
-    body.querySelectorAll('[data-istab]').forEach(function (b) { b.addEventListener('click', function () { go('issues', { status: b.dataset.istab }); }); });
+    body.querySelectorAll('[data-istab]').forEach(function (b) { b.addEventListener('click', function () { go('issues', { status: b.dataset.istab, school: schF }); }); });
+    body.querySelectorAll('[data-isch]').forEach(function (b) { b.addEventListener('click', function () { go('issues', { status: st, school: schF === b.dataset.isch ? '' : b.dataset.isch }); }); });
+    var isel = body.querySelector('#is-school'); if (isel) isel.addEventListener('change', function () { go('issues', { status: st, school: isel.value }); });
+    var icl = body.querySelector('#is-clear'); if (icl) icl.addEventListener('click', function () { go('issues', { status: st }); });
     body.querySelectorAll('[data-status]').forEach(function (b) { b.addEventListener('click', function () { changeIssueStatus(b.dataset.status, body, params); }); });
   };
   function changeIssueStatus(id, body, params) {
@@ -2245,21 +2502,39 @@
     var rq = el.querySelector('#res-q'); if (rq) rq.addEventListener('input', function () { var pos = rq.selectionStart; depResults({ phase: phaseF, q: rq.value }, el); var nq = el.querySelector('#res-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
   }
 
+  // "Latest" / "Older version" — only for published, non-archived templates.
+  function tplVersionBadge(t, latest) {
+    if (t.archived || t.status !== 'Published') return '';
+    return latest[t.phase + '|' + t.audience] === t.id
+      ? '<span class="ui-chip ok tl-latest" title="Newest published ' + esc(t.phase + ' · ' + t.audience) + ' template — the one to deploy.">★ Latest</span>'
+      : '<span class="ui-chip muted" title="A newer ' + esc(t.phase + ' · ' + t.audience) + ' template has been published since.">Older version</span>';
+  }
+  function fmtMs(ms) { return ms ? fmtJoined(ORG.iso(ms)) : '—'; }
+  function tplMetaLine(t) {
+    return 'Created ' + esc(fmtMs(t.createdAt)) + ' by ' + esc(t.createdBy || '—') +
+      (t.updatedAt && t.updatedAt !== t.createdAt ? ' · Edited ' + esc(fmtMs(t.updatedAt)) + (t.updatedBy && t.updatedBy !== t.createdBy ? ' by ' + esc(t.updatedBy) : '') : '');
+  }
+
   // Templates (spec §6.1)
   SCREEN.templates = function (params, body) {
     var stF = params.status || '';
-    var list = ORG.templates.filter(function (t) { return !stF || t.status === stF; });
+    var arch = params.view === 'archived';
+    var counts = { active: ORG.templates.filter(function (t) { return !t.archived; }).length, archived: ORG.templates.filter(function (t) { return t.archived; }).length };
+    var list = ORG.templates.filter(function (t) { return (arch ? t.archived : !t.archived) && (!stF || t.status === stF); });
+    var latest = ORG.server.latestTemplateIds();
     var banner = stF ? '<div class="tl-filterbanner">Filtered to <b>' + esc(stF) + '</b> templates · <button class="btn-link" id="tpl-clear">clear</button></div>' : '';
     var cards = list.map(function (t) {
-      return '<div class="tl-tpl-card"><div class="tt-top"><span class="tt-aud">' + esc(t.audience) + '</span>' + statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn') + '</div>' +
+      return '<div class="tl-tpl-card' + (t.archived ? ' is-archived' : '') + '"><div class="tt-top"><span class="tt-aud">' + esc(t.audience) + '</span>' +
+        '<span class="tt-badges">' + tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')) + '</span></div>' +
         '<div class="tt-title">' + esc(t.title) + '</div><div class="tt-desc">' + esc(t.desc) + '</div>' +
+        '<div class="tt-meta">' + tplMetaLine(t) + '</div>' +
         '<div class="tt-foot"><span class="tt-phase">' + esc(t.phase) + '</span><button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button></div></div>';
     }).join('');
     // The Observation Form is a first-class template (audience: Observation): a
     // shared question bank published per phase. It opens its own editor rather
     // than the generic template menu. Hidden when a status filter is applied.
     var obsCard = '';
-    if (!stF) {
+    if (!stF && !arch) {
       var obs = ORG.observation;
       var pub = obs.phases.filter(function (p) { return p.published; }).length;
       obsCard = '<div class="tl-tpl-card"><div class="tt-top"><span class="tt-aud">Observation</span>' +
@@ -2270,7 +2545,7 @@
     }
     // Self-Guided assessments live here too: gamified instruments (EMT, Hearts &
     // Flowers, Memory Game) shown as their own section under the template grid.
-    var sgCards = stF ? '' : ORG.selfGuided.map(function (g) {
+    var sgCards = (stF || arch) ? '' : ORG.selfGuided.map(function (g) {
       return '<div class="tl-sg-card"><div class="sg-top"><div><div class="sg-name">' + esc(g.name) + '</div><div class="sg-full">' + esc(g.full) + '</div></div>' +
         statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</div>' +
         skillTagsHtml(g.skills) + '<div class="sg-desc">' + esc(g.desc) + '</div>' +
@@ -2279,9 +2554,14 @@
     var sgSection = sgCards ? '<div class="ui-eyebrow tl-mini-head">Self-Guided Assessments</div>' +
       '<p class="ui-mod-note" style="margin:-4px 0 var(--page-gap)">' + ORG.selfGuided.length + ' gamified instruments — EMT, Hearts &amp; Flowers, Memory Game.</p>' +
       '<div class="tl-sg-grid">' + sgCards + '</div>' : '';
-    body.innerHTML = screenHead('Templates', (list.length + (obsCard ? 1 : 0)) + ' assessment templates.', '<button class="btn btn-primary btn-sm" data-new>+ New template</button>') + banner +
-      '<div class="tl-tpl-grid">' + (obsCard + cards || '<div class="ui-empty">No templates.</div>') + '</div>' + sgSection;
-    var c = body.querySelector('#tpl-clear'); if (c) c.addEventListener('click', function () { go('templates', {}); });
+    body.innerHTML = screenHead('Templates', (list.length + (obsCard ? 1 : 0)) + ' assessment templates. The newest published template for each phase + audience is marked Latest — deploy that one.', '<button class="btn btn-primary btn-sm" data-new>+ New template</button>') +
+      '<div class="ui-tabs">' +
+        '<button class="ui-tab' + (!arch ? ' on' : '') + '" data-tplview="">Active <b>' + counts.active + '</b></button>' +
+        '<button class="ui-tab' + (arch ? ' on' : '') + '" data-tplview="archived" title="Archived templates are hidden from new deployments but kept for reference.">Archived <b>' + counts.archived + '</b></button>' +
+      '</div>' + banner +
+      '<div class="tl-tpl-grid">' + (obsCard + cards || '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>') + '</div>' + sgSection;
+    var c = body.querySelector('#tpl-clear'); if (c) c.addEventListener('click', function () { go('templates', arch ? { view: 'archived' } : {}); });
+    body.querySelectorAll('[data-tplview]').forEach(function (b) { b.addEventListener('click', function () { go('templates', b.dataset.tplview ? { view: b.dataset.tplview } : {}); }); });
     var nb = body.querySelector('[data-new]'); if (nb) nb.addEventListener('click', openNewTemplate);
     var ob = body.querySelector('[data-obsedit]'); if (ob) ob.addEventListener('click', function () { go('observation', {}); });
     body.querySelectorAll('[data-tpl]').forEach(function (b) { b.addEventListener('click', function () { openTemplateMenu(b.dataset.tpl); }); });
@@ -2428,12 +2708,12 @@
     body.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
   };
   function actionLabelG(a) {
-    return ({ 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template',
+    return ({ 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template', 'template.archive': 'Archived template', 'template.unarchive': 'Restored template',
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
-      'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'role.change': 'Changed role',
+      'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',
       'observation.publish': 'Published observation phase', 'reflection.edit': 'Edited teacher reflection questions', 'reflection.reset': 'Reset teacher reflection questions', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
-      'group.create': 'Created group', 'group.rename': 'Renamed group', 'group.delete': 'Deleted group',
+      'group.create': 'Created group', 'group.rename': 'Renamed group', 'group.delete': 'Deleted group', 'group.archive': 'Archived group', 'group.unarchive': 'Restored group',
       'invitation.resend': 'Resent invitation', 'invitation.send': 'Sent invitation', 'invitation.revoke': 'Revoked invitation',
       'user.delete': 'Deleted user', 'user.remove': 'Removed from school', 'issue.status': 'Changed issue status' })[a] || a;
   }
@@ -2811,6 +3091,19 @@
   //  Now a tab under Deployments (§6 merge). Renders into a panel;
   //  the old #/master-links route forwards to the Deployments tab.
   // ============================================================
+  // Group links (#7) — Parent + Teacher only; Direct Assessment stays per
+  // school because it runs on a classroom device.
+  var GROUP_LINK_HUBS = [{ role: 'parent', label: 'Parent' }, { role: 'teacher', label: 'Teacher' }];
+  function groupLinksHtml(g) {
+    var n = ORG.schools.filter(function (s) { return s.groupId === g.id && !s.archived; }).length;
+    return '<div class="tl-grouplinks"><div class="tl-grouplinks-h"><b>' + esc(g.name) + '</b><span>' + n + ' school' + (n === 1 ? '' : 's') + ' to pick from</span></div>' +
+      GROUP_LINK_HUBS.map(function (h) {
+        var url = ORG.groupLinkUrl(g, h.role);
+        return '<div class="tl-linkrow"><div><b>' + h.label + ' link</b><span class="mono">' + esc(url) + '</span></div>' +
+          '<div class="tl-inline-actions"><a class="btn btn-outline btn-sm" href="' + esc(ORG.groupLinkPreview(g, h.role)) + '" target="_blank" rel="noopener" style="text-decoration:none" title="Open the pick-your-school page this link leads to.">Open ↗</a>' +
+          '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></div></div>';
+      }).join('') + '</div>';
+  }
   function depMasterLinks(p, el) {
     var ml = ORG.masterLinks;
     var actives = ORG.activeSchools();
@@ -2825,9 +3118,13 @@
         '<details class="mt-2"><summary class="btn-link">Per-school links (' + actives.length + ') →</summary>' + perSchool + '</details></div>';
     }).join('');
 
+    var groups = ORG.activeGroups().filter(function (g) { return g.id !== 'g-none' && ORG.schools.some(function (s) { return s.groupId === g.id && !s.archived; }); });
+    var groupCard = groups.length ? '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">School group links</h3>' +
+      '<p class="ui-mod-note">One link per group. Parents and teachers pick their school from the group\'s list, then carry on as usual.</p></div></div>' +
+      groups.map(groupLinksHtml).join('') + '</div>' : '';
     el.innerHTML =
       '<div class="ui-card"><div class="tl-toggle-row"><div class="tr-body"><b>Entry points only</b><span>Hide chained follow-up assessments from these links</span></div>' + switchHtml(ml.hideChained, ' id="ml-chain"') + '</div></div>' +
-      sections;
+      groupCard + sections;
     var ch = el.querySelector('#ml-chain'); if (ch) ch.addEventListener('change', function () { ml.hideChained = ch.checked; toast('Entry-points-only ' + (ch.checked ? 'on.' : 'off.')); });
     el.querySelectorAll('[data-copy]').forEach(function (btn) { btn.addEventListener('click', function () { copy(btn.dataset.copy); }); });
   }
@@ -2838,8 +3135,388 @@
   SCREEN.results = function (p, b) { go('deployments', { tab: 'results', phase: p.phase, q: p.q }); };
 
   // ---- AI Assistant — intentionally cross-product; deferred per spec §10.1 ----
-  SCREEN['ask-tilli'] = function (p, b) { b.innerHTML = phase2('Ask Tilli', 'Cross-product — configures the Ask Tilli product, not Measures (spec §10.1).', ['Deliberately not built here: it belongs to a separate Ask Tilli admin', 'Kept in this nav for now; revisit when Ask Tilli gets its own surface']); };
-  SCREEN.knowledge = function (p, b) { b.innerHTML = phase2('Knowledge Base', 'Cross-product — knowledge sources powering Ask Tilli (spec §10.1).', ['Deliberately not built here: it configures Ask Tilli, not Measures', 'Candidate to split into a separate admin']); };
+  // ============================================================
+  //  KNOWLEDGE BASE → MANUALS  (#11) — short how-tos for the Tilli
+  //  team, drafted from how this dashboard works. Edit the wording
+  //  here; each step can deep-link into the dashboard.
+  // ============================================================
+  var MANUALS = [
+    { id: 'onboarding', title: 'Onboarding a new school', keywords: 'onboard add new school wizard join code invite admin setup',
+      summary: 'From signed MoU to a school that is ready for Baseline.',
+      steps: [
+        { text: 'Go to All Schools → + Add School. Fill in the profile (name, board, country then city), the rollout, grades & sections, and the school admin.', link: ['schools', {}, 'All Schools'] },
+        { text: 'Review and create. The new school’s hub opens with its codes ready.' },
+        { text: 'Staff & Access: share the Teacher join code — anyone who enters it joins as a Teacher, no invite needed. Invite the school admin if you skipped it in the wizard.' },
+        { text: 'Students: add students by hand or import a CSV (rows are checked before anything is saved).' },
+        { text: 'Assessments: plan the Baseline and deploy it when the school is ready.' },
+      ] },
+    { id: 'grades', title: 'Grades & sections', keywords: 'grade section class add remove empty auto delete 60 days add back structure',
+      summary: 'Adding grades and sections, and the 60-day rule for empty ones.',
+      steps: [
+        { text: 'School hub → Settings → Manage grades / sections. Use “Add grade” or “+ Section”.' },
+        { text: 'A grade or section with no students ' + ORG.emptyStructureTtlDays + ' days after it was added is removed automatically. Each one has its own clock.' },
+        { text: 'Empty sections show how many days they have left (amber within ' + ORG.emptyStructureWarnDays + ' days), and the school card gets a warning flag.' },
+        { text: 'If a school needs a removed one again, open the same dialog → Auto-removed → Add back. It gets a fresh ' + ORG.emptyStructureTtlDays + ' days.' },
+      ] },
+    { id: 'students', title: 'Adding, merging and deleting students', keywords: 'student add csv import merge duplicate delete remove roster',
+      summary: 'Everything student-related lives inside the school.',
+      steps: [
+        { text: 'School hub → Students → + Add Students: manual entry or CSV import, validated before commit.' },
+        { text: 'Merge Students: review suggested duplicates side by side and confirm by typing MERGE. Every merge is written to Merge History.' },
+        { text: 'Delete: type DELETE to confirm. The deletion is recorded in Deletion Logs.', link: ['deletion', {}, 'Deletion Logs'] },
+      ] },
+    { id: 'templates', title: 'Templates: latest versions and archiving', keywords: 'template latest version older archive publish draft duplicate deploy which',
+      summary: 'Which template to deploy, and how to retire old ones.',
+      steps: [
+        { text: 'For each phase + audience, the most recently published template is marked ★ Latest. Deploy that one.', link: ['templates', {}, 'Templates'] },
+        { text: 'To make a new version: Duplicate (it starts as a Draft), edit, then Publish. Publishing makes it the Latest and the old one shows “Older version”.' },
+        { text: 'Archive templates you no longer use: they move to the Archived tab and can’t be picked for new deployments. Un-archive any time.' },
+        { text: 'Each card shows who created it and when it was last edited.' },
+      ] },
+    { id: 'deployments', title: 'Deployments and links', keywords: 'deploy deployment window link master group link parent teacher share url',
+      summary: 'Getting assessments to schools, and the links people use.',
+      steps: [
+        { text: 'Deployments → + New deployment: pick the school, the template (Latest is listed first), the window, and publish.', link: ['deployments', {}, 'Deployments'] },
+        { text: 'Inside a school: Assessments tab → the phase timeline, the planner, and the Teacher / Student assessment logs.' },
+        { text: 'Master Links: one link per school per hub (Parent, Teacher, Direct Assessment).', link: ['deployments', { tab: 'master-links' }, 'Master Links'] },
+        { text: 'School group links: one Parent link and one Teacher link for a whole group — people pick their school first, then carry on as usual.' },
+      ] },
+    { id: 'archiving', title: 'Archiving schools and groups', keywords: 'archive unarchive restore school group delete pause',
+      summary: 'Pausing a school or a whole group without losing data.',
+      steps: [
+        { text: 'Archive a school: School hub → Settings → Archive school (type ARCHIVE). It leaves active lists; deployments and links are suspended; data is kept.' },
+        { text: 'Archive a group: group page → Manage → Archive group. Every school in it is archived and the group admin sees an “archived” notice.' },
+        { text: 'Un-archive the group to restore it. Only the schools archived with it come back — any archived on their own stay archived.' },
+        { text: 'A school can only be deleted after it is archived. Archived items are on the All Schools → Archived tab.', link: ['schools', {}, 'All Schools'] },
+      ] },
+    { id: 'issues', title: 'Handling issue reports', keywords: 'issue bug problem report crash status resolve investigating school',
+      summary: 'Triage what schools report.',
+      steps: [
+        { text: 'Issue Reports: filter by status and by school. The “Most open issues” strip shows which schools need attention first.', link: ['issues', {}, 'Issue Reports'] },
+        { text: 'School cards show a red “open issues” chip — click it to open that school’s Issues & Logs.' },
+        { text: 'Change status as you work: Open → Investigating → Resolved. Auto-crash reports are grouped by crash signature.' },
+      ] },
+    { id: 'exports', title: 'Exports (CSV)', keywords: 'csv export download excel spreadsheet list report',
+      summary: 'Every download in one place.',
+      steps: [
+        { text: 'All Schools → ↓ Schools CSV — the current view (tab, country and search apply).', link: ['schools', {}, 'All Schools'] },
+        { text: 'Group page → ↓ Assessments CSV and ↓ Staff CSV for the whole group.' },
+        { text: 'School hub → Assessments → results CSV, and the Teacher assessment log CSV.' },
+        { text: 'Deployments → Results → Download CSV.', link: ['deployments', { tab: 'results' }, 'Results'] },
+        { text: 'Ask Tilli follow-up reports have their own CSV button.', link: ['ask-tilli', {}, 'Ask Tilli'] },
+      ] },
+    { id: 'ask-tilli', title: 'Using Ask Tilli', keywords: 'ask tilli chat question answer report follow up assistant',
+      summary: 'Quick answers about completion, and follow-up reports.',
+      steps: [
+        { text: 'Pick what Tilli should answer about (whole portfolio, a group, a country or one school), then ask.', link: ['ask-tilli', {}, 'Ask Tilli'] },
+        { text: 'Good questions: “Completion at Sunrise”, “How is Vidya Trust doing?”, “Which teachers haven’t started at Greenfield?”, “Follow-up report for schools below 50%”.' },
+        { text: 'Follow-up reports list the schools, their coordinator’s email and teachers not started — download as CSV or copy as text.' },
+      ] },
+  ];
+  function manualMatches(q) {
+    var words = String(q || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 && ['how', 'the', 'can', 'and', 'for', 'what', 'where', 'does'].indexOf(w) < 0; });
+    if (!words.length) return MANUALS.slice();
+    return MANUALS.map(function (m) {
+      var hay = (m.title + ' ' + m.keywords + ' ' + m.summary).toLowerCase();
+      return { m: m, score: words.filter(function (w) { return hay.indexOf(w) >= 0; }).length };
+    }).filter(function (x) { return x.score; }).sort(function (a, b) { return b.score - a.score; }).map(function (x) { return x.m; });
+  }
+  SCREEN.knowledge = function (params, body) {
+    var q = params.q || '';
+    var list = manualMatches(q);
+    var cur = MANUALS.find(function (m) { return m.id === params.a; }) || list[0] || MANUALS[0];
+    var art = '<article class="tl-kb-art"><div class="ui-eyebrow">Manual</div><h2 class="tl-kb-title">' + esc(cur.title) + '</h2><p class="tl-muted">' + esc(cur.summary) + '</p>' +
+      '<ol class="tl-kb-steps">' + cur.steps.map(function (st) {
+        return '<li>' + esc(st.text) + (st.link ? ' <a class="btn-link" href="' + href(st.link[0], st.link[1]) + '">Open ' + esc(st.link[2]) + ' →</a>' : '') + '</li>';
+      }).join('') + '</ol></article>';
+    body.innerHTML = screenHead('Knowledge Base', 'Manuals for the Tilli team — how to do the common jobs in this dashboard.') +
+      '<div class="tl-kb"><aside class="ui-card tl-kb-side"><input class="input tl-kb-q" id="kb-q" placeholder="Search manuals…" value="' + esc(q) + '" aria-label="Search manuals">' +
+        '<nav class="tl-kb-list">' + (list.length ? list.map(function (m) {
+          return '<a class="tl-kb-item' + (m.id === cur.id ? ' on' : '') + '" href="' + href('knowledge', { a: m.id, q: q }) + '"><b>' + esc(m.title) + '</b><span>' + esc(m.summary) + '</span></a>';
+        }).join('') : '<div class="ui-empty">No manual matches “' + esc(q) + '”.</div>') + '</nav></aside>' +
+        '<div class="ui-card">' + art + '</div></div>';
+    var qi = body.querySelector('#kb-q');
+    qi.addEventListener('input', function () { var pos = qi.selectionStart; SCREEN.knowledge({ q: qi.value, a: params.a }, body); var nq = body.querySelector('#kb-q'); nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} });
+  };
+
+  // ============================================================
+  //  ASK TILLI — platform team (#9 / #10). Scripted, rule-based
+  //  answers over the portfolio data (same idea as the school
+  //  admin's askAnswer in admin.js): completion for a school /
+  //  group / country / everyone, who hasn't finished, lowest
+  //  schools, follow-up reports (CSV / copy), and how-to links.
+  //  Swap platformAskAnswer for a model call later.
+  // ============================================================
+  var ASKP_KEY = 'tilliMeasures.platformChats.' + (me.email || 'team');
+  var askp = { chatId: null, scope: 'all', thinking: false, histCollapsed: false, histOpen: false };
+  var pchats = (function () { try { var v = JSON.parse(localStorage.getItem(ASKP_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })();
+  function savePchats() { try { localStorage.setItem(ASKP_KEY, JSON.stringify(pchats)); } catch (e) { /* private mode — history won't persist */ } }
+  function curPchat() { return pchats.find(function (c) { return c.id === askp.chatId; }) || null; }
+  var alu = function (d, size) { return '<svg width="' + (size || 20) + '" height="' + (size || 20) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; };
+  var ALU = {
+    spark: alu('<path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/>', 40),
+    msg: alu('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', 17),
+    trash: alu('<path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/>', 17),
+    plus: alu('<path d="M5 12h14M12 5v14"/>', 18),
+    collapse: alu('<path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/>', 18),
+    panel: alu('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>', 18),
+    pin: alu('<path d="M20 10c0 5-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>', 14),
+    share: alu('<path d="M12 3v12M17 8l-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>', 18),
+    send: alu('<path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/>', 20),
+  };
+  var ASK_FOLLOWUP_DEFAULT = 50;   // % completion under which a school goes on a follow-up report
+
+  // ---- scope + entity matching ----
+  function askScopeInfo(scope) {
+    var k = String(scope || 'all'), id = k.slice(2);
+    if (k.indexOf('s:') === 0 && ORG.byId(id)) return { kind: 'school', school: ORG.byId(id), label: ORG.byId(id).name };
+    if (k.indexOf('g:') === 0) { var g = ORG.groupById(id); if (g && g.id === id) return { kind: 'group', group: g, label: g.name }; }
+    if (k.indexOf('c:') === 0) return { kind: 'country', country: id, label: id };
+    return { kind: 'all', label: 'Whole portfolio' };
+  }
+  function askFindSchool(ql) {
+    var best = null, bestScore = 0, firstWord = {};
+    ORG.schools.forEach(function (s) { var w = s.name.toLowerCase().split(' ')[0]; firstWord[w] = (firstWord[w] || 0) + 1; });
+    ORG.schools.forEach(function (s) {
+      var nm = s.name.toLowerCase(), w = nm.split(' ')[0], score = 0;
+      if (ql.indexOf(nm) >= 0) score = 100 + nm.length;
+      else if (ql.indexOf(s.code.toLowerCase()) >= 0) score = 90;
+      else if (nm.split(' ').length > 1 && ql.indexOf(nm.split(' ').slice(0, 2).join(' ')) >= 0) score = 50;
+      else if (w.length >= 5 && firstWord[w] === 1 && new RegExp('\\b' + w + '\\b').test(ql)) score = 20;
+      if (score > bestScore) { bestScore = score; best = s; }
+    });
+    return best;
+  }
+  function askFindCountry(ql) {
+    var cs = {}; ORG.schools.forEach(function (s) { if (s.country) cs[s.country] = 1; });
+    return Object.keys(cs).find(function (c) { return ql.indexOf(c.toLowerCase()) >= 0; }) || null;
+  }
+  function askFindGroup(ql) {
+    var q2 = ql.replace(/sri lanka/g, ' ');
+    return ORG.groups.find(function (g) {
+      if (g.id === 'g-none') return false;
+      return q2.indexOf(g.name.toLowerCase()) >= 0 || (g.code && new RegExp('\\b' + g.code + '\\b').test(q2));
+    }) || null;
+  }
+  // Schools a group / country / portfolio scope covers (active only).
+  function askSchoolsFor(t) {
+    return ORG.activeSchools().filter(function (s) {
+      if (t.kind === 'group') return s.groupId === t.group.id;
+      if (t.kind === 'country') return s.country === t.country;
+      if (t.kind === 'school') return s.id === t.school.id;
+      return true;
+    });
+  }
+  // Schools with assessments running (MoU-stage schools haven't started).
+  function askRunning(list) { return list.filter(function (s) { return s.stage !== 'mou'; }); }
+  function askAvg(list) { var xs = askRunning(list); return xs.length ? Math.round(xs.reduce(function (a, s) { return a + (s.completion || 0); }, 0) / xs.length) : 0; }
+  function askLinkBtn(screen, label, params) {
+    return '<button class="btn-link" data-askgo="' + esc(screen) + '"' + (params ? ' data-askparams="' + esc(JSON.stringify(params)) + '"' : '') + '>' + esc(label) + ' →</button>';
+  }
+  function askSrc(txt) { return '<div class="tl-ask-src">' + esc(txt) + '</div>'; }
+  function askTable(head, rows) {
+    return '<div class="tl-ask-tbl"><table><thead><tr>' + head.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function askLatestTeacherCol(s) {
+    var tr = teacherRosterFor(s, ORG.server.schoolSummary(s.id));
+    if (!tr.cols.length) return null;
+    var ci = tr.cols.length - 1;
+    return { label: tr.cols[ci].label, teachers: tr.teachers.map(function (t) { return { name: t.name, email: t.email, sections: t.sections, cell: t.cells[ci] }; }) };
+  }
+
+  // ---- intents ----
+  function askAnsSchool(s) {
+    var res = ORG.results.filter(function (r) { return r.schoolId === s.id; });
+    var rows = res.map(function (r) { return [esc(r.assessment), esc(r.audience), r.responses + ' / ' + r.expected, '<b>' + pct(r.completion) + '%</b>', esc(r.status)]; });
+    return '<p><b>' + esc(s.name) + '</b> is at <b>' + pct(s.completion || 0) + '%</b> completion overall (' + esc(ORG.stageMeta(s.stage).label) + ').</p>' +
+      (rows.length ? askTable(['Assessment', 'Audience', 'Responses', 'Done', 'Status'], rows) : '<p>No assessments deployed here yet.</p>') +
+      '<div class="tl-ask-acts">' + askLinkBtn('school', 'Open ' + s.name, { id: s.id, tab: 'assessments' }) + '</div>' + askSrc('From Deployments → Results · ' + res.length + ' deployment' + (res.length === 1 ? '' : 's'));
+  }
+  function askAnsSet(t) {
+    var list = askSchoolsFor(t), run = askRunning(list);
+    if (!list.length) return '<p>No active schools in ' + esc(t.label) + '.</p>';
+    var low = run.slice().sort(function (a, b) { return (a.completion || 0) - (b.completion || 0); }).slice(0, 5);
+    var bands = [[75, 101, 'on track (75%+)'], [50, 75, 'midway (50–74%)'], [0, 50, 'behind (under 50%)']].map(function (b) {
+      var n = run.filter(function (s) { var c = s.completion || 0; return c >= b[0] && c < b[1]; }).length; return n + ' ' + b[2];
+    });
+    var notStarted = list.length - run.length;
+    var link = t.kind === 'group' ? askLinkBtn('group', 'Open ' + t.label, { id: t.group.id }) : askLinkBtn('analytics', 'Open Analytics');
+    return '<p><b>' + esc(t.label) + '</b>: average completion <b>' + askAvg(list) + '%</b> across ' + run.length + ' school' + (run.length === 1 ? '' : 's') + ' with assessments running' +
+      (notStarted ? ' (' + notStarted + ' still at MoU)' : '') + '.</p><p>' + bands.join(' · ') + '.</p>' +
+      (low.length ? '<p>Lowest first:</p>' + askTable(['School', 'Stage', 'Done'], low.map(function (s) { return ['<button class="btn-link" data-askgo="school" data-askparams="' + esc(JSON.stringify({ id: s.id })) + '">' + esc(s.name) + '</button>', esc(ORG.stageMeta(s.stage).short), '<b>' + pct(s.completion || 0) + '%</b>']; })) : '') +
+      '<div class="tl-ask-acts">' + link + '</div>' + askSrc('From school completion · n=' + run.length);
+  }
+  function askAnsWho(s) {
+    var col = askLatestTeacherCol(s);
+    var parts = ['<p>At <b>' + esc(s.name) + '</b>:</p>'];
+    if (col) {
+      var ns = col.teachers.filter(function (t) { return t.cell.status === 'Not started'; });
+      var ip = col.teachers.filter(function (t) { return t.cell.status === 'In progress'; });
+      parts.push('<p><b>' + ns.length + '</b> teacher' + (ns.length === 1 ? ' hasn’t' : 's haven’t') + ' started <b>' + esc(col.label) + '</b>' + (ip.length ? ', and ' + ip.length + ' ' + (ip.length === 1 ? 'is' : 'are') + ' part-way through' : '') + '.</p>');
+      if (ns.length || ip.length) parts.push(askTable(['Teacher', 'Sections', 'Status'], ns.concat(ip).slice(0, 12).map(function (t) {
+        return [esc(t.name) + '<br><small>' + esc(t.email) + '</small>', esc(t.sections.join(', ') || '—'), esc(t.cell.status) + (t.cell.status === 'In progress' ? ' · ' + t.cell.done + '/' + t.cell.expected : '')];
+      })));
+    } else parts.push('<p>No teacher assessments are deployed here yet.</p>');
+    var fam = ORG.results.filter(function (r) { return r.schoolId === s.id && r.audience !== 'Teacher' && r.status !== 'Scheduled'; });
+    if (fam.length) parts.push('<p>Students / parents still outstanding: ' + fam.map(function (r) { return esc(r.assessment) + ' <b>' + Math.max(0, r.expected - r.responses) + '</b> of ' + r.expected; }).join(' · ') + '.</p>');
+    parts.push('<div class="tl-ask-acts">' + askLinkBtn('school', 'Open the teacher assessment log', { id: s.id, tab: 'assessments' }) + '</div>' + askSrc('From the school’s Teacher assessment log and Results'));
+    return parts.join('');
+  }
+  // Follow-up report: schools under the threshold in scope → table + CSV/copy payload.
+  function askAnsReport(t, threshold) {
+    var list = askRunning(askSchoolsFor(t)).filter(function (s) { return (s.completion || 0) < threshold; })
+      .sort(function (a, b) { return (a.completion || 0) - (b.completion || 0); });
+    if (!list.length) return { html: '<p>Good news — no school in <b>' + esc(t.label) + '</b> is below ' + threshold + '% completion.</p>' };
+    var rows = list.map(function (s) {
+      var col = askLatestTeacherCol(s), ns = col ? col.teachers.filter(function (x) { return x.cell.status === 'Not started'; }).length : 0;
+      return { s: s, ns: ns, issues: ORG.server.openIssueCount(s.id) };
+    });
+    var csv = { name: 'follow-up-' + t.label.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-below-' + threshold + '.csv',
+      headers: ['School', 'Code', 'Group', 'Country', 'Stage', 'Completion %', 'Coordinator', 'Coordinator email', 'Teachers not started', 'Open issues'],
+      rows: rows.map(function (r) { var s = r.s; return [s.name, s.code, s.groupName, s.country, ORG.stageMeta(s.stage).label, s.completion || 0, s.coordinator ? s.coordinator.name : '', s.coordinator ? s.coordinator.email : '', r.ns, r.issues]; }) };
+    var text = 'Follow-up: ' + t.label + ' — schools below ' + threshold + '% completion\n' + rows.map(function (r) {
+      var s = r.s; return '• ' + s.name + ' — ' + (s.completion || 0) + '% — ' + (s.coordinator ? s.coordinator.name + ' <' + s.coordinator.email + '>' : 'no coordinator') + (r.ns ? ' — ' + r.ns + ' teacher' + (r.ns === 1 ? '' : 's') + ' not started' : '');
+    }).join('\n');
+    var shown = rows.slice(0, 10);
+    var html = '<p><b>Follow-up report</b> — ' + rows.length + ' school' + (rows.length === 1 ? '' : 's') + ' in <b>' + esc(t.label) + '</b> below ' + threshold + '% completion:</p>' +
+      askTable(['School', 'Done', 'Coordinator', 'Teachers not started'], shown.map(function (r) {
+        var s = r.s; return ['<button class="btn-link" data-askgo="school" data-askparams="' + esc(JSON.stringify({ id: s.id })) + '">' + esc(s.name) + '</button>', '<b>' + pct(s.completion || 0) + '%</b>',
+          s.coordinator ? esc(s.coordinator.name) + '<br><small>' + esc(s.coordinator.email) + '</small>' : '—', String(r.ns)];
+      })) + (rows.length > shown.length ? '<p class="tl-ask-more">…and ' + (rows.length - shown.length) + ' more in the CSV.</p>' : '') +
+      '<div class="tl-ask-acts"><button class="btn btn-outline btn-sm" data-askcsv>↓ Download CSV</button><button class="btn btn-outline btn-sm" data-askcopy>Copy as text</button></div>' +
+      askSrc('From school completion, coordinators and Teacher assessment logs');
+    return { html: html, csv: csv, text: text };
+  }
+  function askSuggestions(scope) {
+    var t = askScopeInfo(scope);
+    if (t.kind === 'school') return ['Completion at ' + t.label, 'Who hasn’t completed at ' + t.label + '?', 'Follow-up report for ' + t.label];
+    if (t.kind === 'group' || t.kind === 'country') return ['How is ' + t.label + ' doing?', 'Lowest completion in ' + t.label, 'Follow-up report for ' + t.label + ' below 50%'];
+    return ['What’s the completion at Sunrise Public School?', 'How is Vidya Trust doing?', 'Which teachers haven’t started at Greenfield?', 'Follow-up report for schools below 50%', 'Lowest completion in Sri Lanka', 'How do I archive a school group?'];
+  }
+  function platformAskAnswer(q, scope) {
+    var ql = ' ' + String(q || '').toLowerCase() + ' ';
+    var base = askScopeInfo(scope);
+    var school = askFindSchool(ql), group = school ? null : askFindGroup(ql), country = (school || group) ? null : askFindCountry(ql);
+    // What the question is about: a named entity wins over the picked scope.
+    var target = school ? { kind: 'school', school: school, label: school.name }
+      : group ? { kind: 'group', group: group, label: group.name }
+      : country ? { kind: 'country', country: country, label: country } : base;
+    var th = /(below|under|less than|lower than)\s*(\d{1,3})\s*%?/.exec(ql);
+    var threshold = th ? Math.min(100, +th[2]) : ASK_FOLLOWUP_DEFAULT;
+
+    if (/\bhow (do|can|to|should)\b|\bwhere (do|can|is)\b|\bmanual|\bguide\b|\bsteps?\b/.test(ql)) {
+      var ms = manualMatches(q).slice(0, 2);
+      if (ms.length) return { html: '<p>Here’s the manual for that:</p>' + ms.map(function (m) {
+        return '<div class="tl-ask-man"><b>' + esc(m.title) + '</b><ol>' + m.steps.slice(0, 3).map(function (st) { return '<li>' + esc(st.text) + '</li>'; }).join('') + '</ol>' + askLinkBtn('knowledge', 'Read the full manual', { a: m.id }) + '</div>';
+      }).join('') };
+    }
+    if (/report|follow[ -]?up|chase|nudge|who (should|do) (we|i) (call|email|contact)/.test(ql)) return askAnsReport(target.kind === 'school' ? target : target, threshold);
+    if (/who|which teachers?|not (yet )?(started|completed|done|finished)|haven.?t|hasn.?t|pending|outstanding|missing/.test(ql)) {
+      if (target.kind === 'school') return { html: askAnsWho(target.school) };
+      var lowS = askRunning(askSchoolsFor(target)).sort(function (a, b) { return (a.completion || 0) - (b.completion || 0); }).slice(0, 3);
+      return { html: '<p>Which school? Teacher-level answers are per school. The lowest in <b>' + esc(target.label) + '</b> right now:</p>', sugs: lowS.map(function (s) { return 'Who hasn’t completed at ' + s.name + '?'; }) };
+    }
+    if (/lowest|behind|worst|weakest|at risk|struggl|bottom/.test(ql)) return { html: askAnsSet(target.kind === 'school' ? base : target) };
+    if (/complet|progress|status|how (is|are)|doing|done|rate|%/.test(ql) || school || group || country) {
+      return { html: target.kind === 'school' ? askAnsSchool(target.school) : askAnsSet(target) };
+    }
+    return { html: '<p>I can answer completion questions for a school, a group, a country or the whole portfolio, list who hasn’t finished at a school, build follow-up reports, and point you to the manuals. Try one of these:</p>', sugs: askSuggestions(scope) };
+  }
+
+  function askpSend(text) {
+    text = String(text || '').trim(); if (!text || askp.thinking) return;
+    var c = curPchat();
+    if (!c) { c = { id: 'c' + Date.now().toString(36), title: text.length > 60 ? text.slice(0, 59) + '…' : text, at: Date.now(), scope: askp.scope, thread: [] }; pchats.unshift(c); askp.chatId = c.id; }
+    c.thread.push({ role: 'me', text: text }); c.at = Date.now(); savePchats();
+    askp.thinking = true; render();
+    setTimeout(function () {
+      var a = platformAskAnswer(text, c.scope || 'all');
+      c.thread.push({ role: 'tilli', html: a.html, sugs: a.sugs || null, csv: a.csv || null, text: a.text || null }); c.at = Date.now(); savePchats();
+      askp.thinking = false;
+      if (currentRoute().screen === 'ask-tilli') render();
+    }, 600);
+  }
+  function askpExport() {
+    var c = curPchat(); if (!c || !c.thread.length) return;
+    var strip = function (h) { var d = document.createElement('div'); d.innerHTML = h; d.querySelectorAll('button').forEach(function (b) { b.remove(); }); return d.textContent.trim(); };
+    var lines = ['Ask Tilli — ' + c.title, 'Answering about: ' + askScopeInfo(c.scope).label, 'Exported: ' + new Date().toLocaleString(), ''];
+    c.thread.forEach(function (m) { lines.push((m.role === 'me' ? 'You' : 'Tilli') + ':', m.role === 'me' ? m.text : (m.text || strip(m.html)), ''); });
+    var url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
+    var link = document.createElement('a'); link.href = url; link.download = 'ask-tilli-' + new Date().toISOString().slice(0, 10) + '.txt';
+    document.body.appendChild(link); link.click(); link.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  SCREEN['ask-tilli'] = function (params, body) {
+    var c = curPchat(), weekAgo = Date.now() - 7 * 864e5;
+    if (c) askp.scope = c.scope || askp.scope;
+    var item = function (x) {
+      return '<div class="askx-item' + (x.id === askp.chatId ? ' on' : '') + '">' +
+        '<button class="askx-open focus" data-askx-open="' + esc(x.id) + '" title="' + esc(x.title) + '">' + ALU.msg + '<span>' + esc(x.title) + '</span></button>' +
+        '<button class="askx-del focus" data-askx-del="' + esc(x.id) + '" aria-label="Delete chat: ' + esc(x.title) + '" title="Delete chat">' + ALU.trash + '</button></div>';
+    };
+    var grp = function (h, list) { return list.length ? '<div class="askx-gh">' + h + '</div>' + list.map(item).join('') : ''; };
+    var recent = pchats.filter(function (x) { return x.at >= weekAgo; }), older = pchats.filter(function (x) { return x.at < weekAgo; });
+    var opt = function (v, l) { return '<option value="' + esc(v) + '"' + (v === askp.scope ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var countries = {}; ORG.activeSchools().forEach(function (s) { if (s.country) countries[s.country] = 1; });
+    var scopeOpts = opt('all', 'Whole portfolio') +
+      '<optgroup label="School groups">' + ORG.activeGroups().filter(function (g) { return g.id !== 'g-none'; }).map(function (g) { return opt('g:' + g.id, g.name); }).join('') + '</optgroup>' +
+      '<optgroup label="Countries">' + Object.keys(countries).sort().map(function (k) { return opt('c:' + k, k); }).join('') + '</optgroup>' +
+      '<optgroup label="Schools">' + ORG.activeSchools().slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (s) { return opt('s:' + s.id, s.name); }).join('') + '</optgroup>';
+    var thread = c ? c.thread : [];
+    var bodyHTML = (thread.length || askp.thinking)
+      ? '<div class="askx-thread">' + thread.map(function (m, i) {
+          if (m.role === 'me') return '<div class="ask-msg user">' + esc(m.text) + '</div>';
+          return '<div class="ask-msg tilli" data-msg="' + i + '">' + m.html +
+            (m.sugs && m.sugs.length ? '<div class="tl-ask-sugs">' + m.sugs.map(function (sq) { return '<button class="askx-sug" data-askx-try="' + esc(sq) + '">' + esc(sq) + '</button>'; }).join('') + '</div>' : '') + '</div>';
+        }).join('') + (askp.thinking ? '<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>' : '') + '</div>'
+      : '<div class="askx-empty"><span class="askx-spark">' + ALU.spark + '</span>' +
+          '<h2>Hi! I’m Tilli 👋</h2>' +
+          '<p>Ask me how schools are doing, who hasn’t finished, or for a follow-up report — so you can answer a school POC straight away.</p>' +
+          '<div class="askx-try"><div class="askx-try-h">Try asking:</div>' +
+            askSuggestions(askp.scope).map(function (sq) { return '<button class="askx-sug focus" data-askx-try="' + esc(sq) + '">' + esc(sq) + '</button>'; }).join('') +
+          '</div></div>';
+    body.innerHTML = '<div class="askx' + (askp.histOpen ? ' hist-open' : '') + (askp.histCollapsed ? ' collapsed' : '') + '">' +
+      '<aside class="askx-hist" aria-label="Chat history">' +
+        '<div class="askx-hist-top"><button class="btn btn-primary block askx-new focus" data-askx-new>' + ALU.plus + ' New Chat</button>' +
+          '<button class="askx-tool askx-collapse focus" data-askx-collapse aria-label="Hide chat history" title="Hide chat history">' + ALU.collapse + '</button></div>' +
+        '<div class="askx-list">' + (pchats.length ? grp('This week', recent) + grp('Earlier', older) : '<div class="askx-none">No chats yet — ask your first question.</div>') + '</div>' +
+        (pchats.length ? '<button class="askx-clear focus" data-askx-clear>' + ALU.trash + ' Clear all history</button>' : '') +
+      '</aside>' +
+      '<button class="askx-scrim" data-askx-hist aria-label="Close chat history"></button>' +
+      '<section class="askx-main">' +
+        '<div class="askx-scope">' +
+          '<button class="askx-tool askx-histbtn focus" data-askx-hist aria-label="Show chat history" title="Show chat history">' + ALU.panel + '</button>' +
+          '<label class="askx-scope-l" for="askp-scope-sel" title="Answering about">' + ALU.pin + '<span>Answering about</span></label>' +
+          '<select id="askp-scope-sel" class="askx-select focus" data-askx-scope title="Questions that don’t name a school, group or country are answered for what you pick here">' + scopeOpts + '</select>' +
+          '<div class="askx-tools"><button class="askx-tool focus" data-askx-export title="Export this chat as a text file" aria-label="Export this chat"' + (thread.length ? '' : ' disabled') + '>' + ALU.share + '</button></div>' +
+        '</div>' +
+        '<div class="askx-body">' + bodyHTML + '</div>' +
+        '<div class="askx-foot"><form class="askx-compose" data-askx-form>' +
+          '<input class="askx-input" placeholder="Ask about a school, a group or the whole portfolio…" autocomplete="off" aria-label="Message Ask Tilli">' +
+          '<button class="askx-send" type="submit" aria-label="Send"' + (askp.thinking ? ' disabled' : '') + '>' + ALU.send + '</button></form>' +
+          '<p class="askx-note">Scripted preview: answers are worked out from the dashboard’s own data.</p></div>' +
+      '</section></div>';
+
+    var ax = body.querySelector('.askx');
+    var on = function (sel, fn, ev) { ax.querySelectorAll(sel).forEach(function (el) { el.addEventListener(ev || 'click', function (e) { fn(el, e); }); }); };
+    var inp = ax.querySelector('.askx-input');
+    var narrow = function () { return window.matchMedia('(max-width: 760px)').matches; };
+    on('[data-askx-form]', function (f, e) { e.preventDefault(); askpSend(inp.value); }, 'submit');
+    on('[data-askx-try]', function (b) { askpSend(b.dataset.askxTry); });
+    on('[data-askx-new]', function () { askp.chatId = null; askp.histOpen = false; render(); });
+    on('[data-askx-open]', function (b) { askp.chatId = b.dataset.askxOpen; askp.histOpen = false; render(); });
+    on('[data-askx-del]', function (b) { pchats = pchats.filter(function (x) { return x.id !== b.dataset.askxDel; }); if (askp.chatId === b.dataset.askxDel) askp.chatId = null; savePchats(); render(); });
+    on('[data-askx-clear]', function () { if (!confirm('Delete all your Ask Tilli chats? This can’t be undone.')) return; pchats = []; askp.chatId = null; savePchats(); render(); });
+    on('[data-askx-scope]', function (sel) { askp.scope = sel.value; var cc = curPchat(); if (cc) { cc.scope = sel.value; savePchats(); } render(); }, 'change');
+    on('[data-askx-export]', function () { askpExport(); });
+    on('[data-askx-hist]', function () { if (narrow()) askp.histOpen = !askp.histOpen; else askp.histCollapsed = false; render(); });
+    on('[data-askx-collapse]', function () { if (narrow()) askp.histOpen = false; else askp.histCollapsed = true; render(); });
+    on('[data-askgo]', function (b) { var p = b.dataset.askparams ? JSON.parse(b.dataset.askparams) : {}; go(b.dataset.askgo, p); });
+    on('[data-askcsv]', function (b) { var m = thread[+b.closest('[data-msg]').dataset.msg]; if (m && m.csv) downloadCsv(m.csv.name, m.csv.headers, m.csv.rows); });
+    on('[data-askcopy]', function (b) { var m = thread[+b.closest('[data-msg]').dataset.msg]; if (m && m.text) copy(m.text, 'Report copied — paste it into an email or chat.'); });
+    var bd = ax.querySelector('.askx-body'); bd.scrollTop = bd.scrollHeight;
+    if (!askp.thinking) inp.focus();
+  };
 
   // ============================================================
   //  CREATE FLOWS  (New Template / Deployment / Group)
@@ -2856,7 +3533,7 @@
       '</div>', function (close) {
         var title = (document.getElementById('nt-title').value || '').trim();
         if (!title) { toast('Title is required.'); return false; }
-        var t = ORG.server.createTemplate({ title: title, audience: document.getElementById('nt-aud').value, phase: document.getElementById('nt-phase').value, desc: document.getElementById('nt-desc').value.trim(), status: document.getElementById('nt-status').value });
+        var t = ORG.server.createTemplate({ title: title, audience: document.getElementById('nt-aud').value, phase: document.getElementById('nt-phase').value, desc: document.getElementById('nt-desc').value.trim(), status: document.getElementById('nt-status').value }, me.name);
         ORG.server.logAudit(me.name, 'template.create', t.title, 'template');
         close(); toast('Template “' + t.title + '” created.'); go('templates', {});
       }, 'Create template');
@@ -2865,15 +3542,26 @@
   function openTemplateMenu(id) {
     var t = ORG.templates.find(function (x) { return x.id === id; }); if (!t) return;
     var pubLabel = t.status === 'Published' ? 'Unpublish' : 'Publish';
-    openModal('Template · ' + t.title, '<p class="tl-muted">' + esc(t.audience) + ' · ' + esc(t.phase) + ' · ' + statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn') + '</p>' +
+    var rows = [['Created', fmtMs(t.createdAt) + ' · ' + (t.createdBy || '—')], ['Last edited', fmtMs(t.updatedAt) + ' · ' + (t.updatedBy || '—')], ['Last published', t.publishedAt ? fmtMs(t.publishedAt) : 'Never']];
+    openModal('Template · ' + t.title, '<p class="tl-muted">' + esc(t.audience) + ' · ' + esc(t.phase) + ' · ' + statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn') + ' ' + tplVersionBadge(t, ORG.server.latestTemplateIds()) + (t.archived ? ' ' + statusPill('Archived', 'muted') : '') + '</p>' +
+      '<div class="ws-review mb-4">' + rows.map(function (r) { return '<div class="ws-rev-row"><span>' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>'; }).join('') + '</div>' +
       '<div class="tl-stack"><button class="btn btn-outline block" id="tm-edit">Edit</button>' +
       '<button class="btn btn-outline block" id="tm-dup">Duplicate</button>' +
-      '<button class="btn btn-outline block" id="tm-pub">' + pubLabel + '</button>' +
+      (t.archived ? '' : '<button class="btn btn-outline block" id="tm-pub">' + pubLabel + '</button>') +
+      '<button class="btn btn-outline block" id="tm-arch" title="' + (t.archived ? 'Bring this template back to the active list.' : 'Hide from the active list and from new deployments. Nothing is deleted.') + '">' + (t.archived ? 'Un-archive' : 'Archive') + '</button>' +
       '<button class="btn btn-danger block" id="tm-del">Delete</button></div>', function (close) { close(); return true; }, 'Close');
     setTimeout(function () {
       document.getElementById('tm-edit').addEventListener('click', function () { openTemplateEditor(t); });
-      document.getElementById('tm-dup').addEventListener('click', function () { var c = ORG.server.createTemplate({ title: t.title + ' (copy)', audience: t.audience, phase: t.phase, desc: t.desc, status: 'Draft' }); ORG.server.logAudit(me.name, 'template.duplicate', c.title, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Duplicated.'); go('templates', {}); });
-      document.getElementById('tm-pub').addEventListener('click', function () { ORG.server.publishTemplate(t.id, t.status !== 'Published'); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → ' + t.status, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Template ' + (t.status === 'Published' ? 'published.' : 'unpublished.')); go('templates', {}); });
+      document.getElementById('tm-dup').addEventListener('click', function () { var c = ORG.server.createTemplate({ title: t.title + ' (copy)', audience: t.audience, phase: t.phase, desc: t.desc, status: 'Draft' }, me.name); ORG.server.logAudit(me.name, 'template.duplicate', c.title, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Duplicated.'); go('templates', {}); });
+      var pb = document.getElementById('tm-pub'); if (pb) pb.addEventListener('click', function () { ORG.server.publishTemplate(t.id, t.status !== 'Published', me.name); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → ' + t.status, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Template ' + (t.status === 'Published' ? 'published.' : 'unpublished.')); go('templates', {}); });
+      document.getElementById('tm-arch').addEventListener('click', function () {
+        document.getElementById('tl-modal-root').innerHTML = '';
+        var on = !t.archived;
+        gated({ title: (on ? 'Archive ' : 'Un-archive ') + t.title,
+          body: on ? '<p>Archived templates leave the active list and can’t be picked for new deployments. Existing deployments and results are untouched.</p>' : '<p>Bring <b>' + esc(t.title) + '</b> back to the active list.</p>',
+          confirmLabel: on ? 'Archive template' : 'Un-archive', audit: { action: on ? 'template.archive' : 'template.unarchive', entity: t.title, entityType: 'template' },
+          onConfirm: function () { ORG.server.archiveTemplate(t.id, on, me.name); toast('Template ' + (on ? 'archived.' : 'restored.')); go('templates', on ? {} : { view: 'archived' }); } });
+      });
       document.getElementById('tm-del').addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; gated({ title: 'Delete template', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(t.title) + '</b>? This cannot be undone.</p>', confirmLabel: 'Delete template', audit: { action: 'template.delete', entity: t.title, entityType: 'template' }, onConfirm: function () { ORG.server.deleteTemplate(t.id); toast('Template deleted.'); go('templates', {}); } }); });
     }, 0);
   }
@@ -2890,14 +3578,14 @@
       '<label class="field">Status<select class="select" id="et-status"><option' + (t.status === 'Draft' ? ' selected' : '') + '>Draft</option><option' + (t.status === 'Published' ? ' selected' : '') + '>Published</option></select></label>' +
       '</div>', function (close) {
         var title = (document.getElementById('et-title').value || '').trim(); if (!title) { toast('Title is required.'); return false; }
-        ORG.server.updateTemplate(t.id, { title: title, audience: document.getElementById('et-aud').value, phase: document.getElementById('et-phase').value, desc: document.getElementById('et-desc').value, status: document.getElementById('et-status').value });
+        ORG.server.updateTemplate(t.id, { title: title, audience: document.getElementById('et-aud').value, phase: document.getElementById('et-phase').value, desc: document.getElementById('et-desc').value, status: document.getElementById('et-status').value }, me.name);
         ORG.server.logAudit(me.name, 'template.edit', title, 'template');
         close(); toast('Template updated.'); go('templates', {});
       }, 'Save changes');
   }
 
   function openSchoolEditor(s) {
-    var groupOpts = ORG.groups.map(function (g) { return '<option value="' + g.id + '"' + (s.groupId === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('');
+    var groupOpts = ORG.groups.filter(function (g) { return !g.archived || g.id === s.groupId; }).map(function (g) { return '<option value="' + g.id + '"' + (s.groupId === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('');
     openModal('Edit school', '<div class="tl-stack">' +
       '<label class="field">School name<input class="input" id="es-name" value="' + esc(s.name) + '"></label>' +
       '<label class="field">Type<input class="input" id="es-type" value="' + esc(s.type) + '"></label>' +
@@ -2954,18 +3642,43 @@
   }
 
   function openStructureEditor(s) {
+    var ttl = ORG.emptyStructureTtlDays;
+    // Days left before an empty section / section-less grade is auto-removed.
+    var left = {};
+    ORG.server.emptyStructure(s).forEach(function (x) { left[x.grade + '|' + (x.section || '')] = x.daysLeft; });
+    function emptyTag(key) {
+      var d = left[key]; if (d == null) return '';
+      var soon = d <= ORG.emptyStructureWarnDays;
+      return '<em class="tl-tree-ttl' + (soon ? ' soon' : '') + '" title="No students yet. Removed automatically in ' + d + ' day' + (d === 1 ? '' : 's') + ' unless students are added.">' + d + 'd left</em>';
+    }
     var tree = s.structure.grades.length ? s.structure.grades.map(function (g) {
       var body = g.sections.length
-        ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i></span>'; }).join('')
-        : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i></span>';
+        ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i>' + emptyTag(g.grade + '|' + sec.name) + '</span>'; }).join('')
+        : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i>' + emptyTag(g.grade + '|') + '</span>';
       return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + body +
         '<button class="btn-link" data-addsec="' + esc(g.grade) + '">+ Section</button></div>';
     }).join('') : '<div class="ui-empty">No grades yet — add one below.</div>';
+    // Grades/sections the daily job removed — one click puts them back with a fresh window.
+    var removed = s.structure.removed || [];
+    var removedHtml = removed.length ? '<div class="tl-tree-removed"><div class="ui-eyebrow">Auto-removed (empty ' + ttl + ' days)</div>' +
+      removed.map(function (x, i) {
+        var what = x.wholeGrade ? esc(x.grade) + (x.sections.length ? ' <small>(' + esc(x.sections.join(', ')) + ')</small>' : '') : esc(x.grade) + ' · ' + esc(x.sections.join(', '));
+        return '<div class="tl-tree-removed-row"><span>' + what + ' <small>· removed ' + esc(fmtJoined(x.removedAt)) + '</small></span>' +
+          '<button class="btn-link" data-restore="' + i + '" title="Add this back for the school. It gets a fresh ' + ttl + ' days to receive students.">Add back</button></div>';
+      }).join('') + '</div>' : '';
     openModal('Grades & sections · ' + s.name,
+      '<p class="tl-muted">Grades and sections with no students are removed automatically ' + ttl + ' days after they’re added. If the school needs one again, add it back — it gets a fresh ' + ttl + ' days.</p>' +
       '<div class="tl-tree mb-4">' + tree + '</div>' +
-      '<div style="display:flex;gap:8px"><input class="input grow" id="sg-newgrade" placeholder="New grade (e.g. Grade 6)"><button class="btn btn-outline btn-sm" id="sg-addgrade">Add grade</button></div>',
+      '<div style="display:flex;gap:8px"><input class="input grow" id="sg-newgrade" placeholder="New grade (e.g. Grade 6)"><button class="btn btn-outline btn-sm" id="sg-addgrade">Add grade</button></div>' +
+      removedHtml,
       function (close) { close(); return true; }, 'Done');
     setTimeout(function () {
+      document.querySelectorAll('[data-restore]').forEach(function (b) { b.addEventListener('click', function () {
+        var x = ORG.server.restoreStructure(s.id, +b.dataset.restore); if (!x) return;
+        var label = x.wholeGrade ? x.grade : x.grade + ' · ' + x.sections.join(', ');
+        ORG.server.logAudit(me.name, 'school.structure', label + ' added back', 'school', s.id);
+        toast(label + ' added back.'); openStructureEditor(s);
+      }); });
       document.querySelectorAll('[data-addsec]').forEach(function (b) { b.addEventListener('click', function () {
         ORG.server.addSection(s.id, b.dataset.addsec); ORG.server.logAudit(me.name, 'school.structure', 'section added to ' + b.dataset.addsec, 'school', s.id); openStructureEditor(s);
       }); });
@@ -2978,10 +3691,26 @@
 
   function openNewDeployment(schoolId, afterHub) {
     var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
-    var tplOpts = ORG.templates.map(function (t) { return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(t.phase) + '">' + esc(t.title) + '</option>'; }).join('');
+    // Only published, non-archived templates; grouped per phase · audience with
+    // the Latest one first, so the team deploys the current version by default.
+    var latest = ORG.server.latestTemplateIds();
+    var slots = {};
+    ORG.templates.forEach(function (t) {
+      if (t.archived || t.status !== 'Published') return;
+      (slots[t.phase + ' · ' + t.audience] = slots[t.phase + ' · ' + t.audience] || []).push(t);
+    });
+    var PH = ['Baseline', 'Midline', 'Endline'];
+    var tplOpts = Object.keys(slots).sort(function (a, b) { return PH.indexOf(a.split(' · ')[0]) - PH.indexOf(b.split(' · ')[0]) || a.localeCompare(b); }).map(function (k) {
+      var ts = slots[k].sort(function (a, b) { return (b.publishedAt || 0) - (a.publishedAt || 0); });
+      return '<optgroup label="' + esc(k) + '">' + ts.map(function (t) {
+        var isLatest = latest[t.phase + '|' + t.audience] === t.id;
+        return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(t.phase) + '" data-latest="' + (isLatest ? 1 : 0) + '">' + esc(t.title) + (isLatest ? ' — ★ Latest' : ' — older version') + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
     openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a school. Status is derived from the window + publish state. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
       '<label class="field">School<select class="select" id="nd-school">' + schoolOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="nd-assess">' + tplOpts + '</select></label>' +
+      '<p class="tl-muted tl-nd-older" id="nd-older" hidden>⚠ A newer template is published for this phase + audience. Pick the ★ Latest one unless you need the older version.</p>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="nd-aud"><option>Teacher</option><option>Parent</option><option>Direct Assessment</option></select></label>' +
       '<label class="field flex-1">Phase<select class="select" id="nd-phase"><option>Baseline</option><option>Midline</option><option>Endline</option></select></label></div>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Start<input class="input" type="date" id="nd-start" value="' + TODAY_ISO + '"></label>' +
@@ -2997,7 +3726,16 @@
         close(); toast('Deployment created — ' + d.status + '.');
         if (afterHub) go('school', { id: sid, tab: 'assessments' }); else go('deployments', {});
       }, 'Create deployment');
-    setTimeout(function () { var a = document.getElementById('nd-assess'); if (a) a.addEventListener('change', function () { var o = a.options[a.selectedIndex]; if (o.dataset.aud) document.getElementById('nd-aud').value = o.dataset.aud; if (o.dataset.phase) document.getElementById('nd-phase').value = o.dataset.phase; }); }, 0);
+    setTimeout(function () {
+      var a = document.getElementById('nd-assess'); if (!a) return;
+      var sync = function () {
+        var o = a.options[a.selectedIndex]; if (!o) return;
+        if (o.dataset.aud) document.getElementById('nd-aud').value = o.dataset.aud;
+        if (o.dataset.phase) document.getElementById('nd-phase').value = o.dataset.phase;
+        document.getElementById('nd-older').hidden = o.dataset.latest !== '0';
+      };
+      a.addEventListener('change', sync); sync();
+    }, 0);
   }
 
   function openNewGroup() {
@@ -3043,7 +3781,7 @@
   // Floating Ask Tilli + Need help bubbles (assets/float-help.js). Ask Tilli
   // routes to its nav destination — there's no platform-level chat yet.
   // Group mode has no Ask Tilli destination, so it gets the Need-help bubble only.
-  if (window.TilliFloat) TilliFloat.mount(GROUP ? { role: 'School group admin' } : { role: 'Platform admin', ask: function () { go('ask-tilli', {}); } });
+  if (window.TilliFloat) TilliFloat.mount(GROUP ? { role: 'School group admin' } : { role: 'Platform admin', askSub: 'Completion, follow-ups and how-tos', ask: function () { go('ask-tilli', {}); } });
   window.addEventListener('hashchange', render);
   if (!location.hash) location.replace('#/' + HOME);
   render();

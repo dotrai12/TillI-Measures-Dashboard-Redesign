@@ -901,6 +901,17 @@
     return true;
   }
   function staffFor(schoolId){ var db=getDB(); return (db.staff[schoolId]||[]).slice(); }
+  // Active teachers at a school + the sections they own (read-only, for the
+  // platform admin's per-teacher assessment log). Name comes from the account,
+  // else the seeded demo roster, else the email.
+  function teachersFor(schoolId){
+    var db = getDB(), seed = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.teachers) || [];
+    return db.teacherMemberships.filter(function(m){ return m.school_id===schoolId && m.status==='active'; }).map(function(m){
+      var acct = db.accounts && db.accounts[m.user_id];
+      var t = seed.find(function(x){ return low(x.email)===m.user_id; });
+      return { email:m.user_id, name:(acct && acct.name) || (t && t.name) || m.user_id, section_ids:(m.section_ids||[]).slice() };
+    });
+  }
   // Unscoped roster for portfolio / coordinator DISPLAY (not a security path —
   // parent claim + teacher scope still go through the guarded functions above).
   function studentsForSchool(schoolId, opts){ var db=getDB(); opts=opts||{};
@@ -1460,7 +1471,7 @@
     resolveJoinCode: resolveJoinCode,
     verifySchoolCode: verifySchoolCode,
     listSchools: listSchools,
-    staffFor: staffFor,
+    staffFor: staffFor, teachersFor: teachersFor,
     sectionsForSchool: sectionsForSchool,
     ensureSection: ensureSection,
     studentsForSchool: studentsForSchool,
