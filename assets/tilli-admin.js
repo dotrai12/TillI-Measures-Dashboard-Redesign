@@ -1490,23 +1490,28 @@
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
         '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button><button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
           '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div></div>' +
-      (roster.length ? '<div id="stu-page"></div>' : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
+      (roster.length ? '<div class="tl-filters"><input class="input grow tl-filter-q" id="stu-q" type="search" placeholder="Search by name, admission # or grade/section…" aria-label="Search students" value="' + esc(stuPager.schoolId === s.id ? stuPager.q : '') + '"></div><div id="stu-page"></div>'
+        : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
     el.querySelector('[data-add-st]').addEventListener('click', function () { go('add-students', { school: s.id }); });
     el.querySelector('[data-merge-here]').addEventListener('click', function () { go('merge', { school: s.id }); });
     // [data-hubtab] Deletion logs button is wired in place by SCREEN.school.
     // Only the table + pager re-render when paging, so that button stays wired.
-    if (stuPager.schoolId !== s.id) { stuPager.schoolId = s.id; stuPager.page = 1; }
+    if (stuPager.schoolId !== s.id) { stuPager.schoolId = s.id; stuPager.page = 1; stuPager.q = ''; }
     var mount = el.querySelector('#stu-page');
     function drawPage() {
-      var pages = Math.max(1, Math.ceil(roster.length / stuPager.size));
+      // Search matches any word of the query against name, admission # and grade/section.
+      var words = stuPager.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      var list = words.length ? roster.filter(function (r) { var hay = (r.name + ' ' + r.admission + ' ' + r.gradeSection).toLowerCase(); return words.every(function (w) { return hay.indexOf(w) >= 0; }); }) : roster;
+      var pages = Math.max(1, Math.ceil(list.length / stuPager.size));
       stuPager.page = Math.min(Math.max(1, stuPager.page), pages);
       var start = (stuPager.page - 1) * stuPager.size;
-      var rows = roster.slice(start, start + stuPager.size).map(function (r) {
+      var rows = list.slice(start, start + stuPager.size).map(function (r) {
         return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
           '<td class="r"><button class="btn-link" data-edit-st="' + esc(r.admission) + '">Edit</button> <button class="btn-link danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '">Delete</button></td></tr>';
       }).join('');
+      if (!list.length) { mount.innerHTML = '<div class="ui-empty">No students match “' + esc(stuPager.q.trim()) + '”.</div>'; return; }
       mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-        pagerHtml(roster.length, stuPager.page, stuPager.size, 'students');
+        pagerHtml(list.length, stuPager.page, stuPager.size, words.length ? 'matching students' : 'students');
       wirePager(mount, function (page, size) {
         if (size !== stuPager.size) { stuPager.size = size; stuPager.page = 1; try { localStorage.setItem(STU_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
         else stuPager.page = page;
@@ -1519,6 +1524,8 @@
       }); });
       mount.querySelectorAll('[data-edit-st]').forEach(function (b) { b.addEventListener('click', function () { openStudentEditor(s.id, b.dataset.editSt, function () { go('school', { id: s.id, tab: 'students' }); }); }); });
     }
+    var sq = el.querySelector('#stu-q');
+    if (sq) sq.addEventListener('input', function () { stuPager.q = sq.value; stuPager.page = 1; drawPage(); });
     if (mount) drawPage();
   };
 
@@ -1528,7 +1535,7 @@
   var STAFF_PAGE_KEY = 'tilliMeasures.admin.staffPerPage';
   // Remembered rows-per-page for one table (falls back to the first size).
   function savedPageSize(key) { try { var v = +localStorage.getItem(key); return PAGE_SIZES.indexOf(v) >= 0 ? v : PAGE_SIZES[0]; } catch (e) { return PAGE_SIZES[0]; } }
-  var stuPager = { schoolId: null, page: 1, size: savedPageSize(STU_PAGE_KEY) };
+  var stuPager = { schoolId: null, page: 1, q: '', size: savedPageSize(STU_PAGE_KEY) };
   var staffPager = { schoolId: null, page: 1, size: savedPageSize(STAFF_PAGE_KEY) };
   // Page numbers to show: first, last, and a window around the current page, with … gaps.
   function pageList(page, pages) {
