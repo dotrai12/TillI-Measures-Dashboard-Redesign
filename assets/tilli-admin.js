@@ -1655,7 +1655,10 @@
   ];
   var TL_PHASES = ['Baseline', 'Midline', 'Endline'];
   // ── Deployment planner (school Assessments tab) ──────────────────────────
-  // One tab per phase. Inside a phase, one row per audience with two groups:
+  // One tab per phase, split by place — "At school" (the teacher runs these)
+  // and "At home" (a parent does these). Each place has ONE sequence, so
+  // assessments of different audiences can be chained (teacher → direct at
+  // school, parent → direct at home), plus an any-time group:
   // "In order" (a chain — #2 opens once #1 is done) and "Any time" (open as
   // soon as the phase is live), so one audience can mix both. Where an
   // assessment runs is fixed by its audience — teachers at school, parents at
@@ -1666,8 +1669,13 @@
   var TL_WHERE_LABEL = { school: 'At school', home: 'At home' };
   // Student direct: who runs it follows where it runs.
   var TL_DIRECT_WHO = { school: 'the teacher runs it', home: 'a parent does it with the child' };
+  // The two places a phase is split into, and who's in each.
+  var TL_PLACES = [
+    { mode: 'school', label: 'At school', who: 'The teacher runs these', auds: ['teacher', 'direct'] },
+    { mode: 'home', label: 'At home', who: 'A parent does these with the child', auds: ['parent', 'direct'] },
+  ];
   var TL_WHERE_RULE = { teacher: 'At school only', parent: 'At home only', direct: 'At school or at home' };
-  var TL_CHAIN_DEFAULT = { teacher: 'order', parent: 'any', direct: 'order' };   // group a newly-used assessment joins
+  var TL_CHAIN_DEFAULT = { teacher: 'order', parent: 'any', direct: 'any' };   // group a newly-used assessment joins
   var TL_CHAIN = {};       // sid -> { 'Baseline|teacher': [{id,name,mode}], … }  (catalogue per phase)
   var TL_TAB = {};         // sid -> phase tab that's open
   // Phase / audience status — worked out from real deployments + completions only.
@@ -1719,7 +1727,8 @@
   function tlFixMode(ak, mode) { return TL_WHERE[ak].indexOf(mode) >= 0 ? mode : TL_WHERE[ak][0]; }
   var TL_AUD_SHORT = { teacher: 'Teacher', parent: 'Parent', direct: 'Student direct' };
   var TL_AUD_TAG = { teacher: 'persp-teacher', parent: 'persp-parent', direct: 'persp-student' };   // .ui-tag colour per audience
-  var TL_PLAN = {};   // sid -> { phase -> { start, end, deployed, endedEarly, held, byId, seq:{…in order}, free:{…any time}, off:[] } }
+  var TL_AUD_CHIP = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct' };   // short audience tag on each assessment
+  var TL_PLAN = {};   // sid -> { phase -> { start, end, deployed, endedEarly, held, byId, ord:{school,home} (sequence), any:{school,home}, off:[] } }
   var TL_POP = null;  // the open per-item ⋯ menu, if any
   var TL_AUD_LABEL = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct Assessment' };
   var TL_AUD_KEY = { 'Teacher': 'teacher', 'Parent': 'parent', 'Direct Assessment': 'direct' };
@@ -1730,14 +1739,14 @@
   function tlPlan(s, phase) {
     var byS = TL_PLAN[s.id] || (TL_PLAN[s.id] = {});
     if (!byS[phase]) {
-      var byId = {}, seq = { teacher: [], parent: [], direct: [] }, free = { teacher: [], parent: [], direct: [] }, off = [];
+      var byId = {}, ord = { school: [], home: [] }, any = { school: [], home: [] }, off = [];
       TL_AUD.forEach(function (a) {
         tlChain(s, phase, a.aud, a.key).forEach(function (it) {
-          byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: tlFixMode(a.key, it.mode) };
-          if (it.mode === 'off') off.push(it.id); else (TL_CHAIN_DEFAULT[a.key] === 'order' ? seq : free)[a.key].push(it.id);
+          var b = byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: tlFixMode(a.key, it.mode) };
+          if (it.mode === 'off') off.push(it.id); else (TL_CHAIN_DEFAULT[a.key] === 'order' ? ord : any)[b.mode].push(it.id);
         });
       });
-      var rec = byS[phase] = { start: '', end: '', deployed: false, endedEarly: false, held: false, byId: byId, seq: seq, free: free, off: off };
+      var rec = byS[phase] = { start: '', end: '', deployed: false, endedEarly: false, held: false, byId: byId, ord: ord, any: any, off: off };
       // Hydrate from the real source so the planner and the teacher / parent
       // apps agree: the shared store for created and live schools, the
       // portfolio deployments for every other school.
@@ -1745,20 +1754,22 @@
         var deps = window.TilliAPI.getDeployments(s.id).filter(function (x) { return x.phase === phase; });
         if (deps.length) {
           rec.deployed = true; rec.start = deps[0].start || ''; rec.end = deps[0].end || '';
-          TL_AUD.forEach(function (a) {
+          // Everything in use goes back to the catalogue first…
+          ['school', 'home'].forEach(function (m) { ord[m].concat(any[m]).forEach(function (id) { off.push(id); }); ord[m] = []; any[m] = []; });
+          // …then exactly what's deployed comes back, in each place's sequence.
+          var placed = [];
+          TL_AUD.forEach(function (a, ai) {
             var dep = deps.find(function (x) { return x.audience === a.aud; }), ak = a.key;
-            // Everything currently in use for this audience goes back to the catalogue first…
-            seq[ak].concat(free[ak]).forEach(function (id) { off.push(id); }); seq[ak] = []; free[ak] = [];
             if (!dep) return;
             var laneOrdered = dep.chained == null ? TL_CHAIN_DEFAULT[ak] === 'order' : !!dep.chained;
-            // …then exactly what's deployed comes back, in deployed order and group.
-            (dep.assessments || []).forEach(function (x) {
+            (dep.assessments || []).forEach(function (x, xi) {
               if (!byId[x.id]) byId[x.id] = { id: x.id, name: x.name || x.id, aud: ak, mode: tlFixMode(ak, x.mode) };
               else if (x.mode) byId[x.id].mode = tlFixMode(ak, x.mode);
               var oi = off.indexOf(x.id); if (oi >= 0) off.splice(oi, 1);
-              ((x.ordered != null ? x.ordered : laneOrdered) ? seq : free)[ak].push(x.id);
+              placed.push({ id: x.id, ordered: x.ordered != null ? !!x.ordered : laneOrdered, pos: x.pos != null ? x.pos : ai * 100 + xi });
             });
           });
+          placed.sort(function (a, b) { return a.pos - b.pos; }).forEach(function (x) { (x.ordered ? ord : any)[byId[x.id].mode].push(x.id); });
         }
       } else {
         var md = ORG.deployments.filter(function (x) { return x.schoolId === s.id && x.phase === phase; });
@@ -1784,10 +1795,31 @@
     if (p.end && t > p.end) return 'ended';
     return 'live';
   }
-  // In use for an audience: the in-order chain first, then the any-time ones.
-  function tlRunning(p, ak) { return p.seq[ak].concat(p.free[ak]); }
+  // In use for an audience, across both places (school sequence, school any
+  // time, then the same at home).
+  function tlRunning(p, ak) {
+    return p.ord.school.concat(p.any.school, p.ord.home, p.any.home).filter(function (id) { return p.byId[id].aud === ak; });
+  }
   function tlRunningCount(p) { return TL_AUD.reduce(function (n, a) { return n + tlRunning(p, a.key).length; }, 0); }
-  function tlGroupOf(p, id) { var ak = p.byId[id].aud; return p.seq[ak].indexOf(id) >= 0 ? 'order' : (p.free[ak].indexOf(id) >= 0 ? 'any' : null); }
+  function tlInPlace(p, ids, mode) { return ids.filter(function (id) { return p.byId[id].mode === mode; }); }
+  // { done, expected } for everything run in one place (null = not open yet / unknown).
+  function tlPlaceCompletion(s, phase, p, mode) {
+    var win = tlWindowStatus(s, p); if (win === 'none' || win === 'scheduled') return null;
+    var pl = TL_PLACES.find(function (x) { return x.mode === mode; }), done = 0, exp = 0;
+    if (tlUsesApi(s)) {
+      var ids = window.TilliAPI.studentsForSchool(s.id).map(function (x) { return x.student_id; });
+      pl.auds.forEach(function (ak) {
+        var c = window.TilliAPI.itemCompletion(s.id, phase, TL_AUD_LABEL[ak], ids, tlInPlace(p, tlRunning(p, ak), mode));
+        done += c.done; exp += c.expected;
+      });
+    } else {
+      // Portfolio schools only report per audience: teachers at school, parents at home.
+      var c2 = tlAudCompletion(s, phase, mode === 'school' ? 'teacher' : 'parent'); if (!c2) return null;
+      done = c2.done; exp = c2.expected;
+    }
+    return exp ? { done: done, expected: exp } : null;
+  }
+  function tlGroupOf(p, id) { var m = p.byId[id].mode; return p.ord[m].indexOf(id) >= 0 ? 'order' : (p.any[m].indexOf(id) >= 0 ? 'any' : null); }
   // { done, expected } for one audience of a deployed phase (null = unknown).
   function tlAudCompletion(s, phase, ak) {
     if (tlUsesApi(s)) {
@@ -1841,7 +1873,9 @@
     var p = tlPlan(s, phase);
     Object.keys(TL_AUD_LABEL).forEach(function (k) {
       var list = tlRunning(p, k).map(function (id) {
-        var it = p.byId[id], o = { id: id, name: it.name, mode: it.mode, ordered: p.seq[k].indexOf(id) >= 0 };
+        // pos = place in its location's sequence — chains can cross audiences.
+        var it = p.byId[id], at = p.ord[it.mode].indexOf(id), o = { id: id, name: it.name, mode: it.mode, ordered: at >= 0 };
+        if (at >= 0) o.pos = at;
         if (k === 'teacher' && TL_PER_TEACHER.indexOf(it.name) >= 0) o.perTeacher = true;
         return o;
       });
@@ -1855,32 +1889,38 @@
   }
   // Edits — each saves straight away when the phase is already deployed.
   function tlSaved(s, phase) { if (tlPlan(s, phase).deployed) tlPersistDeploy(s, phase); }
+  // Student direct only: move to the other place, same group, at the end.
   function tlSetMode(s, phase, id, mode) {
     var p = tlPlan(s, phase), it = p.byId[id];
     if (TL_WHERE[it.aud].indexOf(mode) < 0) { toast(TL_AUD_SHORT[it.aud] + ' assessments run ' + TL_WHERE_RULE[it.aud].toLowerCase() + '.'); return false; }
-    it.mode = mode; tlSaved(s, phase); return true;
+    var grp = tlGroupOf(p, id); tlDetach(p, id); it.mode = mode;
+    if (grp) (grp === 'order' ? p.ord : p.any)[mode].push(id); else p.off.push(id);
+    tlSaved(s, phase); return true;
   }
   function tlDetach(p, id) {
-    var ak = p.byId[id].aud;
-    [p.seq[ak], p.free[ak], p.off].forEach(function (q) { var i = q.indexOf(id); if (i >= 0) q.splice(i, 1); });
+    [p.ord.school, p.ord.home, p.any.school, p.any.home, p.off].forEach(function (q) { var i = q.indexOf(id); if (i >= 0) q.splice(i, 1); });
   }
   function tlTurnOff(s, phase, id) { var p = tlPlan(s, phase); tlDetach(p, id); p.off.push(id); tlSaved(s, phase); }
-  // group: 'order' | 'any' (default: the audience's usual group).
+  // group: 'order' | 'any' (default: the audience's usual group). Joins the end
+  // of its place's sequence / any-time list.
   function tlTurnOn(s, phase, id, group) {
     var p = tlPlan(s, phase), it = p.byId[id];
-    tlDetach(p, id);
-    ((group || TL_CHAIN_DEFAULT[it.aud]) === 'order' ? p.seq : p.free)[it.aud].push(id);
-    it.mode = tlFixMode(it.aud, it.mode); tlSaved(s, phase);
+    tlDetach(p, id); it.mode = tlFixMode(it.aud, it.mode);
+    ((group || TL_CHAIN_DEFAULT[it.aud]) === 'order' ? p.ord : p.any)[it.mode].push(id);
+    tlSaved(s, phase);
   }
-  function tlSetGroup(s, phase, id, group) { var p = tlPlan(s, phase), it = p.byId[id]; tlDetach(p, id); (group === 'order' ? p.seq : p.free)[it.aud].push(id); tlSaved(s, phase); }
-  function tlReorder(s, phase, id, beforeId, group) {
-    var p = tlPlan(s, phase), ak = p.byId[id].aud, q = (group === 'any' ? p.free : p.seq)[ak];
+  function tlSetGroup(s, phase, id, group) { var p = tlPlan(s, phase), it = p.byId[id]; tlDetach(p, id); (group === 'order' ? p.ord : p.any)[it.mode].push(id); tlSaved(s, phase); }
+  // Move into a group (and, for student direct, a place), before beforeId.
+  function tlReorder(s, phase, id, beforeId, group, mode) {
+    var p = tlPlan(s, phase), it = p.byId[id];
+    if (mode && TL_WHERE[it.aud].indexOf(mode) >= 0) it.mode = mode;
     tlDetach(p, id);
-    var bi = beforeId != null ? q.indexOf(beforeId) : -1;
+    var q = (group === 'any' ? p.any : p.ord)[it.mode], bi = beforeId != null ? q.indexOf(beforeId) : -1;
     q.splice(bi >= 0 ? bi : q.length, 0, id); tlSaved(s, phase);
   }
+  // Swap with the neighbour in its place's sequence.
   function tlShift(s, phase, id, delta) {
-    var p = tlPlan(s, phase), q = p.seq[p.byId[id].aud], i = q.indexOf(id), j = i + delta;
+    var p = tlPlan(s, phase), q = p.ord[p.byId[id].mode], i = q.indexOf(id), j = i + delta;
     if (i < 0 || j < 0 || j >= q.length) return;
     q[i] = q[j]; q[j] = id; tlSaved(s, phase);
   }
@@ -1922,21 +1962,25 @@
           (n ? ' title="' + esc('#' + n + (prev ? ' — opens once “' + prev + '” is done' : ' — opens first')) + '"' : ' title="Any time — open as soon as the phase is live"') + '>' +
         (n ? '<span class="dep-ord">' + n + '</span>' : '') +
         '<span class="dep-node-name">' + esc(it.name) + '</span>' +
-        '<span class="dep-where md-' + it.mode + '"' + (it.aud === 'direct' ? ' title="' + esc(TL_WHERE_LABEL[it.mode] + ' — ' + TL_DIRECT_WHO[it.mode]) + '"' : '') + '>' + esc(TL_WHERE_LABEL[it.mode]) + (it.aud === 'direct' ? (it.mode === 'home' ? ' · parent' : ' · teacher') : '') + '</span>' +
+        '<span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_CHIP[it.aud]) + '</span>' +
         '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Options for ' + esc(it.name) + '">⋯</button></div>';
     };
-    var rows = TL_AUD.map(function (a) {
-      var ak = a.key, ord = p.seq[ak], any = p.free[ak], ax = ps.auds[ak];
-      var orderChips = ord.map(function (id, i) { return (i ? '<span class="dep-arrow" aria-hidden="true">→</span>' : '') + chip(id, i + 1, i ? p.byId[ord[i - 1]].name : null); }).join('');
-      var anyChips = any.map(function (id) { return chip(id, 0); }).join('');
-      var st = ax.st !== 'none' ? '<span class="dep-aud-st st-' + ax.st + '">' + TL_ST_LABEL[ax.st] + (ax.pct != null ? ' · ' + ax.pct + '%' : '') + '</span>' : '';
-      var body = (ord.length || any.length)
-        ? '<div class="dep-group"><span class="dep-group-l" title="Each opens once the one before it is done">In order</span><div class="dep-aud-items" data-drop="' + ak + '|order">' + (orderChips || '<span class="dep-lane-empty">None — drag one here to make it part of the sequence.</span>') + '</div></div>' +
-          '<div class="dep-group"><span class="dep-group-l" title="Open as soon as the phase is live, in any order">Any time</span><div class="dep-aud-items" data-drop="' + ak + '|any">' + (anyChips || '<span class="dep-lane-empty">None — drag one here to make it independent.</span>') + '</div></div>'
-        : '<div class="dep-aud-items" data-drop="' + ak + '|' + TL_CHAIN_DEFAULT[ak] + '"><span class="dep-lane-empty">No ' + esc(TL_AUD_SHORT[ak].toLowerCase()) + ' assessments in ' + esc(phase) + ' — turn one on below or use + Add assessment.</span></div>';
-      return '<div class="dep-aud" data-aud="' + ak + '">' +
-        '<div class="dep-aud-h"><span class="ui-tag ' + TL_AUD_TAG[ak] + '">' + esc(TL_AUD_SHORT[ak]) + '</span>' + st +
-          '<span class="dep-aud-rule">' + esc(TL_WHERE_RULE[ak]) + (ak === 'direct' ? ' — school: teacher runs it · home: parent does it' : '') + '</span></div>' + body + '</div>';
+    // An empty group only shows while dragging, as a drop target.
+    var group = function (ak, mode, grp, ids) {
+      var ord = grp === 'order';
+      var chips = ids.map(function (id, i) { return (ord && i ? '<span class="dep-arrow" aria-hidden="true">→</span>' : '') + chip(id, ord ? i + 1 : 0, ord && i ? p.byId[ids[i - 1]].name : null); }).join('');
+      return '<div class="dep-group' + (ids.length ? '' : ' is-empty') + '"><span class="dep-group-l" title="' + (ord ? 'Each opens once the one before it is done' : 'Open as soon as the phase is live, in any order') + '">' + (ord ? 'In order' : 'Any time') + '</span>' +
+        '<div class="dep-aud-items" data-drop="' + ak + '|' + grp + '|' + mode + '">' + (chips || '<span class="dep-lane-empty">Drop here to make it ' + (ord ? 'part of the sequence' : 'any time') + '.</span>') + '</div></div>';
+    };
+    var rows = TL_PLACES.map(function (pl) {
+      var m = pl.mode, ord = p.ord[m], any = p.any[m], has = ord.length || any.length;
+      var c = tlPlaceCompletion(s, phase, p, m), win = tlWindowStatus(s, p), pct = c ? Math.round(c.done * 100 / c.expected) : null;
+      var st = win === 'none' || !has ? '' : '<span class="dep-aud-st st-' + (pct === 100 ? 'completed' : win) + '">' + (pct === 100 ? 'Completed' : TL_ST_LABEL[win]) + (pct != null ? ' · ' + pct + '%' : '') + '</span>';
+      var auds = pl.auds.map(function (ak) { return TL_AUD_CHIP[ak]; }).join(' and ');
+      return '<div class="dep-aud dep-place" data-place="' + m + '">' +
+        '<div class="dep-aud-h"><span class="dep-place-tag md-' + m + '">' + esc(pl.label) + '</span>' + st + '<span class="dep-aud-rule">' + esc(pl.who) + ' · ' + esc(auds) + ' assessments</span></div>' +
+        (has ? group(pl.auds.join(','), m, 'order', ord) + group(pl.auds.join(','), m, 'any', any)
+          : '<span class="dep-lane-empty">Nothing runs ' + esc(pl.label.toLowerCase()) + ' in ' + esc(phase) + ' — turn one on below or use + Add assessment.</span>') + '</div>';
     }).join('');
 
     var offChips = p.off.map(function (id) {
@@ -1972,7 +2016,7 @@
 
   function openItemMenu(btn, d, s, phase, id) {
     closeItemMenu();
-    var p = tlPlan(s, phase), it = p.byId[id], grp = tlGroupOf(p, id), q = p.seq[it.aud], at = q.indexOf(id);
+    var p = tlPlan(s, phase), it = p.byId[id], grp = tlGroupOf(p, id), q = p.ord[it.mode], at = q.indexOf(id);
     // Where: only student direct can switch; others say why.
     var where = TL_WHERE[it.aud].length > 1
       ? ['school', 'home'].map(function (m) { return '<button type="button" class="ui-menu-item" data-mv="' + m + '"' + (it.mode === m ? ' disabled' : '') + '><i class="dep-swatch md-' + m + '"></i>Run ' + TL_WHERE_LABEL[m].toLowerCase() + (m === 'school' ? ' (teacher)' : ' (parent)') + '</button>'; }).join('')
@@ -2035,9 +2079,9 @@
       b.addEventListener('click', function () {
         var phase = b.dataset.deploy, p = tlPlan(s, phase), n = tlRunningCount(p);
         var future = p.start > tlToday(s);
-        var orderLine = TL_AUD.filter(function (a) { return tlRunning(p, a.key).length; }).map(function (a) {
-          var o = p.seq[a.key].length, f = p.free[a.key].length;
-          return TL_AUD_SHORT[a.key] + ': ' + [o ? o + ' in order' : '', f ? f + ' any time' : ''].filter(Boolean).join(', ');
+        var orderLine = TL_PLACES.filter(function (pl) { return p.ord[pl.mode].length || p.any[pl.mode].length; }).map(function (pl) {
+          var o = p.ord[pl.mode].length, f = p.any[pl.mode].length;
+          return pl.label + ': ' + [o ? o + ' in order' : '', f ? f + ' any time' : ''].filter(Boolean).join(', ');
         }).join(' · ');
         gated({ title: 'Deploy ' + phase, confirmLabel: 'Deploy phase',
           body: '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b>.</p>' +
@@ -2070,14 +2114,15 @@
 
     // Drag to reorder inside an audience row.
     mount.querySelectorAll('.dep-node[draggable="true"]').forEach(function (nd) {
-      nd.addEventListener('dragstart', function (e) { dragId = nd.dataset.item; nd.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (e2) {} });
-      nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); dragId = null; mount.querySelectorAll('.dragover').forEach(function (l) { l.classList.remove('dragover'); }); });
+      nd.addEventListener('dragstart', function (e) { dragId = nd.dataset.item; nd.classList.add('dragging'); mount.classList.add('is-dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (e2) {} });
+      nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); mount.classList.remove('is-dragging'); dragId = null; mount.querySelectorAll('.dragover').forEach(function (l) { l.classList.remove('dragover'); }); });
     });
     mount.querySelectorAll('[data-drop]').forEach(function (row) {
       row.addEventListener('dragover', function (e) {
         if (!dragId) return;
         var phase = row.closest('[data-phase]').dataset.phase;
-        if (tlPlan(s, phase).byId[dragId].aud !== row.dataset.drop.split('|')[0]) return;   // stays in its own audience
+        var dz = row.dataset.drop.split('|'), it = tlPlan(s, phase).byId[dragId];
+        if (TL_WHERE[it.aud].indexOf(dz[2]) < 0) return;   // only into a place its audience can run in
         e.preventDefault(); row.classList.add('dragover'); e.dataTransfer.dropEffect = 'move';
       });
       row.addEventListener('dragleave', function (e) { if (!row.contains(e.relatedTarget)) row.classList.remove('dragover'); });
@@ -2088,7 +2133,8 @@
         var nodes = [].slice.call(row.querySelectorAll('.dep-node[data-item]'));
         for (var i = 0; i < nodes.length; i++) { var r = nodes[i].getBoundingClientRect(); if (e.clientY < r.bottom && e.clientX < r.left + r.width / 2) { before = nodes[i].dataset.item; break; } }
         if (before === dragId) before = null;
-        tlReorder(s, phase, dragId, before, row.dataset.drop.split('|')[1]); refreshPlanner(d);
+        var dz2 = row.dataset.drop.split('|');
+        tlReorder(s, phase, dragId, before, dz2[1], dz2[2]); refreshPlanner(d);
       });
     });
   }
@@ -2107,7 +2153,7 @@
       '<label class="field">Phase<select class="select" id="aa-phase">' + phOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="aa-tpl">' + tOpts + '</select></label>' +
       '<label class="field">Where it runs<select class="select" id="aa-mode"><option value="school">At school — the teacher runs it</option><option value="home">At home — a parent does it with the child</option></select></label>' +
-      '<label class="field">Order<select class="select" id="aa-grp"><option value="order">In order — after the last one in the sequence</option><option value="any">Any time — open as soon as the phase is live</option></select></label>' +
+      '<label class="field">Order<select class="select" id="aa-grp"><option value="order">In order — after the last one in that place’s sequence</option><option value="any">Any time — open as soon as the phase is live</option></select></label>' +
       '<p class="tl-muted" id="aa-note"></p></div>', function (close) {
         var phase = document.getElementById('aa-phase').value, sel = document.getElementById('aa-tpl'), o = sel.options[sel.selectedIndex];
         var ak = TL_AUD_KEY[o.dataset.aud], mode = tlFixMode(ak, document.getElementById('aa-mode').value), p = tlPlan(s, phase);
@@ -2128,32 +2174,15 @@
         // Teacher → school, parent → home; only student direct can choose.
         md.disabled = TL_WHERE[ak].length === 1; md.value = tlFixMode(ak, md.value);
         if (ak !== lastAud) { gr.value = TL_CHAIN_DEFAULT[ak]; lastAud = ak; }   // the audience's usual group
-        var n = p.seq[ak].length, ordered = gr.value === 'order';
+        var n = p.ord[tlFixMode(ak, md.value)].length, ordered = gr.value === 'order';
         note.textContent = (o.dataset.phase !== ph.value ? 'This template was made for ' + o.dataset.phase + '. ' : '') +
           TL_AUD_SHORT[ak] + ' assessments run ' + TL_WHERE_RULE[ak].toLowerCase() + '. ' +
           (ak === 'direct' ? 'Here ' + TL_DIRECT_WHO[md.value] + '. ' : '') +
-          (ordered ? 'It will be #' + (n + 1) + (n ? ', opening once #' + n + ' is done.' : ', opening first.') : 'It’s open any time, alongside the others.') +
+          (ordered ? 'It will be #' + (n + 1) + ' ' + TL_WHERE_LABEL[tlFixMode(ak, md.value)].toLowerCase() + (n ? ', opening once #' + n + ' is done.' : ', opening first.') : 'It’s open any time, alongside the others.') +
           (p.deployed ? ' ' + ph.value + ' is already deployed, so it’s added straight away.' : '');
       }
       [ph, sel, md, gr].forEach(function (x) { x.addEventListener('change', sync); }); sync();
     }, 0);
-  }
-
-  // Demo tooling (live demo school only): record some real completions —
-  // through TilliAPI, respecting each audience's order — so statuses move honestly.
-  var SIM_RATE = 0.6;   // share of students who finish their next open assessment per click
-  function simulateProgress(d) {
-    var s = d.school, API = window.TilliAPI, moved = 0, rnd = Math.random;
-    var ids = API.studentsForSchool(s.id).map(function (x) { return x.student_id; });
-    API.getDeployments(s.id).filter(function (x) { return x.status === 'Live'; }).forEach(function (dep) {
-      ids.forEach(function (sid) {
-        if (rnd() > SIM_RATE) return;
-        var next = API.chainFor(s.id, dep.phase, dep.audience, sid).filter(function (c) { return c.state === 'open'; })[0];
-        if (next && API.markComplete(s.id, dep.phase, dep.audience, sid, next.id, 'demo@tilli.org') === true) moved++;
-      });
-    });
-    toast(moved ? 'Demo: recorded ' + moved + ' completion' + (moved === 1 ? '' : 's') + '.' : 'Demo: nothing to complete — deploy a phase that’s live today first.');
-    refreshPlanner(d);
   }
 
   HUB.assessments = function (d, el) {
@@ -2168,14 +2197,12 @@
         '<div class="tl-inline-actions">' +
           '<button class="btn btn-outline btn-sm" data-teacherlog title="Per-teacher status for every teacher assessment deployed to this school — Completed when every student in their sections is rated.">Teacher assessment log</button>' +
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
-          (s.live && window.TilliAPI ? '<button class="btn btn-outline btn-sm tl-demo-btn" data-simulate title="Demo only: records completions for some students in every live phase (in chain order), so you can watch statuses move.">Demo · Simulate progress</button>' : '') +
           '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Master Links</h3><p class="ui-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
         '<div class="mt-3"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
       '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>';
     el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
-    var simB = el.querySelector('[data-simulate]'); if (simB) simB.addEventListener('click', function () { simulateProgress(d); });
     renderPlanner(d, el.querySelector('#dep-planner'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
     slBtn.addEventListener('click', function () {
@@ -3750,7 +3777,7 @@
     { id: 'phase-status', topic: 'Assessments & templates', q: 'What do Scheduled, Live, Ended and Completed mean on a phase?', screens: ['school', 'deployments'],
       a: 'They come from the phase dates and real responses — nobody sets them by hand. Scheduled = deployed but the start date is ahead. Live = inside the dates. Ended = the end date has passed but not everyone finished. Completed = every expected response is in.' },
     { id: 'chain-order', topic: 'Assessments & templates', q: 'Does the order of assessments in a phase matter?', screens: ['school'],
-      a: 'You decide per assessment. Each audience row has two groups: In order (a sequence — #2 only opens for a child once #1 is done; in the parent app later ones show “Locked — opens after …”) and Any time (open as soon as the phase is live). One audience can mix both. Use ⋯ → “Add to the in-order sequence” / “Make it any time”, or drag between the two groups.' },
+      a: 'You decide per assessment. Each audience row has two groups: In order (a sequence — #2 only opens for a child once #1 is done; in the parent app later ones show “Locked — opens after …”) and Any time (open as soon as the phase is live). One audience can mix both. At school and at home each have one sequence that can mix audiences (e.g. teacher observation → direct task at school, parent survey → direct task at home), and they never wait on each other. Use ⋯ → “Add to the in-order sequence” / “Make it any time”, or drag between the two groups.' },
     { id: 'where-runs', topic: 'Assessments & templates', q: 'Can an assessment run at school or at home?', screens: ['school', 'templates', 'deployments'],
       a: 'It depends on the audience. Teacher assessments always run at school and parent assessments always at home. Student direct assessments can be either: at school the teacher runs it, at home a parent does it with the child (it shows in the parent app). Turning one on asks which; change it later from its ⋯ menu.' },
     { id: 'phase-dates', topic: 'Assessments & templates', q: 'How do I schedule a phase or change its dates?', screens: ['school'],

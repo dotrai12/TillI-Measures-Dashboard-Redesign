@@ -133,7 +133,6 @@
   .dep-phase-when.st-live { color: var(--green-700); }
   .dep-phase-when.st-completed { color: var(--green-700); font-weight: 700; }
   .dep-dates label { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
-  .tl-demo-btn { border-style: dashed; }
   /* Planner tabs + audience rows */
   .dep-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line-200); margin-bottom: 14px; }
   .dep-tab { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: none; border-bottom: 3px solid transparent; padding: 8px 16px 9px; cursor: pointer; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-600); }
@@ -148,6 +147,13 @@
   .dep-aud-st.st-live, .dep-aud-st.st-completed { color: var(--green-700); }
   .dep-aud-st.st-scheduled { color: var(--cyan-700); }
   .dep-aud-rule { font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); }
+  .dep-place-tag { font-weight: 700; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase; padding: 4px 10px; border-radius: var(--radius-pill); }
+  .dep-place-tag.md-school { background: color-mix(in srgb, var(--violet-500) 14%, var(--white)); color: var(--violet-500); }
+  .dep-place-tag.md-home { background: var(--warn-wash); color: var(--warn-700); }
+  .dep-sub { padding: 8px 0 4px; }
+  .dep-sub + .dep-sub { border-top: 1px dashed var(--line-200); margin-top: 6px; }
+  .dep-group.is-empty { display: none; }
+  .is-dragging .dep-group.is-empty { display: grid; }
   .dep-group { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: start; gap: 10px; margin-top: 8px; }
   .dep-group-l { padding-top: 9px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); cursor: help; }
   .dep-where-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
@@ -603,10 +609,10 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261021hd"></script>
+<script src="assets/tilli-api.js?v=20261021hi"></script>
 <script src="assets/tilli-history.js?v=20261020ce"></script>
 <script src="assets/tilli-org-data.js?v=20261021hb"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261021he"></script>
+<script src="assets/tilli-admin.js?v=20261021hj"></script>
 </body>
 </html>

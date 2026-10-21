@@ -382,7 +382,10 @@
         var start = now + pl[0] * DAY_MS, end = now + pl[1] * DAY_MS, rate = pl[2];
         var open = start <= now, liveNow = open && end >= now, upto = Math.min(now, end);
         Object.keys(HERO_ITEMS[ph]).forEach(function(aud){
-          var items = HERO_ITEMS[ph][aud].map(function(x){ return x[2] ? { id: x[0], name: x[1], perTeacher: true } : { id: x[0], name: x[1] }; });
+          var items = HERO_ITEMS[ph][aud].map(function(x, xi){
+            var mode = aud === 'Parent' ? 'home' : aud === 'Teacher' ? 'school' : (xi % 2 ? 'home' : 'school');
+            return x[2] ? { id: x[0], name: x[1], perTeacher: true, mode: mode } : { id: x[0], name: x[1], mode: mode };
+          });
           db.deployments[id][ph + '|' + aud] = { phase: ph, audience: aud, deployed: true, status: 'Live', window: heroISO(start) + ' → ' + heroISO(end),
             start: heroISO(start), end: heroISO(end), assessments: items, deployedAt: start - 7 * DAY_MS, endedAt: null };
           history.push({ at: start - 7 * DAY_MS, school_id: id, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'phase.deploy',
@@ -499,6 +502,18 @@
     if (!db.selfReports){ db.selfReports = {}; write(db); }
     // The four fully-populated demo schools (after history, which re-seeds itself).
     if (db.heroSeedVer !== HERO_SEED_VER){ seedHeroSchools(db); db.heroSeedVer = HERO_SEED_VER; write(db); }
+    // Older deployments don't say where each assessment runs: teachers at
+    // school, parents at home, student direct alternating school / home
+    // (the same default the platform-admin planner shows).
+    if (!db.modeFillVer){
+      Object.keys(db.deployments).forEach(function(sid){
+        Object.keys(db.deployments[sid] || {}).forEach(function(k){
+          var d = db.deployments[sid][k];
+          (d.assessments || []).forEach(function(a, i){ if (!a.mode) a.mode = d.audience === 'Parent' ? 'home' : d.audience === 'Teacher' ? 'school' : (i % 2 ? 'home' : 'school'); });
+        });
+      });
+      db.modeFillVer = 1; write(db);
+    }
     return db;
   }
 
@@ -1241,25 +1256,50 @@
       return d.audience===audience && (opts.includeEnded ? true : d.status==='Live');
     });
   }
-  // Lane-level default when an assessment carries no flag of its own:
-  // parents any time (independent check-ins), everyone else in order.
-  function isChained(d){ return d && (d.chained == null ? d.audience !== 'Parent' : !!d.chained); }
-  // Each assessment is either part of its lane's ordered sequence or "any time".
+  // Default when an assessment carries no flag of its own: teacher assessments
+  // are in order; parent and student direct ones are any time.
+  function isChained(d){ return d && (d.chained == null ? d.audience === 'Teacher' : !!d.chained); }
   function isOrdered(dep, a){ return a.ordered != null ? !!a.ordered : isChained(dep); }
-  // Chain: an in-order assessment opens only once every in-order assessment
-  // before it is done for that student; any-time ones are always open.
-  // → [{ id, name, state:'done'|'open'|'locked', after, ordered, mode }]
+  var AUD_RANK = { 'Teacher': 0, 'Parent': 1, 'Direct Assessment': 2 };
+  // Chain: each place (school / home) has ONE sequence across audiences, so a
+  // direct task can follow a teacher observation at school or a parent survey
+  // at home. An in-order assessment opens for a child once every in-order
+  // assessment before it in the same place is done for that child; any-time
+  // ones are always open. Places never wait on each other.
+  // → [{ id, name, state:'done'|'open'|'locked', after, ordered, mode }] for one audience.
   function chainFor(schoolId, phase, audience, studentId){
-    var db = getDB(); var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    var db = getDB(), all = db.deployments[schoolId] || {}, comp = db.completions[schoolId] || {};
+    var dep = all[depKey(phase, audience)];
     // Per-teacher items (the teacher's own Pre/Post-training survey) aren't part of a child's chain.
-    var list = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; }), prevDone = true, prevName = null, comp = db.completions[schoolId] || {};
-    return list.map(function(a){
-      var done = !!comp[compKey(phase, audience, studentId, a.id)], ord = isOrdered(dep, a);
-      var st = done ? 'done' : (!ord || prevDone ? 'open' : 'locked');
-      var after = ord ? prevName : null;
-      if (ord){ prevDone = prevDone && done; prevName = a.name || a.id; }
-      return { id:a.id, name:a.name||a.id, state:st, after: after, ordered: ord, mode: a.mode || '' };
+    var mine = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; });
+    var seqs = {};
+    Object.keys(all).forEach(function(k){
+      var d = all[k]; if (d.phase !== phase) return;
+      (d.assessments || []).forEach(function(a, i){
+        if (a.perTeacher || !isOrdered(d, a)) return;
+        (seqs[a.mode || ''] = seqs[a.mode || ''] || []).push({ a: a, aud: d.audience, pos: a.pos != null ? a.pos : (AUD_RANK[d.audience] || 0) * 100 + i });
+      });
     });
+    Object.keys(seqs).forEach(function(m){ seqs[m].sort(function(x, y){ return x.pos - y.pos; }); });
+    return mine.map(function(a){
+      var done = !!comp[compKey(phase, audience, studentId, a.id)], ord = isOrdered(dep, a), place = a.mode || '';
+      var out = { id: a.id, name: a.name || a.id, state: done ? 'done' : 'open', after: null, ordered: ord, mode: place };
+      if (!ord) return out;
+      var seq = seqs[place] || [], idx = -1;
+      seq.forEach(function(x, i){ if (x.a.id === a.id && x.aud === audience) idx = i; });
+      if (idx > 0) out.after = seq[idx - 1].a.name || seq[idx - 1].a.id;
+      if (!done && seq.slice(0, Math.max(0, idx)).some(function(x){ return !comp[compKey(phase, x.aud, studentId, x.a.id)]; })) out.state = 'locked';
+      return out;
+    });
+  }
+  // Completion over a chosen set of a lane's assessments (e.g. just the ones
+  // run at home) — per-teacher items excluded, as in completionStats.
+  function itemCompletion(schoolId, phase, audience, studentIds, itemIds){
+    var db = getDB(), dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    var items = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher && itemIds.indexOf(a.id) >= 0; });
+    var comp = db.completions[schoolId] || {}, done = 0;
+    (studentIds || []).forEach(function(sid){ items.forEach(function(a){ if (comp[compKey(phase, audience, sid, a.id)]) done++; }); });
+    return { done: done, expected: (studentIds || []).length * items.length };
   }
 
   // A teacher/parent/student finishes one assessment item for one student.
@@ -1749,7 +1789,7 @@
     endPhase: endPhase,
     undeployPhase: undeployPhase,
     getDeployments: getDeployments, effectiveStatus: effectiveStatus, chainFor: chainFor,
-    saveSelfReport: saveSelfReport, selfReportsFor: selfReportsFor,
+    saveSelfReport: saveSelfReport, selfReportsFor: selfReportsFor, itemCompletion: itemCompletion,
     deploymentsFor: deploymentsFor,
     markComplete: markComplete,
     isComplete: isComplete,
