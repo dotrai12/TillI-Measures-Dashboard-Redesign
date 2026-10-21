@@ -861,9 +861,21 @@
 
     var cols, rnd2 = seededRng(strSeed(s.code + '|teacherlog'));
     if (apiDeps.length) {
-      cols = apiDeps.map(function (x) { return { label: x.phase + ' · Teacher' + (x.status === 'Scheduled' ? ' (opens ' + fmtJoined(x.start) + ')' : ''), phase: x.phase }; });
+      // Per-teacher self-report items (Pre / Post-training) get their own columns;
+      // the rest are per-student observations over the teacher's sections.
+      var selfCols = [], reps = API.selfReportsFor ? API.selfReportsFor(s.id) : {};
+      apiDeps.forEach(function (x) { (x.assessments || []).forEach(function (a) { if (a.perTeacher) selfCols.push({ dep: x, item: a }); }); });
+      cols = selfCols.map(function (c) { return { label: c.item.name + ' (self-report)', phase: c.dep.phase, self: true }; })
+        .concat(apiDeps.filter(function (x) { return (x.assessments || []).some(function (a) { return !a.perTeacher; }); })
+          .map(function (x) { return { label: x.phase + ' · observations' + (x.status === 'Scheduled' ? ' (opens ' + fmtJoined(x.start) + ')' : ''), phase: x.phase }; }));
       teachers.forEach(function (t) {
-        t.cells = apiDeps.map(function (x) { var c = API.completionStats(s.id, x.phase, 'Teacher', t.ids || []); return teacherCell(c.done, c.expected); });
+        var r = reps[String(t.email || '').toLowerCase()] || {};
+        t.cells = selfCols.map(function (c) {
+          var at = /post/i.test(c.item.name) ? r.post : r.pre;
+          return at ? { status: 'Completed', done: 1, expected: 1, at: at } : { status: 'Not started', done: 0, expected: 1 };
+        }).concat(apiDeps.filter(function (x) { return (x.assessments || []).some(function (a) { return !a.perTeacher; }); }).map(function (x) {
+          var c = API.completionStats(s.id, x.phase, 'Teacher', t.ids || []); return teacherCell(c.done, c.expected);
+        }));
       });
     } else {
       cols = mockDeps.map(function (x) { return { label: x.assessment, phase: x.phase }; });
@@ -892,7 +904,8 @@
     var rows = tr.teachers.map(function (t) {
       return '<tr><td class="name">' + esc(t.name) + '<small>' + esc(t.email) + '</small></td><td>' + esc(t.sections.join(', ') || '—') + '<small>' + t.students + ' students</small></td>' +
         t.cells.map(function (c) {
-          return '<td>' + statusPill(c.status === 'In progress' ? 'In progress · ' + c.done + '/' + c.expected : c.status, TEACHERLOG_TONE[c.status]) + '</td>';
+          return '<td>' + statusPill(c.status === 'In progress' ? 'In progress · ' + c.done + '/' + c.expected : c.status, TEACHERLOG_TONE[c.status]) +
+            (c.at ? '<small>' + esc(fmtJoined(ORG.iso(c.at))) + '</small>' : '') + '</td>';
         }).join('') + '</tr>';
     }).join('');
     mount.innerHTML = '<div class="ui-card mt-gap">' +
@@ -900,7 +913,7 @@
         (tr.live ? 'live completion from the teacher app' : 'demo data') + ' · Completed = every student in their sections rated.</p></div>' +
         '<button class="btn btn-outline btn-sm" data-tlog-csv>↓ CSV</button></div>' +
       '<div class="tl-tlog-sums">' + summary + '</div>' +
-      '<div class="ui-tablewrap"><table class="ui-table" style="min-width:' + (380 + tr.cols.length * 190) + 'px"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div></div>';
+      '<div class="ui-tablewrap"><table class="ui-table tl-tlog-table" style="min-width:' + (380 + tr.cols.length * 190) + 'px"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table></div></div>';
     mount.querySelector('[data-tlog-csv]').addEventListener('click', function () {
       downloadCsv(s.code.toLowerCase() + '-teacher-assessment-log.csv', ['Teacher', 'Email', 'Sections', 'Students'].concat(tr.cols.map(function (c) { return c.label; })),
         tr.teachers.map(function (t) { return [t.name, t.email, t.sections.join('; '), t.students].concat(t.cells.map(function (c) { return c.status + (c.expected ? ' (' + c.done + '/' + c.expected + ')' : ''); })); }));
@@ -1634,27 +1647,29 @@
     { key: 'direct', label: 'Student Direct', aud: 'Direct Assessment' },
   ];
   var TL_PHASES = ['Baseline', 'Midline', 'Endline'];
-  var TL_MODE = { school: 'Do at school', home: 'Do at home', off: 'Off' };
-  var TL_MODE_ORDER = ['school', 'home', 'off'];
-  var TL_CHAIN = {};       // sid -> { 'Baseline|teacher': [{id,name,mode}], … }  (edits persist in-session)
-  var TL_NAV = {};         // sid -> { level, phase, audience }
+  // ── Deployment planner (school Assessments tab) ──────────────────────────
+  // One tab per phase. Inside a phase, one row per audience: its assessments
+  // in order, and whether that order is a chain ("In order": #2 opens once #1
+  // is done) or not ("Any order": all open together). Where an assessment runs
+  // is fixed by its audience — teachers at school, parents at home; only
+  // student direct assessments can be either. The phase's Start → End dates are
+  // the schedule (Scheduled before, Live during, Ended after), editable any time.
+  var TL_WHERE = { teacher: ['school'], parent: ['home'], direct: ['school', 'home'] };
+  var TL_WHERE_LABEL = { school: 'At school', home: 'At home' };
+  var TL_WHERE_RULE = { teacher: 'At school only', parent: 'At home only', direct: 'At school or at home' };
+  var TL_CHAIN_DEFAULT = { teacher: 'order', parent: 'any', direct: 'order' };
+  var TL_CHAIN = {};       // sid -> { 'Baseline|teacher': [{id,name,mode}], … }  (catalogue per phase)
+  var TL_TAB = {};         // sid -> phase tab that's open
   // Phase / audience status — worked out from real deployments + completions only.
-  //   none      not deployed
-  //   scheduled deployed, start date still ahead
-  //   live      inside the window
-  //   ended     window over, not everyone finished
-  //   completed every expected response is in
   var TL_ST_LABEL = { none: 'Not deployed', scheduled: 'Scheduled', live: 'Live', ended: 'Ended', completed: 'Completed' };
   var TL_ST_CHIP = { none: 'muted', scheduled: 'info', live: 'ok', ended: 'muted', completed: 'ok' };
 
-  function tlNav(sid) { return TL_NAV[sid] || (TL_NAV[sid] = { level: 1, phase: null, audience: null }); }
   function tlPool(aud) {
     if (aud === 'Teacher') return ['SEL Observation', 'EF Observation', 'Wellbeing Check', 'Classroom Climate', 'Term Review'];
     if (aud === 'Parent') return ['Home SEL Survey', 'Routines Report', 'Wellbeing Check', 'Screen-time Survey', 'Term Review'];
     return ['EMT 1', 'EMT 2', 'EMT 4', 'Hearts & Flowers', 'Memory Game'];
   }
-  // Baseline has a fixed, curated chain per audience (not the randomised pool).
-  // Teacher assessments always run at school (no 'home' mode — see tlModeOrder).
+  // Baseline has a fixed, curated set per audience; 'off' = in the catalogue but not used.
   function tlBaselineChain(aud) {
     if (aud === 'Teacher') return [
       { name: 'Pre-training', mode: 'school' },
@@ -1662,7 +1677,7 @@
       { name: 'Teacher observational report on student foundational skills', mode: 'school' },
     ];
     if (aud === 'Parent') return [
-      { name: 'Home SEL Survey', mode: 'school' },
+      { name: 'Home SEL Survey', mode: 'home' },
     ];
     return [
       { name: 'IDELA', mode: 'school' },
@@ -1673,8 +1688,6 @@
       { name: 'EMT 4', mode: 'off' },
     ];
   }
-  // Mode cycle order per audience. Teacher has no 'home' option.
-  function tlModeOrder(aud) { return aud === 'Teacher' ? ['school', 'off'] : TL_MODE_ORDER; }
   function tlChain(s, phase, aud, audKey) {
     var byS = TL_CHAIN[s.id] || (TL_CHAIN[s.id] = {}), k = phase + '|' + audKey;
     if (!byS[k]) {
@@ -1686,34 +1699,17 @@
         var rnd = seededRng(strSeed(s.code + '|' + phase + '|' + audKey)), pool = tlPool(aud);
         var n = Math.min(pool.length, 3 + Math.floor(rnd() * 3)); // 3–5
         var out = [];
-        for (var i = 0; i < n; i++) out.push({ id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: pool[i], mode: i === 0 ? 'school' : (i === 1 ? 'home' : 'off') });
+        for (var i = 0; i < n; i++) out.push({ id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: pool[i], mode: i < 2 ? (i === 0 ? 'school' : 'home') : 'off' });
         byS[k] = out;
       }
     }
     return byS[k];
   }
-  function tlRail(nodes) {
-    var n = nodes.length;
-    return '<div class="tl-tl-rail"><div class="tl-tl-line" style="left:calc(50% / ' + n + ');right:calc(50% / ' + n + ')"></div>' +
-      nodes.map(function (nd) {
-        return '<div class="tl-tl-node ' + nd.cls + '"' + (nd.attrs || '') + '>' +
-          '<div class="tl-tl-diamond"' + (nd.mkTitle ? ' title="' + esc(nd.mkTitle) + '"' : '') + '></div><div class="tl-tl-dot"></div>' +
-          (nd.navLabel ? '<button class="tl-tl-label nav" title="' + esc(nd.navTitle || '') + '">' + esc(nd.label) + ' <span class="tl-tl-caret">›</span></button>'
-            : '<div class="tl-tl-label">' + esc(nd.label) + '</div>') +
-          (nd.sub ? '<div class="tl-tl-sub">' + esc(nd.sub) + '</div>' : '') +
-          (nd.sub2 ? '<div class="tl-tl-sub2">' + esc(nd.sub2) + '</div>' : '') + '</div>';
-      }).join('') + '</div>';
-  }
-  function tlLegend(items) { return '<div class="tl-tl-legend">' + items.map(function (it) { return '<span class="' + it[0] + '"><i></i>' + esc(it[1]) + '</span>'; }).join('') + '</div>'; }
-  var TL_AUD_SHORT = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct' };
+  // Where an assessment runs, forced by its audience (direct keeps its choice).
+  function tlFixMode(ak, mode) { return TL_WHERE[ak].indexOf(mode) >= 0 ? mode : TL_WHERE[ak][0]; }
+  var TL_AUD_SHORT = { teacher: 'Teacher', parent: 'Parent', direct: 'Student direct' };
   var TL_AUD_TAG = { teacher: 'persp-teacher', parent: 'persp-parent', direct: 'persp-student' };   // .ui-tag colour per audience
-  // ── Deployment planner (school Assessments tab) ──────────────────────────
-  // One card per phase. Its Start → End dates ARE the schedule: before the
-  // start it's Scheduled, then Live, then Ended. Dates stay editable after
-  // deploying. Inside a phase, each audience's running assessments form a
-  // chain (#2 opens once #1 is done) — order is set by dragging or the ⋯ menu.
-  // "+ Add assessment" adds one to a phase; "Deploy phase" sends the whole phase.
-  var TL_PLAN = {};   // sid -> { phase -> { start, end, deployed, endedEarly, byId, order:{school,home,off} } }
+  var TL_PLAN = {};   // sid -> { phase -> { start, end, deployed, endedEarly, held, byId, seq:{teacher,parent,direct}, off:[], chain:{…} } }
   var TL_POP = null;  // the open per-item ⋯ menu, if any
   var TL_AUD_LABEL = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct Assessment' };
   var TL_AUD_KEY = { 'Teacher': 'teacher', 'Parent': 'parent', 'Direct Assessment': 'direct' };
@@ -1724,33 +1720,35 @@
   function tlPlan(s, phase) {
     var byS = TL_PLAN[s.id] || (TL_PLAN[s.id] = {});
     if (!byS[phase]) {
-      var byId = {}, order = { school: [], home: [], off: [] };
+      var byId = {}, seq = { teacher: [], parent: [], direct: [] }, off = [];
       TL_AUD.forEach(function (a) {
         tlChain(s, phase, a.aud, a.key).forEach(function (it) {
-          byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: it.mode };
-          (order[it.mode] || order.off).push(it.id);
+          byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: tlFixMode(a.key, it.mode) };
+          (it.mode === 'off' ? off : seq[a.key]).push(it.id);
         });
       });
-      var rec = byS[phase] = { start: '', end: '', deployed: false, endedEarly: false, byId: byId, order: order };
-      // Hydrate from the real source so the planner, the timeline and the
-      // teacher / parent apps all agree: the shared TilliAPI store for created
-      // and live schools, the portfolio deployments for every other school.
+      var rec = byS[phase] = { start: '', end: '', deployed: false, endedEarly: false, held: false, byId: byId, seq: seq, off: off,
+        chain: { teacher: TL_CHAIN_DEFAULT.teacher, parent: TL_CHAIN_DEFAULT.parent, direct: TL_CHAIN_DEFAULT.direct } };
+      // Hydrate from the real source so the planner and the teacher / parent
+      // apps agree: the shared store for created and live schools, the
+      // portfolio deployments for every other school.
       if (tlUsesApi(s)) {
         var deps = window.TilliAPI.getDeployments(s.id).filter(function (x) { return x.phase === phase; });
         if (deps.length) {
           rec.deployed = true; rec.start = deps[0].start || ''; rec.end = deps[0].end || '';
-          // Restore the deployed chain order (and any assessment added from Templates).
-          deps.forEach(function (dep) {
-            var ak = TL_AUD_KEY[dep.audience];
-            (dep.assessments || []).forEach(function (a) {
-              if (!byId[a.id]) { byId[a.id] = { id: a.id, name: a.name || a.id, aud: ak, mode: 'school' }; order.school.push(a.id); }
-              else if (order.off.indexOf(a.id) >= 0) { order.off.splice(order.off.indexOf(a.id), 1); order.school.push(a.id); byId[a.id].mode = 'school'; }
+          TL_AUD.forEach(function (a) {
+            var dep = deps.find(function (x) { return x.audience === a.aud; }), ak = a.key;
+            // Everything currently "on" for this audience goes back to the catalogue first…
+            seq[ak].forEach(function (id) { off.push(id); }); seq[ak] = [];
+            if (!dep) return;
+            // …then exactly what's deployed comes back, in deployed order.
+            (dep.assessments || []).forEach(function (x) {
+              if (!byId[x.id]) byId[x.id] = { id: x.id, name: x.name || x.id, aud: ak, mode: tlFixMode(ak, x.mode) };
+              else if (x.mode) byId[x.id].mode = tlFixMode(ak, x.mode);
+              var oi = off.indexOf(x.id); if (oi >= 0) off.splice(oi, 1);
+              seq[ak].push(x.id);
             });
-            var seq = (dep.assessments || []).map(function (a) { return a.id; });
-            ['school', 'home'].forEach(function (m) {
-              var mine = order[m].filter(function (id) { return byId[id].aud === ak && seq.indexOf(id) >= 0; }).sort(function (x, y) { return seq.indexOf(x) - seq.indexOf(y); });
-              var k = 0; order[m] = order[m].map(function (id) { return byId[id].aud === ak && seq.indexOf(id) >= 0 ? mine[k++] : id; });
-            });
+            rec.chain[ak] = dep.chained == null ? TL_CHAIN_DEFAULT[ak] : (dep.chained ? 'order' : 'any');
           });
         }
       } else {
@@ -1777,8 +1775,8 @@
     if (p.end && t > p.end) return 'ended';
     return 'live';
   }
-  // Each audience's running assessments, in chain order (school lane, then home lane).
-  function tlRunning(p, ak) { return p.order.school.concat(p.order.home).filter(function (id) { return p.byId[id].aud === ak; }); }
+  function tlRunning(p, ak) { return p.seq[ak]; }
+  function tlRunningCount(p) { return p.seq.teacher.length + p.seq.parent.length + p.seq.direct.length; }
   // { done, expected } for one audience of a deployed phase (null = unknown).
   function tlAudCompletion(s, phase, ak) {
     if (tlUsesApi(s)) {
@@ -1813,29 +1811,30 @@
     if (ps.st === 'ended') return 'Ended ' + f(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '% complete' : '');
     return 'Completed · ran ' + f(ps.start) + ' → ' + f(ps.end);
   }
-
-  // Move an item into a mode lane (optionally before another item). Teacher
-  // assessments can't run at home. A deployed phase saves the new order at once.
-  function planMove(s, phase, id, mode, beforeId) {
-    var p = tlPlan(s, phase), it = p.byId[id];
-    if (mode === 'home' && it.aud === 'teacher') { toast('Teacher assessments can’t run at home.'); return false; }
-    ['school', 'home', 'off'].forEach(function (m) { var i = p.order[m].indexOf(id); if (i > -1) p.order[m].splice(i, 1); });
-    var arr = p.order[mode], idx = arr.length;
-    if (beforeId != null) { var bi = arr.indexOf(beforeId); if (bi > -1) idx = bi; }
-    arr.splice(idx, 0, id); it.mode = mode;
-    if (p.deployed) tlPersistDeploy(s, phase);
-    return true;
+  // Open tab: the live phase, else the next scheduled one, else the first not deployed.
+  function tlDefaultTab(s) {
+    var st = TL_PHASES.map(function (ph) { return { ph: ph, x: tlPhaseStatus(s, ph) }; });
+    var live = st.filter(function (o) { return o.x.st === 'live'; })[0];
+    var sched = st.filter(function (o) { return o.x.st === 'scheduled'; }).sort(function (a, b) { return a.x.start < b.x.start ? -1 : 1; })[0];
+    var none = st.filter(function (o) { return o.x.st === 'none'; })[0];
+    return (live || sched || none || st[st.length - 1]).ph;
   }
 
-  // Persist a phase into the shared TilliAPI store, per audience, in chain
-  // order, so the teacher & parent apps surface exactly what's deployed here
-  // (created schools + the live demo school have a real roster there).
+  // Persist a phase into the shared TilliAPI store, per audience, in order,
+  // with where each runs and whether it's chained — the teacher & parent apps
+  // read exactly this.
+  // A teacher's own surveys — counted once per teacher, not once per child.
+  var TL_PER_TEACHER = ['Pre-training', 'Post-training'];
   function tlPersistDeploy(s, phase) {
     if (!tlUsesApi(s)) return;
     var p = tlPlan(s, phase);
     Object.keys(TL_AUD_LABEL).forEach(function (k) {
-      var list = tlRunning(p, k).map(function (id) { return { id: id, name: p.byId[id].name }; });
-      if (list.length) window.TilliAPI.deployPhase(s.id, phase, TL_AUD_LABEL[k], { start: p.start, end: p.end, window: p.start + ' → ' + p.end, assessments: list });
+      var list = tlRunning(p, k).map(function (id) {
+        var it = p.byId[id], o = { id: id, name: it.name, mode: it.mode };
+        if (k === 'teacher' && TL_PER_TEACHER.indexOf(it.name) >= 0) o.perTeacher = true;
+        return o;
+      });
+      if (list.length) window.TilliAPI.deployPhase(s.id, phase, TL_AUD_LABEL[k], { start: p.start, end: p.end, window: p.start + ' → ' + p.end, assessments: list, chained: p.chain[k] === 'order' });
       else window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]);
     });
   }
@@ -1843,54 +1842,97 @@
     if (!tlUsesApi(s)) return;
     Object.keys(TL_AUD_LABEL).forEach(function (k) { window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]); });
   }
+  // Edits — each saves straight away when the phase is already deployed.
+  function tlSaved(s, phase) { if (tlPlan(s, phase).deployed) tlPersistDeploy(s, phase); }
+  function tlSetMode(s, phase, id, mode) {
+    var p = tlPlan(s, phase), it = p.byId[id];
+    if (TL_WHERE[it.aud].indexOf(mode) < 0) { toast(TL_AUD_SHORT[it.aud] + ' assessments run ' + TL_WHERE_RULE[it.aud].toLowerCase() + '.'); return false; }
+    it.mode = mode; tlSaved(s, phase); return true;
+  }
+  function tlTurnOff(s, phase, id) {
+    var p = tlPlan(s, phase), q = p.seq[p.byId[id].aud], i = q.indexOf(id);
+    if (i >= 0) { q.splice(i, 1); p.off.push(id); tlSaved(s, phase); }
+  }
+  function tlTurnOn(s, phase, id) {
+    var p = tlPlan(s, phase), it = p.byId[id], i = p.off.indexOf(id);
+    if (i >= 0) p.off.splice(i, 1);
+    if (p.seq[it.aud].indexOf(id) < 0) p.seq[it.aud].push(id);
+    it.mode = tlFixMode(it.aud, it.mode); tlSaved(s, phase);
+  }
+  function tlReorder(s, phase, id, beforeId) {
+    var p = tlPlan(s, phase), q = p.seq[p.byId[id].aud], i = q.indexOf(id);
+    if (i < 0) return; q.splice(i, 1);
+    var bi = beforeId != null ? q.indexOf(beforeId) : -1;
+    q.splice(bi >= 0 ? bi : q.length, 0, id); tlSaved(s, phase);
+  }
+  function tlShift(s, phase, id, delta) {
+    var p = tlPlan(s, phase), q = p.seq[p.byId[id].aud], i = q.indexOf(id), j = i + delta;
+    if (i < 0 || j < 0 || j >= q.length) return;
+    q[i] = q[j]; q[j] = id; tlSaved(s, phase);
+  }
 
-  function planPhaseCard(s, phase) {
-    var p = tlPlan(s, phase), ps = tlPhaseStatus(s, phase);
-    var running = p.order.school.length + p.order.home.length, parked = p.order.off.length;
+  function planPhaseBody(s, phase) {
+    var p = tlPlan(s, phase), ps = tlPhaseStatus(s, phase), running = tlRunningCount(p);
     var missing = [];
-    if (!p.start) missing.push('a start date'); if (!p.end) missing.push('an end date'); if (!running) missing.push('at least one assessment turned on');
+    if (!p.start) missing.push('a start date'); if (!p.end) missing.push('an end date'); if (!running) missing.push('at least one assessment');
     var ready = !missing.length && !p.deployed;
     var deployBtn = p.deployed
       ? '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '" title="Take this phase back to draft — teachers and parents lose access">Undeploy</button>'
       : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' + (ready ? '' : ' disabled') + '>Deploy phase</button>';
     var statusPill = '<span class="ui-chip ' + TL_ST_CHIP[ps.st] + '">' + (ps.st === 'live' ? '● ' : ps.st === 'completed' ? '✓ ' : '') + TL_ST_LABEL[ps.st] + '</span>';
-    // Numbering = each audience's chain position (what opens first, second…).
-    var pos = {};
-    TL_AUD.forEach(function (a) { tlRunning(p, a.key).forEach(function (id, i, arr) { pos[id] = { n: i + 1, prev: i ? p.byId[arr[i - 1]].name : null }; }); });
     var head = '<div class="dep-phase-head">' +
       '<span class="dep-phase-name">' + esc(phase) + '</span>' + statusPill +
-      '<span class="dep-phase-sum">' + running + ' on · ' + parked + ' off</span>' +
+      '<span class="dep-phase-sum">' + running + ' in use · ' + p.off.length + ' not used</span>' +
       '<span class="dep-dates" title="The phase goes live on the start date and closes after the end date. You can change both at any time.">' +
         '<label>Start <input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '"' + (p.end ? ' max="' + esc(p.end) + '"' : '') + ' aria-label="' + esc(phase) + ' start date"></label>' +
         '<span class="dep-date-sep">→</span>' +
         '<label>End <input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '"' + (p.start ? ' min="' + esc(p.start) + '"' : '') + ' aria-label="' + esc(phase) + ' end date"></label>' +
       '</span>' + deployBtn + '</div>' +
       (ps.st !== 'none' ? '<div class="dep-phase-when st-' + ps.st + '">' + esc(tlDateLine(ps)) + '</div>'
-        : (!ready && !p.deployed ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>' : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'));
-    var lanes = TL_MODE_ORDER.map(function (mode) {
-      var ids = p.order[mode], off = mode === 'off';
-      var nodes = ids.map(function (id) {
-        var it = p.byId[id], ps2 = pos[id];
-        return '<div class="dep-node md-' + mode + '" draggable="true" data-item="' + esc(id) + '">' +
-          (off || !ps2 ? '' : '<span class="dep-ord" title="' + esc(TL_AUD_SHORT[it.aud] + ' #' + ps2.n + (ps2.prev ? ' — opens once “' + ps2.prev + '” is done' : ' — opens first')) + '">' + ps2.n + '</span>') +
+        : (!ready ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>' : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'));
+
+    var rows = TL_AUD.map(function (a) {
+      var ak = a.key, ids = tlRunning(p, ak), ordered = p.chain[ak] === 'order', ax = ps.auds[ak];
+      var chips = ids.map(function (id, i) {
+        var it = p.byId[id];
+        return (ordered && i ? '<span class="dep-arrow" aria-hidden="true">→</span>' : '') +
+          '<div class="dep-node md-' + it.mode + '" draggable="true" data-item="' + esc(id) + '"' +
+            (ordered ? ' title="' + esc('#' + (i + 1) + (i ? ' — opens once “' + p.byId[ids[i - 1]].name + '” is done' : ' — opens first')) + '"' : '') + '>' +
+          (ordered ? '<span class="dep-ord">' + (i + 1) + '</span>' : '') +
           '<span class="dep-node-name">' + esc(it.name) + '</span>' +
-          '<span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_SHORT[it.aud]) + '</span>' +
-          '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Move ' + esc(it.name) + '">⋯</button>' +
-        '</div>';
+          '<span class="dep-where md-' + it.mode + '">' + esc(TL_WHERE_LABEL[it.mode]) + '</span>' +
+          '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Options for ' + esc(it.name) + '">⋯</button></div>';
       }).join('');
-      var empty = '<span class="dep-lane-empty">' + (off ? 'Nothing turned off' : 'Drag assessments here') + '</span>';
-      return '<div class="dep-lane' + (off ? ' dep-lane--off' : '') + '" data-lane="' + esc(phase) + '|' + mode + '">' +
-        '<div class="dep-lane-head"><span class="dep-mode-tag md-' + mode + '">' + esc(off ? 'Off' : TL_MODE[mode]) + '</span></div>' +
-        '<div class="dep-lane-items">' + (nodes || empty) + '</div></div>';
+      var st = ax.st !== 'none' ? '<span class="dep-aud-st st-' + ax.st + '">' + TL_ST_LABEL[ax.st] + (ax.pct != null ? ' · ' + ax.pct + '%' : '') + '</span>' : '';
+      return '<div class="dep-aud" data-aud="' + ak + '">' +
+        '<div class="dep-aud-h"><span class="ui-tag ' + TL_AUD_TAG[ak] + '">' + esc(TL_AUD_SHORT[ak]) + '</span>' + st +
+          '<span class="dep-aud-rule">' + esc(TL_WHERE_RULE[ak]) + '</span>' +
+          '<div class="ui-seg dep-chainseg" role="group" aria-label="' + esc(TL_AUD_SHORT[ak]) + ' order">' +
+            '<button class="' + (ordered ? 'on' : '') + '" data-chain="' + ak + '|order" title="Each one opens once the one before it is done">In order</button>' +
+            '<button class="' + (!ordered ? 'on' : '') + '" data-chain="' + ak + '|any" title="All open together — do them in any order">Any order</button></div></div>' +
+        '<div class="dep-aud-items" data-drop="' + ak + '">' + (chips || '<span class="dep-lane-empty">No ' + esc(TL_AUD_SHORT[ak].toLowerCase()) + ' assessments in ' + esc(phase) + ' — turn one on below or use + Add assessment.</span>') + '</div></div>';
     }).join('');
-    return '<div class="dep-phase' + (p.deployed ? ' is-deployed st-' + ps.st : '') + '" data-phase="' + esc(phase) + '">' + head + lanes + '</div>';
+
+    var offChips = p.off.map(function (id) {
+      var it = p.byId[id];
+      return '<span class="dep-offitem"><span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_SHORT[it.aud]) + '</span>' + esc(it.name) +
+        '<button class="btn-link" data-turnon="' + esc(id) + '">Turn on</button></span>';
+    }).join('');
+    var offBox = p.off.length ? '<details class="dep-off"><summary>Not used in ' + esc(phase) + ' (' + p.off.length + ')</summary><div class="dep-off-list">' + offChips + '</div></details>' : '';
+    return '<div class="dep-phase' + (p.deployed ? ' is-deployed st-' + ps.st : '') + '" data-phase="' + esc(phase) + '">' + head + rows + offBox + '</div>';
   }
 
   function renderPlanner(d, mount) {
     if (!mount) return;
     var s = d.school;
-    mount.innerHTML = '<p class="tl-muted dep-chain-note">Numbers show each audience’s order: <b>#2 opens once #1 is done</b>, for every student. Drag to reorder or move between lanes.</p>' +
-      TL_PHASES.map(function (phase) { return planPhaseCard(s, phase); }).join('');
+    if (!TL_TAB[s.id]) TL_TAB[s.id] = tlDefaultTab(s);
+    var cur = TL_TAB[s.id];
+    var tabs = TL_PHASES.map(function (ph) {
+      var x = tlPhaseStatus(s, ph);
+      return '<button class="dep-tab' + (ph === cur ? ' on' : '') + '" role="tab" aria-selected="' + (ph === cur) + '" data-tab="' + ph + '">' + esc(ph) +
+        '<span class="dep-tab-st st-' + x.st + '">' + TL_ST_LABEL[x.st] + (x.pct != null && x.st !== 'scheduled' ? ' · ' + x.pct + '%' : '') + '</span></button>';
+    }).join('');
+    mount.innerHTML = '<div class="dep-tabs" role="tablist" aria-label="Phases">' + tabs + '</div>' + planPhaseBody(s, cur);
     wirePlanner(d, mount);
   }
 
@@ -1900,48 +1942,39 @@
   function refreshPlanner(d) {
     closeItemMenu();
     var pm = document.getElementById('dep-planner'); if (pm) renderPlanner(d, pm);
-    var tw = document.getElementById('dep-timeline'); if (tw) renderDeploymentTimeline(d, tw);
   }
 
   function openItemMenu(btn, d, s, phase, id) {
     closeItemMenu();
-    var p = tlPlan(s, phase), it = p.byId[id];
-    var moves = [['school', 'Do at school'], ['home', 'Do at home'], ['off', 'Turn off']].map(function (o) {
-      var teacherHome = o[0] === 'home' && it.aud === 'teacher', dis = (o[0] === it.mode) || teacherHome;
-      return '<button type="button" class="ui-menu-item" data-mv="' + o[0] + '"' + (dis ? ' disabled' : '') + '><i class="dep-swatch md-' + o[0] + '"></i>' + o[1] +
-        (teacherHome ? ' <small class="dep-pop-why">teachers: school only</small>' : '') + '</button>';
-    }).join('');
-    // Reorder inside the audience's chain without dragging.
-    var seq = tlRunning(p, it.aud), at = seq.indexOf(id);
-    var reorder = at < 0 ? '' : '<div class="dep-pop-sep"></div>' +
-      '<button type="button" class="ui-menu-item" data-shift="-1"' + (at <= 0 ? ' disabled' : '') + '>↑ Earlier in the chain</button>' +
-      '<button type="button" class="ui-menu-item" data-shift="1"' + (at >= seq.length - 1 ? ' disabled' : '') + '>↓ Later in the chain</button>';
+    var p = tlPlan(s, phase), it = p.byId[id], ordered = p.chain[it.aud] === 'order', q = p.seq[it.aud], at = q.indexOf(id);
+    // Where: only student direct can switch; others say why.
+    var where = TL_WHERE[it.aud].length > 1
+      ? ['school', 'home'].map(function (m) { return '<button type="button" class="ui-menu-item" data-mv="' + m + '"' + (it.mode === m ? ' disabled' : '') + '><i class="dep-swatch md-' + m + '"></i>Run ' + TL_WHERE_LABEL[m].toLowerCase() + '</button>'; }).join('')
+      : '<div class="dep-pop-note"><i class="dep-swatch md-' + it.mode + '"></i>' + esc(TL_AUD_SHORT[it.aud]) + ' assessments run ' + esc(TL_WHERE_RULE[it.aud].toLowerCase()) + '</div>';
+    var reorder = ordered && q.length > 1 ? '<div class="dep-pop-sep"></div>' +
+      '<button type="button" class="ui-menu-item" data-shift="-1"' + (at <= 0 ? ' disabled' : '') + '>↑ Earlier in the order</button>' +
+      '<button type="button" class="ui-menu-item" data-shift="1"' + (at >= q.length - 1 ? ' disabled' : '') + '>↓ Later in the order</button>' : '';
     var pop = document.createElement('div');
     pop.className = 'ui-menu dep-pop';
-    pop.innerHTML = '<div class="ui-eyebrow dep-pop-h">' + esc(it.name) + '</div>' + moves + reorder;
+    pop.innerHTML = '<div class="ui-eyebrow dep-pop-h">' + esc(it.name) + '</div>' + where + reorder +
+      '<div class="dep-pop-sep"></div><button type="button" class="ui-menu-item" data-off="1">Don’t use in ' + esc(phase) + '</button>';
     document.body.appendChild(pop);
     TL_POP = pop;
     var r = btn.getBoundingClientRect();
     pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
     pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + 'px';
     pop.addEventListener('click', function (e) {
-      var mv = e.target.closest('[data-mv]'), sh = e.target.closest('[data-shift]');
-      if (mv && !mv.hasAttribute('disabled')) { planMove(s, phase, id, mv.dataset.mv); refreshPlanner(d); }
-      else if (sh && !sh.hasAttribute('disabled')) {
-        var other = seq[at + (+sh.dataset.shift)], om = p.byId[other].mode;
-        // Swap places with the neighbour in the chain (possibly across lanes).
-        var oi = p.order[om].indexOf(other), ii = p.order[it.mode].indexOf(id);
-        p.order[om][oi] = id; p.order[it.mode][ii] = other;
-        var tmp = it.mode; it.mode = om; p.byId[other].mode = tmp;
-        if (p.deployed) tlPersistDeploy(s, phase);
-        refreshPlanner(d);
-      }
+      var mv = e.target.closest('[data-mv]'), sh = e.target.closest('[data-shift]'), of = e.target.closest('[data-off]');
+      if (mv && !mv.hasAttribute('disabled')) { tlSetMode(s, phase, id, mv.dataset.mv); refreshPlanner(d); }
+      else if (sh && !sh.hasAttribute('disabled')) { tlShift(s, phase, id, +sh.dataset.shift); refreshPlanner(d); }
+      else if (of) { tlTurnOff(s, phase, id); refreshPlanner(d); }
     });
     setTimeout(function () { document.addEventListener('mousedown', onPopOutside); document.addEventListener('keydown', onPopKey); }, 0);
   }
 
   function wirePlanner(d, mount) {
     var s = d.school, dragId = null;
+    mount.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { TL_TAB[s.id] = b.dataset.tab; renderPlanner(d, mount); }); });
 
     // Dates are the schedule — editable before and after deploying.
     mount.querySelectorAll('.dep-date').forEach(function (inp) {
@@ -1958,14 +1991,27 @@
         refreshPlanner(d);
       });
     });
+    mount.querySelectorAll('[data-chain]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.dataset.chain.split('|'), phase = b.closest('[data-phase]').dataset.phase, p = tlPlan(s, phase);
+        if (p.chain[parts[0]] === parts[1]) return;
+        p.chain[parts[0]] = parts[1]; tlSaved(s, phase);
+        toast(TL_AUD_SHORT[parts[0]] + ' · ' + phase + ': ' + (parts[1] === 'order' ? 'in order — each opens once the one before is done.' : 'any order — all open together.'));
+        refreshPlanner(d);
+      });
+    });
+    mount.querySelectorAll('[data-turnon]').forEach(function (b) {
+      b.addEventListener('click', function () { var phase = b.closest('[data-phase]').dataset.phase; tlTurnOn(s, phase, b.dataset.turnon); refreshPlanner(d); });
+    });
     mount.querySelectorAll('[data-deploy]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var phase = b.dataset.deploy, p = tlPlan(s, phase), n = p.order.school.length + p.order.home.length;
+        var phase = b.dataset.deploy, p = tlPlan(s, phase), n = tlRunningCount(p);
         var future = p.start > tlToday(s);
+        var orderLine = TL_AUD.filter(function (a) { return p.seq[a.key].length; }).map(function (a) { return TL_AUD_SHORT[a.key] + ': ' + (p.chain[a.key] === 'order' ? 'in order' : 'any order'); }).join(' · ');
         gated({ title: 'Deploy ' + phase, confirmLabel: 'Deploy phase',
           body: '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b>.</p>' +
                 '<p>' + (future ? 'It’s <b>Scheduled</b>: it goes live on <b>' + esc(fmtJoined(p.start)) + '</b>' : 'It goes live <b>now</b>') + ' and closes after <b>' + esc(fmtJoined(p.end)) + '</b>.</p>' +
-                '<p class="tl-muted">Each audience’s assessments open in the numbered order — #2 once #1 is done. Off assessments are skipped. You can change the dates later.</p>',
+                '<p class="tl-muted">' + esc(orderLine) + '. You can change the dates and order later.</p>',
           audit: { action: 'phase.deploy', entity: phase, entityType: 'phase', schoolId: s.id },
           onConfirm: function () {
             p.deployed = true; p.endedEarly = false; p.held = false;
@@ -1991,71 +2037,76 @@
       b.addEventListener('click', function (e) { e.stopPropagation(); openItemMenu(b, d, s, b.closest('[data-phase]').dataset.phase, b.dataset.menu); });
     });
 
-    // Drag to reorder within a lane, or across lanes to change where it runs.
+    // Drag to reorder inside an audience row.
     mount.querySelectorAll('.dep-node[draggable="true"]').forEach(function (nd) {
       nd.addEventListener('dragstart', function (e) { dragId = nd.dataset.item; nd.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (e2) {} });
-      nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); dragId = null; mount.querySelectorAll('.dep-lane.dragover').forEach(function (l) { l.classList.remove('dragover'); }); });
+      nd.addEventListener('dragend', function () { nd.classList.remove('dragging'); dragId = null; mount.querySelectorAll('.dragover').forEach(function (l) { l.classList.remove('dragover'); }); });
     });
-    mount.querySelectorAll('.dep-lane').forEach(function (lane) {
-      lane.addEventListener('dragover', function (e) { e.preventDefault(); lane.classList.add('dragover'); e.dataTransfer.dropEffect = 'move'; });
-      lane.addEventListener('dragleave', function (e) { if (!lane.contains(e.relatedTarget)) lane.classList.remove('dragover'); });
-      lane.addEventListener('drop', function (e) {
-        e.preventDefault(); lane.classList.remove('dragover');
+    mount.querySelectorAll('[data-drop]').forEach(function (row) {
+      row.addEventListener('dragover', function (e) {
         if (!dragId) return;
-        var parts = lane.dataset.lane.split('|'), phase = parts[0], mode = parts[1], before = null;
-        var nodes = [].slice.call(lane.querySelectorAll('.dep-node[data-item]'));
-        for (var i = 0; i < nodes.length; i++) { var r = nodes[i].getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) { before = nodes[i].dataset.item; break; } }
+        var phase = row.closest('[data-phase]').dataset.phase;
+        if (tlPlan(s, phase).byId[dragId].aud !== row.dataset.drop) return;   // stays in its own audience
+        e.preventDefault(); row.classList.add('dragover'); e.dataTransfer.dropEffect = 'move';
+      });
+      row.addEventListener('dragleave', function (e) { if (!row.contains(e.relatedTarget)) row.classList.remove('dragover'); });
+      row.addEventListener('drop', function (e) {
+        e.preventDefault(); row.classList.remove('dragover');
+        if (!dragId) return;
+        var phase = row.closest('[data-phase]').dataset.phase, before = null;
+        var nodes = [].slice.call(row.querySelectorAll('.dep-node[data-item]'));
+        for (var i = 0; i < nodes.length; i++) { var r = nodes[i].getBoundingClientRect(); if (e.clientY < r.bottom && e.clientX < r.left + r.width / 2) { before = nodes[i].dataset.item; break; } }
         if (before === dragId) before = null;
-        if (planMove(s, phase, dragId, mode, before)) refreshPlanner(d);
+        tlReorder(s, phase, dragId, before); refreshPlanner(d);
       });
     });
   }
 
-  // "+ Add assessment" — put one assessment (from Templates) into a phase.
-  // If the phase is already deployed it joins straight away, at the end of
-  // its audience's chain.
+  // "+ Add assessment" — put one assessment (from Templates) into a phase. Where
+  // it runs follows its audience; it joins the end of that audience's row.
   function openAddAssessment(d) {
     var s = d.school, latest = ORG.server.latestTemplateIds();
     var tpls = ORG.templates.filter(function (t) { return !t.archived && t.status === 'Published' && TL_AUD_KEY[t.audience]; })
       .sort(function (a, b) { return (latest[b.phase + '|' + b.audience] === b.id) - (latest[a.phase + '|' + a.audience] === a.id) || a.title.localeCompare(b.title); });
     if (!tpls.length) { toast('No published templates to add — publish one in Templates first.'); return; }
-    var phOpts = TL_PHASES.map(function (ph) { var st = tlPhaseStatus(s, ph).st; return '<option value="' + ph + '">' + ph + ' — ' + TL_ST_LABEL[st] + '</option>'; }).join('');
+    var phOpts = TL_PHASES.map(function (ph) { var st = tlPhaseStatus(s, ph).st; return '<option value="' + ph + '"' + (ph === TL_TAB[s.id] ? ' selected' : '') + '>' + ph + ' — ' + TL_ST_LABEL[st] + '</option>'; }).join('');
     var tOpts = tpls.map(function (t) { var L = latest[t.phase + '|' + t.audience] === t.id;
       return '<option value="' + esc(t.id) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(t.phase) + '">' + esc(t.title) + ' · ' + esc(t.audience) + (L ? ' · ★ Latest' : '') + '</option>'; }).join('');
-    openModal('Add assessment', '<p class="tl-muted">Add an assessment to one phase at ' + esc(s.name) + '. It goes at the end of its audience’s chain.</p><div class="tl-stack">' +
+    openModal('Add assessment', '<p class="tl-muted">Add an assessment to one phase at ' + esc(s.name) + '. It goes at the end of its audience’s row.</p><div class="tl-stack">' +
       '<label class="field">Phase<select class="select" id="aa-phase">' + phOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="aa-tpl">' + tOpts + '</select></label>' +
-      '<label class="field">Where it runs<select class="select" id="aa-mode"><option value="school">Do at school</option><option value="home">Do at home</option></select></label>' +
+      '<label class="field">Where it runs<select class="select" id="aa-mode"><option value="school">At school</option><option value="home">At home</option></select></label>' +
       '<p class="tl-muted" id="aa-note"></p></div>', function (close) {
         var phase = document.getElementById('aa-phase').value, sel = document.getElementById('aa-tpl'), o = sel.options[sel.selectedIndex];
-        var ak = TL_AUD_KEY[o.dataset.aud], mode = document.getElementById('aa-mode').value, p = tlPlan(s, phase);
-        if (ak === 'teacher') mode = 'school';
+        var ak = TL_AUD_KEY[o.dataset.aud], mode = tlFixMode(ak, document.getElementById('aa-mode').value), p = tlPlan(s, phase);
         var id = 'tpl-' + sel.value;
-        if (p.byId[id] && p.order.off.indexOf(id) < 0) { toast('That assessment is already in ' + phase + '.'); return false; }
+        if (p.seq[ak].indexOf(id) >= 0) { toast('That assessment is already in ' + phase + '.'); return false; }
         if (!p.byId[id]) p.byId[id] = { id: id, name: o.textContent.split(' · ')[0], aud: ak, mode: mode };
-        planMove(s, phase, id, mode);   // also saves a deployed phase
+        p.byId[id].mode = mode;
+        tlTurnOn(s, phase, id);   // also saves a deployed phase
         ORG.server.logAudit(me.name, 'phase.add', p.byId[id].name + ' → ' + phase, 'phase', s.id);
+        TL_TAB[s.id] = phase;
         close(); refreshPlanner(d);
-        toast(p.byId[id].name + ' added to ' + phase + (p.deployed ? ' — it’s live in the chain now.' : '.'));
+        toast(p.byId[id].name + ' added to ' + phase + (p.deployed ? ' — it’s live now.' : '.'));
       }, 'Add assessment');
     setTimeout(function () {
       var ph = document.getElementById('aa-phase'), sel = document.getElementById('aa-tpl'), md = document.getElementById('aa-mode'), note = document.getElementById('aa-note');
       function sync() {
-        var o = sel.options[sel.selectedIndex], teacher = o.dataset.aud === 'Teacher', p = tlPlan(s, ph.value);
-        md.disabled = teacher; if (teacher) md.value = 'school';
-        var n = tlRunning(p, TL_AUD_KEY[o.dataset.aud]).length;
+        var o = sel.options[sel.selectedIndex], ak = TL_AUD_KEY[o.dataset.aud], p = tlPlan(s, ph.value);
+        // Teacher → school, parent → home; only student direct can choose.
+        md.disabled = TL_WHERE[ak].length === 1; md.value = tlFixMode(ak, md.value);
+        var n = p.seq[ak].length, ordered = p.chain[ak] === 'order';
         note.textContent = (o.dataset.phase !== ph.value ? 'This template was made for ' + o.dataset.phase + '. ' : '') +
-          'It will be ' + o.dataset.aud + ' #' + (n + 1) + (n ? ', opening once #' + n + ' is done.' : ', opening first.') +
+          TL_AUD_SHORT[ak] + ' assessments run ' + TL_WHERE_RULE[ak].toLowerCase() + '. ' +
+          (ordered ? 'It will be #' + (n + 1) + (n ? ', opening once #' + n + ' is done.' : ', opening first.') : 'It opens alongside the others (any order).') +
           (p.deployed ? ' ' + ph.value + ' is already deployed, so it’s added straight away.' : '');
       }
-      // Start on the template's own phase.
-      var first = sel.options[0]; if (first) ph.value = first.dataset.phase;
-      [ph, sel].forEach(function (x) { x.addEventListener('change', sync); }); sync();
+      [ph, sel, md].forEach(function (x) { x.addEventListener('change', sync); }); sync();
     }, 0);
   }
 
   // Demo tooling (live demo school only): record some real completions —
-  // in chain order, through TilliAPI — so statuses move honestly on stage.
+  // through TilliAPI, respecting each audience's order — so statuses move honestly.
   var SIM_RATE = 0.6;   // share of students who finish their next open assessment per click
   function simulateProgress(d) {
     var s = d.school, API = window.TilliAPI, moved = 0, rnd = Math.random;
@@ -2069,41 +2120,6 @@
     });
     toast(moved ? 'Demo: recorded ' + moved + ' completion' + (moved === 1 ? '' : 's') + '.' : 'Demo: nothing to complete — deploy a phase that’s live today first.');
     refreshPlanner(d);
-  }
-
-  // Top timeline: status only, from real data (Phases → Audiences). No
-  // clicking to change status — it moves when work is actually done.
-  function renderDeploymentTimeline(d, mount) {
-    var s = d.school, nav = tlNav(s.id);
-    if (nav.level > 2) nav.level = 2;
-    var crumbs, note, rail;
-    var legend = tlLegend([['st-completed', 'Completed'], ['st-live', 'Live'], ['st-scheduled', 'Scheduled'], ['st-ended', 'Ended (not all done)'], ['st-none', 'Not deployed']]);
-    var short = function (v) { var x = fmtJoined(v).split(' '); return x.length === 3 ? x[0] + ' ' + x[1] : v; };
-
-    if (nav.level === 1) {
-      crumbs = '<span class="cur">Program phases</span>';
-      note = 'Status comes from real deployments and completions. Open a phase to see each audience.';
-      rail = tlRail(TL_PHASES.map(function (ph) {
-        var ps = tlPhaseStatus(s, ph);
-        var sub2 = ps.st === 'scheduled' ? 'Opens ' + short(ps.start) : ps.st === 'live' ? 'Until ' + short(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '%' : '')
-          : ps.st === 'ended' ? 'Ended ' + short(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '%' : '') : ps.st === 'completed' ? '100% done' : '';
-        return { label: ph, sub: TL_ST_LABEL[ps.st], sub2: sub2, cls: 'st-' + ps.st, attrs: ' data-phase="' + ph + '"', mkTitle: tlDateLine(ps) || 'Not deployed yet', navLabel: true, navTitle: 'See ' + ph + ' by audience' };
-      }));
-    } else {
-      var psx = tlPhaseStatus(s, nav.phase);
-      crumbs = '<button data-tlup="1">Program phases</button><span class="sep">›</span><span class="cur">' + esc(nav.phase) + '</span>';
-      note = esc(tlDateLine(psx) || 'Not deployed yet') + ' · per audience below.';
-      rail = tlRail(TL_AUD.map(function (a) {
-        var x = psx.auds[a.key];
-        return { label: a.label, sub: TL_ST_LABEL[x.st], sub2: x.n + ' assessment' + (x.n === 1 ? '' : 's') + ' on' + (x.pct != null ? ' · ' + x.pct + '%' : ''), cls: 'aud st-' + x.st };
-      }));
-    }
-
-    mount.innerHTML = '<div class="tl-tl"><div class="ui-crumbs tl-tl-crumbs">' + crumbs + '</div><p class="tl-tl-note">' + note + '</p>' + rail + legend + '</div>';
-    mount.querySelectorAll('[data-tlup]').forEach(function (b) { b.addEventListener('click', function () { nav.level = +b.dataset.tlup; renderDeploymentTimeline(d, mount); }); });
-    mount.querySelectorAll('[data-phase] .tl-tl-label.nav').forEach(function (b) {
-      b.addEventListener('click', function () { nav.level = 2; nav.phase = b.closest('[data-phase]').dataset.phase; renderDeploymentTimeline(d, mount); });
-    });
   }
 
   HUB.assessments = function (d, el) {
@@ -2120,14 +2136,12 @@
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
           (s.live && window.TilliAPI ? '<button class="btn btn-outline btn-sm tl-demo-btn" data-simulate title="Demo only: records completions for some students in every live phase (in chain order), so you can watch statuses move.">Demo · Simulate progress</button>' : '') +
           '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
-        '<div id="dep-timeline"></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Master Links</h3><p class="ui-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
         '<div class="mt-3"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
       '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>';
     el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
     var simB = el.querySelector('[data-simulate]'); if (simB) simB.addEventListener('click', function () { simulateProgress(d); });
-    renderDeploymentTimeline(d, el.querySelector('#dep-timeline'));
     renderPlanner(d, el.querySelector('#dep-planner'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
     slBtn.addEventListener('click', function () {
@@ -2701,11 +2715,11 @@
     var rows = list.map(function (d) {
       var s = ORG.byId(d.schoolId);
       // Rows deep-link into the Results tab, pre-filtered to that assessment.
-      return '<tr class="clickable" data-depres="' + esc(d.assessment) + '"><td class="name">' + esc(d.assessment) + (d.gamified ? ' <span class="ui-tag plain pink tl-badge-gam">Gamified</span>' : '') + '</td><td>' + (s ? esc(s.name) : '—') + '</td><td>' + esc(d.audience) + '</td><td>' + esc(d.phase) + '</td><td>' + esc(d.start + ' → ' + d.end) + '</td><td>' + (d.chain ? '⛓' : '—') + '</td><td>' + depStatusPill(d.status) + '</td></tr>';
-    }).join('') || '<tr><td colspan="7"><div class="ui-empty">No deployments in this view.</div></td></tr>';
+      return '<tr class="clickable" data-depres="' + esc(d.assessment) + '"><td class="name">' + esc(d.assessment) + (d.gamified ? ' <span class="ui-tag plain pink tl-badge-gam">Gamified</span>' : '') + '</td><td>' + (s ? esc(s.name) : '—') + '</td><td>' + esc(d.audience) + '</td><td>' + esc((d.mode || (d.audience === 'Parent' ? 'home' : 'school')) === 'home' ? 'At home' : 'At school') + '</td><td>' + esc(d.phase) + '</td><td>' + esc(d.start + ' → ' + d.end) + '</td><td>' + (d.chain ? '⛓' : '—') + '</td><td>' + depStatusPill(d.status) + '</td></tr>';
+    }).join('') || '<tr><td colspan="8"><div class="ui-empty">No deployments in this view.</div></td></tr>';
     el.innerHTML = banner +
       '<div class="row end mb-3"><button class="btn btn-primary btn-sm" data-newdep>+ New deployment</button></div>' +
-      '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Assessment</th><th>School</th><th>Audience</th><th>Phase</th><th>Window</th><th>Chain</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Assessment</th><th>School</th><th>Audience</th><th>Where</th><th>Phase</th><th>Window</th><th>Chain</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     var c = el.querySelector('#dep-clear'); if (c) c.addEventListener('click', function () { go('deployments', {}); });
     var nd = el.querySelector('[data-newdep]'); if (nd) nd.addEventListener('click', function () { openNewDeployment(null); });
     el.querySelectorAll('[data-depres]').forEach(function (b) { b.addEventListener('click', function () { go('deployments', { tab: 'results', q: b.dataset.depres }); }); });
@@ -2739,6 +2753,11 @@
     var rq = el.querySelector('#res-q'); if (rq) rq.addEventListener('input', function () { var pos = rq.selectionStart; depResults({ phase: phaseF, q: rq.value }, el); var nq = el.querySelector('#res-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
   }
 
+  // Where an audience's assessments can run: teachers at school, parents at home,
+  // student direct either. Shared by templates, New deployment and the planner.
+  var WHERE_BY_AUD = { 'Teacher': ['school'], 'Parent': ['home'], 'Direct Assessment': ['school', 'home'] };
+  function whereText(aud) { var w = WHERE_BY_AUD[aud] || ['school']; return w.length > 1 ? 'At school or home' : (w[0] === 'home' ? 'At home' : 'At school'); }
+
   // "Latest" / "Older version" — only for published, non-archived templates.
   function tplVersionBadge(t, latest) {
     if (t.archived || t.status !== 'Published') return '';
@@ -2765,7 +2784,7 @@
         '<span class="tt-badges">' + tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')) + '</span></div>' +
         '<div class="tt-title">' + esc(t.title) + '</div><div class="tt-desc">' + esc(t.desc) + '</div>' +
         '<div class="tt-meta">' + tplMetaLine(t) + '</div>' +
-        '<div class="tt-foot"><span class="tt-phase">' + esc(t.phase) + '</span><button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button></div></div>';
+        '<div class="tt-foot"><span class="tt-phase">' + esc(t.phase) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span></span><button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button></div></div>';
     }).join('');
     // The Observation Form is a first-class template (audience: Observation): a
     // shared question bank published per phase. It opens its own editor rather
@@ -3697,7 +3716,9 @@
     { id: 'phase-status', topic: 'Assessments & templates', q: 'What do Scheduled, Live, Ended and Completed mean on a phase?', screens: ['school', 'deployments'],
       a: 'They come from the phase dates and real responses — nobody sets them by hand. Scheduled = deployed but the start date is ahead. Live = inside the dates. Ended = the end date has passed but not everyone finished. Completed = every expected response is in.' },
     { id: 'chain-order', topic: 'Assessments & templates', q: 'Does the order of assessments in a phase matter?', screens: ['school'],
-      a: 'Yes. Each audience’s assessments form a chain: #2 only opens for a student once #1 is done, and so on. Drag them, or use ⋯ → Earlier / Later in the chain, to change the order. In the parent app later ones show as “Locked — opens after …”.' },
+      a: 'You choose per audience on each phase tab. In order: #2 only opens for a child once #1 is done (later ones show “Locked — opens after …” in the parent app). Any order: everything opens together. Defaults: parents any order, teachers and student direct in order. Drag, or use ⋯ → Earlier / Later, to change the order.' },
+    { id: 'where-runs', topic: 'Assessments & templates', q: 'Can an assessment run at school or at home?', screens: ['school', 'templates', 'deployments'],
+      a: 'It depends on the audience. Teacher assessments always run at school and parent assessments always at home. Only student direct assessments can be either — switch it from the assessment’s ⋯ menu.' },
     { id: 'phase-dates', topic: 'Assessments & templates', q: 'How do I schedule a phase or change its dates?', screens: ['school'],
       a: 'Set the phase’s Start and End dates on its card, then Deploy phase. It shows as Scheduled until the start date, goes Live on it, and closes after the end date. You can change both dates any time — even after deploying — and the status updates itself.' },
     { id: 'add-assessment', topic: 'Assessments & templates', q: 'What’s the difference between “Deploy phase” and “+ Add assessment”?', screens: ['school'],
@@ -3889,6 +3910,15 @@
   function askAnsSchool(s) {
     var res = ORG.results.filter(function (r) { return r.schoolId === s.id; });
     var rows = res.map(function (r) { return [esc(r.assessment), esc(r.audience), r.responses + ' / ' + r.expected, '<b>' + pct(r.completion) + '%</b>', esc(r.status)]; });
+    // Schools on the shared store: one row per deployed phase × audience, live numbers.
+    if ((s.created || s.live) && window.TilliAPI) {
+      var API = window.TilliAPI, ids = API.studentsForSchool(s.id).map(function (x) { return x.student_id; });
+      res = API.getDeployments(s.id).sort(function (a, b) { return TL_PHASES.indexOf(a.phase) - TL_PHASES.indexOf(b.phase); });
+      rows = res.map(function (d) {
+        var c = API.completionStats(s.id, d.phase, d.audience, ids);
+        return [esc(d.phase + ' · ' + (d.assessments || []).filter(function (a) { return !a.perTeacher; }).map(function (a) { return a.name; }).join(', ')), esc(d.audience), c.done + ' / ' + c.expected, '<b>' + c.pct + '%</b>', esc(d.status)];
+      });
+    }
     return '<p><b>' + esc(s.name) + '</b> is at <b>' + pct(s.completion || 0) + '%</b> completion overall (' + esc(ORG.stageMeta(s.stage).label) + ').</p>' +
       (rows.length ? askTable(['Assessment', 'Audience', 'Responses', 'Done', 'Status'], rows) : '<p>No assessments deployed here yet.</p>') +
       '<div class="tl-ask-acts">' + askLinkBtn('school', 'Open ' + s.name, { id: s.id, tab: 'assessments' }) + '</div>' + askSrc('From Deployments → Results · ' + res.length + ' deployment' + (res.length === 1 ? '' : 's'));
@@ -4279,6 +4309,8 @@
       '<p class="tl-muted tl-nd-older" id="nd-older" hidden>⚠ A newer template is published for this phase + audience. Pick the ★ Latest one unless you need the older version.</p>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="nd-aud"><option>Teacher</option><option>Parent</option><option>Direct Assessment</option></select></label>' +
       '<label class="field flex-1">Phase<select class="select" id="nd-phase"><option>Baseline</option><option>Midline</option><option>Endline</option></select></label></div>' +
+      '<label class="field">Where it runs<select class="select" id="nd-mode"><option value="school">At school</option><option value="home">At home</option></select></label>' +
+      '<p class="tl-muted tl-nd-where" id="nd-where"></p>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Start<input class="input" type="date" id="nd-start" value="' + TODAY_ISO + '"></label>' +
       '<label class="field flex-1">End<input class="input" type="date" id="nd-end" value="' + isoPlus(14) + '"></label></div>' +
       '<div class="tl-toggle-row" style="border:none;padding:4px 0"><div class="tr-body"><b>Publish now</b><span>Unpublished deployments stay Scheduled.</span></div>' + switchHtml(true, ' id="nd-pub"') + '</div>' +
@@ -4286,7 +4318,9 @@
         var sid = document.getElementById('nd-school').value;
         if (!sid) { toast('Select a school.'); return false; }
         var assess = document.getElementById('nd-assess');
-        var d = ORG.server.createDeployment({ schoolId: sid, assessment: assess.value || 'Assessment', audience: document.getElementById('nd-aud').value, phase: document.getElementById('nd-phase').value, start: document.getElementById('nd-start').value, end: document.getElementById('nd-end').value, published: document.getElementById('nd-pub').checked });
+        var ndAud = document.getElementById('nd-aud').value, ndMode = document.getElementById('nd-mode').value;
+        if ((WHERE_BY_AUD[ndAud] || []).indexOf(ndMode) < 0) ndMode = WHERE_BY_AUD[ndAud][0];
+        var d = ORG.server.createDeployment({ schoolId: sid, assessment: assess.value || 'Assessment', audience: ndAud, mode: ndMode, phase: document.getElementById('nd-phase').value, start: document.getElementById('nd-start').value, end: document.getElementById('nd-end').value, published: document.getElementById('nd-pub').checked });
         var s = ORG.byId(sid);
         ORG.server.logAudit(me.name, 'deployment.create', d.assessment + ' (' + (s ? s.name : '') + ')', 'deployment', sid);
         close(); toast('Deployment created — ' + d.status + '.');
@@ -4294,13 +4328,21 @@
       }, 'Create deployment');
     setTimeout(function () {
       var a = document.getElementById('nd-assess'); if (!a) return;
+      var aud = document.getElementById('nd-aud'), md = document.getElementById('nd-mode'), wn = document.getElementById('nd-where');
+      // Teacher → at school, parent → at home; only student direct can choose.
+      var syncWhere = function () {
+        var w = WHERE_BY_AUD[aud.value] || ['school'];
+        md.disabled = w.length === 1; if (w.indexOf(md.value) < 0) md.value = w[0];
+        wn.textContent = aud.value + ' assessments run ' + whereText(aud.value).toLowerCase() + (w.length > 1 ? ' — pick one.' : '.');
+      };
       var sync = function () {
         var o = a.options[a.selectedIndex]; if (!o) return;
-        if (o.dataset.aud) document.getElementById('nd-aud').value = o.dataset.aud;
+        if (o.dataset.aud) aud.value = o.dataset.aud;
         if (o.dataset.phase) document.getElementById('nd-phase').value = o.dataset.phase;
         document.getElementById('nd-older').hidden = o.dataset.latest !== '0';
+        syncWhere();
       };
-      a.addEventListener('change', sync); sync();
+      a.addEventListener('change', sync); aud.addEventListener('change', syncWhere); sync();
     }, 0);
   }
 

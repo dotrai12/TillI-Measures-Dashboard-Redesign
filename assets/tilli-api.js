@@ -262,6 +262,220 @@
     return write(db);
   }
 
+  /* ---------- four fully-populated demo schools ----------
+     Real roster, teachers, parents, deployments, completions and teacher
+     self-reports in this shared store, so every app tells the same story:
+       banyan-tree   all phases — Baseline + Midline ended, Endline live now
+       lotus-valley  Baseline ended, Midline live, Endline not deployed
+       kandy-hill    Baseline live only
+       colombo-kids  Baseline, Midline and Endline all scheduled (future)
+     Dates are relative to the day it seeds. Runs once per browser
+     (db.heroSeedVer) — bump HERO_SEED_VER to re-seed. Logins: Demo-Logins.md. */
+  var HERO_SEED_VER = 1;
+  var HERO_SECTION_SIZE = 14;   // children per class (kept small: every lookup re-reads the store)
+  var HERO_PHASES = ['Baseline', 'Midline', 'Endline'];
+  var HERO_WIN = { Baseline: 'baseline', Midline: 'mid', Endline: 'post' };
+  // Same ids/names the platform-admin planner uses, so its cards line up.
+  var HERO_ITEMS = {
+    Baseline: { Teacher: [['baselineteacher0', 'Pre-training', 1], ['baselineteacher1', 'Post-training', 1], ['baselineteacher2', 'Teacher observational report on student foundational skills']],
+      Parent: [['baselineparent0', 'Home SEL Survey']], 'Direct Assessment': [['baselinedirect0', 'IDELA'], ['baselinedirect1', 'Hearts & Flowers']] },
+    Midline: { Teacher: [['midlineteacher0', 'SEL Observation'], ['midlineteacher1', 'EF Observation']],
+      Parent: [['midlineparent0', 'Home SEL Survey'], ['midlineparent1', 'Routines Report']], 'Direct Assessment': [['midlinedirect0', 'EMT 1'], ['midlinedirect1', 'EMT 2']] },
+    Endline: { Teacher: [['endlineteacher0', 'SEL Observation'], ['endlineteacher1', 'EF Observation']],
+      Parent: [['endlineparent0', 'Home SEL Survey'], ['endlineparent1', 'Routines Report']], 'Direct Assessment': [['endlinedirect0', 'EMT 1'], ['endlinedirect1', 'EMT 2']] },
+  };
+  // plan: phase → [start offset days, end offset days, share of students done]
+  var HERO_SCHOOLS = [
+    { id: 'banyan-tree', name: 'Banyan Tree School', code: 'BNYN-7712', board: 'ICSE', city: 'Chennai', country: 'India', group_id: 'g-vidya',
+      domain: 'banyantree.edu', prefix: 'BT', admin: ['Suresh Raman', 'suresh.r@banyantree.edu'],
+      classes: [['Grade 1', 'A'], ['Grade 1', 'B'], ['Grade 2', 'A'], ['Grade 3', 'A']],
+      plan: { Baseline: [-150, -125, 0.94], Midline: [-75, -50, 0.88], Endline: [-8, 14, 0.45] } },
+    { id: 'lotus-valley', name: 'Lotus Valley School', code: 'LOTS-3390', board: 'CBSE', city: 'Gurugram', country: 'India', group_id: 'g-metro',
+      domain: 'lotusvalley.edu', prefix: 'LV', admin: ['Pooja Malhotra', 'pooja.m@lotusvalley.edu'],
+      classes: [['Kindergarten', 'A'], ['Grade 1', 'A'], ['Grade 2', 'A'], ['Grade 2', 'B']],
+      plan: { Baseline: [-95, -70, 0.9], Midline: [-6, 16, 0.5] } },
+    { id: 'kandy-hill', name: 'Kandy Hill School', code: 'KNDY-8890', board: 'National', city: 'Kandy', country: 'Sri Lanka', group_id: 'g-lanka',
+      domain: 'kandyhill.lk', prefix: 'KH', admin: ['Nuwan Bandara', 'nuwan.b@kandyhill.lk'],
+      classes: [['Grade 1', 'A'], ['Grade 2', 'A'], ['Grade 3', 'A'], ['Grade 4', 'A']],
+      plan: { Baseline: [-5, 17, 0.42] } },
+    { id: 'colombo-kids', name: 'Colombo Kids Academy', code: 'CLMB-6604', board: 'Cambridge', city: 'Colombo', country: 'Sri Lanka', group_id: 'g-lanka',
+      domain: 'colombokids.lk', prefix: 'CK', admin: ['Dilani Perera', 'dilani.p@colombokids.lk'],
+      classes: [['Kindergarten', 'A'], ['Grade 1', 'A'], ['Grade 1', 'B'], ['Grade 2', 'A']],
+      plan: { Baseline: [12, 33, 0], Midline: [100, 121, 0], Endline: [190, 211, 0] } },
+  ];
+  var HERO_FIRST_F = ['Aanya', 'Diya', 'Ira', 'Kavya', 'Meera', 'Navya', 'Riya', 'Saanvi', 'Tara', 'Zara', 'Dinithi', 'Sanduni', 'Hiruni', 'Nethmi'];
+  var HERO_FIRST_M = ['Aarav', 'Arjun', 'Dhruv', 'Ishaan', 'Kabir', 'Reyansh', 'Vihaan', 'Yash', 'Advik', 'Kian', 'Kaveen', 'Thisal', 'Sehan', 'Dinuka'];
+  var HERO_LAST = ['Sharma', 'Iyer', 'Nair', 'Menon', 'Reddy', 'Rao', 'Shah', 'Desai', 'Pillai', 'Verma', 'Perera', 'Fernando', 'Silva', 'Jayasuriya', 'Wickramasinghe', 'Bandara'];
+  var HERO_TEACHERS = ['Anita', 'Deepa', 'Farah', 'Kavitha', 'Lakshmi', 'Nalini', 'Priya', 'Revathi', 'Shalini', 'Geetha', 'Ishara', 'Nadeesha', 'Tharushi', 'Chamari', 'Rohan', 'Vikram'];
+  var HERO_TEXT = ['Children who name their feelings settle faster after recess.', 'Group work helps the quieter ones speak up.', 'I want more short calm-down routines.', 'Morning check-ins have made a real difference.', 'Some days the class is restless after lunch.'];
+  var DAY_MS = 86400000;
+
+  function heroISO(ms){ var t = new Date(ms), p = function(x){ return (x<10?'0':'')+x; }; return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate()); }
+  // Pre/Post-training survey answers keyed like the reflection bank (q01–q10).
+  function heroReflection(R){
+    var a = {};
+    (DEFAULT_REFLECTION.questions || []).forEach(function(q){
+      if (q.type === 'scale') a[q.id] = 2 + Math.floor(R() * 4);
+      else if (q.type === 'choice') a[q.id] = q.options[1 + Math.floor(R() * (q.options.length - 1))];
+      else a[q.id] = HERO_TEXT[Math.floor(R() * HERO_TEXT.length)];
+    });
+    return a;
+  }
+  function seedHeroSchools(db){
+    var now = Date.now();
+    if (!db.selfReports) db.selfReports = {};
+    var accts = {}; try { accts = JSON.parse(localStorage.getItem('tilliMeasures.accounts') || '{}') || {}; } catch (e) {}
+    var team = { email: 'team@tilli.org', name: 'Tilli Team', role: 'tilli' };
+
+    HERO_SCHOOLS.forEach(function(H){
+      if (db.schools[H.id]) return;   // never overwrite a school that's already in the store
+      var R = schoolRng(H.id + ':hero'), id = H.id;
+      var firstStart = Math.min.apply(null, HERO_PHASES.filter(function(ph){ return H.plan[ph]; }).map(function(ph){ return H.plan[ph][0]; }));
+      var created = now + (firstStart - 30) * DAY_MS;
+      db.schools[id] = { school_id: id, name: H.name, board: H.board, city: H.city, country: H.country,
+        verified: true, status: 'active', claimMethod: 'code', joinCode: makeJoinCode(id), code: H.code,
+        source: 'created', seeded: true, createdAt: created, group_id: H.group_id };
+      var admin = { name: H.admin[0], email: low(H.admin[1]), role: 'admin' };
+      db.adminMemberships.push({ user_id: admin.email, school_id: id, role: 'admin', name: admin.name, status: 'active' });
+      db.staff[id] = [{ name: admin.name, email: admin.email, role: 'coordinator', section_id: null }];
+      db.deployments[id] = {}; db.completions[id] = {}; db.selfReports[id] = {};
+      if (db.createdSchools.indexOf(id) < 0) db.createdSchools.push(id);
+
+      // Classes: one teacher each; students with a parent each.
+      var usedT = {}, classes = H.classes.map(function(c, ci){
+        var secId = 'sec_' + id + '_' + slugify(c[0] + '_' + c[1]);
+        var tn; do { tn = HERO_TEACHERS[Math.floor(R() * HERO_TEACHERS.length)] + ' ' + HERO_LAST[Math.floor(R() * HERO_LAST.length)]; } while (usedT[tn]);
+        usedT[tn] = 1;
+        var teacher = { name: tn, email: tn.toLowerCase().replace(/\s+/g, '.') + '@' + H.domain, role: 'teacher' };
+        db.sections[secId] = { section_id: secId, school_id: id, grade: c[0], section: c[1], name: c[0] + ' ' + c[1], teacherId: teacher.email };
+        db.teacherMemberships.push({ user_id: teacher.email, school_id: id, section_ids: [secId], status: 'active' });
+        db.staff[id].push({ name: tn, email: teacher.email, role: 'teacher', section_id: secId });
+        var kids = [];
+        for (var k = 0; k < HERO_SECTION_SIZE; k++){
+          var girl = R() < 0.5, first = (girl ? HERO_FIRST_F : HERO_FIRST_M)[Math.floor(R() * 14)], last = HERO_LAST[Math.floor(R() * HERO_LAST.length)];
+          var adm = H.prefix + '-' + (1001 + ci * 100 + k);
+          // The first two children of the first class belong to the demo parents.
+          var pEmail = ci === 0 && k < 2 ? 'parent' + (k + 1) + '@' + H.domain : 'parent.' + adm.toLowerCase() + '@example.com';
+          var rec = { student_id: up(adm), school_id: id, section_id: secId, first: first, last: last, name: first + ' ' + last,
+            grade: c[0], section: c[1], gender: girl ? 'f' : 'm', dob: makeDob(adm, c[0]), claimCode: makeClaimCode(adm),
+            uid: makeUid(id, adm), parentName: HERO_FIRST_F[Math.floor(R() * 14)] + ' ' + last, parentEmail: pEmail,
+            status: 'active', source: 'seed', createdAt: created };
+          db.students[keyOf(id, adm)] = rec;
+          db.parentLinks.push({ parent_user_id: pEmail, school_id: id, student_id: up(adm), status: 'active', verified_at: created + 5 * DAY_MS });
+          if (ci === 0 && k < 2) accts[pEmail] = true;   // returning parent login on the landing page
+          kids.push(rec);
+        }
+        // One teacher per school lags behind — a realistic follow-up case.
+        return { secId: secId, teacher: teacher, kids: kids, pace: ci === H.classes.length - 1 ? 0.35 : 1 };
+      });
+
+      // Deployments + completions, phase by phase.
+      var history = [], obsByTeacher = {};
+      classes.forEach(function(cl){
+        history.push({ at: created + 3 * DAY_MS, school_id: id, section_id: cl.secId, section_name: db.sections[cl.secId].name,
+          students: cl.kids.map(function(r){ return { id: r.student_id, name: r.name }; }), kind: 'student', action: 'student.add',
+          changes: [{ label: 'Source', from: '', to: 'CSV import' }], items: [], actor: admin });
+        obsByTeacher[cl.teacher.email] = { baseline: {}, mid: {}, post: {} };
+      });
+      HERO_PHASES.forEach(function(ph){
+        var pl = H.plan[ph]; if (!pl) return;
+        var start = now + pl[0] * DAY_MS, end = now + pl[1] * DAY_MS, rate = pl[2];
+        var open = start <= now, liveNow = open && end >= now, upto = Math.min(now, end);
+        Object.keys(HERO_ITEMS[ph]).forEach(function(aud){
+          var items = HERO_ITEMS[ph][aud].map(function(x){ return x[2] ? { id: x[0], name: x[1], perTeacher: true } : { id: x[0], name: x[1] }; });
+          db.deployments[id][ph + '|' + aud] = { phase: ph, audience: aud, deployed: true, status: 'Live', window: heroISO(start) + ' → ' + heroISO(end),
+            start: heroISO(start), end: heroISO(end), assessments: items, deployedAt: start - 7 * DAY_MS, endedAt: null };
+          history.push({ at: start - 7 * DAY_MS, school_id: id, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'phase.deploy',
+            phase: ph, audience: aud, changes: [{ label: 'Window', from: '', to: heroISO(start) + ' → ' + heroISO(end) }], items: items.map(function(x){ return x.name; }), actor: team });
+          if (!open) return;
+          var perStudent = items.filter(function(x){ return !x.perTeacher; });
+          classes.forEach(function(cl, ci){
+            var done = [];
+            cl.kids.forEach(function(r, k){
+              var u = R(), n;
+              // Demo children: #1 has done everything; #2 hasn't started the live phase.
+              if (ci === 0 && k === 0) n = perStudent.length;
+              else if (ci === 0 && k === 1) n = liveNow ? 0 : perStudent.length;
+              else if (aud === 'Teacher') n = u < rate * cl.pace ? perStudent.length : 0;   // a teacher rates a child in one go
+              else n = u < rate ? perStudent.length : (u < rate + 0.15 && perStudent.length > 1 ? 1 : 0);   // part-way through the chain
+              if (!n) return;
+              var at = start + Math.floor(R() * Math.max(DAY_MS, upto - start));
+              var by = aud === 'Parent' ? r.parentEmail : cl.teacher.email;
+              perStudent.slice(0, n).forEach(function(x, xi){ db.completions[id][ph + '|' + aud + '|' + r.student_id + '|' + x.id] = { by: low(by), at: at + xi * 3600000 }; });
+              if (aud === 'Teacher') obsByTeacher[cl.teacher.email][HERO_WIN[ph]][r.student_id] = at;
+              done.push({ id: r.student_id, name: r.name });
+            });
+            if (done.length) history.push({ at: upto - Math.floor(R() * 2 * DAY_MS), school_id: id, section_id: cl.secId, section_name: db.sections[cl.secId].name,
+              students: done, kind: 'assessment', action: 'assessment.complete', phase: ph, audience: aud, changes: [], items: perStudent.map(function(x){ return x.name; }),
+              actor: aud === 'Parent' ? { email: 'parents', name: 'Parents', role: 'parent' } : { email: cl.teacher.email, name: cl.teacher.name, role: 'teacher' } });
+          });
+        });
+      });
+
+      // Teacher self-report (Pre / Post-training) + each teacher's own saved app state.
+      var base = H.plan.Baseline, baseEnded = base && now + base[1] * DAY_MS < now, baseOpen = base && now + base[0] * DAY_MS <= now;
+      classes.forEach(function(cl, ci){
+        var t = cl.teacher, joined = created + (6 + ci) * DAY_MS, reps = [];
+        var pre = heroReflection(R);
+        reps.push({ kind: 'pre', at: joined, answers: pre });
+        // Post-training once Baseline's over (the lagging teacher hasn't); one early bird while it's live.
+        if ((baseEnded && cl.pace === 1) || (baseOpen && !baseEnded && ci === 0)) reps.push({ kind: 'post', at: Math.min(now, now + (base[0] + 10) * DAY_MS), answers: heroReflection(R) });
+        db.selfReports[id][t.email] = reps;
+        history.push({ at: joined, school_id: id, section_id: cl.secId, section_name: db.sections[cl.secId].name, students: [], kind: 'assessment', action: 'assessment.complete',
+          phase: 'Baseline', audience: 'Teacher', changes: [], items: ['Pre-training'], actor: { email: t.email, name: t.name, role: 'teacher' } });
+        var key = 'tilliMeasures.teacher.' + t.email;
+        if (localStorage.getItem(key) != null) return;   // keep any real progress
+        var gi = ['Pre-school', 'Pre-Kindergarten', 'UKG', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'].indexOf(db.sections[cl.secId].grade), sec = db.sections[cl.secId];
+        var observations = {};
+        Object.keys(obsByTeacher[t.email]).forEach(function(w){
+          var m = obsByTeacher[t.email][w], o = {};
+          Object.keys(m).forEach(function(adm){
+            var ratings = {}; for (var q = 1; q <= 21; q++) ratings['q' + (q < 10 ? '0' : '') + q] = R() < 0.05 ? 'na' : 2 + Math.floor(R() * 3);
+            o[adm] = { ratings: ratings, at: new Date(m[adm]).toISOString() };
+          });
+          if (Object.keys(o).length) observations[w] = o;
+        });
+        var secsSel = {}; secsSel[gi + '-' + sec.section] = true; var gradesSel = {}; gradesSel[gi] = true;
+        try { localStorage.setItem(key, JSON.stringify({
+          email: t.email, school: id, onboarded: true, joinedAt: new Date(joined).toISOString(), completedAt: new Date(joined).toISOString(),
+          demo: { step: 4, name: t.name, gender: 'Female', age: String(28 + Math.floor(R() * 15)), years: String(3 + Math.floor(R() * 12)), edu: "Bachelor's degree",
+            school: H.name, country: H.country, city: H.city, countryOpen: false, cityOpen: false, gradesSel: gradesSel, secs: secsSel,
+            subjects: { 'Language': true, 'Social-Emotional Learning (SEL)': true }, resSuff: 'Mostly sufficient', resources: { 'Books': true, 'Teaching materials': true } },
+          selfAnswers: reps[reps.length - 1].answers,
+          reflections: reps.map(function(x, i){ return { id: 'r' + id.slice(0, 3) + ci + i, kind: x.kind, label: x.kind === 'pre' ? 'Pre-training' : 'Post-training', at: new Date(x.at).toISOString(), answers: x.answers }; }),
+          roster: { method: null, grade: '', first: '', last: '', adm: '', note: null, issues: {}, csvMsg: '', picMsg: '',
+            students: cl.kids.map(function(r){ return { first: r.first, last: r.last, adm: r.student_id, grade: r.grade, section: r.section, uid: r.uid }; }),
+            groups: [{ gs: sec.grade + ' · Section ' + sec.section, rows: cl.kids.map(function(r){ return { first: r.first, last: r.last, adm: r.student_id }; }) }] },
+          observations: observations, obsDrafts: {} })); } catch (e) {}
+      });
+      history.forEach(function(e, i){ e.id = 'h_hero_' + id + '_' + i; db.history.push(e); });
+    });
+    db.history.sort(function(a, b){ return a.at - b.at; });
+    if (db.history.length > HISTORY_CAP) db.history.splice(0, db.history.length - HISTORY_CAP);
+    try { localStorage.setItem('tilliMeasures.accounts', JSON.stringify(accts)); } catch (e) {}
+  }
+
+  /* ---------- teacher self-report (Pre / Post-training), per teacher ----------
+     Shared so the admin views can see who has done it. The teacher app mirrors
+     each new reflection here; Pre/Post-training items (perTeacher) count per
+     teacher, not per student. */
+  function saveSelfReport(schoolId, email, kind, answers){
+    if (!schoolId || !email) return false;
+    var db = getDB(); if (!db.selfReports) db.selfReports = {};
+    var bySchool = db.selfReports[schoolId] || (db.selfReports[schoolId] = {});
+    (bySchool[low(email)] = bySchool[low(email)] || []).push({ kind: kind, at: Date.now(), answers: clone(answers || {}) });
+    write(db); return true;
+  }
+  // → { email: { pre: ms|null, post: ms|null, count } } for a school.
+  function selfReportsFor(schoolId){
+    var db = getDB(), m = (db.selfReports && db.selfReports[schoolId]) || {}, out = {};
+    Object.keys(m).forEach(function(e){
+      var last = function(k){ var x = m[e].filter(function(r){ return r.kind === k; }).slice(-1)[0]; return x ? x.at : null; };
+      out[e] = { pre: last('pre'), post: last('post'), count: m[e].length };
+    });
+    return out;
+  }
+
   function getDB(){
     var db = read() || seedFromSchool();
     // Lazy migration: stores written before the invitation/accounts feature
@@ -282,6 +496,9 @@
     // events) without bumping SEED_VER. Same pass backfills the demo school's
     // real staff memberships so history (and every role check) can scope them.
     if (!db.history){ backfillSeedMemberships(db); seedHistory(db); write(db); }
+    if (!db.selfReports){ db.selfReports = {}; write(db); }
+    // The four fully-populated demo schools (after history, which re-seeds itself).
+    if (db.heroSeedVer !== HERO_SEED_VER){ seedHeroSchools(db); db.heroSeedVer = HERO_SEED_VER; write(db); }
     return db;
   }
 
@@ -909,7 +1126,8 @@
     return db.teacherMemberships.filter(function(m){ return m.school_id===schoolId && m.status==='active'; }).map(function(m){
       var acct = db.accounts && db.accounts[m.user_id];
       var t = seed.find(function(x){ return low(x.email)===m.user_id; });
-      return { email:m.user_id, name:(acct && acct.name) || (t && t.name) || m.user_id, section_ids:(m.section_ids||[]).slice() };
+      var st = (db.staff[schoolId] || []).find(function(x){ return low(x.email)===m.user_id; });
+      return { email:m.user_id, name:(acct && acct.name) || (st && st.name) || (t && t.name) || m.user_id, section_ids:(m.section_ids||[]).slice() };
     });
   }
   // Unscoped roster for portfolio / coordinator DISPLAY (not a security path —
@@ -979,6 +1197,8 @@
       phase:phase, audience:audience, deployed:true, status:'Live',
       window:opts.window||'', start:opts.start||'', end:opts.end||'',
       assessments:(opts.assessments||[]).slice(),
+      // In order (true) / any order (false); unset = the audience default (see isChained).
+      chained: typeof opts.chained === 'boolean' ? opts.chained : (prev ? prev.chained : undefined),
       deployedAt:Date.now(), endedAt:null,
     };
     // The planner re-saves every lane on each deploy, so only log real changes.
@@ -986,6 +1206,8 @@
     var ch = [];
     if (!prev || prev.window !== cur.window) ch.push({ label:'Window', from: prev ? prev.window : '', to: cur.window });
     if (!prev || names(prev) !== names(cur)) ch.push({ label:'Assessments', from: prev ? names(prev) : '', to: names(cur) });
+    var ord = function(d){ return isChained(d) ? 'In order' : 'Any order'; };
+    if (prev && ord(prev) !== ord(cur)) ch.push({ label:'Order', from: ord(prev), to: ord(cur) });
     if (prev && prev.status !== 'Live') ch.push({ label:'Status', from: prev.status, to:'Live' });
     if (ch.length) logHistory(db, phaseEvent(db, schoolId, prev && prev.status === 'Live' ? 'phase.update' : 'phase.deploy', phase, audience, ch));
     write(db);
@@ -1019,14 +1241,19 @@
       return d.audience===audience && (opts.includeEnded ? true : d.status==='Live');
     });
   }
-  // Chain: in a lane, assessment N opens only once every earlier one is done
-  // for that student. → [{ id, name, state:'done'|'open'|'locked', after }]
+  // A lane is "in order" unless set to any order. Default when never set:
+  // parents any order (independent check-ins), everyone else in order.
+  function isChained(d){ return d && (d.chained == null ? d.audience !== 'Parent' : !!d.chained); }
+  // Chain: in an in-order lane, assessment N opens only once every earlier one
+  // is done for that student; in an any-order lane everything is open.
+  // → [{ id, name, state:'done'|'open'|'locked', after }]
   function chainFor(schoolId, phase, audience, studentId){
     var db = getDB(); var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
-    var list = (dep && dep.assessments) || [], prevDone = true;
+    // Per-teacher items (the teacher's own Pre/Post-training survey) aren't part of a child's chain.
+    var list = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; }), prevDone = true, comp = db.completions[schoolId] || {}, ordered = isChained(dep);
     return list.map(function(a, i){
-      var done = isComplete(schoolId, phase, audience, studentId, a.id);
-      var st = done ? 'done' : (prevDone ? 'open' : 'locked');
+      var done = !!comp[compKey(phase, audience, studentId, a.id)];
+      var st = done ? 'done' : (prevDone || !ordered ? 'open' : 'locked');
       prevDone = prevDone && done;
       return { id:a.id, name:a.name||a.id, state:st, after: i ? (list[i-1].name||list[i-1].id) : null };
     });
@@ -1041,6 +1268,8 @@
     if (lane){
       var st = effectiveStatus(lane);
       if (st !== 'Live') return { error: st === 'Scheduled' ? 'not_open' : 'closed', status: st };
+      var item = (lane.assessments||[]).find(function(x){ return x.id===assessId; });
+      if (item && item.perTeacher) return true;   // counted per teacher via saveSelfReport, not per child
       var link = chainFor(schoolId, phase, audience, studentId).find(function(x){ return x.id===assessId; });
       if (link && link.state === 'locked') return { error: 'locked', after: link.after };
     }
@@ -1072,11 +1301,12 @@
   function completionStats(schoolId, phase, audience, studentIds){
     var db = getDB();
     var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
-    var assessments = (dep && dep.assessments) || [];
-    var ids = studentIds || [];
+    // Per-student items only — a teacher's own Pre/Post-training survey is counted per teacher (selfReportsFor).
+    var assessments = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; });
+    var ids = studentIds || [], comp = db.completions[schoolId] || {};
     var expected = ids.length * assessments.length;
     var done = 0;
-    ids.forEach(function(sid){ assessments.forEach(function(a){ if (isComplete(schoolId, phase, audience, sid, a.id)) done++; }); });
+    ids.forEach(function(sid){ assessments.forEach(function(a){ if (comp[compKey(phase, audience, sid, a.id)]) done++; }); });
     return { done:done, expected:expected, pct: expected ? Math.round(done*100/expected) : 0,
       assessments:assessments.length, students:ids.length,
       status: effectiveStatus(dep), start: dep ? dep.start : '', end: dep ? dep.end : '' };
@@ -1516,6 +1746,7 @@
     endPhase: endPhase,
     undeployPhase: undeployPhase,
     getDeployments: getDeployments, effectiveStatus: effectiveStatus, chainFor: chainFor,
+    saveSelfReport: saveSelfReport, selfReportsFor: selfReportsFor,
     deploymentsFor: deploymentsFor,
     markComplete: markComplete,
     isComplete: isComplete,

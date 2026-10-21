@@ -289,9 +289,28 @@
   function hydrateCreatedSchools() {
     if (!window.TilliAPI || !window.TilliAPI.listSchools) return;
     window.TilliAPI.listSchools().forEach(function (api) {
-      if (api.source !== 'created' || byId(api.school_id)) return;
-      SCHOOLS.unshift(buildOrgRecordFromApi(api));
+      if (api.source !== 'created') return;
+      var hero = byId(api.school_id);
+      if (!hero) { SCHOOLS.unshift(buildOrgRecordFromApi(api)); return; }
+      // A portfolio school that now has full data in the shared store (the
+      // seeded demo schools): take its roster, staff and structure from the
+      // store, keep its portfolio identity (type, stage, outcomes, joined).
+      if (!api.seeded) return;
+      var rec = buildOrgRecordFromApi(api);
+      ['live', 'created', 'seeded', 'students', 'staff', 'coordinator', 'joinCode', 'structure', 'gradeCount', 'sectionCount'].forEach(function (k) { hero[k] = rec[k]; });
+      hero.seeded = true; hero.completion = apiCompletion(api.school_id);
+      SEEDED_IDS[api.school_id] = 1;
     });
+  }
+  var SEEDED_IDS = {};
+  // Overall completion across phases that have opened (per-student items).
+  function apiCompletion(id) {
+    var API = window.TilliAPI, ids = API.studentsForSchool(id).map(function (x) { return x.student_id; }), done = 0, exp = 0;
+    API.getDeployments(id).forEach(function (d) {
+      if (d.status === 'Scheduled') return;
+      var c = API.completionStats(id, d.phase, d.audience, ids); done += c.done; exp += c.expected;
+    });
+    return exp ? Math.round(done * 100 / exp) : 0;
   }
 
   // ============================================================
@@ -458,7 +477,8 @@
     deps.forEach(function (d) { d.status = deriveDeploymentStatus(d); });
     return deps;
   }
-  var DEPLOYMENTS = buildDeployments();
+  // Seeded schools deploy through the shared store — drop their old portfolio rows.
+  var DEPLOYMENTS = buildDeployments().filter(function (d) { return !SEEDED_IDS[d.schoolId]; });
 
   // ---- Observation Form (§6.2): shared question bank + phase publish state + per-school access ----
   var SEL_SKILLS = ['Self-Awareness', 'Self-Management', 'Social Awareness', 'Relationship Skills', 'Responsible Decisions', 'Working Memory', 'Inhibitory Control', 'Cognitive Flexibility'];
@@ -952,7 +972,8 @@
   function createDeployment(d) {
     var dep = { id: 'dep-' + Date.now(), schoolId: d.schoolId, assessment: d.assessment, audience: d.audience,
       phase: d.phase, type: d.type || 'Observation', start: d.start, end: d.end,
-      published: d.published !== false, chain: !!d.chain, gamified: !!d.gamified };
+      published: d.published !== false, chain: !!d.chain, gamified: !!d.gamified,
+      mode: d.mode || (d.audience === 'Parent' ? 'home' : 'school') };
     dep.status = deriveDeploymentStatus(dep);
     DEPLOYMENTS.unshift(dep);
     return dep;

@@ -1198,9 +1198,18 @@
   }
   // Reflection-only run (e.g. the post-training survey): save a new snapshot
   // and go back to the profile, where the Mirror shows it.
+  // Mirror a self-report into the shared store so the admin views can see it
+  // (the full answers stay in this teacher's own saved state too).
+  function shareSelfReport(kind) {
+    try {
+      const A = window.TilliAPI, sc = A && A.resolveSchool ? A.resolveSchool(ctx.school) : null;
+      if (sc && A.saveSelfReport) A.saveSelfReport(sc.school_id, ctx.email, kind, state.selfAnswers);
+    } catch (e) {}
+  }
   function finishReflectionOnly() {
     const ro = state.reflectOnly;
     state.reflections = state.reflections.concat([snapshot(ro.kind, state.selfAnswers)]);
+    shareSelfReport(ro.kind);
     state.reflectOnly = null;
     state.startNav = 'profile';
     persist();
@@ -1212,7 +1221,9 @@
     if (!state.joinedAt) state.joinedAt = now;   // first completion only — redo keeps it
     // The first finished setup is the first mirror; a full "Redo reflection" adds one.
     if (Object.keys(state.selfAnswers).length && (state.replaying || !state.reflections.length)) {
-      state.reflections = state.reflections.concat([snapshot(state.reflections.length ? 'retake' : 'pre', state.selfAnswers, now)]);
+      const kind = state.reflections.length ? 'retake' : 'pre';
+      state.reflections = state.reflections.concat([snapshot(kind, state.selfAnswers, now)]);
+      shareSelfReport(kind);
     }
     if (state.replaying) state.startNav = 'profile';
     state.replaying = false;
