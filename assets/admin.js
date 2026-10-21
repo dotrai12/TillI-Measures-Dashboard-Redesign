@@ -101,8 +101,10 @@
         var done = live.reduce(function (a, c) { return a + c.done; }, 0);
         var exp = live.reduce(function (a, c) { return a + c.expected; }, 0);
         var overall = exp ? Math.round(done * 100 / exp) : null;
+        var sched = live.filter(function (c) { return c.status === 'Scheduled'; })[0];
         var tag = !live.length ? '<span class="ui-chip">Not deployed</span>'
           : live.some(function (c) { return c.status === 'Live'; }) ? '<span class="ui-chip ok">Live</span>'
+          : sched ? '<span class="ui-chip info">Scheduled · opens ' + esc(sched.start || '') + '</span>'
           : '<span class="ui-chip muted">Ended</span>';
         return '<tr><td><b>' + esc(phase) + '</b> ' + tag + '</td>' +
           AUDS.map(function (a) { return laneCell(phase, a.k); }).join('') +

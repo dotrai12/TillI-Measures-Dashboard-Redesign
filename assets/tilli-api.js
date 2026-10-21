@@ -955,6 +955,18 @@
      NEW — ASSESSMENT DEPLOYMENT + COMPLETION  (the end of the flow)
      ====================================================================== */
   function depKey(phase, audience){ return phase + '|' + audience; }
+  // Status every app sees is worked out from the window, not stored:
+  // Scheduled before the start date, Live during it, Ended after the end date
+  // (or once ended by hand). The stored status stays 'Live' / 'Ended'.
+  function todayLocalISO(){ var t=new Date(), p=function(x){ return (x<10?'0':'')+x; }; return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate()); }
+  function effectiveStatus(d){
+    if (!d) return 'Not deployed';
+    if (d.status==='Ended') return 'Ended';
+    var t = todayLocalISO();
+    if (d.start && t < d.start) return 'Scheduled';
+    if (d.end && t > d.end) return 'Ended';
+    return 'Live';
+  }
   function compKey(phase, audience, studentId, assessId){ return phase + '|' + audience + '|' + up(studentId) + '|' + assessId; }
 
   // Platform Admin deploys one phase/audience lane (Baseline|Teacher, etc.).
@@ -997,19 +1009,41 @@
   }
   function getDeployments(schoolId){
     var db = getDB(); var m = db.deployments[schoolId]||{};
-    return Object.keys(m).map(function(k){ return Object.assign({}, m[k]); });
+    return Object.keys(m).map(function(k){ return Object.assign({}, m[k], { status: effectiveStatus(m[k]) }); });
   }
-  // What a teacher/parent should see: live (or ended) lanes for their audience.
+  // What a teacher/parent should see: live lanes for their audience
+  // (includeEnded → every deployed lane, Scheduled and Ended too).
   function deploymentsFor(schoolId, audience, opts){
     opts = opts||{};
     return getDeployments(schoolId).filter(function(d){
       return d.audience===audience && (opts.includeEnded ? true : d.status==='Live');
     });
   }
+  // Chain: in a lane, assessment N opens only once every earlier one is done
+  // for that student. → [{ id, name, state:'done'|'open'|'locked', after }]
+  function chainFor(schoolId, phase, audience, studentId){
+    var db = getDB(); var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    var list = (dep && dep.assessments) || [], prevDone = true;
+    return list.map(function(a, i){
+      var done = isComplete(schoolId, phase, audience, studentId, a.id);
+      var st = done ? 'done' : (prevDone ? 'open' : 'locked');
+      prevDone = prevDone && done;
+      return { id:a.id, name:a.name||a.id, state:st, after: i ? (list[i-1].name||list[i-1].id) : null };
+    });
+  }
 
   // A teacher/parent/student finishes one assessment item for one student.
   function markComplete(schoolId, phase, audience, studentId, assessId, byEmail){
     var db = getDB();
+    // Only inside the open window, and only in chain order. (No deployment =
+    // nothing to check — the teacher demo records against a default item.)
+    var lane = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    if (lane){
+      var st = effectiveStatus(lane);
+      if (st !== 'Live') return { error: st === 'Scheduled' ? 'not_open' : 'closed', status: st };
+      var link = chainFor(schoolId, phase, audience, studentId).find(function(x){ return x.id===assessId; });
+      if (link && link.state === 'locked') return { error: 'locked', after: link.after };
+    }
     if (!db.completions[schoolId]) db.completions[schoolId] = {};
     var ck = compKey(phase, audience, studentId, assessId), already = !!db.completions[schoolId][ck];
     db.completions[schoolId][ck] = { by:low(byEmail||''), at:Date.now() };
@@ -1045,7 +1079,7 @@
     ids.forEach(function(sid){ assessments.forEach(function(a){ if (isComplete(schoolId, phase, audience, sid, a.id)) done++; }); });
     return { done:done, expected:expected, pct: expected ? Math.round(done*100/expected) : 0,
       assessments:assessments.length, students:ids.length,
-      status: dep ? dep.status : 'Not deployed' };
+      status: effectiveStatus(dep), start: dep ? dep.start : '', end: dep ? dep.end : '' };
   }
 
   /* ======================================================================
@@ -1111,13 +1145,14 @@
     var AUD = ['Teacher','Parent','Direct Assessment'];
     var out = {};
     PH.forEach(function(pr){
-      var lanes = AUD.map(function(a){ return deps[pr[1]+'|'+a]; }).filter(Boolean);
+      // Scheduled lanes haven't opened yet — they don't count until their start date.
+      var lanes = AUD.map(function(a){ return deps[pr[1]+'|'+a]; }).filter(function(d){ return d && effectiveStatus(d) !== 'Scheduled'; });
       if (!lanes.length){ out[pr[0]] = 'upcoming'; return; }
       // 'complete' (bands appear) as soon as ANY deployed lane is ended or 100%
       // complete — so one audience finishing (e.g. a teacher bulk-marking their
       // class) publishes that point, rather than needing every lane to finish.
       var done = lanes.some(function(d){
-        if (d.status==='Ended') return true;
+        if (effectiveStatus(d)==='Ended') return true;
         var c = completionStats(schoolId, pr[1], d.audience, ids);
         return c.expected>0 && c.done>=c.expected;
       });
@@ -1480,7 +1515,7 @@
     deployPhase: deployPhase,
     endPhase: endPhase,
     undeployPhase: undeployPhase,
-    getDeployments: getDeployments,
+    getDeployments: getDeployments, effectiveStatus: effectiveStatus, chainFor: chainFor,
     deploymentsFor: deploymentsFor,
     markComplete: markComplete,
     isComplete: isComplete,

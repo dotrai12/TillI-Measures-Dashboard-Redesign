@@ -317,7 +317,7 @@
 <div id="app"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261021fa"></script>
+<script src="assets/tilli-api.js?v=20261021ga"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
@@ -877,6 +877,11 @@
 
   // Inner content only — patched in place on a mark-done so the hero doesn't
   // re-animate (mirrors patchHome for the demo path).
+  // 'YYYY-MM-DD' → '2 Nov 2026' (window dates on created-school lanes).
+  function fmtDay(v) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+    return m ? (+m[3]) + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + m[1] : (v || '');
+  }
   function createdMainInner() {
     const c = child();
     const sc = createdSchoolFor(c);
@@ -889,7 +894,7 @@
     const lanes = (API.deploymentsFor(schoolId, 'Parent', { includeEnded: true }) || []);
     const laneByPhase = {};
     lanes.forEach((l) => { laneByPhase[l.phase] = l; });
-    const anyLive = PARENT_PHASES.some((ph) => laneByPhase[ph]);
+    const anyLive = PARENT_PHASES.some((ph) => laneByPhase[ph] && laneByPhase[ph].status === 'Live');
 
     const heroTop = `
         <div class="p-hero" data-rise>
@@ -923,8 +928,29 @@
       const ended = lane.status === 'Ended';
       const assessments = lane.assessments || [];
 
+      // Scheduled → visible but closed until the start date.
+      if (lane.status === 'Scheduled') {
+        return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Opens ${esc(fmtDay(lane.start))}</span></div>
+          <div class="ui-card md tint-cyan win-rest">
+            <span class="ico">🗓️</span>
+            <div class="rt"><b>Opens on ${esc(fmtDay(lane.start))}</b>
+              <span>${assessments.length} check-in${assessments.length === 1 ? '' : 's'} for ${esc(c.name)} — open ${esc(fmtDay(lane.start))} to ${esc(fmtDay(lane.end))}.</span></div>
+          </div>`;
+      }
+      // Chain: each check-in opens once the one before it is done.
+      const chain = API.chainFor ? API.chainFor(schoolId, phase, 'Parent', c.student_id) : [];
+      const chainState = (id) => { const x = chain.find((y) => y.id === id); return x || { state: 'open' }; };
+
       const rows = assessments.length ? assessments.map((a) => {
         const done = API.isComplete(schoolId, phase, 'Parent', c.student_id, a.id);
+        const link = chainState(a.id);
+        if (!done && !ended && link.state === 'locked') {
+          return `<div class="t-row">
+            <span class="t-dot pending"></span>
+            <span class="t-body"><b>${esc(a.name)}</b><span>Opens after “${esc(link.after)}”</span></span>
+            <span class="btn-locked">Locked</span>
+          </div>`;
+        }
         if (done) {
           return `<div class="t-row">
             <span class="t-dot done"></span>
@@ -948,7 +974,7 @@
 
       return `<div class="sec-head">
           <h2>${esc(phase)}</h2>
-          <span class="muted due"><b>${stats.done}</b> of <b>${stats.expected}</b> done${ended ? ' · Ended' : ''}</span>
+          <span class="muted due"><b>${stats.done}</b> of <b>${stats.expected}</b> done${ended ? ' · Ended' : (lane.end ? ' · open until ' + esc(fmtDay(lane.end)) : '')}</span>
         </div>
         <div class="timeline">${rows}</div>`;
     }).join('');

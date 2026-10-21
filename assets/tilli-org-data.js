@@ -661,7 +661,10 @@
     var f = [];
     if (!s.archived && s.students === 0) f.push({ key: 'no-students', label: '0 students' });
     if (!s.archived && s.staff === 0)    f.push({ key: 'no-staff',    label: '0 staff' });
-    var live = DEPLOYMENTS.some(function (d) { return d.schoolId === s.id && d.status === 'Live'; });
+    // Live / created schools deploy through the shared store; everyone else through the portfolio list.
+    var live = ((s.live || s.created) && window.TilliAPI)
+      ? window.TilliAPI.getDeployments(s.id).some(function (d) { return d.status === 'Live'; })
+      : DEPLOYMENTS.some(function (d) { return d.schoolId === s.id && d.status === 'Live'; });
     if (!s.archived && !live)            f.push({ key: 'no-deployment', label: 'No active deployment' });
     var soon = s.archived ? [] : emptyStructure(s).filter(function (x) { return x.daysLeft <= EMPTY_STRUCTURE_WARN_DAYS; });
     if (soon.length) {
@@ -748,8 +751,10 @@
       var done = lanes.reduce(function (a, c) { return a + c.done; }, 0);
       var exp = lanes.reduce(function (a, c) { return a + c.expected; }, 0);
       var anyLive = lanes.some(function (c) { return c.status === 'Live'; });
-      return { phase: ph, deployed: true, status: anyLive ? 'Live' : 'Ended',
-        window: null, completion: exp ? Math.round(done * 100 / exp) : 0 };
+      var allSched = lanes.every(function (c) { return c.status === 'Scheduled'; });
+      var first = lanes[0];
+      return { phase: ph, deployed: true, status: anyLive ? 'Live' : (allSched ? 'Scheduled' : 'Ended'),
+        window: first.start ? first.start + ' → ' + first.end : null, completion: exp ? Math.round(done * 100 / exp) : 0 };
     });
     var staff = API.staffFor(id);
     var secs = API.sectionsForSchool(id);
@@ -772,8 +777,11 @@
   function schoolSummary(id) {
     var s = byId(id); if (!s) return null;
     if (s.created && window.TilliAPI) return createdSchoolSummary(s);
-    var deps = DEPLOYMENTS.filter(function (d) { return d.schoolId === id; });
-    var phaseState = ['Baseline', 'Midline', 'Endline'].map(function (ph) {
+    // The live demo school deploys through the shared store, like created schools —
+    // its old portfolio row would contradict what the planner shows.
+    var deps = s.live && window.TilliAPI ? [] : DEPLOYMENTS.filter(function (d) { return d.schoolId === id; });
+    var apiProgress = s.live && window.TilliAPI ? createdSchoolSummary(s).assessment_progress : null;
+    var phaseState = apiProgress || ['Baseline', 'Midline', 'Endline'].map(function (ph) {
       var d = deps.filter(function (x) { return x.phase === ph; }).sort(function (a, b) { return (b.status === 'Live') - (a.status === 'Live'); })[0];
       return { phase: ph, deployed: !!d, status: d ? d.status : null,
         window: d ? d.start + ' → ' + d.end : null,

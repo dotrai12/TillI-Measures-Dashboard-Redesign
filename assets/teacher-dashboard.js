@@ -1978,7 +1978,8 @@
   function unlockedWindows(sec) {
     const set = new Set(PREVIEW_UNLOCK[S.windowState] || ['baseline']);
     const A = window.TilliAPI, sid = schoolId();
-    if (A && A.getDeployments && sid) A.getDeployments(sid).forEach((d) => { if (WIN_OF_PHASE[d.phase]) set.add(WIN_OF_PHASE[d.phase]); });
+    // Scheduled phases stay locked until their start date.
+    if (A && A.getDeployments && sid) A.getDeployments(sid).forEach((d) => { if (WIN_OF_PHASE[d.phase] && d.status !== 'Scheduled') set.add(WIN_OF_PHASE[d.phase]); });
     (S.data.windows || []).forEach((w, wi) => {
       if (sec.students.some((st) => ((st.assessLog[wi] || {}).persp || []).some((p) => p.done || p.doneParts > 0))) set.add(w.key);
     });

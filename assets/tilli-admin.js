@@ -400,6 +400,18 @@
       '<div class="ui-meter lg light"><div class="tl-bar-fill ' + (cls || '') + '" style="width:' + pct(value) + '%"></div></div>' +
       '<div class="tl-bar-val">' + pct(value) + '</div></div>';
   }
+  // Social-Emotional / Cognitive outcome bars (same look as Analytics → Outcomes
+  // by region). sel/cog are 0–100 band scores; null = no results yet.
+  function outcomesCardHtml(sel, cog, note, extraCls) {
+    var body = sel == null && cog == null
+      ? '<div class="ui-empty">No outcome results yet — scores appear once a Midline or Endline is complete.</div>'
+      : bar('Social-Emotional', sel || 0, 'sel') + bar('Cognitive', cog || 0, 'cog');
+    return '<div class="ui-card' + (extraCls ? ' ' + extraCls : '') + '"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Outcomes</h3><p class="ui-mod-note">' + esc(note) + '</p></div></div>' + body + '</div>';
+  }
+  function avgOutcome(list, key) {
+    var xs = list.filter(function (s) { return s[key] != null; });
+    return xs.length ? Math.round(xs.reduce(function (a, s) { return a + s[key]; }, 0) / xs.length) : null;
+  }
   function stepper(stageKey) {
     var cur = ORG.stageIndex(stageKey);
     return '<div class="tl-steps">' + ORG.stages.map(function (s, i) {
@@ -411,7 +423,7 @@
   function screenHead(title, sub, actionsHtml) {
     return '<div class="tl-screen-head">' +
       '<div><h1 class="ui-screen-title">' + esc(title) + '</h1>' + (sub ? '<p class="ui-screen-sub">' + esc(sub) + '</p>' : '') + '</div>' +
-      (actionsHtml ? '<div class="tl-screen-actions">' + actionsHtml + '</div>' : '') + '</div>';
+      ((actionsHtml || !GROUP) ? '<div class="tl-screen-actions">' + helpBtnHtml() + (actionsHtml || '') + '</div>' : '') + '</div>';
   }
   function crumbs(parts) {
     return '<div class="ui-crumbs">' + parts.map(function (p, i) {
@@ -510,10 +522,34 @@
     var boardRows = Object.keys(boards).sort(function (a, b) { return boards[b] - boards[a]; }).map(function (k) {
       return '<div class="tl-bar-row"><div class="tl-bar-lbl">' + esc(k) + '</div><div class="ui-meter lg light"><div class="tl-bar-fill" style="width:' + (boards[k] / boardMax * 100) + '%"></div></div><div class="tl-bar-val">' + boards[k] + '</div></div>';
     }).join('');
+    // Completion ranking: schools (top 12) or school groups (average of their
+    // schools with completion > 0 — same pool the school ranking uses).
+    var rankByGroup = params.rank === 'groups';
     var ranked = schools.slice().filter(function (s) { return s.completion; }).sort(function (a, b) { return b.completion - a.completion; }).slice(0, 12);
-    var rankRows = ranked.map(function (s) {
-      return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '</td><td>' + esc(s.region) + '</td><td>' + stageChip(s.stage) + '</td><td class="tl-num">' + (s.completion ? s.completion + '%' : '—') + '</td><td>' + statusChip(s.status) + '</td></tr>';
-    }).join('');
+    var rankHead, rankRows;
+    if (rankByGroup) {
+      var gRows = ORG.activeGroups().filter(function (g) { return g.id !== 'g-none'; }).map(function (g) {
+        var inG = schools.filter(function (s) { return s.groupId === g.id; });
+        var withC = inG.filter(function (s) { return s.completion; });
+        var low = withC.slice().sort(function (a, b) { return a.completion - b.completion; })[0];
+        return { g: g, n: inG.length, nc: withC.length, students: sum(inG, function (s) { return s.students; }),
+          avg: withC.length ? Math.round(sum(withC, function (s) { return s.completion; }) / withC.length) : null, low: low };
+      }).filter(function (x) { return x.n; }).sort(function (a, b) { return (b.avg == null ? -1 : b.avg) - (a.avg == null ? -1 : a.avg); });
+      rankHead = '<tr><th>School group</th><th>Schools</th><th>Students</th><th>Avg completion</th><th>Lowest school</th></tr>';
+      rankRows = gRows.map(function (x) {
+        return '<tr class="clickable" data-open-group="' + x.g.id + '"><td class="name">' + esc(x.g.name) + '</td><td class="tl-num">' + x.n + (x.nc < x.n ? '<small>' + x.nc + ' with results</small>' : '') + '</td>' +
+          '<td class="tl-num">' + x.students.toLocaleString() + '</td><td class="tl-num">' + (x.avg == null ? '—' : x.avg + '%') + '</td>' +
+          '<td>' + (x.low ? esc(x.low.name) + ' <small>' + x.low.completion + '%</small>' : '—') + '</td></tr>';
+      }).join('') || '<tr><td colspan="5"><div class="ui-empty">No school groups yet.</div></td></tr>';
+    } else {
+      rankHead = '<tr><th>School</th><th>Group</th><th>Region</th><th>Stage</th><th>Completion</th><th>Engagement</th></tr>';
+      rankRows = ranked.map(function (s) {
+        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '</td><td>' + (s.groupId === 'g-none' ? '<span class="text-muted">—</span>' : esc(s.groupName)) + '</td><td>' + esc(s.region) + '</td><td>' + stageChip(s.stage) + '</td><td class="tl-num">' + (s.completion ? s.completion + '%' : '—') + '</td><td>' + statusChip(s.status) + '</td></tr>';
+      }).join('');
+    }
+    var rankSeg = '<div class="ui-seg" role="group" aria-label="Rank by">' +
+      '<button class="' + (!rankByGroup ? 'on' : '') + '" data-rank="" title="Rank individual schools (top 12)">Schools</button>' +
+      '<button class="' + (rankByGroup ? 'on' : '') + '" data-rank="groups" title="Rank school groups by the average completion of their schools">School groups</button></div>';
 
     body.innerHTML = screenHead('Analytics', 'Rollups across the whole portfolio — outcomes, engagement and rollout.') +
       '<div class="tl-grid two">' +
@@ -521,9 +557,12 @@
           '<div class="ui-legend"><span><i style="background:var(--green-500)"></i>Social-Emotional</span><span><i style="background:var(--cyan-500)"></i>Cognitive</span></div></div>' +
         '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Board mix</h3><p class="ui-mod-note">Partner schools by curriculum board.</p></div></div>' + boardRows + '</div>' +
       '</div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Completion ranking</h3><p class="ui-mod-note">Assessment completion, highest first.</p></div></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-560"><thead><tr><th>School</th><th>Region</th><th>Stage</th><th>Completion</th><th>Engagement</th></tr></thead><tbody>' + rankRows + '</tbody></table></div></div>';
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Completion ranking</h3><p class="ui-mod-note">' +
+        (rankByGroup ? 'School groups by the average completion of their schools with results, highest first.' : 'Assessment completion, highest first.') + '</p></div>' + rankSeg + '</div>' +
+        '<div class="ui-tablewrap"><table class="ui-table mw-640 tl-rank-small"><thead>' + rankHead + '</thead><tbody>' + rankRows + '</tbody></table></div></div>';
     body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: b.dataset.open }); }); });
+    body.querySelectorAll('[data-open-group]').forEach(function (b) { b.addEventListener('click', function () { go('group', { id: b.dataset.openGroup }); }); });
+    body.querySelectorAll('[data-rank]').forEach(function (b) { b.addEventListener('click', function () { go('analytics', b.dataset.rank ? { rank: b.dataset.rank } : {}); }); });
   };
 
   // ============================================================
@@ -683,6 +722,11 @@
         '<button class="btn btn-outline btn-sm" id="grp-manage" title="Rename, archive or delete this group.">Manage ⋯</button>' +
         (g.archived ? '' : '<button class="btn btn-primary btn-sm" id="grp-add">+ Add School</button>')) +
       (g.archived ? '<div class="tl-filterbanner">This group was <b>archived</b>' + (g.archivedAt ? ' on ' + esc(fmtJoined(g.archivedAt)) : '') + ' — its schools are archived and its group admin sees an archived notice. <button class="btn-link" id="grp-unarch">Un-archive group</button></div>' : '') +
+      (function () {
+        var withRes = inGroup.filter(function (s) { return !s.archived && (s.sel != null || s.cog != null); });
+        return outcomesCardHtml(avgOutcome(withRes, 'sel'), avgOutcome(withRes, 'cog'),
+          withRes.length ? 'Average band score (0–100) across ' + withRes.length + ' school' + (withRes.length === 1 ? '' : 's') + ' in this group with results.' : 'Average across the group’s schools with results.', 'mb-gap');
+      })() +
       (g.archived || !counts.active ? '' : '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Group links</h3><p class="ui-mod-note">Share one link with the whole group — each person picks their school first.</p></div></div>' + groupLinksHtml(g) + '</div>') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (grpState.tab === 'active' ? ' on' : '') + '" data-gtab="active">Active <b>' + counts.active + '</b></button>' +
@@ -817,7 +861,7 @@
 
     var cols, rnd2 = seededRng(strSeed(s.code + '|teacherlog'));
     if (apiDeps.length) {
-      cols = apiDeps.map(function (x) { return { label: x.phase + ' · Teacher', phase: x.phase }; });
+      cols = apiDeps.map(function (x) { return { label: x.phase + ' · Teacher' + (x.status === 'Scheduled' ? ' (opens ' + fmtJoined(x.start) + ')' : ''), phase: x.phase }; });
       teachers.forEach(function (t) {
         t.cells = apiDeps.map(function (x) { var c = API.completionStats(s.id, x.phase, 'Teacher', t.ids || []); return teacherCell(c.done, c.expected); });
       });
@@ -1310,7 +1354,7 @@
         '<div><h1 class="ui-screen-title" style="margin-bottom:4px">' + esc(s.name) + (s.archived ? ' <span class="ui-chip">Archived</span>' : '') + '</h1>' +
         '<p class="ui-screen-sub m-0">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + ' · ' + esc(s.city + ', ' + s.country) + '</p>' +
         '<button class="tl-hub-last" data-hubtab="history" title="Open this school\'s change history">' + lastLine(s.id) + '</button></div>' +
-        '<div class="tl-hub-actions"><button class="btn btn-outline btn-sm" data-hub-edit>Edit</button>' +
+        '<div class="tl-hub-actions">' + helpBtnHtml() + '<button class="btn btn-outline btn-sm" data-hub-edit>Edit</button>' +
           '<button class="btn btn-outline btn-sm" data-hub-archive>' + (s.archived ? 'Un-archive' : 'Archive') + '</button>' +
           (s.archived ? '<button class="btn btn-danger btn-sm" data-hub-delete>Delete</button>' : '') +
           (s.live ? '<a class="btn btn-primary btn-sm" href="admin.html?school=' + encodeURIComponent(s.created ? s.id : s.name) + '&email=' + encodeURIComponent(s.created && s.coordinator ? s.coordinator.email : me.email) + '&from=tilli" style="text-decoration:none">Leadership dashboard →</a>' : '') + '</div>' +
@@ -1416,6 +1460,7 @@
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Structure</h3></div>' + structure + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Onboarding</h3></div>' + flags + '</div>' +
       '<div class="ui-card span2"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + progress + '</div>' +
+      (GROUP ? '' : outcomesCardHtml(s.sel, s.cog, 'Average band score (0–100) from this school’s latest results.', 'span2')) +
       '<div class="ui-card span2"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Open issues</h3></div><button class="btn-link" data-hubtab="issues">View all →</button></div>' + issuesHtml + '</div>' +
     '</div>';
     // [data-hubtab] triggers are wired by SCREEN.school's wireHubtabTriggers()
@@ -1429,32 +1474,80 @@
     }) : (s.created && window.TilliAPI) ? window.TilliAPI.studentsForSchool(s.id).map(function (st) {
       return { name: st.name, admission: st.student_id, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
     }) : [];
-    var rows = roster.length ? roster.map(function (r) {
-      return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
-        '<td class="r"><button class="btn-link" data-edit-st="' + esc(r.admission) + '">Edit</button> <button class="btn-link danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '">Delete</button></td></tr>';
-    }).join('') : '';
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
-        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button><button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button></div></div>' +
-      (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-            : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') +
-      '<div class="mt-3"><button class="btn-link" data-hubtab="issues">This school\'s deletion logs →</button></div></div>';
+        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button><button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
+          '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div></div>' +
+      (roster.length ? '<div id="stu-page"></div>' : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
     el.querySelector('[data-add-st]').addEventListener('click', function () { go('add-students', { school: s.id }); });
     el.querySelector('[data-merge-here]').addEventListener('click', function () { go('merge', { school: s.id }); });
-    el.querySelectorAll('[data-open-student]').forEach(function (b) { b.addEventListener('click', function () { go('student', { school: s.id, adm: b.dataset.openStudent }); }); });
-    // [data-hubtab] deletion-logs link is wired in place by SCREEN.school.
-    el.querySelectorAll('[data-del-st]').forEach(function (b) { b.addEventListener('click', function () {
-      gated({ title: 'Delete student', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(b.dataset.nm) + '</b> (' + esc(b.dataset.delSt) + ')? This writes to Deletion Logs.</p>', confirmLabel: 'Delete student', audit: { action: 'student.delete', entity: b.dataset.nm, entityType: 'student', schoolId: s.id }, onConfirm: function () { toast('Student deleted — logged.'); } });
-    }); });
-    el.querySelectorAll('[data-edit-st]').forEach(function (b) { b.addEventListener('click', function () { openStudentEditor(s.id, b.dataset.editSt, function () { go('school', { id: s.id, tab: 'students' }); }); }); });
+    // [data-hubtab] Deletion logs button is wired in place by SCREEN.school.
+    // Only the table + pager re-render when paging, so that button stays wired.
+    if (stuPager.schoolId !== s.id) { stuPager.schoolId = s.id; stuPager.page = 1; }
+    var mount = el.querySelector('#stu-page');
+    function drawPage() {
+      var pages = Math.max(1, Math.ceil(roster.length / stuPager.size));
+      stuPager.page = Math.min(Math.max(1, stuPager.page), pages);
+      var start = (stuPager.page - 1) * stuPager.size;
+      var rows = roster.slice(start, start + stuPager.size).map(function (r) {
+        return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
+          '<td class="r"><button class="btn-link" data-edit-st="' + esc(r.admission) + '">Edit</button> <button class="btn-link danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '">Delete</button></td></tr>';
+      }).join('');
+      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        pagerHtml(roster.length, stuPager.page, stuPager.size, 'students');
+      wirePager(mount, function (page, size) {
+        if (size !== stuPager.size) { stuPager.size = size; stuPager.page = 1; try { localStorage.setItem(STU_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
+        else stuPager.page = page;
+        drawPage();
+        mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      mount.querySelectorAll('[data-open-student]').forEach(function (b) { b.addEventListener('click', function () { go('student', { school: s.id, adm: b.dataset.openStudent }); }); });
+      mount.querySelectorAll('[data-del-st]').forEach(function (b) { b.addEventListener('click', function () {
+        gated({ title: 'Delete student', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(b.dataset.nm) + '</b> (' + esc(b.dataset.delSt) + ')? This writes to Deletion Logs.</p>', confirmLabel: 'Delete student', audit: { action: 'student.delete', entity: b.dataset.nm, entityType: 'student', schoolId: s.id }, onConfirm: function () { toast('Student deleted — logged.'); } });
+      }); });
+      mount.querySelectorAll('[data-edit-st]').forEach(function (b) { b.addEventListener('click', function () { openStudentEditor(s.id, b.dataset.editSt, function () { go('school', { id: s.id, tab: 'students' }); }); }); });
+    }
+    if (mount) drawPage();
   };
+
+  // ---------- pager (Students + Staff tabs; reusable for any long table) ----------
+  var PAGE_SIZES = [20, 50, 100];   // rows-per-page options
+  var STU_PAGE_KEY = 'tilliMeasures.admin.studentsPerPage';
+  var STAFF_PAGE_KEY = 'tilliMeasures.admin.staffPerPage';
+  // Remembered rows-per-page for one table (falls back to the first size).
+  function savedPageSize(key) { try { var v = +localStorage.getItem(key); return PAGE_SIZES.indexOf(v) >= 0 ? v : PAGE_SIZES[0]; } catch (e) { return PAGE_SIZES[0]; } }
+  var stuPager = { schoolId: null, page: 1, size: savedPageSize(STU_PAGE_KEY) };
+  var staffPager = { schoolId: null, page: 1, size: savedPageSize(STAFF_PAGE_KEY) };
+  // Page numbers to show: first, last, and a window around the current page, with … gaps.
+  function pageList(page, pages) {
+    var out = [], want = {}; [1, pages, page - 1, page, page + 1].forEach(function (n) { if (n >= 1 && n <= pages) want[n] = 1; });
+    Object.keys(want).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n, i, arr) { if (i && n - arr[i - 1] > 1) out.push('…'); out.push(n); });
+    return out;
+  }
+  function pagerHtml(total, page, size, noun) {
+    var pages = Math.max(1, Math.ceil(total / size)), from = total ? (page - 1) * size + 1 : 0, to = Math.min(total, page * size);
+    return '<div class="tl-pager"><span class="tl-pager-info">Showing <b>' + from + '–' + to + '</b> of ' + total.toLocaleString() + ' ' + esc(noun) + '</span>' +
+      '<label class="tl-pager-size">Per page <select class="select" data-pg-size aria-label="Rows per page">' +
+        PAGE_SIZES.map(function (n) { return '<option value="' + n + '"' + (n === size ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>' +
+      '<nav class="tl-pager-nav" aria-label="Pages"><button class="tl-pg" data-pg="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + ' aria-label="Previous page">‹</button>' +
+        pageList(page, pages).map(function (n) {
+          return n === '…' ? '<span class="tl-pg-gap">…</span>' : '<button class="tl-pg' + (n === page ? ' on' : '') + '" data-pg="' + n + '"' + (n === page ? ' aria-current="page"' : '') + '>' + n + '</button>';
+        }).join('') +
+        '<button class="tl-pg" data-pg="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + ' aria-label="Next page">›</button></nav></div>';
+  }
+  // onChange(page, size) — size changes reset to page 1 in the caller.
+  function wirePager(root, onChange) {
+    var sel = root.querySelector('[data-pg-size]'), cur = +sel.value;
+    root.querySelectorAll('[data-pg]').forEach(function (b) { b.addEventListener('click', function () { if (!b.disabled) onChange(+b.dataset.pg, cur); }); });
+    sel.addEventListener('change', function () { onChange(1, +sel.value); });
+  }
 
   HUB.staff = function (d, el) {
     var s = d.school;
-    var staffRows = d.staff_users.length ? d.staff_users.map(function (u) {
+    function staffRowHtml(u) {
       return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td><td>' + esc(u.role) + '</td>' +
         '<td>' + (u.sections && u.sections.length ? esc(u.sections.join(', ')) : '—') + '</td>' +
         '<td class="r"><button class="btn-link" data-role="' + esc(u.email) + '">Change role</button> <button class="btn-link danger" data-remove="' + esc(u.name) + '">Remove</button></td></tr>';
-    }).join('') : '<tr><td colspan="4"><div class="ui-empty">No staff yet — invite a school admin or teacher.</div></td></tr>';
+    }
 
     var invRows = d.invitations.length ? d.invitations.map(function (i) {
       return '<tr><td class="name">' + esc(i.name) + '<small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + invStatusPill(i) + '</td><td>' + esc(i.expires) + '</td>' +
@@ -1497,16 +1590,34 @@
     }
 
     el.innerHTML = codesCard + joinCode +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Staff at this school</h3></div><button class="btn btn-outline btn-sm" data-invite>+ Invite to this school</button></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>Sections</th><th></th></tr></thead><tbody>' + staffRows + '</tbody></table></div></div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Staff at this school</h3>' + (d.staff_users.length ? '<p class="ui-mod-note">' + d.staff_users.length + ' staff</p>' : '') + '</div><button class="btn btn-outline btn-sm" data-invite>+ Invite to this school</button></div>' +
+        (d.staff_users.length ? '<div id="staff-page"></div>' : '<div class="ui-empty">No staff yet — invite a school admin or teacher.</div>') + '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Invitations</h3></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Recipient</th><th>Role</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody>' + invRows + '</tbody></table></div></div>';
     el.querySelector('[data-invite]').addEventListener('click', function () { openInvite(s.id); });
     el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy, 'School code copied.'); }); });
     el.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation', s.id); toast('Invitation resent to ' + b.dataset.resend + '.'); }); });
     el.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation', schoolId: s.id }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
-    el.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('school', { id: s.id, tab: 'staff' }); }); }); });
-    el.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Remove from school', danger: true, body: '<p>Remove <b>' + esc(b.dataset.remove) + '</b> from ' + esc(s.name) + '?</p>', confirmLabel: 'Remove', audit: { action: 'user.remove', entity: b.dataset.remove, entityType: 'user', schoolId: s.id }, onConfirm: function () { toast('Removed from school.'); } }); }); });
+    // Staff table — same pager as the Students tab (20 / 50 / 100 per page).
+    if (staffPager.schoolId !== s.id) { staffPager.schoolId = s.id; staffPager.page = 1; }
+    var mount = el.querySelector('#staff-page');
+    function drawStaff() {
+      var list = d.staff_users, pages = Math.max(1, Math.ceil(list.length / staffPager.size));
+      staffPager.page = Math.min(Math.max(1, staffPager.page), pages);
+      var start = (staffPager.page - 1) * staffPager.size;
+      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>Sections</th><th></th></tr></thead><tbody>' +
+        list.slice(start, start + staffPager.size).map(staffRowHtml).join('') + '</tbody></table></div>' +
+        pagerHtml(list.length, staffPager.page, staffPager.size, 'staff');
+      wirePager(mount, function (page, size) {
+        if (size !== staffPager.size) { staffPager.size = size; staffPager.page = 1; try { localStorage.setItem(STAFF_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
+        else staffPager.page = page;
+        drawStaff();
+        mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      mount.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('school', { id: s.id, tab: 'staff' }); }); }); });
+      mount.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Remove from school', danger: true, body: '<p>Remove <b>' + esc(b.dataset.remove) + '</b> from ' + esc(s.name) + '?</p>', confirmLabel: 'Remove', audit: { action: 'user.remove', entity: b.dataset.remove, entityType: 'user', schoolId: s.id }, onConfirm: function () { toast('Removed from school.'); } }); }); });
+    }
+    if (mount) drawStaff();
   };
 
   // ============================================================
@@ -1523,27 +1634,20 @@
     { key: 'direct', label: 'Student Direct', aud: 'Direct Assessment' },
   ];
   var TL_PHASES = ['Baseline', 'Midline', 'Endline'];
-  var TL_STATE_LABEL = { completed: 'Completed', inprogress: 'In progress', pending: 'Pending' };
   var TL_MODE = { school: 'Do at school', home: 'Do at home', off: 'Off' };
   var TL_MODE_ORDER = ['school', 'home', 'off'];
-  var TL_STATE_ORDER = ['pending', 'inprogress', 'completed'];
   var TL_CHAIN = {};       // sid -> { 'Baseline|teacher': [{id,name,mode}], … }  (edits persist in-session)
   var TL_NAV = {};         // sid -> { level, phase, audience }
-  var TL_OVERRIDE = {};    // sid -> { 'Baseline': state, 'Baseline|teacher': state }  (manual taps win over derived)
+  // Phase / audience status — worked out from real deployments + completions only.
+  //   none      not deployed
+  //   scheduled deployed, start date still ahead
+  //   live      inside the window
+  //   ended     window over, not everyone finished
+  //   completed every expected response is in
+  var TL_ST_LABEL = { none: 'Not deployed', scheduled: 'Scheduled', live: 'Live', ended: 'Ended', completed: 'Completed' };
+  var TL_ST_CHIP = { none: 'muted', scheduled: 'info', live: 'ok', ended: 'muted', completed: 'ok' };
 
   function tlNav(sid) { return TL_NAV[sid] || (TL_NAV[sid] = { level: 1, phase: null, audience: null }); }
-  function tlStateFrom(deps) {
-    if (!deps.length) return 'pending';
-    if (deps.some(function (d) { return d.status === 'Live'; })) return 'inprogress';
-    if (deps.every(function (d) { return d.status === 'Ended'; })) return 'completed';
-    return 'pending';
-  }
-  // Effective state = a manual tap-override if the user set one, else the state
-  // derived live from the school's real deployments.
-  function tlEffState(sid, key, derived) { var ov = TL_OVERRIDE[sid]; return (ov && ov[key]) || derived; }
-  function tlCycleState(sid, key, cur) { (TL_OVERRIDE[sid] || (TL_OVERRIDE[sid] = {}))[key] = TL_STATE_ORDER[(TL_STATE_ORDER.indexOf(cur) + 1) % 3]; }
-  function tlPhaseState(deps, phase) { return tlStateFrom(deps.filter(function (d) { return d.phase === phase; })); }
-  function tlAudState(deps, phase, aud) { return tlStateFrom(deps.filter(function (d) { return d.phase === phase && d.audience === aud; })); }
   function tlPool(aud) {
     if (aud === 'Teacher') return ['SEL Observation', 'EF Observation', 'Wellbeing Check', 'Classroom Climate', 'Term Review'];
     if (aud === 'Parent') return ['Home SEL Survey', 'Routines Report', 'Wellbeing Check', 'Screen-time Survey', 'Term Review'];
@@ -1592,25 +1696,30 @@
     var n = nodes.length;
     return '<div class="tl-tl-rail"><div class="tl-tl-line" style="left:calc(50% / ' + n + ');right:calc(50% / ' + n + ')"></div>' +
       nodes.map(function (nd) {
-        return '<div class="tl-tl-node ' + nd.cls + '"' + (nd.attrs || '') + (nd.draggable ? ' draggable="true"' : '') + '>' +
+        return '<div class="tl-tl-node ' + nd.cls + '"' + (nd.attrs || '') + '>' +
           '<div class="tl-tl-diamond"' + (nd.mkTitle ? ' title="' + esc(nd.mkTitle) + '"' : '') + '></div><div class="tl-tl-dot"></div>' +
-          '<div class="tl-tl-label' + (nd.navLabel ? ' nav' : '') + '"' + (nd.navTitle ? ' title="' + esc(nd.navTitle) + '"' : '') + '>' + esc(nd.label) + (nd.navLabel ? ' <span class="tl-tl-caret">›</span>' : '') + '</div>' +
-          (nd.sub ? '<div class="tl-tl-sub">' + esc(nd.sub) + '</div>' : '') + '</div>';
+          (nd.navLabel ? '<button class="tl-tl-label nav" title="' + esc(nd.navTitle || '') + '">' + esc(nd.label) + ' <span class="tl-tl-caret">›</span></button>'
+            : '<div class="tl-tl-label">' + esc(nd.label) + '</div>') +
+          (nd.sub ? '<div class="tl-tl-sub">' + esc(nd.sub) + '</div>' : '') +
+          (nd.sub2 ? '<div class="tl-tl-sub2">' + esc(nd.sub2) + '</div>' : '') + '</div>';
       }).join('') + '</div>';
   }
   function tlLegend(items) { return '<div class="tl-tl-legend">' + items.map(function (it) { return '<span class="' + it[0] + '"><i></i>' + esc(it[1]) + '</span>'; }).join('') + '</div>'; }
   var TL_AUD_SHORT = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct' };
   var TL_AUD_TAG = { teacher: 'persp-teacher', parent: 'persp-parent', direct: 'persp-student' };   // .ui-tag colour per audience
-  // ── Deployment planner (bottom of the school Assessments tab) ────────────
-  // This is now the single place assessments are configured and deployed.
-  // Per phase you set a Start/End window, give School and Home their own
-  // schedules, order the assessments inside each mode lane (order matters —
-  // it's the sequence they run in), and hit "Deploy phase". Off is the parking
-  // lot. The top timeline just reflects the resulting status. Per-item overrides
-  // (move / deploy one / end one) live in each row's ⋯ menu. All state is
-  // in-session (prototype), mirroring how TL_CHAIN / TL_OVERRIDE already work.
-  var TL_PLAN = {};   // sid -> { phase -> { start, end, sched:{school,home}, deployed, byId, order:{school,home,off} } }
+  // ── Deployment planner (school Assessments tab) ──────────────────────────
+  // One card per phase. Its Start → End dates ARE the schedule: before the
+  // start it's Scheduled, then Live, then Ended. Dates stay editable after
+  // deploying. Inside a phase, each audience's running assessments form a
+  // chain (#2 opens once #1 is done) — order is set by dragging or the ⋯ menu.
+  // "+ Add assessment" adds one to a phase; "Deploy phase" sends the whole phase.
+  var TL_PLAN = {};   // sid -> { phase -> { start, end, deployed, endedEarly, byId, order:{school,home,off} } }
   var TL_POP = null;  // the open per-item ⋯ menu, if any
+  var TL_AUD_LABEL = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct Assessment' };
+  var TL_AUD_KEY = { 'Teacher': 'teacher', 'Parent': 'parent', 'Direct Assessment': 'direct' };
+  function tlUsesApi(s) { return !!((s.created || s.live) && window.TilliAPI); }
+  // Live / created schools run on today's date; mock schools on the demo's fixed date.
+  function tlToday(s) { return tlUsesApi(s) ? localISO(new Date()) : TODAY_ISO; }
 
   function tlPlan(s, phase) {
     var byS = TL_PLAN[s.id] || (TL_PLAN[s.id] = {});
@@ -1618,29 +1727,95 @@
       var byId = {}, order = { school: [], home: [], off: [] };
       TL_AUD.forEach(function (a) {
         tlChain(s, phase, a.aud, a.key).forEach(function (it) {
-          byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: it.mode, live: false };
+          byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: it.mode };
           (order[it.mode] || order.off).push(it.id);
         });
       });
-      byS[phase] = { start: '', end: '', sched: { school: '', home: '' }, deployed: false, byId: byId, order: order };
-      // Hydrate from the shared store so a created (or the live demo) school's
-      // deployed phases survive a reload (the planner's own state is in-session only).
-      if ((s.created || s.live) && window.TilliAPI) {
+      var rec = byS[phase] = { start: '', end: '', deployed: false, endedEarly: false, byId: byId, order: order };
+      // Hydrate from the real source so the planner, the timeline and the
+      // teacher / parent apps all agree: the shared TilliAPI store for created
+      // and live schools, the portfolio deployments for every other school.
+      if (tlUsesApi(s)) {
         var deps = window.TilliAPI.getDeployments(s.id).filter(function (x) { return x.phase === phase; });
         if (deps.length) {
-          var rec = byS[phase];
+          rec.deployed = true; rec.start = deps[0].start || ''; rec.end = deps[0].end || '';
+          // Restore the deployed chain order (and any assessment added from Templates).
+          deps.forEach(function (dep) {
+            var ak = TL_AUD_KEY[dep.audience];
+            (dep.assessments || []).forEach(function (a) {
+              if (!byId[a.id]) { byId[a.id] = { id: a.id, name: a.name || a.id, aud: ak, mode: 'school' }; order.school.push(a.id); }
+              else if (order.off.indexOf(a.id) >= 0) { order.off.splice(order.off.indexOf(a.id), 1); order.school.push(a.id); byId[a.id].mode = 'school'; }
+            });
+            var seq = (dep.assessments || []).map(function (a) { return a.id; });
+            ['school', 'home'].forEach(function (m) {
+              var mine = order[m].filter(function (id) { return byId[id].aud === ak && seq.indexOf(id) >= 0; }).sort(function (x, y) { return seq.indexOf(x) - seq.indexOf(y); });
+              var k = 0; order[m] = order[m].map(function (id) { return byId[id].aud === ak && seq.indexOf(id) >= 0 ? mine[k++] : id; });
+            });
+          });
+        }
+      } else {
+        var md = ORG.deployments.filter(function (x) { return x.schoolId === s.id && x.phase === phase; });
+        if (md.length) {
           rec.deployed = true;
-          if (deps[0].start) rec.start = deps[0].start;
-          if (deps[0].end) rec.end = deps[0].end;
-          deps.forEach(function (dep) { (dep.assessments || []).forEach(function (a) { if (rec.byId[a.id]) rec.byId[a.id].live = true; }); });
+          rec.start = md.map(function (x) { return x.start; }).sort()[0] || '';
+          rec.end = md.map(function (x) { return x.end; }).sort().slice(-1)[0] || '';
+          rec.endedEarly = md.every(function (x) { return x.status === 'Ended'; }) && rec.end >= TODAY_ISO;
+          // Deployed but never published (portfolio data): stays Scheduled until it is.
+          rec.held = md.every(function (x) { return x.status === 'Scheduled'; }) && rec.start <= TODAY_ISO;
         }
       }
     }
     return byS[phase];
   }
+  // Dates → status, the same rule TilliAPI uses for every app.
+  function tlWindowStatus(s, p) {
+    if (!p.deployed) return 'none';
+    if (p.endedEarly) return 'ended';
+    if (p.held) return 'scheduled';
+    var t = tlToday(s);
+    if (p.start && t < p.start) return 'scheduled';
+    if (p.end && t > p.end) return 'ended';
+    return 'live';
+  }
+  // Each audience's running assessments, in chain order (school lane, then home lane).
+  function tlRunning(p, ak) { return p.order.school.concat(p.order.home).filter(function (id) { return p.byId[id].aud === ak; }); }
+  // { done, expected } for one audience of a deployed phase (null = unknown).
+  function tlAudCompletion(s, phase, ak) {
+    if (tlUsesApi(s)) {
+      var ids = window.TilliAPI.studentsForSchool(s.id).map(function (x) { return x.student_id; });
+      var c = window.TilliAPI.completionStats(s.id, phase, TL_AUD_LABEL[ak], ids);
+      return c.status === 'Not deployed' ? null : { done: c.done, expected: c.expected };
+    }
+    var r = ORG.results.find(function (x) { return x.schoolId === s.id && x.phase === phase && x.audience === TL_AUD_LABEL[ak]; });
+    return r ? { done: r.responses, expected: r.expected } : null;
+  }
+  // → { st, pct, start, end, auds: { teacher: { st, pct, n } … } }
+  function tlPhaseStatus(s, phase) {
+    var p = tlPlan(s, phase), win = tlWindowStatus(s, p), auds = {}, done = 0, exp = 0, known = 0, deployedAuds = 0;
+    TL_AUD.forEach(function (a) {
+      var n = tlRunning(p, a.key).length;
+      if (win === 'none' || !n) { auds[a.key] = { st: 'none', pct: null, n: n }; return; }
+      deployedAuds++;
+      var c = (win === 'scheduled') ? null : tlAudCompletion(s, phase, a.key), pct = c && c.expected ? Math.round(c.done * 100 / c.expected) : null;
+      if (c && c.expected) { done += c.done; exp += c.expected; known++; }
+      auds[a.key] = { st: (pct === 100 && win !== 'scheduled') ? 'completed' : win, pct: pct, n: n };
+    });
+    var pct = exp ? Math.round(done * 100 / exp) : null;
+    // Completed only when every deployed audience has every response in.
+    var st = win !== 'none' && win !== 'scheduled' && deployedAuds && known === deployedAuds && pct === 100 ? 'completed' : win;
+    return { st: st, pct: pct, start: p.start, end: p.end, auds: auds, today: tlToday(s) };
+  }
+  function tlDateLine(ps) {
+    var f = function (v) { return v ? fmtJoined(v) : '—'; };
+    if (ps.st === 'none') return '';
+    if (ps.st === 'scheduled') return (ps.start <= ps.today ? 'Waiting to be published · window ' + f(ps.start) + ' → ' + f(ps.end) : 'Goes live ' + f(ps.start) + ' · ends ' + f(ps.end));
+    if (ps.st === 'live') return 'Live since ' + f(ps.start) + ' · ends ' + f(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '% complete' : '');
+    if (ps.st === 'ended') return 'Ended ' + f(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '% complete' : '');
+    return 'Completed · ran ' + f(ps.start) + ' → ' + f(ps.end);
+  }
 
   // Move an item into a mode lane (optionally before another item). Teacher
-  // assessments can't run at home — mirrors tlModeOrder in the timeline.
+  // assessments can't run at home. A deployed phase saves the new order at once.
   function planMove(s, phase, id, mode, beforeId) {
     var p = tlPlan(s, phase), it = p.byId[id];
     if (mode === 'home' && it.aud === 'teacher') { toast('Teacher assessments can’t run at home.'); return false; }
@@ -1648,89 +1823,80 @@
     var arr = p.order[mode], idx = arr.length;
     if (beforeId != null) { var bi = arr.indexOf(beforeId); if (bi > -1) idx = bi; }
     arr.splice(idx, 0, id); it.mode = mode;
+    if (p.deployed) tlPersistDeploy(s, phase);
     return true;
   }
 
-  // Persist a phase's running assessments into the shared TilliAPI store, per
-  // audience, so the teacher & parent apps surface exactly what's deployed here.
-  // Created schools + the live demo school (Little Sprouts) have a real roster
-  // there; their window dates also feed the school admin dashboard's labels.
-  var TL_AUD_LABEL = { teacher: 'Teacher', parent: 'Parent', direct: 'Direct Assessment' };
+  // Persist a phase into the shared TilliAPI store, per audience, in chain
+  // order, so the teacher & parent apps surface exactly what's deployed here
+  // (created schools + the live demo school have a real roster there).
   function tlPersistDeploy(s, phase) {
-    if (!((s.created || s.live) && window.TilliAPI)) return;
-    var p = tlPlan(s, phase), running = p.order.school.concat(p.order.home), byAud = {};
-    running.forEach(function (id) { var it = p.byId[id]; (byAud[it.aud] = byAud[it.aud] || []).push({ id: it.id, name: it.name }); });
+    if (!tlUsesApi(s)) return;
+    var p = tlPlan(s, phase);
     Object.keys(TL_AUD_LABEL).forEach(function (k) {
-      if (byAud[k] && byAud[k].length) window.TilliAPI.deployPhase(s.id, phase, TL_AUD_LABEL[k], { start: p.start, end: p.end, window: p.start + ' → ' + p.end, assessments: byAud[k] });
+      var list = tlRunning(p, k).map(function (id) { return { id: id, name: p.byId[id].name }; });
+      if (list.length) window.TilliAPI.deployPhase(s.id, phase, TL_AUD_LABEL[k], { start: p.start, end: p.end, window: p.start + ' → ' + p.end, assessments: list });
       else window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]);
     });
   }
   function tlPersistUndeploy(s, phase) {
-    if (!((s.created || s.live) && window.TilliAPI)) return;
+    if (!tlUsesApi(s)) return;
     Object.keys(TL_AUD_LABEL).forEach(function (k) { window.TilliAPI.undeployPhase(s.id, phase, TL_AUD_LABEL[k]); });
-  }
-  // Aggregate real completion for a deployed phase across all audiences.
-  function tlPhaseCompletion(s, phase) {
-    if (!(s.created && window.TilliAPI)) return null;
-    var ids = window.TilliAPI.studentsForSchool(s.id).map(function (x) { return x.student_id; });
-    var done = 0, exp = 0;
-    Object.keys(TL_AUD_LABEL).forEach(function (k) { var c = window.TilliAPI.completionStats(s.id, phase, TL_AUD_LABEL[k], ids); done += c.done; exp += c.expected; });
-    return exp ? Math.round(done * 100 / exp) : 0;
   }
 
   function planPhaseCard(s, phase) {
-    var p = tlPlan(s, phase);
+    var p = tlPlan(s, phase), ps = tlPhaseStatus(s, phase);
     var running = p.order.school.length + p.order.home.length, parked = p.order.off.length;
-    var ready = running > 0 && p.start && p.end && !p.deployed;
+    var missing = [];
+    if (!p.start) missing.push('a start date'); if (!p.end) missing.push('an end date'); if (!running) missing.push('at least one assessment turned on');
+    var ready = !missing.length && !p.deployed;
     var deployBtn = p.deployed
-      ? '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '">Undeploy</button>'
-      : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' +
-        (ready ? '' : ' disabled title="Set a start &amp; end date and keep at least one assessment on"') + '>Deploy phase</button>';
-    var statusPill = p.deployed
-      ? '<span class="ui-chip ok" title="This phase is live — its assessments have been deployed to the school">● Deployed</span>'
-      : '<span class="ui-chip muted" title="Not yet deployed — configure and hit Deploy phase to send it to the school">○ Not deployed</span>';
-    var comp = p.deployed ? tlPhaseCompletion(s, phase) : null;
-    var compPill = comp != null ? '<span class="dep-phase-sum" title="Live completion across teacher/parent/student assessments">' + comp + '% complete</span>' : '';
+      ? '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '" title="Take this phase back to draft — teachers and parents lose access">Undeploy</button>'
+      : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' + (ready ? '' : ' disabled') + '>Deploy phase</button>';
+    var statusPill = '<span class="ui-chip ' + TL_ST_CHIP[ps.st] + '">' + (ps.st === 'live' ? '● ' : ps.st === 'completed' ? '✓ ' : '') + TL_ST_LABEL[ps.st] + '</span>';
+    // Numbering = each audience's chain position (what opens first, second…).
+    var pos = {};
+    TL_AUD.forEach(function (a) { tlRunning(p, a.key).forEach(function (id, i, arr) { pos[id] = { n: i + 1, prev: i ? p.byId[arr[i - 1]].name : null }; }); });
     var head = '<div class="dep-phase-head">' +
-      '<span class="dep-phase-name">' + esc(phase) + '</span>' +
-      statusPill +
-      '<span class="dep-phase-sum">' + running + ' running · ' + parked + ' off</span>' + compPill +
-      '<span class="dep-dates">' +
-        '<input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '" aria-label="' + esc(phase) + ' start date">' +
+      '<span class="dep-phase-name">' + esc(phase) + '</span>' + statusPill +
+      '<span class="dep-phase-sum">' + running + ' on · ' + parked + ' off</span>' +
+      '<span class="dep-dates" title="The phase goes live on the start date and closes after the end date. You can change both at any time.">' +
+        '<label>Start <input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '"' + (p.end ? ' max="' + esc(p.end) + '"' : '') + ' aria-label="' + esc(phase) + ' start date"></label>' +
         '<span class="dep-date-sep">→</span>' +
-        '<input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '" aria-label="' + esc(phase) + ' end date">' +
-      '</span>' + deployBtn + '</div>';
+        '<label>End <input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '"' + (p.start ? ' min="' + esc(p.start) + '"' : '') + ' aria-label="' + esc(phase) + ' end date"></label>' +
+      '</span>' + deployBtn + '</div>' +
+      (ps.st !== 'none' ? '<div class="dep-phase-when st-' + ps.st + '">' + esc(tlDateLine(ps)) + '</div>'
+        : (!ready && !p.deployed ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>' : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'));
     var lanes = TL_MODE_ORDER.map(function (mode) {
       var ids = p.order[mode], off = mode === 'off';
-      var sched = off ? '' :
-        '<button class="dep-sched" data-sched="' + esc(phase) + '|' + mode + '" title="When ' + esc(TL_MODE[mode]) + ' assessments run">🕘 ' + esc(p.sched[mode] || 'Set schedule') + '</button>';
-      var nodes = ids.map(function (id, idx) {
-        var it = p.byId[id];
-        return '<div class="dep-node md-' + mode + (it.live ? ' is-live' : '') + '" draggable="true" data-item="' + esc(id) + '">' +
-          (off ? '' : '<span class="dep-ord">' + (idx + 1) + '</span>') +
+      var nodes = ids.map(function (id) {
+        var it = p.byId[id], ps2 = pos[id];
+        return '<div class="dep-node md-' + mode + '" draggable="true" data-item="' + esc(id) + '">' +
+          (off || !ps2 ? '' : '<span class="dep-ord" title="' + esc(TL_AUD_SHORT[it.aud] + ' #' + ps2.n + (ps2.prev ? ' — opens once “' + ps2.prev + '” is done' : ' — opens first')) + '">' + ps2.n + '</span>') +
           '<span class="dep-node-name">' + esc(it.name) + '</span>' +
           '<span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_SHORT[it.aud]) + '</span>' +
-          (it.live ? '<span class="dep-live-dot" title="Deployed">●</span>' : '') +
-          '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Move or deploy this assessment">⋯</button>' +
+          '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Move ' + esc(it.name) + '">⋯</button>' +
         '</div>';
       }).join('');
       var empty = '<span class="dep-lane-empty">' + (off ? 'Nothing turned off' : 'Drag assessments here') + '</span>';
       return '<div class="dep-lane' + (off ? ' dep-lane--off' : '') + '" data-lane="' + esc(phase) + '|' + mode + '">' +
-        '<div class="dep-lane-head"><span class="dep-mode-tag md-' + mode + '">' + esc(off ? 'Off' : TL_MODE[mode]) + '</span>' + sched + '</div>' +
+        '<div class="dep-lane-head"><span class="dep-mode-tag md-' + mode + '">' + esc(off ? 'Off' : TL_MODE[mode]) + '</span></div>' +
         '<div class="dep-lane-items">' + (nodes || empty) + '</div></div>';
     }).join('');
-    return '<div class="dep-phase' + (p.deployed ? ' is-deployed' : '') + '" data-phase="' + esc(phase) + '">' + head + lanes + '</div>';
+    return '<div class="dep-phase' + (p.deployed ? ' is-deployed st-' + ps.st : '') + '" data-phase="' + esc(phase) + '">' + head + lanes + '</div>';
   }
 
   function renderPlanner(d, mount) {
     if (!mount) return;
     var s = d.school;
-    mount.innerHTML = TL_PHASES.map(function (phase) { return planPhaseCard(s, phase); }).join('');
+    mount.innerHTML = '<p class="tl-muted dep-chain-note">Numbers show each audience’s order: <b>#2 opens once #1 is done</b>, for every student. Drag to reorder or move between lanes.</p>' +
+      TL_PHASES.map(function (phase) { return planPhaseCard(s, phase); }).join('');
     wirePlanner(d, mount);
   }
 
-  function closeItemMenu() { if (TL_POP) { TL_POP.remove(); TL_POP = null; } document.removeEventListener('mousedown', onPopOutside); }
+  function closeItemMenu() { if (TL_POP) { TL_POP.remove(); TL_POP = null; } document.removeEventListener('mousedown', onPopOutside); document.removeEventListener('keydown', onPopKey); }
   function onPopOutside(e) { if (TL_POP && !TL_POP.contains(e.target)) closeItemMenu(); }
+  function onPopKey(e) { if (e.key === 'Escape') closeItemMenu(); }
   function refreshPlanner(d) {
     closeItemMenu();
     var pm = document.getElementById('dep-planner'); if (pm) renderPlanner(d, pm);
@@ -1741,66 +1907,84 @@
     closeItemMenu();
     var p = tlPlan(s, phase), it = p.byId[id];
     var moves = [['school', 'Do at school'], ['home', 'Do at home'], ['off', 'Turn off']].map(function (o) {
-      var dis = (o[0] === it.mode) || (o[0] === 'home' && it.aud === 'teacher');
-      return '<button type="button" class="ui-menu-item" data-mv="' + o[0] + '"' + (dis ? ' disabled' : '') + '><i class="dep-swatch md-' + o[0] + '"></i>' + o[1] + '</button>';
+      var teacherHome = o[0] === 'home' && it.aud === 'teacher', dis = (o[0] === it.mode) || teacherHome;
+      return '<button type="button" class="ui-menu-item" data-mv="' + o[0] + '"' + (dis ? ' disabled' : '') + '><i class="dep-swatch md-' + o[0] + '"></i>' + o[1] +
+        (teacherHome ? ' <small class="dep-pop-why">teachers: school only</small>' : '') + '</button>';
     }).join('');
-    var override = it.live
-      ? '<button type="button" class="ui-menu-item danger" data-live="0">End this assessment</button>'
-      : '<button type="button" class="ui-menu-item" data-live="1"' + (it.mode === 'off' ? ' disabled' : '') + '>Deploy this one now</button>';
+    // Reorder inside the audience's chain without dragging.
+    var seq = tlRunning(p, it.aud), at = seq.indexOf(id);
+    var reorder = at < 0 ? '' : '<div class="dep-pop-sep"></div>' +
+      '<button type="button" class="ui-menu-item" data-shift="-1"' + (at <= 0 ? ' disabled' : '') + '>↑ Earlier in the chain</button>' +
+      '<button type="button" class="ui-menu-item" data-shift="1"' + (at >= seq.length - 1 ? ' disabled' : '') + '>↓ Later in the chain</button>';
     var pop = document.createElement('div');
     pop.className = 'ui-menu dep-pop';
-    pop.innerHTML = '<div class="ui-eyebrow dep-pop-h">' + esc(it.name) + '</div>' + moves + '<div class="dep-pop-sep"></div>' + override;
+    pop.innerHTML = '<div class="ui-eyebrow dep-pop-h">' + esc(it.name) + '</div>' + moves + reorder;
     document.body.appendChild(pop);
     TL_POP = pop;
     var r = btn.getBoundingClientRect();
     pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
     pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + 'px';
     pop.addEventListener('click', function (e) {
-      var mv = e.target.closest('[data-mv]'), lv = e.target.closest('[data-live]');
+      var mv = e.target.closest('[data-mv]'), sh = e.target.closest('[data-shift]');
       if (mv && !mv.hasAttribute('disabled')) { planMove(s, phase, id, mv.dataset.mv); refreshPlanner(d); }
-      else if (lv && !lv.hasAttribute('disabled')) { it.live = lv.dataset.live === '1'; refreshPlanner(d); }
+      else if (sh && !sh.hasAttribute('disabled')) {
+        var other = seq[at + (+sh.dataset.shift)], om = p.byId[other].mode;
+        // Swap places with the neighbour in the chain (possibly across lanes).
+        var oi = p.order[om].indexOf(other), ii = p.order[it.mode].indexOf(id);
+        p.order[om][oi] = id; p.order[it.mode][ii] = other;
+        var tmp = it.mode; it.mode = om; p.byId[other].mode = tmp;
+        if (p.deployed) tlPersistDeploy(s, phase);
+        refreshPlanner(d);
+      }
     });
-    setTimeout(function () { document.addEventListener('mousedown', onPopOutside); }, 0);
+    setTimeout(function () { document.addEventListener('mousedown', onPopOutside); document.addEventListener('keydown', onPopKey); }, 0);
   }
 
   function wirePlanner(d, mount) {
     var s = d.school, dragId = null;
 
+    // Dates are the schedule — editable before and after deploying.
     mount.querySelectorAll('.dep-date').forEach(function (inp) {
       inp.addEventListener('change', function () {
-        var parts = inp.dataset.date.split('|'); tlPlan(s, parts[0])[parts[1]] = inp.value; renderPlanner(d, mount);
-      });
-    });
-    mount.querySelectorAll('[data-sched]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var parts = b.dataset.sched.split('|'), p = tlPlan(s, parts[0]), mode = parts[1];
-        var val = prompt('When do “' + TL_MODE[mode] + '” assessments run for ' + parts[0] + '?\n(e.g. “Mon & Wed, 9–10am” or “Week of 4 Aug”)', p.sched[mode] || '');
-        if (val !== null) { p.sched[mode] = val.trim(); renderPlanner(d, mount); }
+        var parts = inp.dataset.date.split('|'), phase = parts[0], p = tlPlan(s, phase);
+        p[parts[1]] = inp.value;
+        if (p.start && p.end && p.end < p.start) { if (parts[1] === 'start') p.end = p.start; else p.start = p.end; }
+        if (p.deployed) {
+          p.endedEarly = false; p.held = false;
+          tlPersistDeploy(s, phase);
+          ORG.server.logAudit(me.name, 'phase.dates', phase + ': ' + p.start + ' → ' + p.end, 'phase', s.id);
+          toast(phase + ' dates saved — ' + TL_ST_LABEL[tlPhaseStatus(s, phase).st].toLowerCase() + '.');
+        }
+        refreshPlanner(d);
       });
     });
     mount.querySelectorAll('[data-deploy]').forEach(function (b) {
       b.addEventListener('click', function () {
         var phase = b.dataset.deploy, p = tlPlan(s, phase), n = p.order.school.length + p.order.home.length;
+        var future = p.start > tlToday(s);
         gated({ title: 'Deploy ' + phase, confirmLabel: 'Deploy phase',
-          body: '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b> (' + esc(p.start) + ' → ' + esc(p.end) + ')?</p>' +
-                '<p class="tl-muted">School &amp; Home assessments go live on their set schedules, in the order shown. Off assessments are skipped.</p>',
+          body: '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b>.</p>' +
+                '<p>' + (future ? 'It’s <b>Scheduled</b>: it goes live on <b>' + esc(fmtJoined(p.start)) + '</b>' : 'It goes live <b>now</b>') + ' and closes after <b>' + esc(fmtJoined(p.end)) + '</b>.</p>' +
+                '<p class="tl-muted">Each audience’s assessments open in the numbered order — #2 once #1 is done. Off assessments are skipped. You can change the dates later.</p>',
           audit: { action: 'phase.deploy', entity: phase, entityType: 'phase', schoolId: s.id },
           onConfirm: function () {
-            p.deployed = true;
-            p.order.school.concat(p.order.home).forEach(function (id) { p.byId[id].live = true; });
-            (TL_OVERRIDE[s.id] || (TL_OVERRIDE[s.id] = {}))[phase] = 'inprogress';   // reflect in top timeline
+            p.deployed = true; p.endedEarly = false; p.held = false;
             tlPersistDeploy(s, phase);   // → teacher/parent apps now see these assessments
-            refreshPlanner(d); toast(phase + ' deployed.');
+            refreshPlanner(d); toast(phase + (future ? ' scheduled for ' + fmtJoined(p.start) + '.' : ' is live.'));
           } });
       });
     });
     mount.querySelectorAll('[data-undeploy]').forEach(function (b) {
       b.addEventListener('click', function () {
         var phase = b.dataset.undeploy, p = tlPlan(s, phase);
-        p.deployed = false; Object.keys(p.byId).forEach(function (id) { p.byId[id].live = false; });
-        var ov = TL_OVERRIDE[s.id]; if (ov) delete ov[phase];
-        tlPersistUndeploy(s, phase);
-        refreshPlanner(d); toast(phase + ' returned to draft.');
+        gated({ title: 'Undeploy ' + phase, danger: true, confirmLabel: 'Undeploy',
+          body: '<p>Take <b>' + esc(phase) + '</b> back to draft? Teachers and parents lose access to its assessments straight away. Responses already recorded are kept.</p>',
+          audit: { action: 'phase.undeploy', entity: phase, entityType: 'phase', schoolId: s.id },
+          onConfirm: function () {
+            p.deployed = false; p.endedEarly = false; p.held = false;
+            tlPersistUndeploy(s, phase);
+            refreshPlanner(d); toast(phase + ' returned to draft.');
+          } });
       });
     });
     mount.querySelectorAll('[data-menu]').forEach(function (b) {
@@ -1822,52 +2006,103 @@
         var nodes = [].slice.call(lane.querySelectorAll('.dep-node[data-item]'));
         for (var i = 0; i < nodes.length; i++) { var r = nodes[i].getBoundingClientRect(); if (e.clientX < r.left + r.width / 2) { before = nodes[i].dataset.item; break; } }
         if (before === dragId) before = null;
-        if (planMove(s, phase, dragId, mode, before)) renderPlanner(d, mount);
+        if (planMove(s, phase, dragId, mode, before)) refreshPlanner(d);
       });
     });
   }
 
-  // Top timeline is now status-only (Phases → Audiences). Where each
-  // assessment runs — School / Home / Off — and the deploy action live in the
-  // planner below (renderPlanner), so there is a single place to configure.
+  // "+ Add assessment" — put one assessment (from Templates) into a phase.
+  // If the phase is already deployed it joins straight away, at the end of
+  // its audience's chain.
+  function openAddAssessment(d) {
+    var s = d.school, latest = ORG.server.latestTemplateIds();
+    var tpls = ORG.templates.filter(function (t) { return !t.archived && t.status === 'Published' && TL_AUD_KEY[t.audience]; })
+      .sort(function (a, b) { return (latest[b.phase + '|' + b.audience] === b.id) - (latest[a.phase + '|' + a.audience] === a.id) || a.title.localeCompare(b.title); });
+    if (!tpls.length) { toast('No published templates to add — publish one in Templates first.'); return; }
+    var phOpts = TL_PHASES.map(function (ph) { var st = tlPhaseStatus(s, ph).st; return '<option value="' + ph + '">' + ph + ' — ' + TL_ST_LABEL[st] + '</option>'; }).join('');
+    var tOpts = tpls.map(function (t) { var L = latest[t.phase + '|' + t.audience] === t.id;
+      return '<option value="' + esc(t.id) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(t.phase) + '">' + esc(t.title) + ' · ' + esc(t.audience) + (L ? ' · ★ Latest' : '') + '</option>'; }).join('');
+    openModal('Add assessment', '<p class="tl-muted">Add an assessment to one phase at ' + esc(s.name) + '. It goes at the end of its audience’s chain.</p><div class="tl-stack">' +
+      '<label class="field">Phase<select class="select" id="aa-phase">' + phOpts + '</select></label>' +
+      '<label class="field">Assessment<select class="select" id="aa-tpl">' + tOpts + '</select></label>' +
+      '<label class="field">Where it runs<select class="select" id="aa-mode"><option value="school">Do at school</option><option value="home">Do at home</option></select></label>' +
+      '<p class="tl-muted" id="aa-note"></p></div>', function (close) {
+        var phase = document.getElementById('aa-phase').value, sel = document.getElementById('aa-tpl'), o = sel.options[sel.selectedIndex];
+        var ak = TL_AUD_KEY[o.dataset.aud], mode = document.getElementById('aa-mode').value, p = tlPlan(s, phase);
+        if (ak === 'teacher') mode = 'school';
+        var id = 'tpl-' + sel.value;
+        if (p.byId[id] && p.order.off.indexOf(id) < 0) { toast('That assessment is already in ' + phase + '.'); return false; }
+        if (!p.byId[id]) p.byId[id] = { id: id, name: o.textContent.split(' · ')[0], aud: ak, mode: mode };
+        planMove(s, phase, id, mode);   // also saves a deployed phase
+        ORG.server.logAudit(me.name, 'phase.add', p.byId[id].name + ' → ' + phase, 'phase', s.id);
+        close(); refreshPlanner(d);
+        toast(p.byId[id].name + ' added to ' + phase + (p.deployed ? ' — it’s live in the chain now.' : '.'));
+      }, 'Add assessment');
+    setTimeout(function () {
+      var ph = document.getElementById('aa-phase'), sel = document.getElementById('aa-tpl'), md = document.getElementById('aa-mode'), note = document.getElementById('aa-note');
+      function sync() {
+        var o = sel.options[sel.selectedIndex], teacher = o.dataset.aud === 'Teacher', p = tlPlan(s, ph.value);
+        md.disabled = teacher; if (teacher) md.value = 'school';
+        var n = tlRunning(p, TL_AUD_KEY[o.dataset.aud]).length;
+        note.textContent = (o.dataset.phase !== ph.value ? 'This template was made for ' + o.dataset.phase + '. ' : '') +
+          'It will be ' + o.dataset.aud + ' #' + (n + 1) + (n ? ', opening once #' + n + ' is done.' : ', opening first.') +
+          (p.deployed ? ' ' + ph.value + ' is already deployed, so it’s added straight away.' : '');
+      }
+      // Start on the template's own phase.
+      var first = sel.options[0]; if (first) ph.value = first.dataset.phase;
+      [ph, sel].forEach(function (x) { x.addEventListener('change', sync); }); sync();
+    }, 0);
+  }
+
+  // Demo tooling (live demo school only): record some real completions —
+  // in chain order, through TilliAPI — so statuses move honestly on stage.
+  var SIM_RATE = 0.6;   // share of students who finish their next open assessment per click
+  function simulateProgress(d) {
+    var s = d.school, API = window.TilliAPI, moved = 0, rnd = Math.random;
+    var ids = API.studentsForSchool(s.id).map(function (x) { return x.student_id; });
+    API.getDeployments(s.id).filter(function (x) { return x.status === 'Live'; }).forEach(function (dep) {
+      ids.forEach(function (sid) {
+        if (rnd() > SIM_RATE) return;
+        var next = API.chainFor(s.id, dep.phase, dep.audience, sid).filter(function (c) { return c.state === 'open'; })[0];
+        if (next && API.markComplete(s.id, dep.phase, dep.audience, sid, next.id, 'demo@tilli.org') === true) moved++;
+      });
+    });
+    toast(moved ? 'Demo: recorded ' + moved + ' completion' + (moved === 1 ? '' : 's') + '.' : 'Demo: nothing to complete — deploy a phase that’s live today first.');
+    refreshPlanner(d);
+  }
+
+  // Top timeline: status only, from real data (Phases → Audiences). No
+  // clicking to change status — it moves when work is actually done.
   function renderDeploymentTimeline(d, mount) {
-    var s = d.school, deps = d.deployments, nav = tlNav(s.id);
-    if (nav.level > 2) nav.level = 2;   // level 3 (assessment editing) moved to the planner
-    var crumbs, note, rail, legend;
+    var s = d.school, nav = tlNav(s.id);
+    if (nav.level > 2) nav.level = 2;
+    var crumbs, note, rail;
+    var legend = tlLegend([['st-completed', 'Completed'], ['st-live', 'Live'], ['st-scheduled', 'Scheduled'], ['st-ended', 'Ended (not all done)'], ['st-none', 'Not deployed']]);
+    var short = function (v) { var x = fmtJoined(v).split(' '); return x.length === 3 ? x[0] + ' ' + x[1] : v; };
 
     if (nav.level === 1) {
       crumbs = '<span class="cur">Program phases</span>';
-      note = 'Tap a diamond to change a phase’s status · tap the name to see its audiences. Set where assessments run below.';
-      rail = tlRail(TL_PHASES.map(function (p) {
-        var st = tlEffState(s.id, p, tlPhaseState(deps, p));
-        return { label: p, sub: TL_STATE_LABEL[st], cls: 'st-' + st + ' clickable', attrs: ' data-phase="' + p + '"',
-          mkTitle: 'Tap to change status', navLabel: true, navTitle: 'Open ' + p + ' audiences' };
+      note = 'Status comes from real deployments and completions. Open a phase to see each audience.';
+      rail = tlRail(TL_PHASES.map(function (ph) {
+        var ps = tlPhaseStatus(s, ph);
+        var sub2 = ps.st === 'scheduled' ? 'Opens ' + short(ps.start) : ps.st === 'live' ? 'Until ' + short(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '%' : '')
+          : ps.st === 'ended' ? 'Ended ' + short(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '%' : '') : ps.st === 'completed' ? '100% done' : '';
+        return { label: ph, sub: TL_ST_LABEL[ps.st], sub2: sub2, cls: 'st-' + ps.st, attrs: ' data-phase="' + ph + '"', mkTitle: tlDateLine(ps) || 'Not deployed yet', navLabel: true, navTitle: 'See ' + ph + ' by audience' };
       }));
-      legend = tlLegend([['completed', 'Completed'], ['inprogress', 'In progress'], ['pending', 'Pending']]);
     } else {
+      var psx = tlPhaseStatus(s, nav.phase);
       crumbs = '<button data-tlup="1">Program phases</button><span class="sep">›</span><span class="cur">' + esc(nav.phase) + '</span>';
-      note = 'Status per audience for ' + esc(nav.phase) + '. Configure & deploy this phase below.';
+      note = esc(tlDateLine(psx) || 'Not deployed yet') + ' · per audience below.';
       rail = tlRail(TL_AUD.map(function (a) {
-        var key = nav.phase + '|' + a.key, st = tlEffState(s.id, key, tlAudState(deps, nav.phase, a.aud)), ch = tlChain(s, nav.phase, a.aud, a.key);
-        return { label: a.label, sub: ch.length + ' assessment' + (ch.length === 1 ? '' : 's'), cls: 'aud st-' + st + ' clickable', attrs: ' data-aud="' + a.key + '"',
-          mkTitle: 'Tap to change status' };
+        var x = psx.auds[a.key];
+        return { label: a.label, sub: TL_ST_LABEL[x.st], sub2: x.n + ' assessment' + (x.n === 1 ? '' : 's') + ' on' + (x.pct != null ? ' · ' + x.pct + '%' : ''), cls: 'aud st-' + x.st };
       }));
-      legend = tlLegend([['active', 'Active audience'], ['completed', 'Completed'], ['inprogress', 'In progress'], ['pending', 'Pending']]);
     }
 
     mount.innerHTML = '<div class="tl-tl"><div class="ui-crumbs tl-tl-crumbs">' + crumbs + '</div><p class="tl-tl-note">' + note + '</p>' + rail + legend + '</div>';
-
     mount.querySelectorAll('[data-tlup]').forEach(function (b) { b.addEventListener('click', function () { nav.level = +b.dataset.tlup; renderDeploymentTimeline(d, mount); }); });
-    // Phases (L1): diamond cycles status, name opens the audience status view.
-    mount.querySelectorAll('[data-phase]').forEach(function (nd) {
-      var p = nd.dataset.phase;
-      nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { tlCycleState(s.id, p, tlEffState(s.id, p, tlPhaseState(deps, p))); renderDeploymentTimeline(d, mount); });
-      nd.querySelector('.tl-tl-label').addEventListener('click', function () { nav.level = 2; nav.phase = p; renderDeploymentTimeline(d, mount); });
-    });
-    // Audiences (L2): diamond cycles status. Assessment-level config is in the planner.
-    mount.querySelectorAll('[data-aud]').forEach(function (nd) {
-      var akey = nd.dataset.aud, adef = TL_AUD.filter(function (x) { return x.key === akey; })[0], key = nav.phase + '|' + akey;
-      nd.querySelector('.tl-tl-diamond').addEventListener('click', function () { tlCycleState(s.id, key, tlEffState(s.id, key, tlAudState(deps, nav.phase, adef.aud))); renderDeploymentTimeline(d, mount); });
+    mount.querySelectorAll('[data-phase] .tl-tl-label.nav').forEach(function (b) {
+      b.addEventListener('click', function () { nav.level = 2; nav.phase = b.closest('[data-phase]').dataset.phase; renderDeploymentTimeline(d, mount); });
     });
   }
 
@@ -1883,13 +2118,15 @@
         '<div class="tl-inline-actions">' +
           '<button class="btn btn-outline btn-sm" data-teacherlog title="Per-teacher status for every teacher assessment deployed to this school — Completed when every student in their sections is rated.">Teacher assessment log</button>' +
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
-          '<button class="btn btn-outline btn-sm" data-newdep>+ New deployment</button></div></div>' +
+          (s.live && window.TilliAPI ? '<button class="btn btn-outline btn-sm tl-demo-btn" data-simulate title="Demo only: records completions for some students in every live phase (in chain order), so you can watch statuses move.">Demo · Simulate progress</button>' : '') +
+          '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
         '<div id="dep-timeline"></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Master Links</h3><p class="ui-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
         '<div class="mt-3"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
       '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>';
-    el.querySelector('[data-newdep]').addEventListener('click', function () { openNewDeployment(s.id, true); });
+    el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
+    var simB = el.querySelector('[data-simulate]'); if (simB) simB.addEventListener('click', function () { simulateProgress(d); });
     renderDeploymentTimeline(d, el.querySelector('#dep-timeline'));
     renderPlanner(d, el.querySelector('#dep-planner'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
@@ -2591,7 +2828,25 @@
   // ============================================================
   var HU = window.TilliHistory;
   var HIST_PAGE = 50;   // rows shown per "Show more" step
-  var histState = { kind: '', q: '', school: '', shown: HIST_PAGE };
+  var histState = { kind: '', q: '', school: '', shown: HIST_PAGE, range: '7', from: '', to: '' };
+  // Date-range presets for Change History. Custom uses the from/to date pickers.
+  var HIST_RANGES = [['7', 'Past 7 days'], ['30', 'Past 30 days'], ['custom', 'Custom range'], ['all', 'All time']];
+  function localISO(d) { var p = function (x) { return (x < 10 ? '0' : '') + x; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+  // → [startMs, endMs] for the current range (null = open-ended).
+  function histWindow() {
+    var DAY = 86400000, now = Date.now();
+    if (histState.range === '7' || histState.range === '30') { var t = new Date(); t.setHours(0, 0, 0, 0); return [t.getTime() - (+histState.range - 1) * DAY, now]; }
+    if (histState.range === 'custom') {
+      var a = histState.from ? new Date(histState.from + 'T00:00:00').getTime() : null;
+      var b = histState.to ? new Date(histState.to + 'T23:59:59.999').getTime() : null;
+      return [a, b];
+    }
+    return [null, null];
+  }
+  function histRangeLabel() {
+    if (histState.range === 'custom') return histState.from || histState.to ? 'between ' + (histState.from ? fmtJoined(histState.from) : 'the start') + ' and ' + (histState.to ? fmtJoined(histState.to) : 'today') : 'in this range';
+    return histState.range === 'all' ? '' : 'in the past ' + histState.range + ' days';
+  }
   function scopeSchoolIds() {
     return (GROUP ? ORG.schools.filter(function (s) { return s.groupId === GROUP.id; }) : ORG.schools).map(function (s) { return s.id; });
   }
@@ -2615,16 +2870,24 @@
       '<div class="ui-card"><div class="hist-tools">' + HU.kindChipsHTML(histState.kind) +
         '<select class="select tl-hist-school" id="hist-school" aria-label="Filter by school">' + opts + '</select>' +
         '<input class="input hist-q" id="hist-q" placeholder="Search a student, person or section…" value="' + esc(histState.q) + '" aria-label="Search history">' +
-        '<span class="hist-count" id="hist-count"></span></div><div id="hist-list"></div></div>';
+        '<span class="hist-count" id="hist-count"></span></div>' +
+      '<div class="hist-tools tl-hist-range"><div class="ui-seg" role="group" aria-label="Date range">' +
+        HIST_RANGES.map(function (r) { return '<button class="' + (histState.range === r[0] ? 'on' : '') + '" data-hist-range="' + r[0] + '">' + r[1] + '</button>'; }).join('') + '</div>' +
+        '<span class="tl-hist-dates" id="hist-dates"' + (histState.range === 'custom' ? '' : ' hidden') + '>' +
+          '<label>From <input class="input" type="date" id="hist-from" value="' + esc(histState.from) + '" max="' + localISO(new Date()) + '"></label>' +
+          '<label>To <input class="input" type="date" id="hist-to" value="' + esc(histState.to) + '" max="' + localISO(new Date()) + '"></label></span>' +
+      '</div><div id="hist-list"></div></div>';
 
     var listEl = body.querySelector('#hist-list'), countEl = body.querySelector('#hist-count');
     function drawList() {
-      var all = ORG.server.history(histState.school ? [histState.school] : ids, { kind: histState.kind, q: histState.q });
-      var more = all.length - histState.shown;
+      var win = histWindow();
+      var all = ORG.server.history(histState.school ? [histState.school] : ids, { kind: histState.kind, q: histState.q })
+        .filter(function (e) { return (win[0] == null || e.at >= win[0]) && (win[1] == null || e.at <= win[1]); });
+      var more = all.length - histState.shown, rl = histRangeLabel();
       listEl.innerHTML = histList(all.slice(0, histState.shown), { showSchool: !histState.school,
-          empty: histState.q ? 'No changes match “' + histState.q + '”.' : 'No changes recorded yet.' }) +
+          empty: histState.q ? 'No changes match “' + histState.q + '”' + (rl ? ' ' + rl : '') + '.' : 'No changes ' + (rl || 'recorded yet') + '.' }) +
         (more > 0 ? '<button class="btn btn-outline btn-sm hist-morebtn" id="hist-more">Show ' + Math.min(HIST_PAGE, more) + ' more</button>' : '');
-      countEl.textContent = all.length.toLocaleString() + ' change' + (all.length === 1 ? '' : 's');
+      countEl.textContent = all.length.toLocaleString() + ' change' + (all.length === 1 ? '' : 's') + (rl ? ' ' + rl : '');
       var mb = listEl.querySelector('#hist-more');
       if (mb) mb.addEventListener('click', function () { histState.shown += HIST_PAGE; drawList(); });
     }
@@ -2642,6 +2905,30 @@
       drawList();
     });
     body.querySelector('#hist-q').addEventListener('input', function (ev) { histState.q = ev.target.value; histState.shown = HIST_PAGE; drawList(); });
+    var datesEl = body.querySelector('#hist-dates');
+    body.querySelectorAll('[data-hist-range]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        histState.range = b.dataset.histRange; histState.shown = HIST_PAGE;
+        // First time into Custom: start from the past 30 days so the list isn't empty.
+        if (histState.range === 'custom' && !histState.from && !histState.to) {
+          histState.from = localISO(new Date(Date.now() - 29 * 86400000)); histState.to = localISO(new Date());
+          body.querySelector('#hist-from').value = histState.from; body.querySelector('#hist-to').value = histState.to;
+        }
+        body.querySelectorAll('[data-hist-range]').forEach(function (c) { c.classList.toggle('on', c === b); });
+        datesEl.hidden = histState.range !== 'custom';
+        drawList();
+      });
+    });
+    ['from', 'to'].forEach(function (k) {
+      body.querySelector('#hist-' + k).addEventListener('change', function (ev) {
+        histState[k] = ev.target.value; histState.shown = HIST_PAGE;
+        // Keep the range the right way round if the dates cross.
+        if (histState.from && histState.to && histState.from > histState.to) {
+          var o = k === 'from' ? 'to' : 'from'; histState[o] = histState[k]; body.querySelector('#hist-' + o).value = histState[k];
+        }
+        drawList();
+      });
+    });
     drawList();
   };
 
@@ -3222,6 +3509,10 @@
     }).filter(function (x) { return x.score; }).sort(function (a, b) { return b.score - a.score; }).map(function (x) { return x.m; });
   }
   SCREEN.knowledge = function (params, body) {
+    var kbTabs = '<div class="ui-tabs mb-gap"><button class="ui-tab' + (params.tab !== 'faq' ? ' on' : '') + '" data-kbtab="">Manuals <b>' + MANUALS.length + '</b></button>' +
+      '<button class="ui-tab' + (params.tab === 'faq' ? ' on' : '') + '" data-kbtab="faq">FAQ <b>' + FAQS.length + '</b></button></div>';
+    var wireKbTabs = function () { body.querySelectorAll('[data-kbtab]').forEach(function (b) { b.addEventListener('click', function () { go('knowledge', b.dataset.kbtab ? { tab: b.dataset.kbtab } : {}); }); }); };
+    if (params.tab === 'faq') { renderFaqTab(params, body, kbTabs); wireKbTabs(); return; }
     var q = params.q || '';
     var list = manualMatches(q);
     var cur = MANUALS.find(function (m) { return m.id === params.a; }) || list[0] || MANUALS[0];
@@ -3229,7 +3520,7 @@
       '<ol class="tl-kb-steps">' + cur.steps.map(function (st) {
         return '<li>' + esc(st.text) + (st.link ? ' <a class="btn-link" href="' + href(st.link[0], st.link[1]) + '">Open ' + esc(st.link[2]) + ' →</a>' : '') + '</li>';
       }).join('') + '</ol></article>';
-    body.innerHTML = screenHead('Knowledge Base', 'Manuals for the Tilli team — how to do the common jobs in this dashboard.') +
+    body.innerHTML = screenHead('Knowledge Base', 'Manuals and FAQs for the Tilli team — how to do the common jobs in this dashboard.') + kbTabs +
       '<div class="tl-kb"><aside class="ui-card tl-kb-side"><input class="input tl-kb-q" id="kb-q" placeholder="Search manuals…" value="' + esc(q) + '" aria-label="Search manuals">' +
         '<nav class="tl-kb-list">' + (list.length ? list.map(function (m) {
           return '<a class="tl-kb-item' + (m.id === cur.id ? ' on' : '') + '" href="' + href('knowledge', { a: m.id, q: q }) + '"><b>' + esc(m.title) + '</b><span>' + esc(m.summary) + '</span></a>';
@@ -3237,7 +3528,276 @@
         '<div class="ui-card">' + art + '</div></div>';
     var qi = body.querySelector('#kb-q');
     qi.addEventListener('input', function () { var pos = qi.selectionStart; SCREEN.knowledge({ q: qi.value, a: params.a }, body); var nq = body.querySelector('#kb-q'); nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} });
+    wireKbTabs();
   };
+  // Knowledge Base → FAQ: searchable, grouped by topic. ?f=<id> opens one.
+  function renderFaqTab(params, body, kbTabs) {
+    var q = params.q || '';
+    var list = q ? faqSearch(q).map(function (h) { return h.f; }) : FAQS;
+    var groups = q ? '<div class="ui-card">' + (list.length ? list.map(function (f, i) { return faqItemHtml(f, i === 0 || f.id === params.f); }).join('') : '<div class="ui-empty">No FAQ matches “' + esc(q) + '”. Try Ask Tilli.</div>') + '</div>'
+      : FAQ_TOPICS.map(function (t) {
+          var fs = list.filter(function (f) { return f.topic === t; }); if (!fs.length) return '';
+          return '<div class="ui-card mb-gap"><h3 class="ui-mod-title tl-faq-topic">' + esc(t) + '</h3>' + fs.map(function (f) { return faqItemHtml(f, f.id === params.f); }).join('') + '</div>';
+        }).join('');
+    body.innerHTML = screenHead('Knowledge Base', 'Manuals and FAQs for the Tilli team — how to do the common jobs in this dashboard.') + kbTabs +
+      '<div class="tl-filters"><input class="input grow tl-filter-q" id="faq-q" placeholder="Search the FAQ…" value="' + esc(q) + '" aria-label="Search the FAQ">' +
+        '<a class="btn btn-outline btn-sm" href="' + href('ask-tilli', {}) + '" style="text-decoration:none">Can’t find it? Ask Tilli →</a></div>' + groups;
+    var qi = body.querySelector('#faq-q');
+    qi.addEventListener('input', function () { var pos = qi.selectionStart; SCREEN.knowledge({ tab: 'faq', q: qi.value }, body); var nq = body.querySelector('#faq-q'); nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} });
+    if (params.f) { var el = body.querySelector('#faq-' + params.f); if (el) el.scrollIntoView({ block: 'center' }); }
+  }
+
+  // ============================================================
+  //  HELP (super admin) — ⓘ tooltips on titles / columns / KPIs,
+  //  a Help button on every page (that page's FAQs + an ask box),
+  //  and the FAQ list (Knowledge Base → FAQ, also used by Ask Tilli).
+  //  Edit the wording in TIPS and FAQS below.
+  // ============================================================
+  // Visible text of a title, card heading, column header, KPI label or list
+  // heading → what it means. Matched on the element's own text (counts ignored).
+  var TIPS = {
+    // screens
+    'Control Room': 'Your start page: what needs the team’s attention right now, platform totals and the latest activity.',
+    'Analytics': 'Portfolio-wide roll-ups — outcomes by country, curriculum boards and the completion ranking.',
+    'All Schools': 'Every partner school, grouped by school group. Use the country switch, search, or the Archived tab.',
+    'Change History': 'Every change to student records and assessments — by teachers, school admins, parents and the Tilli team. Filter by date range, type and school.',
+    'Templates': 'Assessment templates. The newest published one for each phase + audience is marked ★ Latest — that’s the one to deploy.',
+    'Deployments': 'Assessments sent to schools, their results, and the links people use to take them.',
+    'Reflection Questions': 'Questions teachers answer about themselves during dashboard onboarding.',
+    'Users': 'Everyone with a login and their role. Change a role or remove access here.',
+    'Invitations': 'Invites sent to school admins and teachers — pending, accepted or expired.',
+    'Issue Reports': 'Problems reported from the apps, plus grouped auto-crash reports. Filter by status or school.',
+    'Audit Trail': 'Append-only log of admin actions (archive, delete, publish…) by the Tilli team and the system.',
+    'Deletion Logs': 'Read-only record of every deleted student — who deleted them and when.',
+    'Merge Students': 'Combine duplicate student profiles. Suggestions never merge on their own — you always confirm.',
+    'Knowledge Base': 'Manuals and FAQs for the Tilli team.',
+    'Add Students': 'Add students by hand or paste a CSV. Rows are checked before anything is saved.',
+    // cards
+    'Needs attention': 'Queues that need action. Each card opens the filtered list behind its number.',
+    'Recent activity': 'The latest admin actions from the Audit Trail.',
+    'Outcomes by region': 'Average Social-Emotional and Cognitive band score (0–100) per country, across schools with results.',
+    'Outcomes': 'Average Social-Emotional and Cognitive band score (0–100). Appears once a Midline or Endline is complete.',
+    'Board mix': 'How many partner schools follow each curriculum board.',
+    'Completion ranking': 'Schools — or school groups — ordered by assessment completion, highest first.',
+    'Structure': 'Grades and sections with their student counts. Empty ones are removed automatically after ' + ORG.emptyStructureTtlDays + ' days.',
+    'Onboarding': 'Setup checks worked out automatically from the school’s data: missing students or staff, no live assessment, empty sections close to removal.',
+    'Assessment progress': 'Each phase (Baseline, Midline, Endline): whether it’s deployed, its window and completion so far.',
+    'Open issues': 'Unresolved problem reports from this school.',
+    'Group links': 'One link per audience for the whole group — people pick their school first.',
+    'School group links': 'One Parent and one Teacher link per group. People pick their school, then carry on as usual.',
+    'Master Links': 'The fixed per-school links for the Parent, Teacher and Direct Assessment hubs.',
+    'Teacher join code': 'Anyone who enters this code joins the school as a Teacher — no invite needed.',
+    'Staff at this school': 'School admins and teachers with access to this school.',
+    'Teacher assessment log': 'Per teacher: Completed when every student in their sections is rated, In progress when some are, Not started when none are.',
+    'Student assessment log': 'Per student: status of every student-facing (parent / direct) assessment deployed to the school.',
+    'Student Directory': 'This school’s roster. 20 per page by default — change it with “Per page”.',
+    'Merge history': 'Past merges. “0 re-linked” means no assessment data moved — worth a second look.',
+    'Suggested duplicates': 'Profiles that look like the same child. Review each pair before merging.',
+    'Deletion logs': 'Students deleted at this school, and by whom.',
+    'Issue reports': 'Problem reports from this school’s users.',
+    'Demo access & codes': 'Logins and codes for clicking through this demo school as each role.',
+    // columns / KPIs / list headings
+    'Completion': '% of expected assessment responses received (responses ÷ expected) across deployed assessments.',
+    'Avg completion': 'Average completion of the group’s schools that have results. Schools still at MoU aren’t counted.',
+    'Engagement': 'Recent use of Tilli: Active = steady use, Slowing = dropping off, Quiet = little or no use lately.',
+    'Stage': 'Where the school is in the programme: MoU → Onboarding → Baseline → Midline → Endline → Renewed.',
+    'Lowest school': 'The group’s school with the lowest completion — usually the first to follow up with.',
+    'Responses': 'Responses received / responses expected.',
+    'Chain': '⛓ = this assessment is chained after another and opens when the earlier one is done.',
+    'Window': 'Start → end dates when the assessment is open.',
+    'School Groups': 'Partner organisations that run more than one school.',
+    'Active Schools': 'Schools that aren’t archived.',
+    'Total Students': 'Students across all active schools.',
+    'Staff Members': 'School admins and teachers across all active schools.',
+    'School groups': 'Organisations running several schools. Open one to see its schools, links and CSVs.',
+    'Independent schools': 'Schools that don’t belong to a school group.',
+    'Archived groups': 'Groups archived as a whole — their schools are archived with them.',
+    'Archived schools': 'Schools archived on their own. Their data is kept.',
+  };
+  var TIP_SELECTORS = '.ui-screen-title, .ui-mod-title, .ui-table th, .tl-kpi .lbl, .tl-listgroup-h';
+  function ownText(el) {
+    for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 3 && n.nodeValue.trim()) return n.nodeValue.trim();
+    return '';
+  }
+  function decorateTips(root) {
+    if (GROUP) return;
+    root.querySelectorAll(TIP_SELECTORS).forEach(function (el) {
+      if (el.dataset.tipped) return;
+      var key = ownText(el), t = TIPS[key];
+      if (!t) return;
+      el.dataset.tipped = '1';
+      el.insertAdjacentHTML('beforeend', ' <span class="tl-tip" tabindex="0" role="button" aria-label="What does “' + esc(key) + '” mean?" data-tip="' + esc(t) + '">i</span>');
+    });
+  }
+  // One floating bubble for every [data-tip] — positioned in JS so table /
+  // card overflow never clips it. Hover or keyboard focus shows it; tap toggles.
+  var tipBox = null, tipFor = null;
+  function showTip(el) {
+    if (!tipBox) { tipBox = document.createElement('div'); tipBox.className = 'tl-tipbox'; tipBox.setAttribute('role', 'tooltip'); document.body.appendChild(tipBox); }
+    tipFor = el; tipBox.textContent = el.dataset.tip; tipBox.classList.add('show');
+    var r = el.getBoundingClientRect(), b = tipBox.getBoundingClientRect(), pad = 8;
+    var top = r.top - b.height - 8 < pad ? r.bottom + 8 : r.top - b.height - 8;
+    var left = Math.min(window.innerWidth - b.width - pad, Math.max(pad, r.left + r.width / 2 - b.width / 2));
+    tipBox.style.top = (top + window.scrollY) + 'px'; tipBox.style.left = (left + window.scrollX) + 'px';
+  }
+  function hideTip() { if (tipBox) tipBox.classList.remove('show'); tipFor = null; }
+  function wireTips() {
+    document.addEventListener('mouseover', function (e) { var t = e.target.closest && e.target.closest('[data-tip]'); if (t && t !== tipFor) showTip(t); else if (!t && tipFor) hideTip(); });
+    document.addEventListener('focusin', function (e) { var t = e.target.closest && e.target.closest('[data-tip]'); if (t) showTip(t); });
+    document.addEventListener('focusout', hideTip);
+    document.addEventListener('pointerdown', function (e) { if (tipFor && !(e.target.closest && e.target.closest('[data-tip]'))) hideTip(); });
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest && e.target.closest('.tl-tip');
+      if (!t) return;
+      e.preventDefault(); e.stopPropagation();   // an ⓘ inside a link / clickable row shouldn't navigate
+      showTip(t);   // tap shows it; tapping anywhere else hides it
+    }, true);
+    window.addEventListener('scroll', hideTip, true);
+    // Screens re-render often (tabs, pagers, filters) — decorate whatever lands.
+    var pending = false;
+    new MutationObserver(function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; decorateTips(app); }); })
+      .observe(app, { childList: true, subtree: true });
+  }
+
+  // ---- FAQ ----
+  var FAQ_TOPICS = ['Numbers & data', 'Schools & groups', 'Students', 'Assessments & templates', 'Deployments & links', 'Issues & support', 'People & access', 'History & logs', 'Ask Tilli & help'];
+  var FAQS = [
+    { id: 'completion', topic: 'Numbers & data', q: 'What does “Completion” mean?', screens: ['analytics', 'schools', 'school', 'group', 'deployments'],
+      a: 'The share of expected assessment responses a school has sent in: responses received ÷ responses expected, across the assessments deployed to it. 100% means everyone who was meant to respond has.' },
+    { id: 'group-avg', topic: 'Numbers & data', q: 'How is a school group’s completion worked out?', screens: ['analytics', 'group'],
+      a: 'It’s the plain average of the group’s schools that have some completion. Schools still at MoU aren’t counted, and big and small schools count the same.' },
+    { id: 'outcomes', topic: 'Numbers & data', q: 'What do the Social-Emotional and Cognitive bars show?', screens: ['school', 'group', 'analytics'],
+      a: 'The average band score (0–100) from the latest results. They appear once a Midline or Endline is complete — before that the card says there are no results yet.' },
+    { id: 'engagement', topic: 'Numbers & data', q: 'What do Active, Slowing and Quiet mean?', screens: ['analytics', 'schools'],
+      a: 'How much the school has used Tilli recently. Active = steady use, Slowing = use is dropping, Quiet = little or no use lately. Quiet schools are good follow-up candidates.' },
+    { id: 'stages', topic: 'Numbers & data', q: 'What do the stages (MoU → Renewed) mean?', screens: ['schools', 'analytics', 'school'],
+      a: 'MoU signed → Onboarding (setting up) → Baseline → Midline → Endline (the three assessment rounds) → Renewed (signed up again). The stage is set when the school is added.' },
+    { id: 'add-school', topic: 'Schools & groups', q: 'How do I add a new school?', screens: ['schools', 'controlroom'],
+      a: 'All Schools → + Add School. The wizard asks for the profile, rollout, grades & sections and the school admin, then opens the new school’s page with its codes ready.' },
+    { id: 'find-school', topic: 'Schools & groups', q: 'How do I find a school quickly?', screens: ['controlroom', 'schools'],
+      a: 'Type in “Find a school” on the Control Room and pick it from the list. On All Schools you can also search by name or code, or use the country switch.' },
+    { id: 'setup-flags', topic: 'Schools & groups', q: 'What do the warnings on a school (0 students, No active deployment…) mean?', screens: ['school', 'schools'],
+      a: 'They’re setup checks worked out automatically from the school’s data — nobody ticks them off. They clear on their own once students or staff are added, or an assessment goes live.' },
+    { id: 'empty-sections', topic: 'Schools & groups', q: 'Why is a grade or section about to be removed?', screens: ['school', 'schools'],
+      a: 'Grades and sections with no students ' + ORG.emptyStructureTtlDays + ' days after they were added are removed automatically. If the school needs one again, open Settings → Manage grades / sections → Add back — it gets a fresh ' + ORG.emptyStructureTtlDays + ' days.' },
+    { id: 'archive-vs-delete', topic: 'Schools & groups', q: 'What’s the difference between archiving and deleting a school?', screens: ['school', 'schools'],
+      a: 'Archiving hides the school from active lists and pauses its deployments and links, but keeps all data — you can un-archive any time. Deleting removes it for good and is only allowed once it’s archived.' },
+    { id: 'archive-group', topic: 'Schools & groups', q: 'What happens when I archive a school group?', screens: ['group', 'schools'],
+      a: 'Every school in the group is archived with it and the group admin sees an “archived” notice. Un-archiving the group restores only the schools archived with it.' },
+    { id: 'unarchive-blocked', topic: 'Schools & groups', q: 'Why can’t I un-archive a school?', screens: ['school', 'schools'],
+      a: 'Its school group is archived. Un-archive the group first, or move the school to another group in Edit.' },
+    { id: 'csv-students', topic: 'Students', q: 'How do I add a lot of students at once?', screens: ['school', 'add-students'],
+      a: 'School page → Students → + Add Students → CSV import. Paste or upload the CSV; every row is checked and you see a preview before anything is saved.' },
+    { id: 'merge', topic: 'Students', q: 'How are duplicate students merged?', screens: ['merge', 'school'],
+      a: 'Merge Students lists likely duplicates. Review each pair side by side and confirm by typing MERGE — nothing merges automatically. Assessment data moves to the profile you keep.' },
+    { id: 'deleted', topic: 'Students', q: 'Where can I see students who were deleted?', screens: ['deletion', 'school', 'audit'],
+      a: 'Audit Trail → Deletion Logs for everyone, or a school’s Issues & Logs tab for that school. Each row shows who deleted the student and when.' },
+    { id: 'per-page', topic: 'Students', q: 'Can I show more students per page?', screens: ['school'],
+      a: 'Yes — under the Students list, change “Per page” to 20, 50 or 100. Your choice is remembered in this browser.' },
+    { id: 'phase-status', topic: 'Assessments & templates', q: 'What do Scheduled, Live, Ended and Completed mean on a phase?', screens: ['school', 'deployments'],
+      a: 'They come from the phase dates and real responses — nobody sets them by hand. Scheduled = deployed but the start date is ahead. Live = inside the dates. Ended = the end date has passed but not everyone finished. Completed = every expected response is in.' },
+    { id: 'chain-order', topic: 'Assessments & templates', q: 'Does the order of assessments in a phase matter?', screens: ['school'],
+      a: 'Yes. Each audience’s assessments form a chain: #2 only opens for a student once #1 is done, and so on. Drag them, or use ⋯ → Earlier / Later in the chain, to change the order. In the parent app later ones show as “Locked — opens after …”.' },
+    { id: 'phase-dates', topic: 'Assessments & templates', q: 'How do I schedule a phase or change its dates?', screens: ['school'],
+      a: 'Set the phase’s Start and End dates on its card, then Deploy phase. It shows as Scheduled until the start date, goes Live on it, and closes after the end date. You can change both dates any time — even after deploying — and the status updates itself.' },
+    { id: 'add-assessment', topic: 'Assessments & templates', q: 'What’s the difference between “Deploy phase” and “+ Add assessment”?', screens: ['school'],
+      a: 'Deploy phase sends a whole phase (Baseline, Midline or Endline) with all the assessments turned on in it. + Add assessment puts one more assessment from Templates into a phase — if that phase is already deployed, it joins straight away at the end of its audience’s chain.' },
+    { id: 'which-template', topic: 'Assessments & templates', q: 'Which template should I deploy?', screens: ['templates', 'deployments'],
+      a: 'The one marked ★ Latest — the newest published template for that phase + audience. New deployment lists it first and warns you if you pick an older version.' },
+    { id: 'archive-template', topic: 'Assessments & templates', q: 'What does archiving a template do?', screens: ['templates'],
+      a: 'It moves to the Archived tab and can’t be picked for new deployments. Existing deployments and results aren’t touched, and you can un-archive it any time.' },
+    { id: 'teacher-log', topic: 'Assessments & templates', q: 'How do I see which teachers haven’t finished?', screens: ['school', 'deployments'],
+      a: 'School page → Assessments → Teacher assessment log. Each teacher shows Completed, In progress (x/y) or Not started for every teacher assessment. You can also ask Ask Tilli “who hasn’t completed at [school]”.' },
+    { id: 'logs-diff', topic: 'Assessments & templates', q: 'What’s the difference between the Teacher and Student assessment logs?', screens: ['school'],
+      a: 'The Teacher log has one row per teacher for teacher assessments. The Student log has one row per student for parent and direct (student) assessments.' },
+    { id: 'links', topic: 'Deployments & links', q: 'What’s the difference between a master link and a group link?', screens: ['deployments', 'group'],
+      a: 'A master link belongs to one school. A group link is shared with a whole school group — each person picks their school from the group’s list first, then carries on as usual.' },
+    { id: 'direct-link', topic: 'Deployments & links', q: 'Why is there no group link for Direct Assessment?', screens: ['deployments', 'group'],
+      a: 'Direct Assessment runs on a classroom device set up for one school, so it keeps its per-school link.' },
+    { id: 'exports', topic: 'Deployments & links', q: 'How do I export data?', screens: ['schools', 'group', 'deployments', 'school'],
+      a: 'All Schools → Schools CSV (the current view); a group page → Assessments CSV and Staff CSV; a school → Assessments → results CSV and Teacher assessment log CSV; Deployments → Results → Download CSV; Ask Tilli follow-up reports → CSV.' },
+    { id: 'issue-count', topic: 'Issues & support', q: 'How are open issues counted on school cards?', screens: ['issues', 'schools'],
+      a: 'Each open report from a person counts once. Auto-crash reports count once per crash type, however many times it happened.' },
+    { id: 'issue-reply', topic: 'Issues & support', q: 'Can I reply to the person who reported an issue?', screens: ['issues'],
+      a: 'Not from the dashboard yet. Change the status as you work (Open → Investigating → Resolved) and contact the reporter directly.' },
+    { id: 'teacher-join', topic: 'People & access', q: 'How do teachers join a school?', screens: ['school', 'users', 'invitations'],
+      a: 'Share the school’s Teacher join code (School page → Staff & Access). Anyone who enters it joins as a Teacher. You can also send a named invitation.' },
+    { id: 'group-admin', topic: 'People & access', q: 'What does a school group admin see?', screens: ['group', 'users'],
+      a: 'A group overview, Change History and read-only school pages for their group only. Use “Group admin view →” on the group page to see exactly what they see.' },
+    { id: 'history-range', topic: 'History & logs', q: 'How far back does Change History go?', screens: ['history'],
+      a: 'It opens on the past 7 days. Switch to Past 30 days, a Custom range (From / To), or All time.' },
+    { id: 'history-vs-audit', topic: 'History & logs', q: 'What’s the difference between Change History and the Audit Trail?', screens: ['history', 'audit'],
+      a: 'Change History is every change to student records and assessments, by anyone. The Audit Trail is admin actions — archive, delete, publish, role changes — by the Tilli team and the system.' },
+    { id: 'ask-tilli', topic: 'Ask Tilli & help', q: 'What can Ask Tilli answer?', screens: ['ask-tilli', 'controlroom'],
+      a: 'Completion for a school, group, country or everyone; who hasn’t finished at a school; the lowest schools; follow-up reports with coordinator emails (CSV or copy); and how-to questions from the manuals and these FAQs.' },
+    { id: 'help', topic: 'Ask Tilli & help', q: 'Where do I find help on a page?', screens: ['controlroom', 'knowledge'],
+      a: 'Hover the ⓘ next to a title, column or number for a one-line explanation. The ? Help button at the top of each page lists that page’s FAQs and lets you ask a question.' },
+  ];
+  var FAQ_STOP = ['how', 'the', 'can', 'and', 'for', 'what', 'where', 'does', 'why', 'this', 'that', 'with', 'are', 'there', 'mean', 'means', 'do', 'is', 'my', 'our'];
+  function faqWords(t) { return String(t || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 && FAQ_STOP.indexOf(w) < 0; }); }
+  // Score = words found in the question (2) or answer (1), plus a bonus for how
+  // much of the FAQ's own question the user's words cover — so “what does
+  // completion mean” lands on the Completion FAQ, not every FAQ mentioning it.
+  function faqSearch(q) {
+    var words = faqWords(q);
+    if (!words.length) return [];
+    return FAQS.map(function (f) {
+      var qq = f.q.toLowerCase(), aa = (f.a + ' ' + f.topic).toLowerCase(), own = faqWords(f.q);
+      var base = words.reduce(function (n, w) { return n + (qq.indexOf(w) >= 0 ? 2 : 0) + (aa.indexOf(w) >= 0 ? 1 : 0); }, 0);
+      var cover = own.length ? own.filter(function (w) { return words.some(function (u) { return u.indexOf(w) === 0 || w.indexOf(u) === 0; }); }).length / own.length : 0;
+      return { f: f, score: base ? base + Math.round(cover * 4) : 0 };
+    }).filter(function (x) { return x.score; }).sort(function (a, b) { return b.score - a.score; });
+  }
+  function faqItemHtml(f, open) {
+    return '<details class="tl-faq"' + (open ? ' open' : '') + ' id="faq-' + f.id + '"><summary>' + esc(f.q) + '</summary><p>' + esc(f.a) + '</p></details>';
+  }
+  var SCREEN_TITLES = { controlroom: 'Control Room', analytics: 'Analytics', schools: 'All Schools', group: 'School group', school: 'School page', history: 'Change History',
+    templates: 'Templates', deployments: 'Deployments', reflection: 'Reflection Questions', users: 'Users', invitations: 'Invitations', issues: 'Issue Reports',
+    audit: 'Audit Trail', deletion: 'Deletion Logs', merge: 'Merge Students', 'add-students': 'Add Students', knowledge: 'Knowledge Base', student: 'Student report', observation: 'Observation Form' };
+
+  // ---- Help panel (? Help on every page) ----
+  function helpBtnHtml() { return GROUP ? '' : '<button class="btn btn-ghost btn-sm tl-help-btn" data-help title="Help and FAQs for this page" aria-label="Help for this page">?<span> Help</span></button>'; }
+  function closeHelp() { var p = document.getElementById('tl-help'); if (p) p.remove(); document.removeEventListener('keydown', helpKey); }
+  function helpKey(e) { if (e.key === 'Escape') closeHelp(); }
+  function openHelp() {
+    closeHelp();
+    var r = currentRoute(), key = r.screen, title = SCREEN_TITLES[key] || 'This page';
+    var list = FAQS.filter(function (f) { return f.screens.indexOf(key) >= 0; });
+    if (!list.length) list = FAQS.filter(function (f) { return f.topic === 'Ask Tilli & help'; });
+    var p = document.createElement('div'); p.id = 'tl-help'; p.className = 'tl-help';
+    p.innerHTML = '<button class="tl-help-scrim" data-help-close aria-label="Close help"></button>' +
+      '<aside class="tl-help-panel" role="dialog" aria-label="Help">' +
+        '<div class="tl-help-h"><div><div class="ui-eyebrow">Help</div><h2>' + esc(title) + '</h2></div><button class="tl-help-x" data-help-close aria-label="Close">×</button></div>' +
+        '<form class="tl-help-ask" data-help-ask><input class="input" placeholder="Ask a question about this dashboard…" aria-label="Ask a question"><button class="btn btn-primary btn-sm" type="submit">Ask</button></form>' +
+        '<div class="tl-help-answer" id="tl-help-answer"></div>' +
+        '<div class="tl-help-sec">Common questions here</div>' + list.map(function (f) { return faqItemHtml(f, false); }).join('') +
+        '<div class="tl-help-foot"><a class="btn-link" href="' + href('knowledge', { tab: 'faq' }) + '" data-help-close>All FAQs →</a>' +
+          '<a class="btn-link" href="' + href('knowledge', {}) + '" data-help-close>Manuals →</a>' +
+          '<a class="btn-link" href="' + href('ask-tilli', {}) + '" data-help-close>Open Ask Tilli →</a></div>' +
+      '</aside>';
+    document.body.appendChild(p);
+    p.querySelectorAll('[data-help-close]').forEach(function (b) { b.addEventListener('click', closeHelp); });
+    document.addEventListener('keydown', helpKey);
+    var inp = p.querySelector('[data-help-ask] input'), ans = p.querySelector('#tl-help-answer');
+    function ask(q) {
+      q = String(q || '').trim(); if (!q) return;
+      // Same routing as Ask Tilli: dashboard questions → FAQ, data questions →
+      // completion / who hasn't finished / reports.
+      var a = platformAskAnswer(q, 'all');
+      var html = '<div class="tl-help-tilli">' + a.html + (a.csv ? '<p class="tl-muted">Open this in Ask Tilli to download the CSV.</p>' : '') +
+        (a.sugs && a.sugs.length ? '<div class="tl-ask-sugs">' + a.sugs.map(function (sq) { return '<button class="askx-sug" data-help-try="' + esc(sq) + '">' + esc(sq) + '</button>'; }).join('') + '</div>' : '') + '</div>';
+      ans.innerHTML = html + '<button class="btn-link tl-help-more" data-help-more>Continue in Ask Tilli →</button>';
+      ans.querySelectorAll('[data-help-try]').forEach(function (b) { b.addEventListener('click', function () { inp.value = b.dataset.helpTry; ask(inp.value); }); });
+      ans.querySelectorAll('[data-askcsv],[data-askcopy]').forEach(function (b) { b.remove(); });
+      ans.querySelectorAll('[data-askgo]').forEach(function (b) { b.addEventListener('click', function () { closeHelp(); go(b.dataset.askgo, b.dataset.askparams ? JSON.parse(b.dataset.askparams) : {}); }); });
+      ans.querySelector('[data-help-more]').addEventListener('click', function () { closeHelp(); askp.chatId = null; go('ask-tilli', {}); askpSend(q); });
+    }
+    p.querySelector('[data-help-ask]').addEventListener('submit', function (e) { e.preventDefault(); ask(inp.value); });
+    inp.focus();
+  }
+  function wireHelp() {
+    document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-help]'); if (b) { e.preventDefault(); openHelp(); } });
+  }
 
   // ============================================================
   //  ASK TILLI — platform team (#9 / #10). Scripted, rule-based
@@ -3405,6 +3965,11 @@
     var th = /(below|under|less than|lower than)\s*(\d{1,3})\s*%?/.exec(ql);
     var threshold = th ? Math.min(100, +th[2]) : ASK_FOLLOWUP_DEFAULT;
 
+    // Questions about the dashboard itself (no school / group / country named) → FAQ.
+    var faqTop = (school || group || country) ? null : faqSearch(q)[0];
+    if (faqTop && faqTop.score >= 4 && /\b(what|why|how|where|can|does|is|which|when|difference|explain|meaning)\b/.test(ql)) {
+      return { html: '<p><b>' + esc(faqTop.f.q) + '</b></p><p>' + esc(faqTop.f.a) + '</p><div class="tl-ask-acts">' + askLinkBtn('knowledge', 'More in the FAQ', { tab: 'faq', f: faqTop.f.id }) + '</div>' };
+    }
     if (/\bhow (do|can|to|should)\b|\bwhere (do|can|is)\b|\bmanual|\bguide\b|\bsteps?\b/.test(ql)) {
       var ms = manualMatches(q).slice(0, 2);
       if (ms.length) return { html: '<p>Here’s the manual for that:</p>' + ms.map(function (m) {
@@ -3421,6 +3986,7 @@
     if (/complet|progress|status|how (is|are)|doing|done|rate|%/.test(ql) || school || group || country) {
       return { html: target.kind === 'school' ? askAnsSchool(target.school) : askAnsSet(target) };
     }
+    if (faqTop && faqTop.score >= 4) return { html: '<p><b>' + esc(faqTop.f.q) + '</b></p><p>' + esc(faqTop.f.a) + '</p><div class="tl-ask-acts">' + askLinkBtn('knowledge', 'More in the FAQ', { tab: 'faq', f: faqTop.f.id }) + '</div>' };
     return { html: '<p>I can answer completion questions for a school, a group, a country or the whole portfolio, list who hasn’t finished at a school, build follow-up reports, and point you to the manuals. Try one of these:</p>', sugs: askSuggestions(scope) };
   }
 
@@ -3782,7 +4348,8 @@
   // routes to its nav destination — there's no platform-level chat yet.
   // Group mode has no Ask Tilli destination, so it gets the Need-help bubble only.
   if (window.TilliFloat) TilliFloat.mount(GROUP ? { role: 'School group admin' } : { role: 'Platform admin', askSub: 'Completion, follow-ups and how-tos', ask: function () { go('ask-tilli', {}); } });
-  window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', function () { closeHelp(); hideTip(); render(); });
+  if (!GROUP) { wireTips(); wireHelp(); }
   if (!location.hash) location.replace('#/' + HOME);
   render();
 })();
