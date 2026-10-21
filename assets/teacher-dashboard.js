@@ -35,7 +35,10 @@
     hairM: '#4A3B2E', hairF: '#5B4636', shadow: '#000', trousers: '#6D5B4B', boots: '#4A3F35', skin: '#F6DFC8',
     green: '#56C02B', shirtSeam: '#49A524', yellow: '#FCC30B', brim: '#E8B96F', hatBand: '#E8912D', cyan: '#26BDE2',
     // sprout (sidebar logo + journey marker), journey vine, lock
-    sproutStem: '#348C11', sproutLime: '#9BDE1D', vineStem: '#8FB37E', vineLeaf: '#A9C79A', lock: '#B0A794',
+    sproutStem: '#348C11', sproutLime: '#9BDE1D', vineStem: '#56C02B', vineLeaf: '#8FD96B', lock: '#B0A794',
+    // journey 'Complete' flowers — one brand colour per step, in order: [petal, centre]
+    // (same palette as the welcome screen's flower band)
+    journeyFlowers: [['#E866B0', '#FCC30B'], ['#26BDE2', '#FCC30B'], ['#FCC30B', '#F99B1C'], ['#E91E8C', '#FCC30B'], ['#F99B1C', '#FCC30B']],
     // garden scene backdrops (CSS template)
     bedGround: 'linear-gradient(180deg,#EAF1E4 0%,#DCE8D4 62%,#D6E2CD 100%)',
     sky: 'linear-gradient(180deg, #E6F4F8 0%, #EAF5EC 52%, #F1FFEC 100%)',
@@ -1636,7 +1639,7 @@
       if (key === 'post' && st === 'done') body = 'Your Teaching Mirror now shows how you’ve changed';
       return { key, title: d.title, meta: st === 'done' ? d.done : st === 'active' ? d.due : 'Locked', body: st === 'locked' ? '' : body, st, obs: !!wk };
     });
-    const flower = `<svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="12" r="6.4" fill="${ART.blush}"/><circle cx="31.5" cy="19" r="6.4" fill="${ART.blush}"/><circle cx="27.8" cy="30" r="6.4" fill="${ART.blush}"/><circle cx="16.2" cy="30" r="6.4" fill="${ART.blush}"/><circle cx="12.5" cy="19" r="6.4" fill="${ART.blush}"/><circle cx="22" cy="22" r="6.6" fill="${ART.pollen}"/></svg>`;
+    const flower = (k) => { const [petal, pollen] = ART.journeyFlowers[k % ART.journeyFlowers.length]; return `<svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="12" r="6.4" fill="${petal}"/><circle cx="31.5" cy="19" r="6.4" fill="${petal}"/><circle cx="27.8" cy="30" r="6.4" fill="${petal}"/><circle cx="16.2" cy="30" r="6.4" fill="${petal}"/><circle cx="12.5" cy="19" r="6.4" fill="${petal}"/><circle cx="22" cy="22" r="6.6" fill="${pollen}"/></svg>` };
     const sprout = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 21v-8" stroke="${ART.sproutStem}" stroke-width="2" stroke-linecap="round"/><path d="M12 13C12 9 9 6 5 6c0 4 3 7 7 7Z" fill="${ART.sproutLime}"/><path d="M12 14c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="${ART.green}"/></svg>`;
     const lock = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="${ART.lock}"/><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="${ART.lock}" stroke-width="2"/></svg>`;
     // No window open → one calm line saying when the next one opens.
@@ -1647,14 +1650,14 @@
       const nextW = (S.data.windows || []).find((w) => !unlocked.has(w.key));
       calm = `<div class="ui-note mb-4"><span>🌿 Nothing to observe right now.${nextW ? ' ' + esc(nextW.label) + (nextW.date ? ' opens ' + esc(nextW.date) : ' opens next') + '.' : ' Every window this year is done.'}</span></div>`;
     }
-    const nodes = journey.map((j) => {
+    const nodes = journey.map((j, ji) => {
       const dn = j.st === 'done', active = j.st === 'active';
       const clickable = active || dn;
       const dataAttr = (j.key === 'post' && active) ? 'data-take-reflection="post"'
         : (j.key === 'pre' || j.key === 'post') && dn ? 'data-nav="profile"'
         : active && j.obs ? 'data-obs-pending="1"'   // → who's still to observe
         : active ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
-      const marker = dn ? flower : active ? `<div class="obs-marker active">${sprout}</div>` : `<div class="obs-marker lock">${lock}</div>`;
+      const marker = dn ? flower(ji) : active ? `<div class="obs-marker active">${sprout}</div>` : `<div class="obs-marker lock">${lock}</div>`;
       const badge = dn ? 'Complete' : active ? 'Active' : 'Locked';
       const what = j.title.replace(/ (observations|report)$/, '').toLowerCase();
       const cta = active ? (j.obs ? 'Continue ' + what + ' observations →' : 'Start survey →')
