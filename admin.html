@@ -196,6 +196,16 @@
   .ad-nav-mini svg { width: 15px; height: 15px; flex: none; }
   .ad-nav-mini:hover { background: var(--surface-100); color: var(--ink-900); }
   .ad-nav-mini.on { color: var(--green-700); }
+  /* Outcomes: a sub-item under Overview (indented, smaller, a guide line on the left) */
+  .ui-nav-item.open { color: var(--green-700); }
+  .ui-nav-item.ad-nav-sub { position: relative; width: calc(100% - 22px); margin-left: 22px; padding: 8px 12px; gap: 10px; font-size: var(--fs-sm); }
+  .ui-nav-item.ad-nav-sub::before { content: ''; position: absolute; left: -10px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--line-200); }
+  .ui-nav-item.ad-nav-sub.on::before { background: var(--green-500); }
+  .ui-nav-item.ad-nav-sub .ic { width: 16px; height: 16px; }
+  .ui-nav-item.ad-nav-sub svg { width: 16px; height: 16px; }
+  /* Outcomes › School: Progress over time drops its own legend (the school card above has one) */
+  #o-prog.no-legend .ad-proghead > div:first-child { display: none; }
+  #o-prog.no-legend .ad-proghead { justify-content: flex-end; }
   .ad-tabalert { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--warn-700); vertical-align: 2px; }   /* "School admin", "No section yet" on one line */
   .ad-navcard .nc-pcts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); }
 
@@ -420,7 +430,16 @@
   .ov-dl { --attn: #D9361F; --attn-ink: #C2361C; --attn-wash: #FFF1EE; }
   .dl-attn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 3px 7px; border-radius: 999px;
     background: var(--attn-wash); color: var(--attn-ink); letter-spacing: .03em; }
-  .dl-points li.activity .dl-pt-kind { color: var(--green-700); }
+  /* Results cards in band colours: good news = Blooming green, needs help = Sprouting blue
+     (tinted card + border + label pill; pill text darkened for AA: 5.3:1 / 5.8:1). */
+  .ov-dl { --tone-bloom-ink: #2A700D; --tone-sprout-ink: #14657A; }
+  .dl-points li.tone-bloom { border-color: color-mix(in srgb, var(--lvl-3) 40%, var(--line-200)); background: color-mix(in srgb, var(--lvl-3-wash) 45%, var(--white)); }
+  .dl-points li.tone-sprout { border-color: color-mix(in srgb, var(--lvl-1) 40%, var(--line-200)); background: color-mix(in srgb, var(--lvl-1-wash) 45%, var(--white)); }
+  .dl-points li.tone-bloom.on, .dl-points li.tone-bloom.pinned { border-color: var(--lvl-3); }
+  .dl-points li.tone-sprout.on, .dl-points li.tone-sprout.pinned { border-color: var(--lvl-1); }
+  .dl-tone { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; letter-spacing: .03em; }
+  .dl-points li.tone-bloom .dl-tone { background: var(--lvl-3-wash); color: var(--tone-bloom-ink); }
+  .dl-points li.tone-sprout .dl-tone { background: var(--lvl-1-wash); color: var(--tone-sprout-ink); }
   .dl-pt-kind svg { flex: none; }
   .dl-pt-head { margin: 0; font-family: var(--font-body); font-weight: 700; font-size: var(--fs-md); line-height: 1.4; color: var(--ink-900); }
   .dl-pt-head em { font-style: normal; color: inherit; }
@@ -529,6 +548,6 @@
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
 <script src="assets/admin-data.js?v=20261020ca"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261020sug"></script>
+<script src="assets/admin.js?v=20261021de"></script>
 </body>
 </html>

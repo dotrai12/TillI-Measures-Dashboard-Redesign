@@ -383,7 +383,8 @@
       '<label class="select-wrap"><select class="select" id="o-progskill" title="Trace all skills pooled together, or one skill on its own">' + skillOpts + '</select></label>' +
       '<label class="select-wrap"><select class="select" id="o-progperiod" title="All periods = time on the x-axis. Pick one period = every skill on the x-axis at that point.">' + periodOpts + '</select></label>' +
       '</div></div>';
-    return head + '<div class="ad-progcap">' + v.cap + '</div><div id="o-progchart" class="ad-progchart"></div>';
+    var isDefault = !progSkill && progPeriod === 'all';
+    return head + (isDefault ? '' : '<div class="ad-progcap">' + v.cap + '</div>') + '<div id="o-progchart" class="ad-progchart"></div>';
   }
   // Measure, then draw the SVG at 1 unit = 1px. Called after insertion and on resize.
   function drawProgChart(students) {
@@ -487,6 +488,10 @@
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
       '<nav class="ui-nav">' + navItems().filter(function (n) { return n.key !== 'asktilli'; }).map(function (n) {
         if (n.disabled) return '<button class="ui-nav-item disabled" data-navsoon="1" title="Coming soon to the leadership view"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '<span class="ui-tag ml-auto">Soon</span></button>';
+        // Outcomes is a sub-item tucked under Overview: Overview is "on" on its own screen and
+        // "open" (green text, no fill) while you're on Outcomes, which then gets the fill.
+        if (n.key === 'overview') return '<button class="ui-nav-item' + (r.screen === 'overview' ? ' on' : r.screen === 'outcomes' ? ' open' : '') + '" data-nav="overview"><span class="ic">' + ICONS.overview + '</span>Overview</button>' +
+          '<button class="ui-nav-item ad-nav-sub' + (r.screen === 'outcomes' ? ' on' : '') + '" data-nav="outcomes"' + (r.screen === 'outcomes' ? ' aria-current="page"' : '') + '><span class="ic">' + ICONS.outcomes + '</span>Outcomes</button>';
         return '<button class="ui-nav-item' + (navOn(n.key, r.screen) ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
       }).join('') +
       // Ask Tilli is mostly asked from the Overview now, so its full screen gets a quieter link under the nav.
@@ -645,7 +650,7 @@
       var interp = AD.interpret(sk.key, gradeBand, point, AD.shapeOf(d));
       // School-scope rows carry the skill's Secure target so every bar has a "vs what?".
       var tgt = (AD.targetsSet && gradeBand === 'school') ? AD.skillSecureTarget(sk.key) : null;
-      return '<div class="ad-skillrow"><div class="ad-skillname">' + esc(sk.name) + '<small>' + (sk.group === 'sel' ? 'Social-Emotional' : 'Cognitive') + '</small></div>' +
+      return '<div class="ad-skillrow"><div class="ad-skillname">' + esc(sk.name) + '</div>' +   // the bucket heading already names the group
         '<div>' + bandBar(d, false, tgt) + (tgt != null ? targetDelta(d.pct.secure, tgt) : '') +
         (interp.authored ? '<p class="ad-interp">' + esc(interp.text) + '</p>' : '') + '</div></div>';
     }
@@ -657,8 +662,7 @@
         '<span class="ad-bucket-count">' + list.length + ' skills</span></summary>' +
         '<div class="ad-bucket-body">' + list.map(distSkillRow).join('') + '</div></details>';
     }
-    return '<div class="mb-3">' + bandLegend() + '</div>' +
-      distBucket('Social-Emotional', 'sel') +
+    return distBucket('Social-Emotional', 'sel') +   // legend: once, on the school card above
       distBucket('Cognitive', 'cog');
   }
 
@@ -1368,7 +1372,7 @@
     out.push({ kind: 'result', eyebrow: pt.label + ' results',
       head: dlHl(d.pct.secure + '%', blm.ink) + ' of skill ratings are ' + dlHl('Blooming', blm.ink) + '.', body: line + ' Each circle' + '’' + 's colour is the band most of its children are in.' });
     var bloomKids = studs.filter(function (s) { return dlKidBand(s, pt) === 'secure'; }), sproutKids = studs.filter(function (s) { return dlKidBand(s, pt) === 'emerging'; });
-    out.push({ kind: 'result', eyebrow: 'Children Blooming',
+    out.push({ kind: 'result', tone: 'bloom', eyebrow: 'Children Blooming',
       head: dlHl(bloomKids.length + ' of ' + n + ' children', blm.ink) + ' are Blooming overall.',
       body: countNoun(sproutKids.length, 'child is', 'children are') + ' Sprouting overall and could use a little extra.', hl: dlKidKeys(bloomKids) });
     var missed = dlMissed(studs, pt);
@@ -1377,17 +1381,17 @@
       body: missed.length ? 'Their results are missing from these numbers; the next window is a chance to include them.' : 'These numbers cover all ' + countNoun(n, 'child', 'children') + '.', hl: missed.length ? dlKidKeys(missed) : null });
     var gsAll = AD.growthStrength(studs, pt.key, 1), st = gsAll.strength[0], gr = gsAll.growth[0];
     var STRONG_PCT = 40;   // below this, the top skill is "furthest along", not something to celebrate
-    if (st) out.push({ kind: 'result', eyebrow: st.secure >= STRONG_PCT ? 'Strongest skill' : 'Furthest along',
+    if (st) out.push({ kind: 'result', tone: 'bloom', eyebrow: st.secure >= STRONG_PCT ? 'Strongest skill' : 'Furthest along',
       head: st.secure >= STRONG_PCT ? dlHl(st.name, blm.ink) + ' is the strongest skill: ' + st.secure + '% Blooming.' : dlHl(st.name, blm.ink) + ' is furthest along, at ' + st.secure + '% Blooming.',
       body: st.secure >= STRONG_PCT ? 'Worth celebrating with teachers and families.' : 'Every skill is early on; this is the best one to build from.',
       hl: dlKidKeys(dlInBand(studs, st.key, pt.scoreField, 'secure')) });
-    if (gr) out.push({ kind: 'result', eyebrow: 'Where to help next',
+    if (gr) out.push({ kind: 'result', tone: 'sprout', eyebrow: 'Where to help next',
       head: dlHl(gr.name, spr.ink) + ' has the most children Sprouting: ' + gr.emerging + '%.', body: esc(AD.helpStep(gr.key)),
       hl: dlKidKeys(dlInBand(studs, gr.key, pt.scoreField, 'emerging')) });
     if (secs.length > 1) {
       var ranked = secs.map(function (x) { return { sd: x, pct: dlDist(AD.studentsInSection(x), pt.key).pct.secure }; }).sort(function (a, b) { return b.pct - a.pct; });
       var top = ranked[0], low = ranked[ranked.length - 1];
-      out.push({ kind: 'result', eyebrow: 'Furthest along',
+      out.push({ kind: 'result', tone: 'bloom', eyebrow: 'Furthest along',
         head: dlHl(top.sd.name, blm.ink) + ' has the most Blooming, at ' + top.pct + '%.',
         body: esc(low.sd.name) + ' is at ' + low.pct + '%. Groups grow at different speeds; both are worth a look.',
         hl: dlSecKeys(top.sd).concat(dlSecKeys(low.sd)), sep: true });
@@ -1395,7 +1399,7 @@
     if (AD.completedPoints.length >= 2) {
       var m = AD.overallBandMovement(studs), idx = { emerging: 0, developing: 1, secure: 2 };
       var up = studs.filter(function (x) { return idx[AD.bandOf(AD.meanScore(x, pt.scoreField))] > idx[AD.bandOf(AD.meanScore(x, first.scoreField))]; });
-      out.push({ kind: 'result', eyebrow: 'Since ' + first.label,
+      out.push({ kind: 'result', tone: 'bloom', eyebrow: 'Since ' + first.label,
         head: dlHl(m.up + ' of ' + m.n + ' children', blm.ink) + ' moved up a band.',
         body: m.down ? countNoun(m.down, 'child', 'children') + ' moved down. Dips happen; a second look helps.' : 'No child moved down a band.', hl: dlKidKeys(up) });
     }
@@ -1415,7 +1419,7 @@
     var sd = best.g.sd || AD.sections.filter(function (x) { return x.grade === best.g.grade; })
       .map(function (x) { return { sd: x, v: pct(AD.studentsInSection(x), best.sk.key) }; }).sort(function (a, b) { return a.v - b.v; })[0].sd;
     var teacher = AD.teacherFor(sd), act = AD.activityFor(best.sk.key), spr = AD.bandMeta('emerging');
-    return { kind: 'activity', eyebrow: 'Try this next',
+    return { kind: 'activity', tone: 'sprout', eyebrow: 'Try this next',
       head: 'From ' + esc(pt.label) + ', ' + dlHl(best.g.label, spr.ink) + ' needs the most help with ' + dlHl(best.sk.name, spr.ink) + ' (' + best.v + '% Blooming).',
       body: '<b>Activity:</b> ' + esc(act.activity) + '<br><b>Talk it through with ' + esc(teacher) + '</b> (' + esc(sd.name) + '): ' + esc(act.talk) +
         (act.sample ? ' <span class="ui-tag dl-sample" title="Placeholder copy until the real activity library is connected">Sample</span>' : ''),
@@ -1454,13 +1458,14 @@
   // of the dandelion; clicking pins it (click again to unpin).
   var dlPinned = { key: '', i: -1 };
   function dlPointInner(x) {
-    return '<p class="dl-pt-kind">' + (x.kind === 'warn' ? '<span class="dl-attn">' + DL_WARN_ICON + 'Needs attention</span>' : '') + '<span>' + esc(x.eyebrow) + '</span></p>' +
+    var label = x.tone ? '<span class="dl-tone">' + esc(x.eyebrow) + '</span>' : '<span>' + esc(x.eyebrow) + '</span>';   // good news = Blooming pill, needs help = Sprouting pill
+    return '<p class="dl-pt-kind">' + (x.kind === 'warn' ? '<span class="dl-attn">' + DL_WARN_ICON + 'Needs attention</span>' : '') + label + '</p>' +
       '<p class="dl-pt-head">' + x.head + '</p><p class="dl-pt-body">' + x.body + '</p>';
   }
   function dlStoryHTML(steps) {
     return '<ul class="dl-points">' + steps.map(function (x, j) {
       var more = x.stack ? x.stack.length - 1 : 0;
-      return '<li tabindex="0" class="' + (x.kind || '') + (more && dlWarnOpen ? ' open' : '') + '" data-dl-pt="' + j + '" aria-label="' + esc((x.kind === 'warn' ? 'Needs attention: ' : '') + x.eyebrow) + '">' +
+      return '<li tabindex="0" class="' + (x.kind || '') + (x.tone ? ' tone-' + x.tone : '') + (more && dlWarnOpen ? ' open' : '') + '" data-dl-pt="' + j + '" aria-label="' + esc((x.kind === 'warn' ? 'Needs attention: ' : '') + x.eyebrow) + '">' +
         (more ? '<button type="button" class="dl-more" data-dl-more aria-expanded="' + dlWarnOpen + '">' + (dlWarnOpen ? 'Show less' : '+ ' + more + ' more') + '</button>' : '') +
         dlPointInner(x) +
         (more && dlWarnOpen ? x.stack.slice(1).map(function (w) { return '<div class="dl-stack-row">' + dlPointInner(w) + '</div>'; }).join('') : '') +
@@ -1820,14 +1825,21 @@
     var section = params.section || '';
     var point = params.point && AD.completedPoints.some(function (p) { return p.key === params.point; }) ? params.point : AD.latestComplete.key;
     var level = section ? 'section' : grade ? 'grade' : 'school';
+    var allGrades = level === 'school' && params.view === 'grades';   // School › All grades: one card per grade
     var scope = { level: level, grade: grade, sectionId: section };
     var students = AD.scopeStudents(scope);
 
     // breadcrumb (terminates at section — no student level exists)
-    var crumbs = '<div class="ui-crumbs"><button data-scope="school">School</button>';
-    if (grade) crumbs += '<span class="sep">›</span>' + (section ? '<button data-scope="grade">' + esc(grade) + '</button>' : '<span class="cur">' + esc(grade) + '</span>');
+    // Two tabs at the top: School (whole-school overview) · All grades (one card per grade).
+    // Inside a grade / section the All grades tab stays selected and a short trail shows where you are.
+    var onGrades = allGrades || level !== 'school';
+    var tabs = '<div class="ui-tabs ad-rostertabs" role="tablist" aria-label="Outcomes">' +
+      '<button class="ui-tab' + (onGrades ? '' : ' on') + '" role="tab" aria-selected="' + !onGrades + '" data-scope="school">School</button>' +
+      '<button class="ui-tab' + (onGrades ? ' on' : '') + '" role="tab" aria-selected="' + onGrades + '" data-scope="grades">All grades</button></div>';
+    var crumbs = tabs;
+    if (grade) crumbs += '<div class="ui-crumbs"><button data-scope="grades">All grades</button><span class="sep">›</span>' + (section ? '<button data-scope="grade">' + esc(grade) + '</button>' : '<span class="cur">' + esc(grade) + '</span>');
     if (section) { var sd = AD.sections.find(function (s) { return s.id === section; }); crumbs += '<span class="sep">›</span><span class="cur">' + esc(sd ? sd.name : '') + '</span>'; }
-    crumbs += '</div>';
+    if (grade) crumbs += '</div>';
 
     // scope + point controls
     var gradeOpts = [{ v: '', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
@@ -1841,12 +1853,27 @@
 
     // Module 4: progress over time — one stacked-area chart tracing the
     // band mix across completed points; selector switches pooled / single skill.
-    var progBody = '<div id="o-prog">' + progOverTimeHTML(students) + '</div>';
+    var progBody = '<div id="o-prog"' + (level === 'school' ? ' class="no-legend"' : '') + '>' + progOverTimeHTML(students) + '</div>';
 
     // Grade/section navigator — the mockup's "See your school as grades"
     // → "Look deeper into [grade]" drill. Sits above the skill detail.
     var navCards = '';
-    if (level === 'school') navCards = '<div class="mb-gap">' + card('Your school, grade by grade', 'Open a grade to see its sections. ' + nNote(students.length), gradeNavHTML(point), 'span2') + '</div>';
+    // No outer box: the title sits on the page and the grade cards follow directly.
+    if (allGrades) navCards = '<div class="mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Your school, grade by grade</h3>' +
+      '<p class="ui-mod-note">' + esc((AD.points.find(function (p) { return p.key === point; }) || AD.latestComplete).label) + ' results. Open a grade to see its sections. ' + nNote(students.length) + '</p></div></div>' + gradeNavHTML(point) + '</div>';
+    else if (level === 'school') {
+      // Whole school first: the same card a grade gets (headline + band bar + 2 skills to
+      // help next / going well), with "View all grades" to open the grade-by-grade view.
+      var sd0 = distAllSkills(students, point), sPt = AD.points.find(function (p) { return p.key === point; }) || AD.latestComplete;
+      navCards = '<div class="mb-gap"><div class="ui-card tight ad-gradebreak ad-schoolsnap">' +
+        '<div class="gb-head"><div>' +   // no title: the header names the school and the tab says "School"
+          '<div class="ui-meta gb-meta">' + plural(students.length, 'student') + ' · ' + plural(AD.grades.length, 'grade') + ' · ' + plural(AD.sections.length, 'section') + '</div></div>' +
+          '</div>' +
+        '<div class="gb-snap"><div class="ui-kpi"><div class="num">' + sd0.pct.secure + '%</div>' +
+          '<div class="lbl">' + esc(AD.bandMeta('secure').label) + ' at ' + esc(sPt ? sPt.label : '') + '</div></div>' +
+          '<div class="gb-bar">' + bandBar(sd0) + '<div style="margin-top:10px">' + bandLegend() + '</div></div></div>' +
+        gsPair(students, point, 'ad-grid two gb-gs') + '</div></div>';
+    }
     else if (level === 'grade') {
       // Headline snapshot from the grade card (school view): % Blooming + band bar,
       // sitting above the section navigator so the drill opens on the same summary.
@@ -1902,7 +1929,7 @@
       var picker = '<label class="select-wrap cmp-select"><select class="select" id="o-class' + side + '" title="Section to show in this column">' + cmp2Options(selId, side) + '</select></label>';
       var inner;
       if (!sec) {
-        inner = stEmpty('No section chosen yet.', 'Pick a section above to see its strengths, focus areas and skill bands.');
+        return '<div class="cmp-col">' + picker + '</div>';   // empty until picked; one shared hint sits above both columns
       } else if (selId === otherId) {
         inner = stEmpty('Already shown.', 'This section is on the other side — pick a different one to compare.');
       } else {
@@ -1920,8 +1947,8 @@
       return '<div class="cmp-col">' + picker + '<div class="ui-card cmp-body">' + inner + '</div></div>';
     }
     function cmp2HTML() {
-      return '<div class="cmp-head"><div class="cmp-head-kicker">Compare two sections</div>' +
-        '<div class="cmp-head-row"><h2 class="ui-title xl">Which two sections would you like to see side by side?</h2>' + cadence(point) + '</div></div>' +
+      var hint = !cmpTwo.a || !cmpTwo.b ? '<p class="ui-mod-note">Pick two sections to see their strengths, focus areas and skill bands side by side.</p>' : '';
+      return '<div class="cmp-head"><h2 class="ui-title xl">Compare two sections</h2>' + hint + '</div>' +
         '<div class="cmp-cols">' + cmpColHTML('a') + cmpColHTML('b') + '</div>';
     }
     function wireCmp2() {
@@ -1934,24 +1961,28 @@
     // Progress + Multi-perspective live only on the section view (2 columns).
     // At school scope, Progress stays full width; the grade ("class") view shows
     // neither — it's just the section navigator + growth/strength.
-    var progCard = card('Progress over time', 'How the mix of Sprouting, Growing and Blooming shifts through the year.', progBody, '', '<div>' + cadence(point) + '</div>');
+    var progCard = card('Progress over time', 'How the mix of Sprouting, Growing and Blooming shifts through the year.', progBody);
+    // Progress over time only once there's a "time": from the moment the second
+    // assessment point (Midline) opens. With Baseline alone there's nothing to trace.
+    var showProg = AD.points.length > 1 && AD.points[1].status !== 'upcoming';
     var midRow = '';
-    if (level === 'section') midRow = '<div class="ad-grid two mt-gap">' + progCard + viewsCard + '</div>';
-    else if (level === 'school') midRow = '<div class="mt-gap">' + progCard + '</div>';
+    if (level === 'section') midRow = showProg ? '<div class="ad-grid two mt-gap">' + progCard + viewsCard + '</div>' : '<div class="mt-gap">' + viewsCard + '</div>';
+    else if (level === 'school' && !allGrades && showProg) midRow = '<div class="mt-gap">' + progCard + '</div>';
 
     // Skill band distribution — whole school, at the chosen point (moved here from Overview).
-    var distCard = level === 'school' ? '<div class="mt-gap">' +
+    var distCard = level === 'school' && !allGrades ? '<div class="mt-gap">' +
       card('Skill by skill', 'Where children across the school are on each skill right now.', skillBandDistBody(students, point, 'school'), 'span2', '<div>' + cadence(point) + '</div>') + '</div>' : '';
 
     body.innerHTML = screenHead('Outcomes', 'How your children are growing — always as groups, never individual results.') +
       crumbs + navCards + gsCard +
-      midRow + distCard +
-      (level === 'school' ? '<div id="o-cmp2" class="mt-gap">' + cmp2HTML() + '</div>' : '');
+      (level === 'school' ? distCard + midRow : midRow + distCard) +   // school: skill by skill, then progress over time
+      (level === 'school' && !allGrades ? '<div id="o-cmp2" class="mt-gap">' + cmp2HTML() + '</div>' : '');
 
     // wiring
     body.querySelectorAll('[data-gradenav]').forEach(function (b) { b.addEventListener('click', function () { setParams({ grade: b.dataset.gradenav, section: '', point: point }); }); });
     body.querySelectorAll('[data-sectionnav]').forEach(function (b) { b.addEventListener('click', function () { setParams({ grade: grade, section: b.dataset.sectionnav, point: point }); }); });
-    body.querySelectorAll('[data-scope]').forEach(function (b) { b.addEventListener('click', function () { var lv = b.dataset.scope; if (lv === 'school') setParams({ point: point }); else if (lv === 'grade') setParams({ grade: grade, point: point }); }); });
+    body.querySelectorAll('[data-scope]').forEach(function (b) { b.addEventListener('click', function () { var lv = b.dataset.scope; if (lv === 'school') setParams({ point: point }); else if (lv === 'grades') setParams({ view: 'grades', point: point }); else if (lv === 'grade') setParams({ grade: grade, point: point }); }); });
+    body.querySelectorAll('[data-allgrades]').forEach(function (b) { b.addEventListener('click', function () { setParams({ view: 'grades', point: point }, false); }); });
     var elGrade = body.querySelector('#o-grade'); if (elGrade) elGrade.addEventListener('change', function (e) { setParams({ grade: e.target.value, section: '', point: point }); });
     var elSection = body.querySelector('#o-section'); if (elSection) elSection.addEventListener('change', function (e) { setParams({ grade: grade, section: e.target.value, point: point }); });
     var elPoint = body.querySelector('#o-point'); if (elPoint) elPoint.addEventListener('change', function (e) { setParams({ grade: grade, section: section, point: e.target.value }); });
@@ -1980,9 +2011,9 @@
         return '<div class="ui-card tight ad-gradebreak">' +
           '<div class="gb-head"><div><div class="ui-title">' + esc(g) + '</div>' +
             '<div class="ui-meta gb-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div></div>' +
-            '<button class="btn-link" data-gradenav="' + esc(g) + '">View ' + esc(g) + ' →</button></div>' +
+            '<button class="btn-link" data-gradenav="' + esc(g) + '" aria-label="View ' + esc(g) + '">View →</button></div>' +
           '<div class="gb-snap"><div class="ui-kpi"><div class="num">' + d.pct.secure + '%</div>' +
-            '<div class="lbl">' + esc(se.label) + ' at ' + esc(ptLabel) + '</div></div>' +
+            '<div class="lbl">' + esc(se.label) + '</div></div>' +
             '<div class="gb-bar">' + bandBar(d) + '</div></div>' +
           gsPair(studs, point, 'ad-grid two gb-gs') + '</div>';
       }).join('') + '</div>';
