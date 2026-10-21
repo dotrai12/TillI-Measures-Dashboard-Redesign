@@ -148,8 +148,14 @@
   .dep-aud-st.st-live, .dep-aud-st.st-completed { color: var(--green-700); }
   .dep-aud-st.st-scheduled { color: var(--cyan-700); }
   .dep-aud-rule { font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); }
-  .dep-chainseg { margin-left: auto; }
-  .dep-chainseg button { padding: 5px 12px; font-size: var(--fs-xs); }
+  .dep-group { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: start; gap: 10px; margin-top: 8px; }
+  .dep-group-l { padding-top: 9px; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-450); cursor: help; }
+  .dep-where-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .dep-where-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px; border: 1px solid var(--line-200); border-radius: var(--radius-md); background: var(--white); cursor: pointer; font-family: var(--font-body); }
+  .dep-where-opt:hover, .dep-where-opt.on { border-color: var(--green-500); background: var(--wash-green); }
+  .dep-where-opt b { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
+  .dep-where-opt span:last-child { font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); }
+  @media (max-width: 560px) { .dep-group { grid-template-columns: 1fr; gap: 4px; } .dep-group-l { padding-top: 0; } }
   .dep-aud-items { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 36px; border-radius: var(--radius-sm); }
   .dep-aud-items.dragover { box-shadow: inset 0 0 0 2px var(--green-500); background: var(--wash-green); }
   .dep-arrow { color: var(--ink-300); font-weight: 700; }
@@ -423,8 +429,6 @@
   /* ---- Deployment planner (school Assessments tab) — configure & deploy per phase ---- */
   .dep-chains { display: flex; flex-direction: column; gap: 14px; }
   .dep-phase { border: 1px solid var(--line-200); border-radius: var(--radius-card); background: var(--surface-100); padding: 14px 16px; }
-  /* Deployed phases read as live at a glance: green accent + tinted ground */
-  .dep-phase.is-deployed { border-left: 4px solid var(--green-500); background: var(--wash-green); }
   .dep-phase-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
   .dep-phase-name { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
   .dep-phase-sum { font-weight: 700; font-size: var(--fs-xs); color: var(--ink-300); }
@@ -599,10 +603,10 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261021hb"></script>
+<script src="assets/tilli-api.js?v=20261021hd"></script>
 <script src="assets/tilli-history.js?v=20261020ce"></script>
 <script src="assets/tilli-org-data.js?v=20261021hb"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261021hb"></script>
+<script src="assets/tilli-admin.js?v=20261021hd"></script>
 </body>
 </html>

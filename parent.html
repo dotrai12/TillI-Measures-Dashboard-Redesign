@@ -317,7 +317,7 @@
 <div id="app"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261021hb"></script>
+<script src="assets/tilli-api.js?v=20261021hd"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
@@ -890,11 +890,15 @@
 
     const chips = heroChips(c, sc.name);
 
-    // Live + ended Parent lanes, indexed by phase.
+    // Deployed Parent lanes, plus student direct assessments set to run at home
+    // (a parent does those with the child), indexed by phase.
     const lanes = (API.deploymentsFor(schoolId, 'Parent', { includeEnded: true }) || []);
-    const laneByPhase = {};
+    const laneByPhase = {}, directByPhase = {};
     lanes.forEach((l) => { laneByPhase[l.phase] = l; });
-    const anyLive = PARENT_PHASES.some((ph) => laneByPhase[ph] && laneByPhase[ph].status === 'Live');
+    (API.deploymentsFor(schoolId, 'Direct Assessment', { includeEnded: true }) || []).forEach((l) => {
+      if ((l.assessments || []).some((a) => a.mode === 'home')) directByPhase[l.phase] = l;
+    });
+    const anyLive = PARENT_PHASES.some((ph) => [laneByPhase[ph], directByPhase[ph]].some((l) => l && l.status === 'Live'));
 
     const heroTop = `
         <div class="p-hero" data-rise>
@@ -912,7 +916,8 @@
         </div>`;
 
     const sections = PARENT_PHASES.map((phase) => {
-      const lane = laneByPhase[phase];
+      const plane = laneByPhase[phase], dlane = directByPhase[phase];
+      const lane = plane || dlane;   // the phase's window/status (both lanes share the phase dates)
 
       // Not deployed yet → muted resting card (appears once the admin deploys it).
       if (!lane) {
@@ -924,9 +929,12 @@
           </div>`;
       }
 
-      const stats = API.completionStats(schoolId, phase, 'Parent', [c.student_id]);
       const ended = lane.status === 'Ended';
-      const assessments = lane.assessments || [];
+      // Everything this parent does in the phase: their check-ins, then at-home activities.
+      const assessments = ((plane && plane.assessments) || []).map((a) => Object.assign({ aud: 'Parent' }, a))
+        .concat(((dlane && dlane.assessments) || []).filter((a) => a.mode === 'home').map((a) => Object.assign({ aud: 'Direct Assessment' }, a)));
+      const isDone = (a) => API.isComplete(schoolId, phase, a.aud, c.student_id, a.id);
+      const stats = { done: assessments.filter(isDone).length, expected: assessments.length };
 
       // Scheduled → visible but closed until the start date.
       if (lane.status === 'Scheduled') {
@@ -937,13 +945,17 @@
               <span>${assessments.length} check-in${assessments.length === 1 ? '' : 's'} for ${esc(c.name)} — open ${esc(fmtDay(lane.start))} to ${esc(fmtDay(lane.end))}.</span></div>
           </div>`;
       }
-      // Chain: each check-in opens once the one before it is done.
-      const chain = API.chainFor ? API.chainFor(schoolId, phase, 'Parent', c.student_id) : [];
-      const chainState = (id) => { const x = chain.find((y) => y.id === id); return x || { state: 'open' }; };
+      // In-order items open once the one before them is done; any-time items are always open.
+      const chains = {
+        'Parent': API.chainFor ? API.chainFor(schoolId, phase, 'Parent', c.student_id) : [],
+        'Direct Assessment': API.chainFor ? API.chainFor(schoolId, phase, 'Direct Assessment', c.student_id) : [],
+      };
+      const chainState = (a) => chains[a.aud].find((y) => y.id === a.id) || { state: 'open' };
+      const kindLabel = (a) => a.aud === 'Parent' ? 'Parent check-in' : 'Activity to do with your child';
 
       const rows = assessments.length ? assessments.map((a) => {
-        const done = API.isComplete(schoolId, phase, 'Parent', c.student_id, a.id);
-        const link = chainState(a.id);
+        const done = isDone(a);
+        const link = chainState(a);
         if (!done && !ended && link.state === 'locked') {
           return `<div class="t-row">
             <span class="t-dot pending"></span>
@@ -954,7 +966,7 @@
         if (done) {
           return `<div class="t-row">
             <span class="t-dot done"></span>
-            <span class="t-body"><b>${esc(a.name)}</b><span>Parent check-in</span></span>
+            <span class="t-body"><b>${esc(a.name)}</b><span>${kindLabel(a)}</span></span>
             <span class="ui-chip lg ok">Completed</span>
           </div>`;
         }
@@ -965,9 +977,9 @@
               <span class="t-body"><b>${esc(a.name)}</b><span>Window ended · not completed</span></span>
               <span class="ui-chip lg muted">Missed</span>
             </div>`
-          : `<button class="t-row focus" data-act="mark-done" data-phase="${esc(phase)}" data-assess="${esc(a.id)}">
+          : `<button class="t-row focus" data-act="mark-done" data-phase="${esc(phase)}" data-aud="${esc(a.aud)}" data-assess="${esc(a.id)}">
               <span class="t-dot pending"></span>
-              <span class="t-body"><b>${esc(a.name)}</b><span>Parent check-in · tap to mark done</span></span>
+              <span class="t-body"><b>${esc(a.name)}</b><span>${kindLabel(a)} · tap to mark done</span></span>
               <span class="ui-chip lg muted">Mark done</span>
             </button>`;
       }).join('') : `<div class="t-row"><span class="t-body"><b>No assessments in this window yet</b></span></div>`;
@@ -1390,7 +1402,7 @@
           // survives reload; re-read on patch so state is never cached stale.
           const c = child(); const sc = createdSchoolFor(c);
           if (sc) {
-            API.markComplete(sc.school_id, b.dataset.phase, 'Parent', c.student_id, b.dataset.assess, PARENT_EMAIL);
+            API.markComplete(sc.school_id, b.dataset.phase, b.dataset.aud || 'Parent', c.student_id, b.dataset.assess, PARENT_EMAIL);
             patchCreated();
           }
           break;

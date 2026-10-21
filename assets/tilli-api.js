@@ -1241,21 +1241,24 @@
       return d.audience===audience && (opts.includeEnded ? true : d.status==='Live');
     });
   }
-  // A lane is "in order" unless set to any order. Default when never set:
-  // parents any order (independent check-ins), everyone else in order.
+  // Lane-level default when an assessment carries no flag of its own:
+  // parents any time (independent check-ins), everyone else in order.
   function isChained(d){ return d && (d.chained == null ? d.audience !== 'Parent' : !!d.chained); }
-  // Chain: in an in-order lane, assessment N opens only once every earlier one
-  // is done for that student; in an any-order lane everything is open.
-  // → [{ id, name, state:'done'|'open'|'locked', after }]
+  // Each assessment is either part of its lane's ordered sequence or "any time".
+  function isOrdered(dep, a){ return a.ordered != null ? !!a.ordered : isChained(dep); }
+  // Chain: an in-order assessment opens only once every in-order assessment
+  // before it is done for that student; any-time ones are always open.
+  // → [{ id, name, state:'done'|'open'|'locked', after, ordered, mode }]
   function chainFor(schoolId, phase, audience, studentId){
     var db = getDB(); var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
     // Per-teacher items (the teacher's own Pre/Post-training survey) aren't part of a child's chain.
-    var list = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; }), prevDone = true, comp = db.completions[schoolId] || {}, ordered = isChained(dep);
-    return list.map(function(a, i){
-      var done = !!comp[compKey(phase, audience, studentId, a.id)];
-      var st = done ? 'done' : (prevDone || !ordered ? 'open' : 'locked');
-      prevDone = prevDone && done;
-      return { id:a.id, name:a.name||a.id, state:st, after: i ? (list[i-1].name||list[i-1].id) : null };
+    var list = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; }), prevDone = true, prevName = null, comp = db.completions[schoolId] || {};
+    return list.map(function(a){
+      var done = !!comp[compKey(phase, audience, studentId, a.id)], ord = isOrdered(dep, a);
+      var st = done ? 'done' : (!ord || prevDone ? 'open' : 'locked');
+      var after = ord ? prevName : null;
+      if (ord){ prevDone = prevDone && done; prevName = a.name || a.id; }
+      return { id:a.id, name:a.name||a.id, state:st, after: after, ordered: ord, mode: a.mode || '' };
     });
   }
 
