@@ -443,13 +443,131 @@
     { id: 'tpl-base-p', title: 'Baseline · Parent Report', audience: 'Parent', phase: 'Baseline', status: 'Published', desc: 'Home-context parent survey.', meta: tplMeta(52, 'Meera Krishnan', 30, null, 30) },
     { id: 'tpl-mid-t', title: 'Midline · Teacher Report', audience: 'Teacher', phase: 'Midline', status: 'Draft', desc: 'Mid-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 3, null, null) },
     { id: 'tpl-end-t', title: 'Endline · Teacher Report', audience: 'Teacher', phase: 'Endline', status: 'Draft', desc: 'End-of-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 14, null, null) },
-    { id: 'tpl-direct-emt', title: 'EMT · Direct Assessment', audience: 'Direct Assessment', phase: 'Baseline', status: 'Published', desc: 'Gamified executive-function task.', meta: tplMeta(120, 'Ishani Rao', 60, null, 60) },
-    { id: 'tpl-direct-checkin', title: 'My School Check-in', audience: 'Direct Assessment', phase: 'Baseline', status: 'Published', desc: 'IDELA’s school-safety and teacher-support questions, split out. Runs at home when parents take part, else at school — where no teacher runs it for their own class.', meta: tplMeta(1, 'Ishani Rao', 1, null, 1) },
-    { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', phase: 'Midline', status: 'Published', desc: 'Inhibition / flexibility task.', meta: tplMeta(120, 'Ishani Rao', 75, null, 75) },
+    { id: 'tpl-direct-emt', title: 'EMT · Direct Assessment', audience: 'Direct Assessment', phase: 'Baseline', phases: ['Baseline', 'Midline', 'Endline'], status: 'Published', desc: 'Gamified executive-function task.', meta: tplMeta(120, 'Ishani Rao', 60, null, 60) },
+    { id: 'tpl-direct-checkin', title: 'My School Check-in', audience: 'Direct Assessment', phase: 'Baseline', phases: ['Baseline', 'Midline', 'Endline'], status: 'Published', desc: 'IDELA’s school-safety and teacher-support questions, split out. Runs at home when parents take part, else at school — where no teacher runs it for their own class.', meta: tplMeta(1, 'Ishani Rao', 1, null, 1) },
+    { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', phase: 'Midline', phases: ['Baseline', 'Midline'], status: 'Published', desc: 'Inhibition / flexibility task.', meta: tplMeta(120, 'Ishani Rao', 75, null, 75) },
     // Last year's version — still published, so it shows as "Older version" next to tpl-base-t.
     { id: 'tpl-base-t-2025', title: 'Baseline · Teacher Report (2025)', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '18-item teacher observation used in the 2025 cohort.', meta: tplMeta(400, 'Meera Krishnan', 380, null, 380) },
   ];
-  TEMPLATES.forEach(function (t) { Object.assign(t, t.meta); delete t.meta; });
+  // A template can be tagged with any set of phases (t.phases, in phase order);
+  // t.phase stays as the first one for older readers.
+  var TPL_PHASES = ['Baseline', 'Midline', 'Endline'];
+  function setTemplatePhases(t, phases) {
+    var list = TPL_PHASES.filter(function (ph) { return (phases || []).indexOf(ph) >= 0; });
+    t.phases = list.length ? list : [t.phase || 'Baseline']; t.phase = t.phases[0];
+  }
+  // ---- Question banks (DEMO content) — what each template asks, in order.
+  // Each bank becomes builder questions (see bankQuestions): an opening
+  // Section Break, then one Multiple Choice per item with scored options and
+  // the skills it evaluates. Templates made with "New template" start empty.
+  var TB_SKILL_OF = { 'Emotion awareness': 'Emotion Awareness', 'Emotion regulation': 'Emotion Regulation', 'Empathy': 'Empathy',
+    'Relationship skills': 'Relationship Skills', 'Metacognition': 'Metacognition', 'Critical thinking': 'Critical Thinking',
+    'Working Memory': 'Working Memory', 'Planning': 'Planning and Organization', 'Cognitive Flexibility': 'Cognitive Flexibility',
+    'Attention': 'Attention', 'Distraction': 'Inhibition (Distraction)', 'Inhibitory Control': 'Inhibition (Response)' };
+  var FREQ = [['Rarely', 1], ['Sometimes', 2], ['Often', 3], ['Almost always', 4]];
+  var TPL_TEACHER_OBS = { intro: 'Think about the last few weeks. For each statement, choose how often you’ve seen this child do it.',
+    options: FREQ.concat([['Haven’t seen yet', null]]), scoring: 'map', items: [
+    ['Notices and names their own feelings in the moment.', 'Emotion awareness'],
+    ['Recognises how a classmate is feeling from their face or voice.', 'Emotion awareness'],
+    ['Calms down and recovers after being upset, with support.', 'Emotion regulation'],
+    ['Copes with small disappointments (losing a game, waiting) without a big outburst.', 'Emotion regulation'],
+    ['Notices when a classmate is upset and responds kindly.', 'Empathy'],
+    ['Offers help or comfort without being asked.', 'Empathy'],
+    ['Joins play and takes turns with peers.', 'Relationship skills'],
+    ['Works out small disagreements with words.', 'Relationship skills'],
+    ['Talks about how they solved a problem or what was tricky.', 'Metacognition'],
+    ['Notices a mistake and tries a different way.', 'Metacognition'],
+    ['Asks “why” and gives reasons for their thinking.', 'Critical thinking'],
+    ['Compares two choices and picks one with a reason.', 'Critical thinking'],
+    ['Follows a two-step instruction without reminders.', 'Working Memory'],
+    ['Remembers what they were doing after a short interruption.', 'Working Memory'],
+    ['Gathers what they need before starting a task.', 'Planning'],
+    ['Breaks a bigger task into steps (first…, then…).', 'Planning'],
+    ['Switches between activities without much fuss.', 'Cognitive Flexibility'],
+    ['Stays with a task when there’s noise nearby.', 'Distraction'],
+    ['Waits for their turn instead of calling out.', 'Inhibitory Control'],
+    ['Stops an action when asked to.', 'Inhibitory Control'],
+    ['Stays focused through a short group activity.', 'Attention'],
+  ] };
+  var TPL_PARENT = { intro: 'Think about your child at home over the last few weeks. Choose how often each statement is true.',
+    options: FREQ, scoring: 'map', items: [
+    ['My child can tell me how they are feeling.', 'Emotion awareness'],
+    ['My child calms down within a few minutes after being upset.', 'Emotion regulation'],
+    ['My child notices when someone at home is sad or hurt.', 'Empathy'],
+    ['My child plays with siblings or friends and takes turns.', 'Relationship skills'],
+    ['My child keeps trying when something is hard.', 'Metacognition'],
+    ['My child follows a two-step instruction at home (“wash your hands, then come to eat”).', 'Working Memory'],
+    ['My child gets ready for routines (bath, bed, school) with few reminders.', 'Planning'],
+    ['My child can wait for something they want.', 'Inhibitory Control'],
+    ['My child moves from play to another activity without a big fuss.', 'Cognitive Flexibility'],
+    ['My child talks about their day at school.', 'Relationship skills'],
+    ['My child asks questions about how things work.', 'Critical thinking'],
+    ['My child helps with small jobs at home.', 'Planning'],
+  ] };
+  // Direct items: [text, skill, index of the correct option]
+  var FACES = [['Happy'], ['Sad'], ['Angry'], ['Scared']];
+  var TPL_EMT = { intro: 'Read each question aloud. The child taps one of the four faces.', options: FACES, scoring: 'correct', items: [
+    ['Which face looks happy?', 'Emotion awareness', 0], ['Which face looks sad?', 'Emotion awareness', 1],
+    ['Which face looks angry?', 'Emotion awareness', 2], ['Which face looks scared?', 'Emotion awareness', 3],
+    ['Find the face that feels the same as this one (happy).', 'Emotion awareness', 0], ['Find the face that feels the same as this one (scared).', 'Emotion awareness', 3],
+    ['This child dropped their ice cream. How do they feel?', 'Empathy', 1], ['This child got a present. How do they feel?', 'Empathy', 0],
+  ] };
+  var TPL_HF = { intro: 'Show the practice rounds first, then run each block without stopping.', timed: 2,
+    options: [['Tapped the correct side'], ['Tapped the wrong side'], ['No tap in time']], scoring: 'correct', items: [
+    ['Practice: a heart appears — tap the same side.', 'Inhibitory Control', 0],
+    ['Hearts block — 12 trials, tap the same side as the heart.', 'Inhibitory Control', 0],
+    ['Practice: a flower appears — tap the opposite side.', 'Inhibitory Control', 0],
+    ['Flowers block — 12 trials, tap the opposite side.', 'Inhibitory Control', 0],
+    ['Mixed block — 33 trials, hearts and flowers mixed.', 'Cognitive Flexibility', 0],
+  ] };
+  // Not graded — feedback on the school, so no scores or skills.
+  var TPL_CHECKIN = { intro: 'Ask each question somewhere calm and private. There are no right or wrong answers, and this part isn’t scored.',
+    options: [['Yes', null], ['Sometimes', null], ['No', null]], scoring: 'none', items: [
+    ['Do you feel safe at school?'], ['When you need help, does your teacher help you?'], ['Do you have a friend at school?'],
+    ['Do you like coming to school?'], ['Do the grown-ups at school listen to you?'], ['Is anyone at school unkind to you?'],
+    ['Do you feel happy in your classroom?'],
+  ] };
+  var TPL_BANKS = { 'tpl-base-t': TPL_TEACHER_OBS, 'tpl-mid-t': TPL_TEACHER_OBS, 'tpl-end-t': TPL_TEACHER_OBS,
+    'tpl-base-p': TPL_PARENT, 'tpl-direct-emt': TPL_EMT, 'tpl-direct-hf': TPL_HF, 'tpl-direct-checkin': TPL_CHECKIN,
+    // last year's version had 18 items
+    'tpl-base-t-2025': Object.assign({}, TPL_TEACHER_OBS, { items: TPL_TEACHER_OBS.items.slice(0, 18) }) };
+  // A builder question. type: 'section' | 'mc' | 'text'.
+  function newQuestion(id, type, f) {
+    return Object.assign({ id: id, type: type, title: '', desc: '', required: true, options: type === 'mc' ? [{ text: '', score: null }] : [],
+      noneOfAbove: false, timed: false, seconds: 30, videoUrl: '', audioUrl: '', media: [], cond: null,
+      scoring: type === 'mc' ? 'map' : 'none', skills: [], tr: {} }, f || {});
+  }
+  function bankQuestions(t, ph) {
+    var b = TPL_BANKS[t.id]; if (!b) return [];
+    var pre = t.id + '-' + ph.toLowerCase();
+    var out = [newQuestion(pre + '-s0', 'section', { title: t.title, desc: b.intro })];
+    b.items.forEach(function (x, i) {
+      out.push(newQuestion(pre + '-q' + (i + 1), 'mc', {
+        title: x[0], scoring: b.scoring, timed: !!b.timed, seconds: b.timed || 30, skills: x[1] && TB_SKILL_OF[x[1]] ? [TB_SKILL_OF[x[1]]] : [],
+        options: b.options.map(function (o, oi) { return { text: o[0], score: b.scoring === 'correct' ? (oi === x[2] ? 1 : 0) : (o[1] == null ? null : o[1]) }; }) }));
+    });
+    return out;
+  }
+  // Deep copy of a set of questions under new ids; conditions follow the copies.
+  function copyQuestions(qs, prefix) {
+    var ids = {}, out = (qs || []).map(function (q, i) { var c = JSON.parse(JSON.stringify(q)); c.id = prefix + '-q' + i; ids[q.id] = c.id; return c; });
+    out.forEach(function (c) { if (c.cond) c.cond = ids[c.cond.q] ? { q: ids[c.cond.q], opt: c.cond.opt } : null; });
+    return out;
+  }
+  // Each tagged phase has its own version of the questions (t.versions[phase]).
+  // A newly tagged phase starts as a copy of the earliest existing version.
+  // Versions of untagged phases are kept (hidden) in case the phase comes back.
+  function ensureVersions(t) {
+    if (!t.versions) t.versions = {};
+    var from = TPL_PHASES.find(function (ph) { return t.versions[ph] && t.versions[ph].length; });
+    t.phases.forEach(function (ph) {
+      if (!t.versions[ph]) t.versions[ph] = from ? copyQuestions(t.versions[from], t.id + '-' + ph.toLowerCase() + '-' + Date.now().toString(36)) : [];
+    });
+  }
+  TEMPLATES.forEach(function (t) {
+    Object.assign(t, t.meta); delete t.meta; setTemplatePhases(t, t.phases || [t.phase]);
+    t.versions = {}; t.phases.forEach(function (ph) { t.versions[ph] = bankQuestions(t, ph); }); t.langs = [];
+  });
 
   // ---- Deployments (status server-derived from window + publish state) ----
   function deriveDeploymentStatus(d) {
@@ -945,6 +1063,10 @@
     var tpl = { id: 'tpl-' + now, title: t.title, audience: t.audience, phase: t.phase,
       status: status, desc: t.desc || '', createdAt: now, createdBy: actor || 'Tilli Team',
       updatedAt: now, updatedBy: actor || 'Tilli Team', publishedAt: status === 'Published' ? now : null, archived: false };
+    setTemplatePhases(tpl, t.phases || [t.phase]);
+    // Duplicates carry the source's phase versions + languages; brand-new templates start empty.
+    tpl.versions = {}; Object.keys(t.versions || {}).forEach(function (ph) { tpl.versions[ph] = copyQuestions(t.versions[ph], tpl.id + '-' + ph.toLowerCase()); });
+    tpl.langs = (t.langs || []).slice(); ensureVersions(tpl);
     TEMPLATES.unshift(tpl);
     return tpl;
   }
@@ -959,12 +1081,15 @@
     t.archived = !!on; touchTemplate(t, actor); return t;
   }
   // phase|audience → id of the newest published, non-archived template.
+  // A template tagged with several phases competes in each of them.
   function latestTemplateIds() {
     var best = {};
     TEMPLATES.forEach(function (t) {
       if (t.archived || t.status !== 'Published') return;
-      var k = t.phase + '|' + t.audience, cur = best[k];
-      if (!cur || (t.publishedAt || 0) > (cur.publishedAt || 0)) best[k] = t;
+      t.phases.forEach(function (ph) {
+        var k = ph + '|' + t.audience, cur = best[k];
+        if (!cur || (t.publishedAt || 0) > (cur.publishedAt || 0)) best[k] = t;
+      });
     });
     var out = {}; Object.keys(best).forEach(function (k) { out[k] = best[k].id; });
     return out;
@@ -994,7 +1119,8 @@
   function updateTemplate(id, patch, actor) {
     var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
     var wasPublished = t.status === 'Published';
-    ['title', 'audience', 'phase', 'status', 'desc'].forEach(function (k) { if (patch[k] != null) t[k] = patch[k]; });
+    ['title', 'audience', 'status', 'desc'].forEach(function (k) { if (patch[k] != null) t[k] = patch[k]; });
+    if (patch.phases || patch.phase) { setTemplatePhases(t, patch.phases || [patch.phase]); ensureVersions(t); }
     if (!wasPublished && t.status === 'Published') t.publishedAt = Date.now();
     touchTemplate(t, actor);
     return t;
@@ -1195,7 +1321,7 @@
       // §9 write helpers (gated in the client, computed here)
       createGroup: createGroup, createSchool: createSchool,
       createTemplate: createTemplate, publishTemplate: publishTemplate, deleteTemplate: deleteTemplate,
-      archiveTemplate: archiveTemplate, latestTemplateIds: latestTemplateIds,
+      archiveTemplate: archiveTemplate, latestTemplateIds: latestTemplateIds, newQuestion: newQuestion, touchTemplate: touchTemplate,
       createDeployment: createDeployment, endDeployment: endDeployment,
       setObsPhasePublish: setObsPhasePublish, setObsAccess: setObsAccess,
       setObsAccessAll: setObsAccessAll, obsAccessCount: obsAccessCount,

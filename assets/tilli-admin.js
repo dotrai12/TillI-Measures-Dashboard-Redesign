@@ -186,7 +186,7 @@
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
   var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
-    observation: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'deployments', gschool: 'groupoverview' };
+    observation: 'templates', template: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'deployments', gschool: 'groupoverview' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
   function chrome(r) {
@@ -383,19 +383,22 @@
   }
 
   // Generic form modal (add school, invite, etc.)
+  // onSave null → no Cancel / Save footer (the modal's own buttons do the work; × closes).
   function openModal(title, bodyHtml, onSave, saveLabel) {
     var root = document.getElementById('tl-modal-root');
     root.innerHTML = '<div class="overlay" id="tl-ov"><div class="ui-modal-card">' +
       '<div class="ui-modal-h"><h3>' + esc(title) + '</h3><button class="dialog-close" id="tl-mx" aria-label="Close">×</button></div>' +
       bodyHtml +
-      '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" id="tl-cancel">Cancel</button>' +
-      '<button class="btn btn-primary btn-sm" id="tl-save">' + esc(saveLabel || 'Save') + '</button></div></div></div>';
+      (onSave ? '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" id="tl-cancel">Cancel</button>' +
+      '<button class="btn btn-primary btn-sm" id="tl-save">' + esc(saveLabel || 'Save') + '</button></div>' : '') + '</div></div>';
     var ov = document.getElementById('tl-ov');
     function close() { root.innerHTML = ''; }
     ov.addEventListener('click', function (ev) { if (ev.target === ov) close(); });
     document.getElementById('tl-mx').addEventListener('click', close);
-    document.getElementById('tl-cancel').addEventListener('click', close);
-    document.getElementById('tl-save').addEventListener('click', function () { if (onSave(close) !== false) {} });
+    if (onSave) {
+      document.getElementById('tl-cancel').addEventListener('click', close);
+      document.getElementById('tl-save').addEventListener('click', function () { if (onSave(close) !== false) {} });
+    }
     return close;
   }
 
@@ -2269,11 +2272,11 @@
   function openAddAssessment(d) {
     var s = d.school, latest = ORG.server.latestTemplateIds();
     var tpls = ORG.templates.filter(function (t) { return !t.archived && t.status === 'Published' && TL_AUD_KEY[t.audience]; })
-      .sort(function (a, b) { return (latest[b.phase + '|' + b.audience] === b.id) - (latest[a.phase + '|' + a.audience] === a.id) || a.title.localeCompare(b.title); });
+      .sort(function (a, b) { return (tplLatestIn(b, latest).length > 0) - (tplLatestIn(a, latest).length > 0) || a.title.localeCompare(b.title); });
     if (!tpls.length) { toast('No published templates to add — publish one in Templates first.'); return; }
     var phOpts = TL_PHASES.map(function (ph) { var st = tlPhaseStatus(s, ph).st; return '<option value="' + ph + '"' + (ph === TL_TAB[s.id] ? ' selected' : '') + '>' + ph + ' — ' + TL_ST_LABEL[st] + '</option>'; }).join('');
-    var tOpts = tpls.map(function (t) { var L = latest[t.phase + '|' + t.audience] === t.id;
-      return '<option value="' + esc(t.id) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(t.phase) + '">' + esc(t.title) + ' · ' + esc(t.audience) + (L ? ' · ★ Latest' : '') + '</option>'; }).join('');
+    var tOpts = tpls.map(function (t) { var L = tplLatestIn(t, latest).length;
+      return '<option value="' + esc(t.id) + '" data-aud="' + esc(t.audience) + '" data-phases="' + esc(tplPhases(t).join(',')) + '">' + esc(t.title) + ' · ' + esc(t.audience) + (L ? ' · ★ Latest' : '') + '</option>'; }).join('');
     openModal('Add assessment', '<p class="tl-muted">Add an assessment to one phase at ' + esc(s.name) + '. It goes at the end of its audience’s row.</p><div class="tl-stack">' +
       '<label class="field">Phase<select class="select" id="aa-phase">' + phOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="aa-tpl">' + tOpts + '</select></label>' +
@@ -2301,7 +2304,8 @@
         md.disabled = TL_WHERE[ak].length === 1; md.value = tlFixMode(ak, md.value);
         if (ak !== lastAud) { gr.value = TL_CHAIN_DEFAULT[ak]; lastAud = ak; }   // the audience's usual group
         var n = p.ord[tlFixMode(ak, md.value)].length, ordered = gr.value === 'order';
-        note.textContent = (o.dataset.phase !== ph.value ? 'This template was made for ' + o.dataset.phase + '. ' : '') +
+        var tagged = o.dataset.phases.split(',');
+        note.textContent = (tagged.indexOf(ph.value) < 0 ? 'This template is tagged for ' + tagged.join(', ') + ', not ' + ph.value + '. ' : '') +
           TL_AUD_SHORT[ak] + ' assessments run ' + TL_WHERE_RULE[ak].toLowerCase() + '. ' +
           (ak === 'direct' ? 'Here ' + TL_DIRECT_WHO[md.value] + '. ' : '') +
           (ordered ? 'It will be #' + (n + 1) + ' ' + TL_WHERE_LABEL[tlFixMode(ak, md.value)].toLowerCase() + (n ? ', opening once #' + n + ' is done.' : ', opening first.') : 'It’s open any time, alongside the others.') +
@@ -3056,11 +3060,24 @@
   function whereText(aud) { var w = WHERE_BY_AUD[aud] || ['school']; return w.length > 1 ? 'At school or home' : (w[0] === 'home' ? 'At home' : 'At school'); }
 
   // "Latest" / "Older version" — only for published, non-archived templates.
+  // A template is tagged with any set of phases (chosen in its editor).
+  var TPL_PHASE_LIST = ['Baseline', 'Midline', 'Endline'];
+  function tplPhases(t) { return t.phases || [t.phase]; }
+  function tplPhaseText(t) { var ph = tplPhases(t); return ph.length === TPL_PHASE_LIST.length ? 'All phases' : ph.join(', '); }
+  // Phases where this template is the newest published one for its audience.
+  function tplLatestIn(t, latest) { return tplPhases(t).filter(function (ph) { return latest[ph + '|' + t.audience] === t.id; }); }
+  // Phase tick-boxes for the template editor / New template (read with readPhasePick).
+  function phasePickHtml(name, selected) {
+    return '<fieldset class="field tl-phasepick"><legend>Phases <span class="tl-muted">— pick every phase it can be used in</span></legend><div>' +
+      TPL_PHASE_LIST.map(function (ph) { return '<label><input type="checkbox" name="' + name + '" value="' + ph + '"' + (selected.indexOf(ph) >= 0 ? ' checked' : '') + '>' + ph + '</label>'; }).join('') + '</div></fieldset>';
+  }
+  function readPhasePick(name) { return [].slice.call(document.querySelectorAll('input[name="' + name + '"]:checked')).map(function (x) { return x.value; }); }
   function tplVersionBadge(t, latest) {
     if (t.archived || t.status !== 'Published') return '';
-    return latest[t.phase + '|' + t.audience] === t.id
-      ? '<span class="ui-chip ok tl-latest" title="Newest published ' + esc(t.phase + ' · ' + t.audience) + ' template — the one to deploy.">★ Latest</span>'
-      : '<span class="ui-chip muted" title="A newer ' + esc(t.phase + ' · ' + t.audience) + ' template has been published since.">Older version</span>';
+    var inPh = tplLatestIn(t, latest);
+    return inPh.length
+      ? '<span class="ui-chip ok tl-latest" title="Newest published ' + esc(t.audience) + ' template for ' + esc(inPh.join(', ')) + ' — the one to deploy.">★ Latest</span>'
+      : '<span class="ui-chip muted" title="A newer ' + esc(t.audience) + ' template has been published for ' + esc(tplPhaseText(t)) + ' since.">Older version</span>';
   }
   function fmtMs(ms) { return ms ? fmtJoined(ORG.iso(ms)) : '—'; }
   function tplMetaLine(t) {
@@ -3074,15 +3091,11 @@
     'Teacher':            { cls: 'teacher',     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20l4-4 4 4"/><line x1="7" y1="9" x2="13" y2="9"/></svg>' },
     'Parent':             { cls: 'parent',      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="11" r="2.2"/><path d="M14.8 20a3.4 3.4 0 0 1 6.2-1.9"/></svg>' },
     'Direct Assessment':  { cls: 'direct',      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4h4v2.5a1.5 1.5 0 1 0 3 0V4h3v6h-2.5a1.5 1.5 0 1 0 0 3H20v7h-6v-2.5a1.5 1.5 0 1 0-3 0V20H4v-7h2.5a1.5 1.5 0 1 0 0-3H4V4z"/></svg>' },
-    'Observation':        { cls: 'observation', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>' },
-    'Teacher reflection': { cls: 'reflection',  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M12 15.5s-3-1.8-3-3.8a1.6 1.6 0 0 1 3-.8 1.6 1.6 0 0 1 3 .8c0 2-3 3.8-3 3.8z"/></svg>' },
   };
   var AUD_TIPS = {
     'Teacher': 'Answered by the class teacher about each student.',
     'Parent': 'Answered by a parent at home.',
     'Direct Assessment': 'Done by the student — gamified tasks.',
-    'Observation': 'Teacher observation form — a shared question bank, published per phase.',
-    'Teacher reflection': 'Teachers reflect on themselves during dashboard onboarding.',
   };
   function audChip(aud) {
     var m = AUD_META[aud] || { cls: 'other', icon: '' };
@@ -3130,43 +3143,45 @@
     if (!stF && !arch) {
       var obs = ORG.observation;
       var pub = obs.phases.filter(function (p) { return p.published; }).length;
-      items.push({ aud: 'Observation', badges: statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn'),
+      items.push({ aud: 'Teacher', open: 'data-obsedit', badges: statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn'),
         title: 'Teacher Observation Form', desc: obs.questions.length + '-item shared question bank, published per phase. Deploy from Deployments.',
         meta: '', foot: 'Pre · Mid · Post',
-        action: '<button class="tl-rowact" data-obsedit title="Configure the observation form" aria-label="Configure Teacher Observation Form">' + ICONS.settings + '</button>',
-        sort: { title: 'Teacher Observation Form', aud: 'Observation', phase: 0, status: pub ? 1 : 3, history: null } });
+        action: '<button class="tl-rowact" data-obsedit title="Edit the observation form — questions and which phases are published" aria-label="Edit Teacher Observation Form">' + ICONS.edit + '</button>',
+        sort: { title: 'Teacher Observation Form', aud: 'Teacher', phase: 0, status: pub ? 1 : 3, history: null } });
     }
     // Teacher Reflection Questions: the one-time onboarding reflection, edited in
     // its own screen (SCREEN.reflection). Not deployed — teachers get it on first login.
     var reflCfg = (!stF && !arch && window.TilliAPI && window.TilliAPI.getReflectionConfig) ? window.TilliAPI.getReflectionConfig() : null;
     if (reflCfg) {
       var rqN = (reflCfg.questions || []).length, rcN = (reflCfg.cats || []).length;
-      items.push({ aud: 'Teacher reflection', badges: statusPill(rqN + ' questions', rqN ? 'ok' : 'warn'),
+      items.push({ aud: 'Teacher', open: 'data-refledit', badges: statusPill(rqN + ' questions', rqN ? 'ok' : 'warn'),
         title: 'Teacher Reflection Questions', desc: 'One-time self-reflection every teacher completes during dashboard onboarding — ' + rqN + ' questions across ' + rcN + ' categories.',
         meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: 'Onboarding · not deployed',
         action: '<button class="tl-rowact" data-refledit title="Edit the reflection questions" aria-label="Edit Teacher Reflection Questions">' + ICONS.edit + '</button>',
-        sort: { title: 'Teacher Reflection Questions', aud: 'Teacher reflection', phase: 0, status: rqN ? 1 : 3, history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
+        sort: { title: 'Teacher Reflection Questions', aud: 'Teacher', phase: 0, status: rqN ? 1 : 3, history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
     }
     list.forEach(function (t) {
-      items.push({ aud: t.audience, archived: t.archived,
+      items.push({ aud: t.audience, archived: t.archived, open: 'data-tplopen="' + t.id + '"',
         badges: tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')),
         title: t.title, desc: t.desc, meta: tplMetaLine(t),
-        foot: esc(t.phase) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span>',
+        foot: esc(tplPhaseText(t)) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span>',
         action: '<button class="tl-rowact" data-tpl="' + t.id + '" title="Edit — also duplicate, publish, archive or delete" aria-label="Edit ' + esc(t.title) + '">' + ICONS.edit + '</button>',
         // status rank: ★ Latest · Published · Older version · Draft · Archived
-        sort: { title: t.title, aud: t.audience, phase: TPL_PHASE_RANK[t.phase] != null ? TPL_PHASE_RANK[t.phase] : 9,
-          status: t.archived ? 4 : t.status !== 'Published' ? 3 : latest[t.phase + '|' + t.audience] === t.id ? 0 : 2,
+        // phase: its earliest phase (ties keep the default order)
+        sort: { title: t.title, aud: t.audience, phase: Math.min.apply(null, tplPhases(t).map(function (ph) { return TPL_PHASE_RANK[ph] != null ? TPL_PHASE_RANK[ph] : 9; })),
+          status: t.archived ? 4 : t.status !== 'Published' ? 3 : tplLatestIn(t, latest).length ? 0 : 2,
           history: +new Date(t.updatedAt || t.createdAt) || null } });
     });
+    function tplName(it) { return '<button type="button" class="tl-tpl-name" ' + it.open + ' title="Open — see and edit every question">' + esc(it.title) + '</button>'; }
     function tplCard(it) {
       return '<div class="tl-tpl-card' + (it.archived ? ' is-archived' : '') + '"><div class="tt-top">' + audChip(it.aud) +
         '<span class="tt-badges">' + it.badges + '</span></div>' +
-        '<div class="tt-title">' + esc(it.title) + '</div><div class="tt-desc">' + esc(it.desc) + '</div>' +
+        '<div class="tt-title">' + tplName(it) + '</div><div class="tt-desc">' + esc(it.desc) + '</div>' +
         (it.meta ? '<div class="tt-meta">' + it.meta + '</div>' : '') +
         '<div class="tt-foot"><span class="tt-phase">' + it.foot + '</span>' + it.action + '</div></div>';
     }
     function tplRow(it) {
-      return '<tr' + (it.archived ? ' class="is-archived"' : '') + '><td class="name">' + esc(it.title) + '<small>' + esc(it.desc) + '</small></td>' +
+      return '<tr' + (it.archived ? ' class="is-archived"' : '') + '><td class="name">' + tplName(it) + '<small>' + esc(it.desc) + '</small></td>' +
         '<td>' + audChip(it.aud) + '</td><td>' + it.foot + '</td>' +
         '<td><span class="tt-badges">' + it.badges + '</span></td>' +
         '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + it.action + '</td></tr>';
@@ -3226,11 +3241,328 @@
     var c = body.querySelector('#tpl-clear'); if (c) c.addEventListener('click', function () { go('templates', arch ? { view: 'archived' } : {}); });
     body.querySelectorAll('[data-tplview]').forEach(function (b) { b.addEventListener('click', function () { go('templates', b.dataset.tplview ? { view: b.dataset.tplview } : {}); }); });
     var nb = body.querySelector('[data-new]'); if (nb) nb.addEventListener('click', openNewTemplate);
-    var ob = body.querySelector('[data-obsedit]'); if (ob) ob.addEventListener('click', function () { go('observation', {}); });
-    var rb = body.querySelector('[data-refledit]'); if (rb) rb.addEventListener('click', function () { go('reflection', {}); });
+    body.querySelectorAll('[data-obsedit]').forEach(function (b) { b.addEventListener('click', function () { go('observation', {}); }); });
+    body.querySelectorAll('[data-refledit]').forEach(function (b) { b.addEventListener('click', function () { go('reflection', {}); }); });
+    body.querySelectorAll('[data-tplopen]').forEach(function (b) { b.addEventListener('click', function () { go('template', { id: b.dataset.tplopen }); }); });
     body.querySelectorAll('[data-tpl]').forEach(function (b) { b.addEventListener('click', function () { openTemplateMenu(b.dataset.tpl); }); });
     body.querySelectorAll('[data-manage]').forEach(function (b) { b.addEventListener('click', function () { openManageGame(b.dataset.manage); }); });
   };
+
+  // ============================================================
+  //  TEMPLATE BUILDER (#/template?id=) — a template's questions, edited in
+  //  place: Section Break / Multiple Choice / Short Answer cards with options
+  //  + scores, timing, media, conditional display, scoring rule and skills.
+  //  Edits save straight onto the template (autosave). Media / option images
+  //  are local previews only in this prototype.
+  // ============================================================
+  var TB_TYPES = { section: 'Section Break', mc: 'Multiple Choice', text: 'Short Answer' };
+  var TB_SKILLS = ['Emotion Awareness', 'Emotion Regulation', 'Empathy', 'Relationship Skills', 'Metacognition', 'Critical Thinking',
+    'Attention', 'Working Memory', 'Cognitive Flexibility', 'Planning and Organization', 'Inhibition (Distraction)', 'Inhibition (Response)'];
+  var TB_SCORING = { map: 'Option Score Mapping', correct: 'Correct Answer', none: 'Not Scored' };
+  var TB_SCORING_TIP = { map: 'Each option carries its own score; the answer’s score counts toward the skills below.',
+    correct: 'Options scored 1 are correct, everything else 0.', none: 'Collected but never scored (e.g. feedback on the school).' };
+  var TB_LANGS = ['Hindi', 'Tamil', 'Telugu', 'Kannada', 'Marathi', 'Bengali', 'Sinhala'];
+  var TB_OPEN_FIRST = 0;   // cards open by default on first visit (0 = all start collapsed)
+  var tbState = { id: null, phase: null, tab: 'questions', lang: null, open: {} };
+  var TB_IC = {
+    drag: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+    kebab: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5.5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18.5" r="1.8"/></svg>',
+    img: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="14" rx="2"/><circle cx="8" cy="10" r="1.5"/><path d="M17 15l-4-4-7 8"/><line x1="20" y1="3" x2="20" y2="9"/><line x1="17" y1="6" x2="23" y2="6"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
+    video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+    audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>',
+    upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>',
+    calc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><circle cx="9" cy="12" r=".6"/><circle cx="12" cy="12" r=".6"/><circle cx="15" cy="12" r=".6"/><circle cx="9" cy="16" r=".6"/><circle cx="12" cy="16" r=".6"/><circle cx="15" cy="16" r=".6"/></svg>',
+    branch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10"/><path d="M6 12h10"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>',
+  };
+  // The phase version being viewed: the builder's pick for this template, else its first phase.
+  function tbPhaseOf(t) { return tbState.id === t.id && tbState.phase && tplPhases(t).indexOf(tbState.phase) >= 0 ? tbState.phase : tplPhases(t)[0]; }
+  function tbList(t, ph) { var v = t.versions || (t.versions = {}); return v[ph || tbPhaseOf(t)] || (v[ph || tbPhaseOf(t)] = []); }
+  // Questions only (Section Breaks aren't counted or numbered).
+  function tbQuestions(t, ph) { return tbList(t, ph).filter(function (q) { return q.type !== 'section'; }); }
+  // Text in the language being edited: the original, or its translation.
+  function tbTx(q, f) { if (!tbState.lang) return q[f] || ''; var tr = (q.tr || {})[tbState.lang] || {}; return tr[f] || ''; }
+  function tbSetTx(q, f, v) { if (!tbState.lang) { q[f] = v; return; } q.tr = q.tr || {}; (q.tr[tbState.lang] = q.tr[tbState.lang] || {})[f] = v; }
+  function tbOptTx(q, i) { if (!tbState.lang) return q.options[i].text || ''; var tr = ((q.tr || {})[tbState.lang] || {}).options || []; return tr[i] || ''; }
+  function tbSetOptTx(q, i, v) {
+    if (!tbState.lang) { q.options[i].text = v; return; }
+    q.tr = q.tr || {}; var tr = q.tr[tbState.lang] = q.tr[tbState.lang] || {}; (tr.options = tr.options || [])[i] = v;
+  }
+  function tbMaxScore(q) { var m = null; (q.options || []).forEach(function (o) { if (o.score != null && (m == null || o.score > m)) m = o.score; }); return q.scoring === 'none' ? null : m; }
+  function tbFileSize(n) { return n < 1024 * 1024 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
+
+  function tbCard(t, q, idx, num) {
+    var open = tbState.open[q.id], ph = function (f) { return tbState.lang ? ' placeholder="' + esc(q[f] || '') + '"' : ''; };
+    var head = '<div class="tb-card-h">' +
+      '<span class="tb-drag" data-drag title="Drag to reorder">' + TB_IC.drag + '</span>' +
+      '<span class="tb-swatch"></span><span class="tb-type">' + TB_TYPES[q.type] + '</span>' + (num ? '<span class="tb-num">Q' + num + '</span>' : '') +
+      (open ? '' : '<button type="button" class="tb-peek" data-toggle title="Open">' + esc(q.title || 'Untitled') + '</button>') +
+      '<span class="tb-req" title="Respondents must answer before moving on">Required' + switchHtml(q.required, ' data-req aria-label="Required"') + '</span>' +
+      '<button type="button" class="tb-ic tb-chev" data-toggle aria-expanded="' + !!open + '" aria-label="' + (open ? 'Collapse' : 'Expand') + '">' + TB_IC.chev + '</button>' +
+      '<button type="button" class="tb-ic" data-qmenu aria-label="More options">' + TB_IC.kebab + '</button></div>';
+    if (!open) return '<div class="tb-card t-' + q.type + ' is-closed" data-q="' + esc(q.id) + '">' + head + '</div>';
+
+    var body = '<input class="tb-title" data-f="title" value="' + esc(tbTx(q, 'title')) + '"' + (tbState.lang ? ph('title') : ' placeholder="' + (q.type === 'section' ? 'Section title' : 'Question') + '"') + '>' +
+      '<textarea class="tb-desc" data-f="desc" rows="2"' + (tbState.lang ? ph('desc') : ' placeholder="Description (optional)…"') + '>' + esc(tbTx(q, 'desc')) + '</textarea>';
+    if (q.type === 'mc') {
+      body += '<div class="tb-label">Answer Options</div><div class="tb-opts">' + q.options.map(function (o, i) {
+        return '<div class="tb-opt"><span class="tb-radio" aria-hidden="true"></span>' +
+          '<input class="input" data-opt="' + i + '" value="' + esc(tbOptTx(q, i)) + '" placeholder="' + esc(tbState.lang ? o.text : 'Option ' + (i + 1)) + '">' +
+          '<input class="input tb-score" type="number" step="1" data-score="' + i + '" value="' + (o.score == null ? '' : o.score) + '" placeholder="Score" title="Score for this option (blank = not scored)"' + (q.scoring === 'none' ? ' disabled' : '') + '>' +
+          '<button type="button" class="tb-ic" data-optimg="' + i + '" title="' + (o.img ? 'Replace image' : 'Add an image to this option') + '">' + TB_IC.img + '</button>' +
+          '<button type="button" class="tb-ic" data-optdel="' + i + '" title="Remove option"' + (q.options.length < 2 ? ' disabled' : '') + '>' + TB_IC.x + '</button>' +
+          (o.img ? '<span class="tb-optimg"><img src="' + esc(o.img) + '" alt=""></span>' : '') + '</div>';
+      }).join('') + '</div><button type="button" class="btn btn-outline btn-sm tb-addopt" data-addopt>+ Add Option</button>' +
+      '<div class="tb-row"><div><b>Include “None of the Above”</b><span>Adds a final option that asks for a written answer</span></div>' + switchHtml(q.noneOfAbove, ' data-none aria-label="Include None of the Above"') + '</div>' +
+      '<div class="tb-row"><div><b>Timed Question</b><span>' + (q.timed ? 'The respondent has ' + q.seconds + ' seconds to answer' : 'No time limit') + '</span></div>' +
+        (q.timed ? '<label class="tb-secs">Seconds<input class="input" type="number" min="1" data-secs value="' + q.seconds + '"></label>' : '') + switchHtml(q.timed, ' data-timed aria-label="Timed question"') + '</div>';
+    } else if (q.type === 'text') {
+      body += '<div class="tb-textans">Short written answer</div>';
+    }
+    body += '<label class="tb-media-row"><span>' + TB_IC.video + 'Video URL:</span><input class="input" data-f2="videoUrl" value="' + esc(q.videoUrl) + '" placeholder="YouTube or Google Drive link"></label>' +
+      '<label class="tb-media-row"><span>' + TB_IC.audio + 'Audio Instructions:</span><input class="input" data-f2="audioUrl" value="' + esc(q.audioUrl) + '" placeholder="URL to audio file for read-aloud instructions"></label>' +
+      '<div class="tb-label">Media Attachments</div>' +
+      (q.media.length ? '<div class="tb-thumbs">' + q.media.map(function (m, i) {
+        return '<div class="tb-thumb">' + (m.kind === 'image' ? '<img src="' + esc(m.url) + '" alt="">' : '<span class="tb-thumb-ic">' + (m.kind === 'video' ? TB_IC.video : TB_IC.audio) + '</span>') +
+          '<span class="tb-thumb-cap">' + esc(m.name) + '<br>' + esc(m.size) + '</span><button type="button" class="tb-ic tb-thumb-x" data-mediadel="' + i + '" aria-label="Remove ' + esc(m.name) + '">' + TB_IC.x + '</button></div>';
+      }).join('') + '</div>' : '') +
+      '<button type="button" class="btn btn-outline btn-sm" data-addmedia>' + TB_IC.upload + 'Add Media</button>';
+    if (q.type !== 'section') {
+      // Conditional display: only show after an earlier multiple-choice answer.
+      var earlier = (tbList(t) || []).slice(0, idx).filter(function (x) { return x.type === 'mc'; });
+      var c = q.cond || {}, src = earlier.find(function (x) { return x.id === c.q; });
+      body += '<details class="tb-fold"' + (q.cond ? ' open' : '') + '><summary>' + TB_IC.branch + 'Conditional Display' + (q.cond ? '<span class="tb-badge">On</span>' : '') + '</summary><div class="tb-fold-b">' +
+        (earlier.length ? '<label class="tb-cond">Show this question only if <select class="select" data-condq><option value="">— always show —</option>' +
+            earlier.map(function (x) { return '<option value="' + esc(x.id) + '"' + (x.id === c.q ? ' selected' : '') + '>' + esc(x.title || 'Untitled') + '</option>'; }).join('') + '</select></label>' +
+          (src ? '<label class="tb-cond">is answered <select class="select" data-condo>' + src.options.map(function (o, i) { return '<option value="' + i + '"' + (i === c.opt ? ' selected' : '') + '>' + esc(o.text || 'Option ' + (i + 1)) + '</option>'; }).join('') + '</select></label>' : '')
+          : '<p class="tl-muted">Add a multiple-choice question above this one to show it conditionally.</p>') + '</div></details>' +
+        '<details class="tb-fold"><summary>' + TB_IC.calc + 'Scoring Rule<span class="tb-badge" title="' + esc(TB_SCORING_TIP[q.scoring]) + '">' + TB_SCORING[q.scoring] + '</span></summary><div class="tb-fold-b">' +
+          (q.type === 'mc' ? '<label class="tb-cond">Rule <select class="select" data-scoring>' + Object.keys(TB_SCORING).map(function (k) { return '<option value="' + k + '"' + (q.scoring === k ? ' selected' : '') + '>' + TB_SCORING[k] + '</option>'; }).join('') + '</select></label>' +
+            '<p class="tl-muted">' + esc(TB_SCORING_TIP[q.scoring]) + (tbMaxScore(q) != null ? ' Highest score: ' + tbMaxScore(q) + '.' : '') + '</p>'
+            : '<p class="tl-muted">Written answers aren’t scored.</p>') + '</div></details>' +
+        '<div class="tb-label">Skills Evaluated</div><div class="tb-skills">' + TB_SKILLS.map(function (k) {
+          var on = q.skills.indexOf(k) >= 0;
+          return '<button type="button" class="tb-skill' + (on ? ' on' : '') + '" data-skill="' + esc(k) + '" aria-pressed="' + on + '">' + esc(k) + '</button>';
+        }).join('') + '</div>';
+    }
+    return '<div class="tb-card t-' + q.type + '" data-q="' + esc(q.id) + '">' + head + '<div class="tb-body">' + body + '</div></div>';
+  }
+
+  // Scoring Configuration tab: what each skill is built from.
+  function tbScoringView(t) {
+    var qs = tbQuestions(t), by = {}, unscored = [];
+    qs.forEach(function (q, i) {
+      var m = tbMaxScore(q);
+      if (m == null || !q.skills.length) { unscored.push('Q' + (i + 1) + ' ' + (q.title || 'Untitled')); return; }
+      q.skills.forEach(function (k) { var r = by[k] || (by[k] = { n: 0, max: 0 }); r.n++; r.max += m; });
+    });
+    var rows = TB_SKILLS.filter(function (k) { return by[k]; }).map(function (k) { return '<tr><td class="name">' + esc(k) + '</td><td>' + by[k].n + '</td><td>' + by[k].max + '</td></tr>'; }).join('');
+    var total = Object.keys(by).reduce(function (n, k) { return n + by[k].max; }, 0);
+    return '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Skills and scores</h3><p class="ui-mod-note">Worked out from each question’s options, scoring rule and skills. Highest possible total: <b>' + total + '</b>.</p></div></div>' +
+      (rows ? '<div class="ui-tablewrap"><table class="ui-table"><thead><tr><th>Skill</th><th>Questions</th><th>Highest score</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="ui-empty">No scored questions yet.</div>') + '</div>' +
+      (unscored.length ? '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Not scored (' + unscored.length + ')</h3><p class="ui-mod-note">No scoring rule, no option scores or no skills picked.</p></div></div><ul class="tb-unscored">' + unscored.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '');
+  }
+
+  SCREEN.template = function (params, body) {
+    var t = ORG.templates.find(function (x) { return x.id === params.id; });
+    if (!t) { body.innerHTML = crumbs([{ label: 'Templates', screen: 'templates' }, { label: 'Not found' }]) + '<div class="ui-empty">That template no longer exists.</div>'; wireCrumbs(body); return; }
+    if (tbState.id !== t.id) tbState = { id: t.id, phase: null, tab: 'questions', lang: null, open: {} };
+    tbState.phase = tbPhaseOf(t);
+    tbList(t).forEach(function (q, i) { if (tbState.open[q.id] == null) tbState.open[q.id] = i < TB_OPEN_FIRST; });
+    if (!t.langs) t.langs = [];
+    var qs = tbList(t) || [], n = 0, published = t.status === 'Published';
+    var nQ = tbQuestions(t).length;
+    var cards = qs.map(function (q, i) { return tbCard(t, q, i, q.type === 'section' ? 0 : ++n); }).join('');
+    var langs = '<div class="tb-langs"><button type="button" class="tb-lang' + (!tbState.lang ? ' on' : '') + '" data-lang="">English (Original)</button>' +
+      t.langs.map(function (l) { return '<button type="button" class="tb-lang' + (tbState.lang === l ? ' on' : '') + '" data-lang="' + esc(l) + '">' + esc(l) + '</button>'; }).join('') +
+      '<button type="button" class="tb-addlang" data-addlang>+ Add Language</button></div>';
+    var allOpen = qs.length && qs.every(function (q) { return tbState.open[q.id]; });
+    body.innerHTML =
+      '<div class="tb-head"><button type="button" class="tb-ic tb-back" data-back aria-label="Back to Templates" title="Back to Templates">' + TB_IC.back + '</button>' +
+        '<div class="tb-head-txt"><input class="tb-name" data-tname value="' + esc(t.title) + '" aria-label="Template name">' +
+          '<input class="tb-tdesc" data-tdesc value="' + esc(t.desc || '') + '" placeholder="Add a description…" aria-label="Template description">' +
+          '<div class="tl-tm-chips">' + audChip(t.audience) + '<span class="tl-tm-phase">' + esc(tplPhaseText(t)) + ' · ' + esc(whereText(t.audience)) + '</span>' +
+            statusPill(t.archived ? 'Archived' : t.status, t.archived ? 'muted' : published ? 'ok' : 'warn') + tplVersionBadge(t, ORG.server.latestTemplateIds()) +
+            '<button type="button" class="btn-link" data-details title="Audience, phases and status">Edit details</button><span class="tb-saved" id="tb-saved"></span></div></div>' +
+        '<div class="tb-head-act"><button type="button" class="btn btn-outline btn-sm" data-csv>' + TB_IC.download + 'Download CSV</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" data-preview>' + TB_IC.eye + 'Preview</button>' +
+          (t.archived ? '' : published ? '<button type="button" class="btn btn-primary btn-sm" disabled title="Live for new deployments. Unpublish from More ⋮.">Published</button>'
+            : '<button type="button" class="btn btn-primary btn-sm" data-publish title="Make it available for new deployments">Publish</button>') +
+          '<button type="button" class="tb-ic" data-more aria-label="More actions" title="Duplicate, unpublish, archive or delete">' + TB_IC.kebab + '</button></div></div>' +
+      '<div class="tb-phases" role="tablist" aria-label="Phase version"><span class="tb-phases-l">Version</span>' + TPL_PHASE_LIST.map(function (ph) {
+        var tagged = tplPhases(t).indexOf(ph) >= 0, on = ph === tbState.phase;
+        return '<button type="button" role="tab" class="tb-ph' + (on ? ' on' : '') + '" data-tbphase="' + ph + '" aria-selected="' + on + '"' +
+          (tagged ? ' title="The ' + ph + ' version of this template — its own questions"' : ' disabled title="Not tagged for ' + ph + ' — add it in Edit details"') + '>' +
+          ph + (tagged ? ' <b>' + tbQuestions(t, ph).length + '</b>' : '') + '</button>';
+      }).join('') + '</div>' +
+      '<div class="tb-tabs" role="tablist"><button type="button" role="tab" class="tb-tab' + (tbState.tab === 'questions' ? ' on' : '') + '" data-tbtab="questions" aria-selected="' + (tbState.tab === 'questions') + '">Questions <b>' + nQ + '</b></button>' +
+        '<button type="button" role="tab" class="tb-tab' + (tbState.tab === 'scoring' ? ' on' : '') + '" data-tbtab="scoring" aria-selected="' + (tbState.tab === 'scoring') + '">Scoring Configuration</button></div>' +
+      (tbState.tab === 'scoring' ? tbScoringView(t) :
+        langs + (tbState.lang ? '<div class="tl-filterbanner">Translating into <b>' + esc(tbState.lang) + '</b> — type over the English shown in each field. Options, scores and settings are shared with the original.</div>' : '') +
+        (qs.length ? '<div class="tb-tools"><button type="button" class="btn-link" data-openall="' + (allOpen ? 0 : 1) + '">' + (allOpen ? 'Collapse all' : 'Expand all') + '</button></div>' : '') +
+        '<div class="tb-list" id="tb-list">' + (cards || '<div class="ui-empty">No questions yet — add the first one below.</div>') + '</div>' +
+        '<div class="tb-add"><span>Add</span><button type="button" class="btn btn-outline btn-sm" data-addq="mc">Multiple Choice</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" data-addq="text">Short Answer</button><button type="button" class="btn btn-outline btn-sm" data-addq="section">Section Break</button></div>') +
+      '<input type="file" id="tb-file" hidden>';
+    tbWire(t, params, body);
+  };
+
+  function tbWire(t, params, body) {
+    var redraw = function () { SCREEN.template(params, body); };
+    var savedT = null;
+    function saved() {
+      ORG.server.touchTemplate(t, me.name);
+      // One audit entry per editing visit, not one per keystroke.
+      if (!tbState.logged) { tbState.logged = true; ORG.server.logAudit(me.name, 'template.edit', t.title, 'template'); }
+      var el = body.querySelector('#tb-saved'); if (el) { el.textContent = 'Saved'; clearTimeout(savedT); savedT = setTimeout(function () { el.textContent = ''; }, 1500); }
+    }
+    var qOf = function (el) { var c = el.closest('[data-q]'); return c ? tbList(t).find(function (q) { return q.id === c.dataset.q; }) : null; };
+    var qIdx = function (q) { return tbList(t).indexOf(q); };
+
+    body.querySelector('[data-back]').addEventListener('click', function () { go('templates', {}); });
+    body.querySelector('[data-tname]').addEventListener('input', function (e) { if (e.target.value.trim()) { t.title = e.target.value; saved(); } });
+    body.querySelector('[data-tdesc]').addEventListener('input', function (e) { t.desc = e.target.value; saved(); });
+    body.querySelector('[data-details]').addEventListener('click', function () { openTemplateEditor(t); });
+    body.querySelector('[data-more]').addEventListener('click', function () { openTemplateMenu(t.id); });
+    var pb = body.querySelector('[data-publish]'); if (pb) pb.addEventListener('click', function () {
+      if (!tbQuestions(t).length) { toast('Add at least one question before publishing.'); return; }
+      ORG.server.publishTemplate(t.id, true, me.name); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → Published', 'template'); toast('Published.'); redraw();
+    });
+    body.querySelector('[data-csv]').addEventListener('click', function () {
+      var n = 0;
+      downloadCsv((t.title + ' ' + tbState.phase).replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '-questions.csv', ['#', 'Type', 'Question', 'Description', 'Options (score)', 'Required', 'Timed (s)', 'Scoring', 'Skills', 'Shown if'],
+        tbList(t).map(function (q) {
+          var src = q.cond && tbList(t).find(function (x) { return x.id === q.cond.q; });
+          return [q.type === 'section' ? '' : 'Q' + (++n), TB_TYPES[q.type], q.title, q.desc, (q.options || []).map(function (o) { return o.text + (o.score == null ? '' : ' (' + o.score + ')'); }).join(' | '),
+            q.required ? 'Yes' : 'No', q.timed ? q.seconds : '', q.type === 'section' ? '' : TB_SCORING[q.scoring], q.skills.join(' | '),
+            src ? src.title + ' = ' + ((src.options[q.cond.opt] || {}).text || '') : ''];
+        }));
+    });
+    body.querySelector('[data-preview]').addEventListener('click', function () {
+      var n = 0;
+      openModal('Preview · ' + t.title + ' · ' + tbState.phase, '<div class="tb-pv">' + tbList(t).map(function (q) {
+        var title = esc(tbTx(q, 'title') || q.title), desc = tbTx(q, 'desc') || q.desc;
+        if (q.type === 'section') return '<div class="tb-pv-sec"><h4>' + title + '</h4>' + (desc ? '<p>' + esc(desc) + '</p>' : '') + '</div>';
+        var opts = q.type === 'mc' ? '<div class="tb-pv-opts">' + q.options.concat(q.noneOfAbove ? [{ text: 'None of the above' }] : []).map(function (o, i) {
+          return '<label><input type="radio" name="pv-' + esc(q.id) + '"> ' + esc((i < q.options.length ? tbOptTx(q, i) : '') || o.text) + '</label>'; }).join('') + '</div>'
+          : '<input class="input" placeholder="Type your answer">';
+        return '<div class="tb-pv-q"><b>' + (++n) + '. ' + title + (q.required ? ' <span class="tb-pv-req">*</span>' : '') + '</b>' + (desc ? '<p>' + esc(desc) + '</p>' : '') +
+          (q.timed ? '<span class="ui-chip info">⏱ ' + q.seconds + 's</span>' : '') + (q.cond ? '<span class="ui-chip muted">Conditional</span>' : '') + opts + '</div>';
+      }).join('') + '</div>', null);
+    });
+    body.querySelectorAll('[data-tbphase]').forEach(function (b) { b.addEventListener('click', function () { if (!b.disabled) { tbState.phase = b.dataset.tbphase; redraw(); } }); });
+    body.querySelectorAll('[data-tbtab]').forEach(function (b) { b.addEventListener('click', function () { tbState.tab = b.dataset.tbtab; redraw(); }); });
+    body.querySelectorAll('[data-lang]').forEach(function (b) { b.addEventListener('click', function () { tbState.lang = b.dataset.lang || null; redraw(); }); });
+    var al = body.querySelector('[data-addlang]'); if (al) al.addEventListener('click', function () {
+      var left = TB_LANGS.filter(function (l) { return t.langs.indexOf(l) < 0; });
+      if (!left.length) { toast('Every language is already added.'); return; }
+      openModal('Add a language', '<p class="tl-muted">Translate this template’s text. Options, scores and settings stay shared.</p><label class="field">Language<select class="select" id="tb-newlang">' +
+        left.map(function (l) { return '<option>' + esc(l) + '</option>'; }).join('') + '</select></label>', function (close) {
+          var l = document.getElementById('tb-newlang').value; t.langs.push(l); tbState.lang = l; saved(); close(); redraw();
+        }, 'Add language');
+    });
+    var oa = body.querySelector('[data-openall]'); if (oa) oa.addEventListener('click', function () { var on = oa.dataset.openall === '1'; tbList(t).forEach(function (q) { tbState.open[q.id] = on; }); redraw(); });
+    body.querySelectorAll('[data-addq]').forEach(function (b) { b.addEventListener('click', function () {
+      var q = ORG.server.newQuestion(t.id + '-n' + Date.now(), b.dataset.addq); tbList(t).push(q); tbState.open[q.id] = true; saved(); redraw();
+      var c = body.querySelector('[data-q="' + q.id + '"]'); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); var ti = c.querySelector('.tb-title'); if (ti) ti.focus(); }
+    }); });
+
+    var list = body.querySelector('#tb-list'); if (!list) return;
+    // Text: patch in place (no redraw → the caret stays put).
+    list.addEventListener('input', function (e) {
+      var el = e.target, q = qOf(el); if (!q) return;
+      if (el.dataset.f) tbSetTx(q, el.dataset.f, el.value);
+      else if (el.dataset.f2) q[el.dataset.f2] = el.value.trim();
+      else if (el.dataset.opt != null) tbSetOptTx(q, +el.dataset.opt, el.value);
+      else if (el.dataset.score != null) q.options[+el.dataset.score].score = el.value === '' ? null : +el.value;
+      else if (el.hasAttribute('data-secs')) q.seconds = Math.max(1, +el.value || 1);
+      else return;
+      saved();
+    });
+    list.addEventListener('change', function (e) {
+      var el = e.target, q = qOf(el); if (!q) return;
+      if (el.hasAttribute('data-req')) q.required = el.checked;
+      else if (el.hasAttribute('data-none')) q.noneOfAbove = el.checked;
+      else if (el.hasAttribute('data-timed')) q.timed = el.checked;
+      else if (el.hasAttribute('data-condq')) q.cond = el.value ? { q: el.value, opt: 0 } : null;
+      else if (el.hasAttribute('data-condo')) q.cond.opt = +el.value;
+      else if (el.hasAttribute('data-scoring')) q.scoring = el.value;
+      else return;
+      saved(); redraw();
+    });
+    list.addEventListener('click', function (e) {
+      var el = e.target.closest('button'); if (!el) return;
+      var q = qOf(el); if (!q) return;
+      if (el.hasAttribute('data-toggle')) { tbState.open[q.id] = !tbState.open[q.id]; redraw(); return; }
+      if (el.hasAttribute('data-addopt')) { q.options.push({ text: '', score: null }); saved(); redraw(); var ins = body.querySelectorAll('[data-q="' + q.id + '"] [data-opt]'); if (ins.length) ins[ins.length - 1].focus(); return; }
+      if (el.dataset.optdel != null) { q.options.splice(+el.dataset.optdel, 1); if (q.cond) q.cond.opt = 0; saved(); redraw(); return; }
+      if (el.dataset.skill) { var k = el.dataset.skill, at = q.skills.indexOf(k); if (at >= 0) q.skills.splice(at, 1); else q.skills.push(k); saved(); redraw(); return; }
+      if (el.dataset.mediadel != null) { q.media.splice(+el.dataset.mediadel, 1); saved(); redraw(); return; }
+      if (el.hasAttribute('data-addmedia') || el.dataset.optimg != null) {
+        var f = body.querySelector('#tb-file'), forOpt = el.dataset.optimg;
+        f.accept = forOpt != null ? 'image/*' : 'image/*,video/*,audio/*'; f.value = '';
+        f.onchange = function () {
+          var file = f.files && f.files[0]; if (!file) return;
+          var url = URL.createObjectURL(file);   // local preview only — not uploaded in the prototype
+          if (forOpt != null) q.options[+forOpt].img = url;
+          else q.media.push({ name: file.name, size: tbFileSize(file.size), url: url, kind: /^video/.test(file.type) ? 'video' : /^audio/.test(file.type) ? 'audio' : 'image' });
+          saved(); redraw();
+        };
+        f.click(); return;
+      }
+      if (el.hasAttribute('data-qmenu')) { tbQuestionMenu(el, t, q, saved, redraw); }
+    });
+    // Drag a card by its handle to reorder.
+    var dragId = null;
+    list.addEventListener('mousedown', function (e) { var h = e.target.closest('[data-drag]'); if (h) h.closest('.tb-card').setAttribute('draggable', 'true'); });
+    list.addEventListener('dragstart', function (e) { var c = e.target.closest('.tb-card'); if (!c) return; dragId = c.dataset.q; c.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', dragId); } catch (x) {} });
+    list.addEventListener('dragover', function (e) { if (!dragId) return; e.preventDefault(); var c = e.target.closest('.tb-card'); list.querySelectorAll('.drop-before').forEach(function (x) { x.classList.remove('drop-before'); }); if (c && c.dataset.q !== dragId) c.classList.add('drop-before'); });
+    list.addEventListener('drop', function (e) {
+      e.preventDefault(); var c = e.target.closest('.tb-card'); if (!dragId || !c || c.dataset.q === dragId) return;
+      var from = tbList(t).findIndex(function (q) { return q.id === dragId; }), moving = tbList(t).splice(from, 1)[0];
+      tbList(t).splice(tbList(t).findIndex(function (q) { return q.id === c.dataset.q; }), 0, moving);
+      dragId = null; saved(); redraw();
+    });
+    list.addEventListener('dragend', function () { dragId = null; list.querySelectorAll('.tb-card').forEach(function (x) { x.removeAttribute('draggable'); x.classList.remove('dragging', 'drop-before'); }); });
+  }
+  // ⋮ on a question: duplicate, move, change type, delete.
+  function tbQuestionMenu(btn, t, q, saved, redraw) {
+    closeItemMenu();
+    var i = tbList(t).indexOf(q), last = tbList(t).length - 1;
+    var pop = document.createElement('div'); pop.className = 'ui-menu dep-pop';
+    pop.innerHTML = '<button type="button" class="ui-menu-item" data-a="dup">Duplicate</button>' +
+      '<button type="button" class="ui-menu-item" data-a="up"' + (i <= 0 ? ' disabled' : '') + '>↑ Move up</button>' +
+      '<button type="button" class="ui-menu-item" data-a="down"' + (i >= last ? ' disabled' : '') + '>↓ Move down</button><div class="dep-pop-sep"></div>' +
+      Object.keys(TB_TYPES).filter(function (k) { return k !== q.type; }).map(function (k) { return '<button type="button" class="ui-menu-item" data-a="type:' + k + '">Change to ' + TB_TYPES[k] + '</button>'; }).join('') +
+      '<div class="dep-pop-sep"></div><button type="button" class="ui-menu-item danger" data-a="del">Delete</button>';
+    document.body.appendChild(pop); TL_POP = pop;
+    var r = btn.getBoundingClientRect();
+    pop.style.top = (window.scrollY + r.bottom + 6) + 'px'; pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + 'px';
+    pop.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
+      var a = b.dataset.a; closeItemMenu();
+      if (a === 'dup') { var c = JSON.parse(JSON.stringify(q)); c.id = t.id + '-n' + Date.now(); tbList(t).splice(i + 1, 0, c); tbState.open[c.id] = true; }
+      else if (a === 'up' || a === 'down') { var j = a === 'up' ? i - 1 : i + 1; tbList(t)[i] = tbList(t)[j]; tbList(t)[j] = q; }
+      else if (a.indexOf('type:') === 0) {
+        q.type = a.slice(5);
+        if (q.type === 'mc' && !q.options.length) q.options = [{ text: '', score: null }];
+        if (q.type !== 'mc') q.scoring = 'none'; else if (q.scoring === 'none') q.scoring = 'map';
+      }
+      else if (a === 'del') {
+        if (!confirm('Delete this ' + TB_TYPES[q.type].toLowerCase() + '?\n\n“' + (q.title || 'Untitled') + '”')) return;
+        tbList(t).splice(i, 1);
+        tbList(t).forEach(function (x) { if (x.cond && x.cond.q === q.id) x.cond = null; });   // nothing can depend on a deleted question
+      }
+      saved(); redraw();
+    });
+    setTimeout(function () { document.addEventListener('mousedown', onPopOutside); document.addEventListener('keydown', onPopKey); }, 0);
+  }
+  // After an edit from the template page, stay on it; from the list, back to the list.
+  function tplAfterChange() { if (currentRoute().screen === 'template') render(); else go('templates', {}); }
 
   // Deletion Logs (spec §8.3) — read-only evidence
   SCREEN.deletion = function (params, body) {
@@ -4185,7 +4517,7 @@
     return '<details class="tl-faq"' + (open ? ' open' : '') + ' id="faq-' + f.id + '"><summary>' + esc(f.q) + '</summary><p>' + esc(f.a) + '</p></details>';
   }
   var SCREEN_TITLES = { controlroom: 'Control Room', analytics: 'Analytics', schools: 'All Schools', group: 'School group', school: 'School page', history: 'Change History',
-    templates: 'Templates', deployments: 'Deployments', reflection: 'Teacher Reflection Questions', users: 'Users', invitations: 'Invitations', issues: 'Issue Reports',
+    templates: 'Templates', template: 'Template', deployments: 'Deployments', reflection: 'Teacher Reflection Questions', users: 'Users', invitations: 'Invitations', issues: 'Issue Reports',
     audit: 'Audit Trail', deletion: 'Deletion Logs', merge: 'Merge Students', 'add-students': 'Add Students', knowledge: 'Knowledge Base', student: 'Student report', observation: 'Observation Form' };
 
   // ---- Help panel (? Help on every page) ----
@@ -4531,17 +4863,17 @@
   // ============================================================
   function openNewTemplate() {
     var audOpts = ['Teacher', 'Parent', 'Direct Assessment'].map(function (a) { return '<option>' + a + '</option>'; }).join('');
-    var phOpts = ['Baseline', 'Midline', 'Endline'].map(function (a) { return '<option>' + a + '</option>'; }).join('');
     openModal('New template', '<p class="tl-muted">Create an assessment template. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
       '<label class="field">Title<input class="input" id="nt-title" placeholder="e.g. Endline · Parent Report"></label>' +
-      '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="nt-aud">' + audOpts + '</select></label>' +
-      '<label class="field flex-1">Phase<select class="select" id="nt-phase">' + phOpts + '</select></label></div>' +
+      '<label class="field">Audience<select class="select" id="nt-aud">' + audOpts + '</select></label>' +
+      phasePickHtml('nt-ph', ['Baseline']) +
       '<label class="field">Description<input class="input" id="nt-desc" placeholder="Short description"></label>' +
       '<label class="field">Status<select class="select" id="nt-status"><option>Draft</option><option>Published</option></select></label>' +
       '</div>', function (close) {
         var title = (document.getElementById('nt-title').value || '').trim();
         if (!title) { toast('Title is required.'); return false; }
-        var t = ORG.server.createTemplate({ title: title, audience: document.getElementById('nt-aud').value, phase: document.getElementById('nt-phase').value, desc: document.getElementById('nt-desc').value.trim(), status: document.getElementById('nt-status').value }, me.name);
+        var phases = readPhasePick('nt-ph'); if (!phases.length) { toast('Pick at least one phase.'); return false; }
+        var t = ORG.server.createTemplate({ title: title, audience: document.getElementById('nt-aud').value, phases: phases, desc: document.getElementById('nt-desc').value.trim(), status: document.getElementById('nt-status').value }, me.name);
         ORG.server.logAudit(me.name, 'template.create', t.title, 'template');
         close(); toast('Template “' + t.title + '” created.'); go('templates', {});
       }, 'Create template');
@@ -4551,17 +4883,22 @@
     var t = ORG.templates.find(function (x) { return x.id === id; }); if (!t) return;
     var pubLabel = t.status === 'Published' ? 'Unpublish' : 'Publish';
     var rows = [['Created', fmtMs(t.createdAt) + ' · ' + (t.createdBy || '—')], ['Last edited', fmtMs(t.updatedAt) + ' · ' + (t.updatedBy || '—')], ['Last published', t.publishedAt ? fmtMs(t.publishedAt) : 'Never']];
-    openModal('Template · ' + t.title, '<p class="tl-muted">' + esc(t.audience) + ' · ' + esc(t.phase) + ' · ' + statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn') + ' ' + tplVersionBadge(t, ORG.server.latestTemplateIds()) + (t.archived ? ' ' + statusPill('Archived', 'muted') : '') + '</p>' +
-      '<div class="ws-review mb-4">' + rows.map(function (r) { return '<div class="ws-rev-row"><span>' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>'; }).join('') + '</div>' +
-      '<div class="tl-stack"><button class="btn btn-outline block" id="tm-edit">Edit</button>' +
-      '<button class="btn btn-outline block" id="tm-dup">Duplicate</button>' +
-      (t.archived ? '' : '<button class="btn btn-outline block" id="tm-pub">' + pubLabel + '</button>') +
-      '<button class="btn btn-outline block" id="tm-arch" title="' + (t.archived ? 'Bring this template back to the active list.' : 'Hide from the active list and from new deployments. Nothing is deleted.') + '">' + (t.archived ? 'Un-archive' : 'Archive') + '</button>' +
-      '<button class="btn btn-danger block" id="tm-del">Delete</button></div>', function (close) { close(); return true; }, 'Close');
+    // Name as the title; who/when/status as chips; Edit leads, Publish + Duplicate
+    // beside it; Archive + Delete set apart and quiet. × closes (no footer).
+    openModal(t.title, '<div class="tl-tm-chips">' + audChip(t.audience) + '<span class="tl-tm-phase">' + esc(tplPhaseText(t)) + '</span>' +
+        statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn') + tplVersionBadge(t, ORG.server.latestTemplateIds()) + (t.archived ? statusPill('Archived', 'muted') : '') + '</div>' +
+      '<div class="ws-review">' + rows.map(function (r) { return '<div class="ws-rev-row"><span>' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>'; }).join('') + '</div>' +
+      '<div class="tl-tm-main"><button class="btn btn-primary btn-sm" id="tm-edit">' + ICONS.edit + 'Edit template</button>' +
+        (currentRoute().screen === 'template' ? '' : '<button class="btn btn-outline btn-sm" id="tm-open" title="See and edit every question in this template">Questions (' + tbQuestions(t).length + ')</button>') +
+        (t.archived ? '' : '<button class="btn btn-outline btn-sm" id="tm-pub" title="' + (t.status === 'Published' ? 'Hide it from new deployments until it’s published again.' : 'Make it available for new deployments.') + '">' + pubLabel + '</button>') +
+        '<button class="btn btn-outline btn-sm" id="tm-dup" title="Make an editable Draft copy">Duplicate</button></div>' +
+      '<div class="tl-tm-sub"><button class="btn-link" id="tm-arch" title="' + (t.archived ? 'Bring this template back to the active list.' : 'Hide from the active list and from new deployments. Nothing is deleted.') + '">' + (t.archived ? 'Un-archive' : 'Archive') + '</button>' +
+        '<button class="btn-link danger tl-tm-del" id="tm-del" title="Delete permanently — you’ll be asked to confirm">' + ICONS.trash + 'Delete</button></div>', null);
     setTimeout(function () {
       document.getElementById('tm-edit').addEventListener('click', function () { openTemplateEditor(t); });
-      document.getElementById('tm-dup').addEventListener('click', function () { var c = ORG.server.createTemplate({ title: t.title + ' (copy)', audience: t.audience, phase: t.phase, desc: t.desc, status: 'Draft' }, me.name); ORG.server.logAudit(me.name, 'template.duplicate', c.title, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Duplicated.'); go('templates', {}); });
-      var pb = document.getElementById('tm-pub'); if (pb) pb.addEventListener('click', function () { ORG.server.publishTemplate(t.id, t.status !== 'Published', me.name); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → ' + t.status, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Template ' + (t.status === 'Published' ? 'published.' : 'unpublished.')); go('templates', {}); });
+      var op = document.getElementById('tm-open'); if (op) op.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; go('template', { id: t.id }); });
+      document.getElementById('tm-dup').addEventListener('click', function () { var c = ORG.server.createTemplate({ title: t.title + ' (copy)', audience: t.audience, phases: tplPhases(t), desc: t.desc, status: 'Draft', versions: t.versions, langs: t.langs }, me.name); ORG.server.logAudit(me.name, 'template.duplicate', c.title, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Duplicated.'); go('templates', {}); });
+      var pb = document.getElementById('tm-pub'); if (pb) pb.addEventListener('click', function () { ORG.server.publishTemplate(t.id, t.status !== 'Published', me.name); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → ' + t.status, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Template ' + (t.status === 'Published' ? 'published.' : 'unpublished.')); tplAfterChange(); });
       document.getElementById('tm-arch').addEventListener('click', function () {
         document.getElementById('tl-modal-root').innerHTML = '';
         var on = !t.archived;
@@ -4577,18 +4914,18 @@
   // ---- Super-Admin editors (v1: full access — these actually write) ----
   function openTemplateEditor(t) {
     var audOpts = ['Teacher', 'Parent', 'Direct Assessment'].map(function (a) { return '<option' + (t.audience === a ? ' selected' : '') + '>' + a + '</option>'; }).join('');
-    var phOpts = ['Baseline', 'Midline', 'Endline'].map(function (a) { return '<option' + (t.phase === a ? ' selected' : '') + '>' + a + '</option>'; }).join('');
     openModal('Edit template', '<div class="tl-stack">' +
       '<label class="field">Title<input class="input" id="et-title" value="' + esc(t.title) + '"></label>' +
-      '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="et-aud">' + audOpts + '</select></label>' +
-      '<label class="field flex-1">Phase<select class="select" id="et-phase">' + phOpts + '</select></label></div>' +
+      '<label class="field">Audience<select class="select" id="et-aud">' + audOpts + '</select></label>' +
+      phasePickHtml('et-ph', tplPhases(t)) +
       '<label class="field">Description<input class="input" id="et-desc" value="' + esc(t.desc) + '"></label>' +
       '<label class="field">Status<select class="select" id="et-status"><option' + (t.status === 'Draft' ? ' selected' : '') + '>Draft</option><option' + (t.status === 'Published' ? ' selected' : '') + '>Published</option></select></label>' +
       '</div>', function (close) {
         var title = (document.getElementById('et-title').value || '').trim(); if (!title) { toast('Title is required.'); return false; }
-        ORG.server.updateTemplate(t.id, { title: title, audience: document.getElementById('et-aud').value, phase: document.getElementById('et-phase').value, desc: document.getElementById('et-desc').value, status: document.getElementById('et-status').value }, me.name);
+        var phases = readPhasePick('et-ph'); if (!phases.length) { toast('Pick at least one phase.'); return false; }
+        ORG.server.updateTemplate(t.id, { title: title, audience: document.getElementById('et-aud').value, phases: phases, desc: document.getElementById('et-desc').value, status: document.getElementById('et-status').value }, me.name);
         ORG.server.logAudit(me.name, 'template.edit', title, 'template');
-        close(); toast('Template updated.'); go('templates', {});
+        close(); toast('Template updated.'); tplAfterChange();
       }, 'Save changes');
   }
 
@@ -4705,14 +5042,15 @@
     var slots = {};
     ORG.templates.forEach(function (t) {
       if (t.archived || t.status !== 'Published') return;
-      (slots[t.phase + ' · ' + t.audience] = slots[t.phase + ' · ' + t.audience] || []).push(t);
+      tplPhases(t).forEach(function (ph) { (slots[ph + ' · ' + t.audience] = slots[ph + ' · ' + t.audience] || []).push(t); });
     });
     var PH = ['Baseline', 'Midline', 'Endline'];
     var tplOpts = Object.keys(slots).sort(function (a, b) { return PH.indexOf(a.split(' · ')[0]) - PH.indexOf(b.split(' · ')[0]) || a.localeCompare(b); }).map(function (k) {
       var ts = slots[k].sort(function (a, b) { return (b.publishedAt || 0) - (a.publishedAt || 0); });
+      var ph = k.split(' · ')[0];
       return '<optgroup label="' + esc(k) + '">' + ts.map(function (t) {
-        var isLatest = latest[t.phase + '|' + t.audience] === t.id;
-        return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(t.phase) + '" data-latest="' + (isLatest ? 1 : 0) + '">' + esc(t.title) + (isLatest ? ' — ★ Latest' : ' — older version') + '</option>';
+        var isLatest = latest[ph + '|' + t.audience] === t.id;
+        return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(ph) + '" data-latest="' + (isLatest ? 1 : 0) + '">' + esc(t.title) + (isLatest ? ' — ★ Latest' : ' — older version') + '</option>';
       }).join('') + '</optgroup>';
     }).join('');
     openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a school. Status is derived from the window + publish state. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
