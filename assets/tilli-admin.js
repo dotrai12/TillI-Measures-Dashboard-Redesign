@@ -97,7 +97,9 @@
     // layout toggle (Templates)
     grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
     list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>',
-    // row actions (Users & Invitations tables)
+    // row actions (Users & Invitations tables, Templates list)
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><line x1="13.5" y1="6.5" x2="17.5" y2="10.5"/></svg>',
+    settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
     role: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M3 20a6 6 0 0 1 9.5-4.9"/><path d="M17.5 13.5l3 3-5 5H12.5v-3z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><line x1="10" y1="11" x2="10" y2="16"/><line x1="14" y1="11" x2="14" y2="16"/></svg>',
     resend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/></svg>',
@@ -1698,6 +1700,33 @@
   var TL_ST_LABEL = { none: 'Not deployed', scheduled: 'Scheduled', live: 'Live', ended: 'Ended', completed: 'Completed' };
   var TL_ST_CHIP = { none: 'muted', scheduled: 'info', live: 'ok', ended: 'muted', completed: 'ok' };
 
+  // My School Check-in (IDELA's school-safety questions, split out). Where it
+  // runs isn't picked per phase: it follows the school's "Parents take part"
+  // setting — at home when parents take part, else at school. At school it
+  // turns on the own-class rule (TilliAPI.checkinAtSchool): no teacher runs
+  // student direct assessments for their own class in that phase.
+  var TL_CHECKIN = 'My School Check-in';
+  function tlIsCheckin(it) { return !!it && String(it.name).toLowerCase() === TL_CHECKIN.toLowerCase(); }
+  function tlParentsOn(s) { return tlUsesApi(s) ? window.TilliAPI.parentsTakePart(s.id) : s.parentsTakePart !== false; }
+  function tlCheckinMode(s) { return tlParentsOn(s) ? 'home' : 'school'; }
+  function tlCheckinNote(s) { return TL_CHECKIN + ' runs ' + (tlParentsOn(s) ? 'at home' : 'at school') + ' because parents ' + (tlParentsOn(s) ? '' : 'don’t ') + 'take part. Change it with “Parents take part” above the phases.'; }
+  // Flip the setting, then move the check-in to its new place in every phase
+  // that hasn't ended (ended phases keep where it actually ran).
+  function tlSetParentsOn(s, on) {
+    if (tlUsesApi(s)) window.TilliAPI.setParentsTakePart(s.id, on); else s.parentsTakePart = !!on;
+    var mode = on ? 'home' : 'school';
+    TL_PHASES.forEach(function (ph) {
+      var p = tlPlan(s, ph); if (tlWindowStatus(s, p) === 'ended') return;
+      var moved = false;
+      Object.keys(p.byId).forEach(function (id) {
+        var it = p.byId[id]; if (!tlIsCheckin(it) || it.mode === mode) return;
+        var grp = tlGroupOf(p, id); tlDetach(p, id); it.mode = mode;
+        if (grp) { (grp === 'order' ? p.ord : p.any)[mode].push(id); moved = true; } else p.off.push(id);
+      });
+      if (moved) tlSaved(s, ph);
+    });
+  }
+
   function tlPool(aud) {
     if (aud === 'Teacher') return ['SEL Observation', 'EF Observation', 'Wellbeing Check', 'Classroom Climate', 'Term Review'];
     if (aud === 'Parent') return ['Home SEL Survey', 'Routines Report', 'Wellbeing Check', 'Screen-time Survey', 'Term Review'];
@@ -1715,6 +1744,7 @@
     ];
     return [
       { name: 'IDELA', mode: 'school' },
+      { name: TL_CHECKIN, mode: 'checkin' },   // on by default; place follows the parent setting
       { name: 'Hearts & Flowers', mode: 'home' },
       { name: 'Memory Game', mode: 'off' },
       { name: 'EMT 1', mode: 'off' },
@@ -1734,6 +1764,7 @@
         var n = Math.min(pool.length, 3 + Math.floor(rnd() * 3)); // 3–5
         var out = [];
         for (var i = 0; i < n; i++) out.push({ id: (phase + audKey + i).toLowerCase().replace(/[^a-z0-9]/g, ''), name: pool[i], mode: i < 2 ? (i === 0 ? 'school' : 'home') : 'off' });
+        if (aud === 'Direct Assessment') out.push({ id: (phase + audKey + 'checkin').toLowerCase().replace(/[^a-z0-9]/g, ''), name: TL_CHECKIN, mode: 'checkin' });
         byS[k] = out;
       }
     }
@@ -1758,7 +1789,7 @@
       var byId = {}, ord = { school: [], home: [] }, any = { school: [], home: [] }, off = [];
       TL_AUD.forEach(function (a) {
         tlChain(s, phase, a.aud, a.key).forEach(function (it) {
-          var b = byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: tlFixMode(a.key, it.mode) };
+          var b = byId[it.id] = { id: it.id, name: it.name, aud: a.key, mode: it.mode === 'checkin' ? tlCheckinMode(s) : tlFixMode(a.key, it.mode) };
           if (it.mode === 'off') off.push(it.id); else (TL_CHAIN_DEFAULT[a.key] === 'order' ? ord : any)[b.mode].push(it.id);
         });
       });
@@ -1909,6 +1940,7 @@
   function tlSetMode(s, phase, id, mode) {
     var p = tlPlan(s, phase), it = p.byId[id];
     if (TL_WHERE[it.aud].indexOf(mode) < 0) { toast(TL_AUD_SHORT[it.aud] + ' assessments run ' + TL_WHERE_RULE[it.aud].toLowerCase() + '.'); return false; }
+    if (tlIsCheckin(it) && mode !== tlCheckinMode(s)) { toast(tlCheckinNote(s)); return false; }
     var grp = tlGroupOf(p, id); tlDetach(p, id); it.mode = mode;
     if (grp) (grp === 'order' ? p.ord : p.any)[mode].push(id); else p.off.push(id);
     tlSaved(s, phase); return true;
@@ -1921,7 +1953,7 @@
   // of its place's sequence / any-time list.
   function tlTurnOn(s, phase, id, group) {
     var p = tlPlan(s, phase), it = p.byId[id];
-    tlDetach(p, id); it.mode = tlFixMode(it.aud, it.mode);
+    tlDetach(p, id); it.mode = tlIsCheckin(it) ? tlCheckinMode(s) : tlFixMode(it.aud, it.mode);
     ((group || TL_CHAIN_DEFAULT[it.aud]) === 'order' ? p.ord : p.any)[it.mode].push(id);
     tlSaved(s, phase);
   }
@@ -1929,7 +1961,7 @@
   // Move into a group (and, for student direct, a place), before beforeId.
   function tlReorder(s, phase, id, beforeId, group, mode) {
     var p = tlPlan(s, phase), it = p.byId[id];
-    if (mode && TL_WHERE[it.aud].indexOf(mode) >= 0) it.mode = mode;
+    if (mode && TL_WHERE[it.aud].indexOf(mode) >= 0 && !tlIsCheckin(it)) it.mode = mode;
     tlDetach(p, id);
     var q = (group === 'any' ? p.any : p.ord)[it.mode], bi = beforeId != null ? q.indexOf(beforeId) : -1;
     q.splice(bi >= 0 ? bi : q.length, 0, id); tlSaved(s, phase);
@@ -1974,8 +2006,8 @@
 
     var chip = function (id, n, prev) {
       var it = p.byId[id];
-      return '<div class="dep-node md-' + it.mode + '" draggable="true" data-item="' + esc(id) + '"' +
-          (n ? ' title="' + esc('#' + n + (prev ? ' — opens once “' + prev + '” is done' : ' — opens first')) + '"' : ' title="Any time — open as soon as the phase is live"') + '>' +
+      var tip = (n ? '#' + n + (prev ? ' — opens once “' + prev + '” is done' : ' — opens first') : 'Any time — open as soon as the phase is live') + (tlIsCheckin(it) ? '. ' + tlCheckinNote(s) : '');
+      return '<div class="dep-node md-' + it.mode + (tlIsCheckin(it) ? ' is-checkin' : '') + '" draggable="true" data-item="' + esc(id) + '" title="' + esc(tip) + '">' +
         (n ? '<span class="dep-ord">' + n + '</span>' : '') +
         '<span class="dep-node-name">' + esc(it.name) + '</span>' +
         '<span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_CHIP[it.aud]) + '</span>' +
@@ -2005,7 +2037,10 @@
         '<button class="btn-link" data-turnon="' + esc(id) + '">Turn on</button></span>';
     }).join('');
     var offBox = p.off.length ? '<details class="dep-off"><summary>Not used in ' + esc(phase) + ' (' + p.off.length + ')</summary><div class="dep-off-list">' + offChips + '</div></details>' : '';
-    return '<div class="dep-phase" data-phase="' + esc(phase) + '">' + head + rows + offBox + '</div>';
+    // Own-class rule: on while the check-in is in use at school this phase.
+    var ruleOn = tlRunning(p, 'direct').some(function (id) { return tlIsCheckin(p.byId[id]) && p.byId[id].mode === 'school'; });
+    var rule = ruleOn ? '<div class="tl-filterbanner dep-rule"><b>Own-class rule is on for ' + esc(phase) + '.</b> ' + TL_CHECKIN + ' runs at school, so no teacher runs student assessments for their own class — another teacher does, using the student direct-assessment link.</div>' : '';
+    return '<div class="dep-phase" data-phase="' + esc(phase) + '">' + head + rule + rows + offBox + '</div>';
   }
 
   function renderPlanner(d, mount) {
@@ -2018,7 +2053,13 @@
       return '<button class="dep-tab' + (ph === cur ? ' on' : '') + '" role="tab" aria-selected="' + (ph === cur) + '" data-tab="' + ph + '">' + esc(ph) +
         '<span class="dep-tab-st st-' + x.st + '">' + TL_ST_LABEL[x.st] + (x.pct != null && x.st !== 'scheduled' ? ' · ' + x.pct + '%' : '') + '</span></button>';
     }).join('');
-    mount.innerHTML = '<div class="dep-tabs" role="tablist" aria-label="Phases">' + tabs + '</div>' + planPhaseBody(s, cur);
+    var on = tlParentsOn(s);
+    var parents = '<div class="dep-parents"><div class="dep-parents-txt"><b>Parents take part in Tilli Measures</b>' +
+      '<span>' + (on ? TL_CHECKIN + ' runs at home — the parent asks their child the questions.'
+        : TL_CHECKIN + ' runs at school — so no teacher runs student assessments for their own class.') + '</span></div>' +
+      '<span title="On: parents take part, so ' + TL_CHECKIN + ' goes home. Off: it runs at school and the own-class rule applies. Ended phases keep where it ran.">' +
+        switchHtml(on, ' data-parents-on aria-label="Parents take part in Tilli Measures"') + '</span></div>';
+    mount.innerHTML = parents + '<div class="dep-tabs" role="tablist" aria-label="Phases">' + tabs + '</div>' + planPhaseBody(s, cur);
     wirePlanner(d, mount);
   }
 
@@ -2034,7 +2075,9 @@
     closeItemMenu();
     var p = tlPlan(s, phase), it = p.byId[id], grp = tlGroupOf(p, id), q = p.ord[it.mode], at = q.indexOf(id);
     // Where: only student direct can switch; others say why.
-    var where = TL_WHERE[it.aud].length > 1
+    var where = tlIsCheckin(it)
+      ? '<div class="dep-pop-note"><i class="dep-swatch md-' + it.mode + '"></i>' + esc(tlCheckinNote(s)) + '</div>'
+      : TL_WHERE[it.aud].length > 1
       ? ['school', 'home'].map(function (m) { return '<button type="button" class="ui-menu-item" data-mv="' + m + '"' + (it.mode === m ? ' disabled' : '') + '><i class="dep-swatch md-' + m + '"></i>Run ' + TL_WHERE_LABEL[m].toLowerCase() + (m === 'school' ? ' (teacher)' : ' (parent)') + '</button>'; }).join('')
       : '<div class="dep-pop-note"><i class="dep-swatch md-' + it.mode + '"></i>' + esc(TL_AUD_SHORT[it.aud]) + ' assessments run ' + esc(TL_WHERE_RULE[it.aud].toLowerCase()) + '</div>';
     var group = '<div class="dep-pop-sep"></div>' + (grp === 'order'
@@ -2065,6 +2108,13 @@
   function wirePlanner(d, mount) {
     var s = d.school, dragId = null;
     mount.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { TL_TAB[s.id] = b.dataset.tab; renderPlanner(d, mount); }); });
+    var po = mount.querySelector('[data-parents-on]');
+    if (po) po.addEventListener('change', function () {
+      tlSetParentsOn(s, po.checked);
+      ORG.server.logAudit(me.name, 'school.parents', s.name + ' → parents ' + (po.checked ? 'take part' : 'don’t take part'), 'school', s.id);
+      toast(TL_CHECKIN + ' now runs ' + (po.checked ? 'at home.' : 'at school — own-class rule on.'));
+      refreshPlanner(d);
+    });
 
     // Dates are the schedule — editable before and after deploying.
     mount.querySelectorAll('.dep-date').forEach(function (inp) {
@@ -2085,6 +2135,7 @@
       b.addEventListener('click', function () {
         var phase = b.closest('[data-phase]').dataset.phase, p = tlPlan(s, phase), it = p.byId[b.dataset.turnon];
         if (it.aud !== 'direct') { tlTurnOn(s, phase, it.id); refreshPlanner(d); return; }
+        if (tlIsCheckin(it)) { tlTurnOn(s, phase, it.id); toast(tlCheckinNote(s).split('. Change')[0] + '.'); refreshPlanner(d); return; }
         askDirectWhere(it.name, it.mode, function (mode) {
           it.mode = mode; tlTurnOn(s, phase, it.id);
           toast(it.name + ' runs ' + TL_WHERE_LABEL[mode].toLowerCase() + ' — ' + TL_DIRECT_WHO[mode] + '.'); refreshPlanner(d);
@@ -2139,6 +2190,7 @@
         var phase = row.closest('[data-phase]').dataset.phase;
         var dz = row.dataset.drop.split('|'), it = tlPlan(s, phase).byId[dragId];
         if (TL_WHERE[it.aud].indexOf(dz[2]) < 0) return;   // only into a place its audience can run in
+        if (tlIsCheckin(it) && dz[2] !== it.mode) return;   // the check-in's place follows the parent setting
         e.preventDefault(); row.classList.add('dragover'); e.dataTransfer.dropEffect = 'move';
       });
       row.addEventListener('dragleave', function (e) { if (!row.contains(e.relatedTarget)) row.classList.remove('dragover'); });
@@ -2175,8 +2227,9 @@
         var ak = TL_AUD_KEY[o.dataset.aud], mode = tlFixMode(ak, document.getElementById('aa-mode').value), p = tlPlan(s, phase);
         var id = 'tpl-' + sel.value;
         if (tlRunning(p, ak).indexOf(id) >= 0) { toast('That assessment is already in ' + phase + '.'); return false; }
+        if (tlIsCheckin({ name: o.textContent.split(' · ')[0] }) && tlRunning(p, ak).some(function (x) { return tlIsCheckin(p.byId[x]); })) { toast(TL_CHECKIN + ' is already in ' + phase + '.'); return false; }
         if (!p.byId[id]) p.byId[id] = { id: id, name: o.textContent.split(' · ')[0], aud: ak, mode: mode };
-        p.byId[id].mode = mode;
+        p.byId[id].mode = tlIsCheckin(p.byId[id]) ? tlCheckinMode(s) : mode;
         tlTurnOn(s, phase, id, document.getElementById('aa-grp').value);   // also saves a deployed phase
         ORG.server.logAudit(me.name, 'phase.add', p.byId[id].name + ' → ' + phase, 'phase', s.id);
         TL_TAB[s.id] = phase;
@@ -2206,7 +2259,8 @@
 
     var links = ['Parent', 'Teacher', 'Direct Assessment'].map(function (kind) {
       var url = 'https://measures.tilli.app/' + s.code.toLowerCase() + '/' + kind.toLowerCase().replace(/\s+/g, '-');
-      return '<div class="tl-linkrow"><div><b>' + esc(kind) + '</b><span class="mono">' + esc(url) + '</span></div><button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></div>';
+      var preview = kind === 'Direct Assessment' ? '<a class="btn btn-outline btn-sm" href="assess.html" target="_blank" rel="noopener" title="Open the student direct-assessment page (local prototype): school code → teacher email → pick a class.">Preview</a>' : '';
+      return '<div class="tl-linkrow"><div><b>' + esc(kind) + '</b><span class="mono">' + esc(url) + '</span></div><span class="tl-inline-actions">' + preview + '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
     }).join('');
 
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Deployments</h3></div>' +
@@ -3022,6 +3076,7 @@
       items.push({ aud: 'Observation', badges: statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn'),
         title: 'Teacher Observation Form', desc: obs.questions.length + '-item shared question bank, published per phase. Deploy from Deployments.',
         meta: '', foot: 'Pre · Mid · Post', action: '<button class="btn-link" data-obsedit>Configure ⋮</button>',
+        actIcon: '<button class="tl-rowact" data-obsedit title="Configure the observation form" aria-label="Configure Teacher Observation Form">' + ICONS.settings + '</button>',
         sort: { title: 'Teacher Observation Form', aud: 'Observation', phase: 0, status: pub ? 1 : 3, history: null } });
     }
     // Teacher Reflection Questions: the one-time onboarding reflection, edited in
@@ -3032,6 +3087,7 @@
       items.push({ aud: 'Teacher reflection', badges: statusPill(rqN + ' questions', rqN ? 'ok' : 'warn'),
         title: 'Teacher Reflection Questions', desc: 'One-time self-reflection every teacher completes during dashboard onboarding — ' + rqN + ' questions across ' + rcN + ' categories.',
         meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: 'Onboarding · not deployed', action: '<button class="btn-link" data-refledit>Edit questions ⋮</button>',
+        actIcon: '<button class="tl-rowact" data-refledit title="Edit the reflection questions" aria-label="Edit Teacher Reflection Questions">' + ICONS.edit + '</button>',
         sort: { title: 'Teacher Reflection Questions', aud: 'Teacher reflection', phase: 0, status: rqN ? 1 : 3, history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
     }
     list.forEach(function (t) {
@@ -3040,6 +3096,7 @@
         title: t.title, desc: t.desc, meta: tplMetaLine(t),
         foot: esc(t.phase) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span>',
         action: '<button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button>',
+        actIcon: '<button class="tl-rowact" data-tpl="' + t.id + '" title="Edit — also duplicate, publish, archive or delete" aria-label="Edit ' + esc(t.title) + '">' + ICONS.edit + '</button>',
         // status rank: ★ Latest · Published · Older version · Draft · Archived
         sort: { title: t.title, aud: t.audience, phase: TPL_PHASE_RANK[t.phase] != null ? TPL_PHASE_RANK[t.phase] : 9,
           status: t.archived ? 4 : t.status !== 'Published' ? 3 : latest[t.phase + '|' + t.audience] === t.id ? 0 : 2,
@@ -3056,7 +3113,7 @@
       return '<tr' + (it.archived ? ' class="is-archived"' : '') + '><td class="name">' + esc(it.title) + '<small>' + esc(it.desc) + '</small></td>' +
         '<td>' + audChip(it.aud) + '</td><td>' + it.foot + '</td>' +
         '<td><span class="tt-badges">' + it.badges + '</span></td>' +
-        '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + it.action + '</td></tr>';
+        '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + (it.actIcon || it.action) + '</td></tr>';
     }
     var empty = '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>';
     var tplView = !items.length ? empty : asList
@@ -3079,7 +3136,7 @@
             var g = o.g;
             return '<tr><td class="name">' + esc(g.name) + '<small>' + esc(g.full) + ' — ' + esc(g.desc) + '</small></td><td>' + skillTagsHtml(g.skills) + '</td>' +
               '<td>' + g.questions + '</td><td>' + statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</td>' +
-              '<td class="r"><button class="btn-link" data-manage="' + g.id + '">Manage</button></td></tr>';
+              '<td class="r"><button class="tl-rowact" data-manage="' + g.id + '" title="Manage this instrument" aria-label="Manage ' + esc(g.name) + '">' + ICONS.settings + '</button></td></tr>';
           }).join('') + '</tbody></table></div></div>'
       : '<div class="tl-sg-grid">' + games.map(function (g) {
           return '<div class="tl-sg-card"><div class="sg-top"><div><div class="sg-name">' + esc(g.name) + '</div><div class="sg-full">' + esc(g.full) + '</div></div>' +

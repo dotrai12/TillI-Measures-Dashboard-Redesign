@@ -1579,7 +1579,7 @@
     if (tab === 'enter') { body = obsEnter(); subtitle = sec.name + ' · recording an observation'; }
     else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
     else if (S.todoView === 'pending') { body = pendingView(); subtitle = 'Who still needs a teacher observation in this window.'; }
-    else { body = obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
+    else { body = studentAssessCard() + obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
     // Recording a child is a focused mode: no big "Assess" title or tabs — a way back,
     // then the child is the page heading (inside obsEnter).
     if (tab === 'enter') return `<div class="dash-wrap" style="max-width:1080px">
@@ -1591,6 +1591,33 @@
       <p class="ui-screen-sub flush" style="max-width:560px">${esc(subtitle)}</p>
       <div class="log-tabs mt-4">${subTabs}</div>
       <div class="mt-4">${body}</div>
+    </div>`;
+  }
+
+  // Student direct assessments that run AT SCHOOL in the live phase. They're run
+  // from the student link (assess.html), not from here, so a child's device
+  // never opens the dashboard. With My School Check-in at school the own-class
+  // rule is on: another teacher assesses this teacher's class.
+  function studentAssessCard() {
+    const A = window.TilliAPI, sid = schoolId();
+    if (!A || !A.liveDirectPhase || !sid) return '';
+    const phase = A.liveDirectPhase(sid); if (!phase) return '';
+    const its = A.directAtSchool(sid, phase); if (!its.length) return '';
+    const on = A.checkinAtSchool(sid, phase);
+    const mine = A.sectionsForTeacher(S.teacher.email, sid);
+    const mineIds = mine.map((m) => m.section_id);
+    const kids = A.studentsForSchool(sid).filter((st) => mineIds.indexOf(st.section_id) >= 0).map((st) => st.student_id);
+    const c = A.itemCompletion(sid, phase, 'Direct Assessment', kids, its.map((i) => i.id));
+    const names = mine.map((m) => m.name).join(', ') || 'your class';
+    const badge = c.expected ? `<span class="ui-badge ${c.done === c.expected ? 'done' : c.done ? 'prog' : 'pend'}" title="Steps done for the children in ${esc(names)}">${c.done} of ${c.expected} done in ${esc(names)}</span>` : '';
+    const note = on
+      ? `My School Check-in runs at school this phase, so <b>another teacher</b> runs these for ${esc(names)}. You’ll run them for a different class.`
+      : `Run them with your class — open the student link on each child’s device, or here.`;
+    return `<div class="ui-card sa-card mb-4">
+      <div class="sa-head"><div><div class="ui-title md">Student assessments · ${esc(phase)}</div>
+        <div class="sa-items">${its.map((i) => `<span class="ui-chip info">${esc(i.name)}</span>`).join('')}</div></div>${badge}</div>
+      <p class="sa-note">${note}</p>
+      <a class="btn btn-primary sm focus" href="assess.html" target="_blank" rel="noopener" title="Opens the student assessment page — it never shows your dashboard, so it’s safe on a child’s device.">${on ? 'Assess another class →' : 'Start student assessments →'}</a>
     </div>`;
   }
 

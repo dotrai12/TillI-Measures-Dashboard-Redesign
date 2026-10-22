@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student Assessments · Tilli Measures</title>
+<link rel="stylesheet" href="_ds/tilli/tokens/fonts.css?v=20261020nb">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/tilli.css?v=20261022a">
+<style>
+  /* Student direct-assessment page — opened from the school's student master
+     link on each child's device. Never links to a dashboard. */
+  :root {
+    --as-max: 760px;              /* width of the page column */
+    --as-class-min: 180px;        /* min width of a class tile in the picker */
+    --as-run-pad: 28px;           /* padding inside the full-screen assessment panel */
+  }
+  body { margin: 0; background: var(--surface-100); color: var(--ink-900); font-family: var(--font-body); }
+  .as-top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--white); border-bottom: 1px solid var(--line-200); }
+  .as-top .lockup { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--green-700); }
+  .as-top .as-who { margin-left: auto; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); text-align: right; line-height: 1.4; }
+  .as-wrap { max-width: var(--as-max); margin: 0 auto; padding: 24px 16px 48px; }
+  .as-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 24px; box-shadow: var(--shadow-card); }
+  .as-card.narrow { max-width: 420px; margin: 8vh auto 0; }
+  .as-h1 { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl, 24px); margin: 0 0 6px; }
+  .as-sub { font-size: var(--fs-sm); color: var(--ink-450); font-weight: 600; margin: 0 0 18px; line-height: 1.5; }
+  .as-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-weight: 700; font-size: var(--fs-sm); }
+  .as-field .input { width: 100%; box-sizing: border-box; }
+  .as-code { text-align: center; letter-spacing: .12em; font-weight: 700; text-transform: uppercase; }
+  .as-err { color: var(--danger-700); font-size: var(--fs-sm); font-weight: 600; margin: -6px 0 12px; }
+  .as-hint { font-size: var(--fs-xs); color: var(--ink-450); margin-top: 14px; line-height: 1.5; }
+  .as-rule { background: var(--wash-cyan); color: var(--cyan-700); border-radius: var(--radius-md); padding: 12px 14px; font-size: var(--fs-sm); font-weight: 600; margin-bottom: 18px; line-height: 1.5; }
+  .as-items { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  .as-classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--as-class-min), 1fr)); gap: 12px; }
+  .as-class { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px; border: 1px solid var(--line-200); border-radius: var(--radius-md); background: var(--white); font: inherit; text-align: left; cursor: pointer; color: inherit; }
+  .as-class:hover:not(:disabled) { border-color: var(--green-500); background: var(--wash-green); }
+  .as-class:disabled { cursor: not-allowed; background: var(--surface-100); color: var(--ink-300); }
+  .as-class b { font-family: var(--font-heading); font-size: var(--fs-md); }
+  .as-class span { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+  .as-class:disabled span { color: var(--ink-300); }
+  .as-class .as-own { font-weight: 700; color: var(--green-700); }
+  .as-class:disabled .as-own { color: var(--ink-450); }
+  .as-back { margin-bottom: 14px; }
+  .as-kids { display: flex; flex-direction: column; }
+  .as-kid { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-top: 1px solid var(--line-200); }
+  .as-kid:first-child { border-top: none; }
+  .as-kid-name { flex: 1; min-width: 0; font-weight: 700; }
+  .as-kid-name small { display: block; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); }
+  .as-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+  .as-run { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--white); padding: var(--as-run-pad); }
+  .as-run-top { display: flex; align-items: center; gap: 12px; }
+  .as-run-top .as-h1 { margin: 0; }
+  .as-run-body { flex: 1; display: grid; place-items: center; margin: 20px 0; border: 2px dashed var(--line-200); border-radius: var(--radius-card); color: var(--ink-450); font-weight: 600; text-align: center; padding: 24px; }
+  .as-run-foot { display: flex; justify-content: flex-end; gap: 10px; }
+  .as-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 9; background: var(--ink-900); color: var(--white); font-weight: 600; font-size: var(--fs-sm); padding: 10px 16px; border-radius: var(--radius-pill); }
+  @media (max-width: 640px) { .as-card { padding: 18px; } .as-kid { flex-wrap: wrap; } .as-steps { width: 100%; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="assets/school-data.js?v=20261020mx"></script>
+<script src="assets/tilli-api.js?v=20261022a"></script>
+<script src="assets/assess.js?v=20261022a"></script>
+</body>
+</html>

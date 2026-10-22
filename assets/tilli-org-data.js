@@ -444,6 +444,7 @@
     { id: 'tpl-mid-t', title: 'Midline · Teacher Report', audience: 'Teacher', phase: 'Midline', status: 'Draft', desc: 'Mid-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 3, null, null) },
     { id: 'tpl-end-t', title: 'Endline · Teacher Report', audience: 'Teacher', phase: 'Endline', status: 'Draft', desc: 'End-of-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 14, null, null) },
     { id: 'tpl-direct-emt', title: 'EMT · Direct Assessment', audience: 'Direct Assessment', phase: 'Baseline', status: 'Published', desc: 'Gamified executive-function task.', meta: tplMeta(120, 'Ishani Rao', 60, null, 60) },
+    { id: 'tpl-direct-checkin', title: 'My School Check-in', audience: 'Direct Assessment', phase: 'Baseline', status: 'Published', desc: 'IDELA’s school-safety and teacher-support questions, split out. Runs at home when parents take part, else at school — where no teacher runs it for their own class.', meta: tplMeta(1, 'Ishani Rao', 1, null, 1) },
     { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', phase: 'Midline', status: 'Published', desc: 'Inhibition / flexibility task.', meta: tplMeta(120, 'Ishani Rao', 75, null, 75) },
     // Last year's version — still published, so it shows as "Older version" next to tpl-base-t.
     { id: 'tpl-base-t-2025', title: 'Baseline · Teacher Report (2025)', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '18-item teacher observation used in the 2025 cohort.', meta: tplMeta(400, 'Meera Krishnan', 380, null, 380) },

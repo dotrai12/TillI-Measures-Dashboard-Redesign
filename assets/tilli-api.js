@@ -1292,6 +1292,70 @@
       return out;
     });
   }
+  /* ---------- My School Check-in + the own-class rule ----------
+     IDELA's "do you feel safe / does your teacher help you" questions are a
+     separate direct assessment, My School Check-in. Where it runs follows the
+     school's "Parents take part" setting (home when they do, school when they
+     don't). While it runs AT SCHOOL in a phase, no teacher may run any student
+     direct assessment at school for their own class in that phase — another
+     teacher does it via the student direct-assessment link (assess.html). */
+  var CHECKIN_NAME = 'My School Check-in';
+  function isCheckin(a){ return !!a && low(a.name) === low(CHECKIN_NAME); }
+  // Default: parents take part (unset = true).
+  function parentsTakePart(schoolId){ var sc = getDB().schools[schoolId]; return !sc || sc.parentsTakePart !== false; }
+  function setParentsTakePart(schoolId, on){
+    var db = getDB(), sc = db.schools[schoolId]; if (!sc) return false;
+    sc.parentsTakePart = !!on; write(db); return true;
+  }
+  function directLane(schoolId, phase){ var all = getDB().deployments[schoolId] || {}; return all[depKey(phase, 'Direct Assessment')] || null; }
+  // The rule is on for a phase when My School Check-in is deployed there, at school.
+  function checkinAtSchool(schoolId, phase){
+    var lane = directLane(schoolId, phase);
+    return !!lane && (lane.assessments || []).some(function(a){ return isCheckin(a) && a.mode === 'school'; });
+  }
+  // Direct assessments run at school in a phase → [{ id, name, mode }].
+  function directAtSchool(schoolId, phase){
+    var lane = directLane(schoolId, phase);
+    return lane ? (lane.assessments || []).filter(function(a){ return a.mode === 'school'; }).map(function(a){ return { id:a.id, name:a.name||a.id, mode:a.mode }; }) : [];
+  }
+  // The live phase with student direct assessments at school (null = none open).
+  function liveDirectPhase(schoolId){
+    var d = getDeployments(schoolId).filter(function(x){ return x.audience === 'Direct Assessment' && x.status === 'Live'; })
+      .find(function(x){ return (x.assessments || []).some(function(a){ return a.mode === 'school'; }); });
+    return d ? d.phase : null;
+  }
+  function isOwnClassBlocked(schoolId, phase, email, studentId){
+    if (!email || !checkinAtSchool(schoolId, phase)) return false;
+    var db = getDB(), stu = db.students[keyOf(schoolId, studentId)];
+    return !!stu && teacherScope(db, email, schoolId).indexOf(stu.section_id) >= 0;
+  }
+  // Every section of the school, flagged for one teacher: own (theirs) and
+  // blocked (theirs while the rule is on) → [{ section_id, name, grade, own, blocked, students }].
+  function assessableSections(email, schoolId, phase){
+    var db = getDB(), mine = teacherScope(db, email, schoolId), on = checkinAtSchool(schoolId, phase);
+    var counts = {};
+    Object.keys(db.students).forEach(function(k){ var st = db.students[k]; if (st.school_id === schoolId && st.status !== 'left') counts[st.section_id] = (counts[st.section_id] || 0) + 1; });
+    return sectionsForSchool(schoolId).map(function(sec){
+      var own = mine.indexOf(sec.section_id) >= 0;
+      return { section_id:sec.section_id, name:sec.name, grade:sec.grade, own:own, blocked:own && on, students:counts[sec.section_id] || 0 };
+    }).sort(function(a, b){ return String(a.name).localeCompare(String(b.name), undefined, { numeric:true }); });
+  }
+  // Student-link sign-in: school code → school. Accepts the school's public
+  // code (e.g. BNYN-7712) or its teacher join code; case / spaces / hyphens ignored.
+  function resolveSchoolCode(codeStr){
+    var db = getDB(), clean = function(x){ return up(x).replace(/[^A-Z0-9]/g,''); }, q = clean(codeStr);
+    if (!q) return null;
+    var ids = Object.keys(db.schools);
+    for (var i=0;i<ids.length;i++){ var sc = db.schools[ids[i]]; if ((sc.code && clean(sc.code)===q) || (sc.joinCode && clean(sc.joinCode)===q)) return Object.assign({}, sc); }
+    return null;
+  }
+  // Schools where this email is an active teacher (the student link only lets teachers in).
+  function teacherSchools(email){
+    var db = getDB(), e = low(email);
+    return db.teacherMemberships.filter(function(m){ return m.user_id===e && m.status==='active'; }).map(function(m){ return m.school_id; });
+  }
+  function isTeacherAt(email, schoolId){ return roleOf(getDB(), email, schoolId) === 'teacher'; }
+
   // Completion over a chosen set of a lane's assessments (e.g. just the ones
   // run at home) — per-teacher items excluded, as in completionStats.
   function itemCompletion(schoolId, phase, audience, studentIds, itemIds){
@@ -1315,6 +1379,10 @@
       if (item && item.perTeacher) return true;   // counted per teacher via saveSelfReport, not per child
       var link = chainFor(schoolId, phase, audience, studentId).find(function(x){ return x.id===assessId; });
       if (link && link.state === 'locked') return { error: 'locked', after: link.after };
+      // Own-class rule: with My School Check-in at school, a teacher can't
+      // record a direct assessment at school for a child in their own class.
+      if (audience === 'Direct Assessment' && item && item.mode === 'school' && isOwnClassBlocked(schoolId, phase, byEmail, studentId))
+        return { error: 'own_class' };
     }
     if (!db.completions[schoolId]) db.completions[schoolId] = {};
     var ck = compKey(phase, audience, studentId, assessId), already = !!db.completions[schoolId][ck];
@@ -1778,6 +1846,18 @@
     createSchoolFull: createSchoolFull,
     resolveJoinCode: resolveJoinCode,
     verifySchoolCode: verifySchoolCode,
+    // My School Check-in + own-class rule (student direct link)
+    CHECKIN_NAME: CHECKIN_NAME,
+    parentsTakePart: parentsTakePart,
+    setParentsTakePart: setParentsTakePart,
+    checkinAtSchool: checkinAtSchool,
+    directAtSchool: directAtSchool,
+    liveDirectPhase: liveDirectPhase,
+    isOwnClassBlocked: isOwnClassBlocked,
+    assessableSections: assessableSections,
+    resolveSchoolCode: resolveSchoolCode,
+    teacherSchools: teacherSchools,
+    isTeacherAt: isTeacherAt,
     listSchools: listSchools,
     staffFor: staffFor, teachersFor: teachersFor,
     sectionsForSchool: sectionsForSchool,
