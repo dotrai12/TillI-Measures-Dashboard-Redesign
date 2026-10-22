@@ -1269,6 +1269,7 @@
   // → [{ id, name, state:'done'|'open'|'locked', after, ordered, mode }] for one audience.
   function chainFor(schoolId, phase, audience, studentId){
     var db = getDB(), all = db.deployments[schoolId] || {}, comp = db.completions[schoolId] || {};
+    var prog = (db.inProgress && db.inProgress[schoolId]) || {};
     var dep = all[depKey(phase, audience)];
     // Per-teacher items (the teacher's own Pre/Post-training survey) aren't part of a child's chain.
     var mine = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; });
@@ -1283,7 +1284,10 @@
     Object.keys(seqs).forEach(function(m){ seqs[m].sort(function(x, y){ return x.pos - y.pos; }); });
     return mine.map(function(a){
       var done = !!comp[compKey(phase, audience, studentId, a.id)], ord = isOrdered(dep, a), place = a.mode || '';
-      var out = { id: a.id, name: a.name || a.id, state: done ? 'done' : 'open', after: null, ordered: ord, mode: place };
+      var started = !done && prog[compKey(phase, audience, studentId, a.id)];
+      // startedMode: where an unfinished run began — it's finished there even if
+      // the assessment has since moved (e.g. My School Check-in after a parent-setting change).
+      var out = { id: a.id, name: a.name || a.id, state: done ? 'done' : 'open', after: null, ordered: ord, mode: place, startedMode: started ? started.mode : null };
       if (!ord) return out;
       var seq = seqs[place] || [], idx = -1;
       seq.forEach(function(x, i){ if (x.a.id === a.id && x.aud === audience) idx = i; });
@@ -1324,15 +1328,18 @@
       .find(function(x){ return (x.assessments || []).some(function(a){ return a.mode === 'school'; }); });
     return d ? d.phase : null;
   }
+  // The rule needs another class to swap with: a school with a single class
+  // (one grade, one section) is exempt — its teacher runs everything.
+  function ownClassRuleOn(schoolId, phase){ return checkinAtSchool(schoolId, phase) && sectionsForSchool(schoolId).length > 1; }
   function isOwnClassBlocked(schoolId, phase, email, studentId){
-    if (!email || !checkinAtSchool(schoolId, phase)) return false;
+    if (!email || !ownClassRuleOn(schoolId, phase)) return false;
     var db = getDB(), stu = db.students[keyOf(schoolId, studentId)];
     return !!stu && teacherScope(db, email, schoolId).indexOf(stu.section_id) >= 0;
   }
   // Every section of the school, flagged for one teacher: own (theirs) and
   // blocked (theirs while the rule is on) → [{ section_id, name, grade, own, blocked, students }].
   function assessableSections(email, schoolId, phase){
-    var db = getDB(), mine = teacherScope(db, email, schoolId), on = checkinAtSchool(schoolId, phase);
+    var db = getDB(), mine = teacherScope(db, email, schoolId), on = ownClassRuleOn(schoolId, phase);
     var counts = {};
     Object.keys(db.students).forEach(function(k){ var st = db.students[k]; if (st.school_id === schoolId && st.status !== 'left') counts[st.section_id] = (counts[st.section_id] || 0) + 1; });
     return sectionsForSchool(schoolId).map(function(sec){
@@ -1340,6 +1347,35 @@
       return { section_id:sec.section_id, name:sec.name, grade:sec.grade, own:own, blocked:own && on, students:counts[sec.section_id] || 0 };
     }).sort(function(a, b){ return String(a.name).localeCompare(String(b.name), undefined, { numeric:true }); });
   }
+  // A run has begun (the child is part-way through). Recorded so that if the
+  // assessment moves place mid-run it's still finished where it started.
+  function startAssessment(schoolId, phase, audience, studentId, assessId, byEmail){
+    var db = getDB(), lane = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    var item = lane && (lane.assessments || []).find(function(x){ return x.id === assessId; });
+    if (!item) return false;
+    if (!db.inProgress) db.inProgress = {};
+    var m = db.inProgress[schoolId] || (db.inProgress[schoolId] = {}), k = compKey(phase, audience, studentId, assessId);
+    if (!m[k]) m[k] = { by: low(byEmail || ''), at: Date.now(), mode: item.mode || '' };
+    write(db); return true;
+  }
+  // Direct results recorded AT SCHOOL by the child's own class teacher in a
+  // phase. Kept, but flagged once the own-class rule is on (and counted in the
+  // warning before it's turned on) → [{ student_id, name, assessId, item, by, at }].
+  function ownClassResults(schoolId, phase){
+    var db = getDB(), lane = directLane(schoolId, phase); if (!lane) return [];
+    var atSchool = {}; (lane.assessments || []).forEach(function(a){ if (a.mode === 'school') atSchool[a.id] = a.name || a.id; });
+    var comp = db.completions[schoolId] || {}, out = [], pre = phase + '|Direct Assessment|';
+    Object.keys(comp).forEach(function(k){
+      if (k.indexOf(pre) !== 0) return;
+      var parts = k.split('|'), sid = parts[2], aid = parts[3], by = comp[k].by;
+      if (!atSchool[aid] || !by) return;
+      var stu = db.students[keyOf(schoolId, sid)];
+      if (stu && teacherScope(db, by, schoolId).indexOf(stu.section_id) >= 0)
+        out.push({ student_id: stu.student_id, name: stu.name, assessId: aid, item: atSchool[aid], by: by, at: comp[k].at });
+    });
+    return out;
+  }
+
   // Student-link sign-in: school code → school. Accepts the school's public
   // code (e.g. BNYN-7712) or its teacher join code; case / spaces / hyphens ignored.
   function resolveSchoolCode(codeStr){
@@ -1387,6 +1423,7 @@
     if (!db.completions[schoolId]) db.completions[schoolId] = {};
     var ck = compKey(phase, audience, studentId, assessId), already = !!db.completions[schoolId][ck];
     db.completions[schoolId][ck] = { by:low(byEmail||''), at:Date.now() };
+    if (db.inProgress && db.inProgress[schoolId]) delete db.inProgress[schoolId][ck];
     var stu = db.students[keyOf(schoolId, studentId)];
     if (!already && stu){
       var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
@@ -1854,6 +1891,9 @@
     directAtSchool: directAtSchool,
     liveDirectPhase: liveDirectPhase,
     isOwnClassBlocked: isOwnClassBlocked,
+    ownClassRuleOn: ownClassRuleOn,
+    startAssessment: startAssessment,
+    ownClassResults: ownClassResults,
     assessableSections: assessableSections,
     resolveSchoolCode: resolveSchoolCode,
     teacherSchools: teacherSchools,

@@ -1603,7 +1603,7 @@
     if (!A || !A.liveDirectPhase || !sid) return '';
     const phase = A.liveDirectPhase(sid); if (!phase) return '';
     const its = A.directAtSchool(sid, phase); if (!its.length) return '';
-    const on = A.checkinAtSchool(sid, phase);
+    const on = A.ownClassRuleOn(sid, phase);
     const mine = A.sectionsForTeacher(S.teacher.email, sid);
     const mineIds = mine.map((m) => m.section_id);
     const kids = A.studentsForSchool(sid).filter((st) => mineIds.indexOf(st.section_id) >= 0).map((st) => st.student_id);

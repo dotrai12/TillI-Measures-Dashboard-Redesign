@@ -1710,13 +1710,39 @@
   function tlParentsOn(s) { return tlUsesApi(s) ? window.TilliAPI.parentsTakePart(s.id) : s.parentsTakePart !== false; }
   function tlCheckinMode(s) { return tlParentsOn(s) ? 'home' : 'school'; }
   function tlCheckinNote(s) { return TL_CHECKIN + ' runs ' + (tlParentsOn(s) ? 'at home' : 'at school') + ' because parents ' + (tlParentsOn(s) ? '' : 'don’t ') + 'take part. Change it with “Parents take part” above the phases.'; }
+  // The own-class rule needs another class to swap with — a one-class school
+  // (one grade, one section) is exempt (TilliAPI.ownClassRuleOn).
+  function tlSectionCount(s) { return tlUsesApi(s) ? window.TilliAPI.sectionsForSchool(s.id).length : (s.sectionCount || 2); }
+  function tlRuleApplies(s) { return tlSectionCount(s) > 1; }
+  function tlCheckinIds(p) { return Object.keys(p.byId).filter(function (id) { return tlIsCheckin(p.byId[id]); }); }
+  function tlCheckinInUse(p) { return tlCheckinIds(p).some(function (id) { return tlGroupOf(p, id); }); }
+  // Live phases whose in-use check-in would move if the setting flipped now.
+  function tlLiveCheckinPhases(s) {
+    return TL_PHASES.filter(function (ph) { var p = tlPlan(s, ph); return tlWindowStatus(s, p) === 'live' && tlCheckinInUse(p); });
+  }
+  // Results recorded at school by the child's own teacher (kept; flagged once the rule is on).
+  function tlOwnClassResults(s, phase) { return tlUsesApi(s) && tlPlan(s, phase).deployed ? window.TilliAPI.ownClassResults(s.id, phase) : []; }
+  // Before the own-class rule turns on in some phases: if own teachers already
+  // recorded results there, say they're kept and flagged, then proceed.
+  function tlWarnRuleOn(s, phases, proceed) {
+    var n = tlRuleApplies(s) ? phases.reduce(function (t, ph) { return t + tlOwnClassResults(s, ph).length; }, 0) : 0;
+    if (!n) { proceed(); return; }
+    gated({ title: 'Turn on the own-class rule?', confirmLabel: 'Turn it on',
+      body: '<p>In <b>' + esc(phases.join(', ')) + '</b>, <b>' + n + '</b> student assessment result' + (n === 1 ? ' was' : 's were') + ' recorded by the child’s own class teacher.</p>' +
+        '<p>They’re kept, and flagged so you can tell them apart. From now on another teacher assesses each class.</p>',
+      audit: { action: 'phase.ownclass', entity: n + ' results flagged · ' + phases.join(', '), entityType: 'phase', schoolId: s.id },
+      onConfirm: proceed });
+  }
   // Flip the setting, then move the check-in to its new place in every phase
-  // that hasn't ended (ended phases keep where it actually ran).
-  function tlSetParentsOn(s, on) {
+  // that hasn't ended (ended phases keep where it actually ran). skipLive:
+  // leave live phases as they are — the change applies from the next phase.
+  // A child part-way through a moved check-in finishes it where they started
+  // (TilliAPI.startAssessment / chainFor startedMode).
+  function tlSetParentsOn(s, on, skipLive) {
     if (tlUsesApi(s)) window.TilliAPI.setParentsTakePart(s.id, on); else s.parentsTakePart = !!on;
     var mode = on ? 'home' : 'school';
     TL_PHASES.forEach(function (ph) {
-      var p = tlPlan(s, ph); if (tlWindowStatus(s, p) === 'ended') return;
+      var p = tlPlan(s, ph), st = tlWindowStatus(s, p); if (st === 'ended' || (skipLive && st === 'live')) return;
       var moved = false;
       Object.keys(p.byId).forEach(function (id) {
         var it = p.byId[id]; if (!tlIsCheckin(it) || it.mode === mode) return;
@@ -2037,9 +2063,13 @@
         '<button class="btn-link" data-turnon="' + esc(id) + '">Turn on</button></span>';
     }).join('');
     var offBox = p.off.length ? '<details class="dep-off"><summary>Not used in ' + esc(phase) + ' (' + p.off.length + ')</summary><div class="dep-off-list">' + offChips + '</div></details>' : '';
-    // Own-class rule: on while the check-in is in use at school this phase.
-    var ruleOn = tlRunning(p, 'direct').some(function (id) { return tlIsCheckin(p.byId[id]) && p.byId[id].mode === 'school'; });
-    var rule = ruleOn ? '<div class="tl-filterbanner dep-rule"><b>Own-class rule is on for ' + esc(phase) + '.</b> ' + TL_CHECKIN + ' runs at school, so no teacher runs student assessments for their own class — another teacher does, using the student direct-assessment link.</div>' : '';
+    // Own-class rule: on while the check-in is in use at school this phase
+    // (and the school has more than one class).
+    var ckSchool = tlRunning(p, 'direct').some(function (id) { return tlIsCheckin(p.byId[id]) && p.byId[id].mode === 'school'; });
+    var ruleOn = ckSchool && tlRuleApplies(s), flagged = ruleOn ? tlOwnClassResults(s, phase).length : 0;
+    var rule = ruleOn ? '<div class="tl-filterbanner dep-rule"><b>Own-class rule is on for ' + esc(phase) + '.</b> ' + TL_CHECKIN + ' runs at school, so no teacher runs student assessments for their own class — another teacher does, using the student direct-assessment link.' +
+        (flagged ? ' <b>' + flagged + '</b> earlier result' + (flagged === 1 ? ' was' : 's were') + ' recorded by the child’s own teacher — kept and flagged.' : '') + '</div>'
+      : ckSchool ? '<div class="tl-filterbanner dep-rule">' + TL_CHECKIN + ' runs at school, but this school has only one class, so the own-class rule doesn’t apply — its teacher runs everything.</div>' : '';
     return '<div class="dep-phase" data-phase="' + esc(phase) + '">' + head + rule + rows + offBox + '</div>';
   }
 
@@ -2053,10 +2083,14 @@
       return '<button class="dep-tab' + (ph === cur ? ' on' : '') + '" role="tab" aria-selected="' + (ph === cur) + '" data-tab="' + ph + '">' + esc(ph) +
         '<span class="dep-tab-st st-' + x.st + '">' + TL_ST_LABEL[x.st] + (x.pct != null && x.st !== 'scheduled' ? ' · ' + x.pct + '%' : '') + '</span></button>';
     }).join('');
-    var on = tlParentsOn(s);
+    var on = tlParentsOn(s), live = tlLiveCheckinPhases(s);
+    // Phases still running the check-in in the old place (changed "from the next phase").
+    var lag = TL_PHASES.filter(function (ph) { var p = tlPlan(s, ph); return tlWindowStatus(s, p) !== 'ended' && tlCheckinIds(p).some(function (id) { return tlGroupOf(p, id) && p.byId[id].mode !== tlCheckinMode(s); }); });
     var parents = '<div class="dep-parents"><div class="dep-parents-txt"><b>Parents take part in Tilli Measures</b>' +
       '<span>' + (on ? TL_CHECKIN + ' runs at home — the parent asks their child the questions.'
-        : TL_CHECKIN + ' runs at school — so no teacher runs student assessments for their own class.') + '</span></div>' +
+        : TL_CHECKIN + ' runs at school' + (tlRuleApplies(s) ? ' — so no teacher runs student assessments for their own class.' : '.')) + '</span>' +
+      (lag.length ? '<span>' + esc(lag.join(', ')) + ' keeps it ' + (on ? 'at school' : 'at home') + ' until it ends.</span>' : '') +
+      (live.length ? '<span class="dep-parents-lock">Locked while ' + esc(live.join(', ')) + ' is live — changing it asks whether to apply it now or from the next phase.</span>' : '') + '</div>' +
       '<span title="On: parents take part, so ' + TL_CHECKIN + ' goes home. Off: it runs at school and the own-class rule applies. Ended phases keep where it ran.">' +
         switchHtml(on, ' data-parents-on aria-label="Parents take part in Tilli Measures"') + '</span></div>';
     mount.innerHTML = parents + '<div class="dep-tabs" role="tablist" aria-label="Phases">' + tabs + '</div>' + planPhaseBody(s, cur);
@@ -2110,10 +2144,29 @@
     mount.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { TL_TAB[s.id] = b.dataset.tab; renderPlanner(d, mount); }); });
     var po = mount.querySelector('[data-parents-on]');
     if (po) po.addEventListener('change', function () {
-      tlSetParentsOn(s, po.checked);
-      ORG.server.logAudit(me.name, 'school.parents', s.name + ' → parents ' + (po.checked ? 'take part' : 'don’t take part'), 'school', s.id);
-      toast(TL_CHECKIN + ' now runs ' + (po.checked ? 'at home.' : 'at school — own-class rule on.'));
-      refreshPlanner(d);
+      var on = po.checked; po.checked = !on;   // nothing changes until confirmed
+      function apply(skipLive) {
+        // Phases where the check-in will now move to school → the own-class rule turns on there.
+        var toSchool = on ? [] : TL_PHASES.filter(function (ph) { var p = tlPlan(s, ph), st = tlWindowStatus(s, p); return st !== 'ended' && !(skipLive && st === 'live') && tlCheckinInUse(p); });
+        tlWarnRuleOn(s, toSchool, function () {
+          tlSetParentsOn(s, on, skipLive);
+          ORG.server.logAudit(me.name, 'school.parents', s.name + ' → parents ' + (on ? 'take part' : 'don’t take part') + (skipLive ? ' (from next phase)' : ''), 'school', s.id);
+          toast(TL_CHECKIN + ' now runs ' + (on ? 'at home' : 'at school') + (skipLive ? ' from the next phase.' : '.'));
+          refreshPlanner(d);
+        });
+      }
+      var live = tlLiveCheckinPhases(s);
+      if (!live.length) { apply(false); return; }
+      // A phase is live: default to the next phase, allow changing it now.
+      var to = on ? 'at home' : 'at school';
+      openModal('Change while ' + live.join(', ') + ' is live?', '<p class="tl-muted">' + TL_CHECKIN + ' is in use in ' + esc(live.join(', ')) + ', which is live now.</p>' +
+        '<div class="dep-where-pick">' +
+          '<button type="button" class="dep-where-opt on" data-when="next"><b>From the next phase</b><span>' + esc(live.join(', ')) + ' keeps it where it is until it ends. Later phases run it ' + to + '.</span></button>' +
+          '<button type="button" class="dep-where-opt" data-when="now"><b>Change it now</b><span>It moves ' + to + ' straight away. A child who has already started it finishes it where they started, and their completion counts as normal.</span></button>' +
+        '</div>', function (close) { close(); return true; }, 'Cancel');
+      setTimeout(function () {
+        document.querySelectorAll('[data-when]').forEach(function (b) { b.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; apply(b.dataset.when === 'next'); }); });
+      }, 0);
     });
 
     // Dates are the schedule — editable before and after deploying.
@@ -2135,7 +2188,11 @@
       b.addEventListener('click', function () {
         var phase = b.closest('[data-phase]').dataset.phase, p = tlPlan(s, phase), it = p.byId[b.dataset.turnon];
         if (it.aud !== 'direct') { tlTurnOn(s, phase, it.id); refreshPlanner(d); return; }
-        if (tlIsCheckin(it)) { tlTurnOn(s, phase, it.id); toast(tlCheckinNote(s).split('. Change')[0] + '.'); refreshPlanner(d); return; }
+        if (tlIsCheckin(it)) {
+          var turnOn = function () { tlTurnOn(s, phase, it.id); toast(tlCheckinNote(s).split('. Change')[0] + '.'); refreshPlanner(d); };
+          if (tlCheckinMode(s) === 'school') tlWarnRuleOn(s, [phase], turnOn); else turnOn();
+          return;
+        }
         askDirectWhere(it.name, it.mode, function (mode) {
           it.mode = mode; tlTurnOn(s, phase, it.id);
           toast(it.name + ' runs ' + TL_WHERE_LABEL[mode].toLowerCase() + ' — ' + TL_DIRECT_WHO[mode] + '.'); refreshPlanner(d);

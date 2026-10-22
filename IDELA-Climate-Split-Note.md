@@ -53,16 +53,20 @@ Only teachers can sign in to run these.
 
 - **Name:** My School Check-in.
 - **Own-class rule:** applies to every direct assessment at school, but only in a phase where My School Check-in runs at school (see §3).
+- **One-class schools are exempt:** if a school has only one grade with one section, the rule doesn't apply — its teacher runs everything.
+- **Email-only sign-in is fine:** the student link only runs assessments; it shows no personal data or results.
+- **Changing "Parents take part" while a phase is live:** locked by default — the admin chooses *From the next phase* (the live phase keeps the check-in where it is) or *Change it now*. With *Change it now*, a child who has already started the check-in finishes it where they started, then their completion counts as normal; everyone else gets it in the new place straight away.
+- **Teachers at two schools:** when the device's signed-in teacher belongs to more than one school, the student link still asks for the school code (it says which school they're at) but skips the email.
+- **Turning the rule on late:** before the rule turns on, the admin is warned how many results were recorded by the child's own class teacher. Those results are kept and flagged (⚑ on the student page, a count in the planner banner).
 - **Sign-in on the student link:** school code + teacher email, no password. *Trade-off:* anyone who has the school code and knows a teacher's email can open the assessment page as that teacher. It only reaches the assessment page, not the dashboard.
 
 ## Open questions
 
-- **Small schools:** a school with one section per grade, or one teacher teaching every section, may have nobody allowed to assess a class. Who does it then? (Admin override? Allow it with a flag on the result?)
+- **One teacher, several classes:** a school with several classes but only one teacher still has nobody allowed to assess that teacher's classes. Who does it then?
 - **Teachers with several sections:** are all their sections blocked? *(Prototype: yes, all of them.)*
 - **School admins:** can they run assessments too, or only teachers? *(Prototype: only teachers.)*
 - **Leaving the assessment page:** when it was opened from a device that already had the dashboard signed in, does getting back to the dashboard need the password again, so a child can't wander into it? *(Prototype: the page has no link to any dashboard; "Finish" ends the assessment sign-in only.)*
 - **My School Check-in at home:** does the parent ask the questions and the child answer, while the parent records the answers? Does it reuse the existing parent link or the direct-assessment link?
-- **Changing the parent setting mid-programme:** if a school flips "parents take part" after baseline, where does midline/endline My School Check-in run? *(Prototype: it moves in every phase that hasn't ended, live ones included; ended phases keep where it ran. Confirm that moving a live phase is OK.)*
 - **School code on the link:** the master link URL already contains the school's code, yet the page still asks for it (as specified). Keep both?
 
 ## What's built in the prototype (22 Oct 2026)

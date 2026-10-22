@@ -35,10 +35,13 @@
     var own = readJSON(ASSESS_KEY);
     if (own && own.email && own.school_id && A.isTeacherAt(own.email, own.school_id)) return signedIn(own.school_id, own.email, false);
     // A teacher dashboard already open on this device → skip the code + email.
+    // Teaching at more than one school → ask for the code (it says which
+    // school they're at), but still skip the email.
     var dash = readJSON(SESSION_KEY);
     if (dash && dash.email) {
       var ids = A.teacherSchools(dash.email);
-      if (ids.length) return signedIn(ids[0], dash.email, true);
+      if (ids.length === 1) return signedIn(ids[0], dash.email, true);
+      if (ids.length > 1) S.knownEmail = String(dash.email).toLowerCase();
     }
     S.step = 'code'; render();
   }
@@ -52,13 +55,20 @@
 
   // ---------- data helpers ----------
   function items() { return A.directAtSchool(S.school.school_id, S.phase); }
-  function ruleOn() { return A.checkinAtSchool(S.school.school_id, S.phase); }
+  function ruleOn() { return A.ownClassRuleOn(S.school.school_id, S.phase); }
+  // "studentId|assessId" of results the child's own teacher recorded before the rule was on.
+  function flaggedSet() {
+    var out = {}; if (!ruleOn()) return out;
+    A.ownClassResults(S.school.school_id, S.phase).forEach(function (r) { out[r.student_id + '|' + r.assessId] = 1; });
+    return out;
+  }
   function kidsOf(sectionId) {
     return A.studentsForSchool(S.school.school_id).filter(function (st) { return st.section_id === sectionId; })
       .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
   }
-  // Only the steps that run at school — home ones belong to the parent.
-  function stepsFor(st) { return A.chainFor(S.school.school_id, S.phase, AUD, st.student_id).filter(function (x) { return x.mode === 'school'; }); }
+  // Only the steps that run at school — home ones belong to the parent. A run
+  // started here before the assessment moved home is still finished here.
+  function stepsFor(st) { return A.chainFor(S.school.school_id, S.phase, AUD, st.student_id).filter(function (x) { return x.mode === 'school' || x.startedMode === 'school'; }); }
   function classDone(sectionId) {
     var ids = kidsOf(sectionId).map(function (k) { return k.student_id; }), its = items().map(function (i) { return i.id; });
     return A.itemCompletion(S.school.school_id, S.phase, AUD, ids, its);
@@ -73,7 +83,7 @@
   }
   function codeView() {
     return '<div class="as-card narrow"><h1 class="as-h1">Enter your school code</h1>' +
-      '<p class="as-sub">This makes sure the assessment is run by your school. A teacher signs in next.</p>' +
+      '<p class="as-sub">' + (S.knownEmail ? 'You teach at more than one school — enter the code of the school you’re at now.' : 'This makes sure the assessment is run by your school. A teacher signs in next.') + '</p>' +
       '<form data-form="code"><label class="as-field">School code<input class="input as-code" id="as-code" value="' + esc(S.code) + '" placeholder="e.g. ABCD-1234" autocomplete="off" autocapitalize="characters" spellcheck="false" autofocus></label>' +
       (S.err ? '<p class="as-err">' + esc(S.err) + '</p>' : '') +
       '<button class="btn btn-primary block" type="submit">Continue</button></form>' +
@@ -109,15 +119,19 @@
       '<div class="as-items">' + chips + '</div>' + rule + '<div class="as-classes">' + tiles + '</div>';
   }
   function classView() {
-    var kids = kidsOf(S.sectionId);
+    var kids = kidsOf(S.sectionId), flags = flaggedSet();
     var rows = kids.map(function (st) {
-      var steps = stepsFor(st), next = steps.find(function (x) { return x.state === 'open'; });
+      var steps = stepsFor(st);
+      // A started run comes first, so it's finished before anything new begins.
+      var next = steps.find(function (x) { return x.state === 'open' && x.startedMode; }) || steps.find(function (x) { return x.state === 'open'; });
       var chips = steps.map(function (x) {
-        var cls = x.state === 'done' ? 'ok' : x.state === 'locked' ? 'muted' : 'info';
-        var tip = x.state === 'locked' ? 'Opens once “' + x.after + '” is done' : x.state === 'done' ? 'Done' : 'Ready';
-        return '<span class="ui-chip ' + cls + '" title="' + esc(tip) + '">' + (x.state === 'done' ? '✓ ' : '') + esc(x.name) + '</span>';
+        var flag = x.state === 'done' && flags[st.student_id + '|' + x.id];
+        var cls = flag ? 'warn' : x.state === 'done' ? 'ok' : x.state === 'locked' ? 'muted' : 'info';
+        var tip = flag ? 'Recorded by the child’s own teacher before the own-class rule was on — kept and flagged'
+          : x.state === 'locked' ? 'Opens once “' + x.after + '” is done' : x.state === 'done' ? 'Done' : x.startedMode ? 'Started — finish it here' : 'Ready';
+        return '<span class="ui-chip ' + cls + '" title="' + esc(tip) + '">' + (flag ? '⚑ ' : x.state === 'done' ? '✓ ' : '') + esc(x.name) + '</span>';
       }).join('');
-      var btn = next ? '<button class="btn btn-primary sm" data-start="' + esc(st.student_id) + '" data-item="' + esc(next.id) + '">Start ' + esc(next.name) + '</button>'
+      var btn = next ? '<button class="btn btn-primary sm" data-start="' + esc(st.student_id) + '" data-item="' + esc(next.id) + '">' + (next.startedMode ? 'Continue ' : 'Start ') + esc(next.name) + '</button>'
         : (steps.length && steps.every(function (x) { return x.state === 'done'; }) ? '<span class="ui-chip ok">All done</span>' : '<span class="ui-chip muted">Waiting</span>');
       return '<div class="as-kid"><span class="as-kid-name">' + esc(st.name) + '<small>' + esc(st.student_id) + '</small></span><span class="as-steps">' + chips + '</span>' + btn + '</div>';
     }).join('') || '<p class="as-sub">No children in this class.</p>';
@@ -126,12 +140,12 @@
       '<div class="as-card"><div class="as-kids">' + rows + '</div></div>';
   }
   function runView() {
-    var st = A.getStudent(S.school.school_id, S.studentId), it = items().find(function (x) { return x.id === S.itemId; }) || {};
+    var st = A.getStudent(S.school.school_id, S.studentId), it = A.chainFor(S.school.school_id, S.phase, AUD, S.studentId).find(function (x) { return x.id === S.itemId; }) || {};
     return '<div class="as-run" role="dialog" aria-label="' + esc(it.name || 'Assessment') + '">' +
       '<div class="as-run-top"><h1 class="as-h1">' + esc(it.name || 'Assessment') + '</h1><span class="ui-chip info">' + esc(st ? st.first || st.name : '') + '</span></div>' +
       '<div class="as-run-body">The assessment runs here on the child’s screen.<br>(Prototype — mark it complete when the child finishes.)</div>' +
       (S.err ? '<p class="as-err">' + esc(S.err) + '</p>' : '') +
-      '<div class="as-run-foot"><button class="btn btn-outline md" data-go="class">Stop</button><button class="btn btn-primary md" data-complete>Mark complete</button></div></div>';
+      '<div class="as-run-foot"><button class="btn btn-outline md" data-go="class" title="Pause — the child can continue it later from the class list">Stop</button><button class="btn btn-primary md" data-complete>Mark complete</button></div></div>';
   }
   function doneView() {
     return '<div class="as-card narrow"><h1 class="as-h1">Session finished</h1>' +
@@ -156,7 +170,9 @@
       S.code = document.getElementById('as-code').value.trim();
       var sc = A.resolveSchoolCode(S.code);
       if (!sc) { S.err = 'That code doesn’t match a school. Check it with your school office.'; return render(); }
-      S.school = sc; S.err = ''; S.step = 'email'; render();
+      S.school = sc; S.err = '';
+      if (S.knownEmail && A.isTeacherAt(S.knownEmail, sc.school_id)) return signedIn(sc.school_id, S.knownEmail, true);
+      S.step = 'email'; render();
     } else if (f === 'email') {
       var em = document.getElementById('as-email').value.trim().toLowerCase();
       S.email = em;
@@ -172,7 +188,11 @@
     var t = e.target.closest('button, a'); if (!t) return;
     if (t.dataset.go) { S.err = ''; S.step = t.dataset.go; if (t.dataset.go === 'code') { S.school = null; S.email = ''; } render(); return; }
     if (t.dataset.section && !t.disabled) { S.sectionId = t.dataset.section; S.step = 'class'; render(); window.scrollTo(0, 0); return; }
-    if (t.dataset.start) { S.studentId = t.dataset.start; S.itemId = t.dataset.item; S.err = ''; S.step = 'run'; render(); return; }
+    if (t.dataset.start) {
+      S.studentId = t.dataset.start; S.itemId = t.dataset.item; S.err = ''; S.step = 'run';
+      A.startAssessment(S.school.school_id, S.phase, AUD, S.studentId, S.itemId, S.email);   // marks it part-way through
+      render(); return;
+    }
     if (t.hasAttribute('data-complete')) {
       var res = A.markComplete(S.school.school_id, S.phase, AUD, S.studentId, S.itemId, S.email);
       if (res === true) { S.step = 'class'; render(); toast('Saved.'); return; }
