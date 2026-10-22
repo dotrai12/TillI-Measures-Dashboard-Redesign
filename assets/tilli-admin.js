@@ -3075,8 +3075,8 @@
       var pub = obs.phases.filter(function (p) { return p.published; }).length;
       items.push({ aud: 'Observation', badges: statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn'),
         title: 'Teacher Observation Form', desc: obs.questions.length + '-item shared question bank, published per phase. Deploy from Deployments.',
-        meta: '', foot: 'Pre · Mid · Post', action: '<button class="btn-link" data-obsedit>Configure ⋮</button>',
-        actIcon: '<button class="tl-rowact" data-obsedit title="Configure the observation form" aria-label="Configure Teacher Observation Form">' + ICONS.settings + '</button>',
+        meta: '', foot: 'Pre · Mid · Post',
+        action: '<button class="tl-rowact" data-obsedit title="Configure the observation form" aria-label="Configure Teacher Observation Form">' + ICONS.settings + '</button>',
         sort: { title: 'Teacher Observation Form', aud: 'Observation', phase: 0, status: pub ? 1 : 3, history: null } });
     }
     // Teacher Reflection Questions: the one-time onboarding reflection, edited in
@@ -3086,8 +3086,8 @@
       var rqN = (reflCfg.questions || []).length, rcN = (reflCfg.cats || []).length;
       items.push({ aud: 'Teacher reflection', badges: statusPill(rqN + ' questions', rqN ? 'ok' : 'warn'),
         title: 'Teacher Reflection Questions', desc: 'One-time self-reflection every teacher completes during dashboard onboarding — ' + rqN + ' questions across ' + rcN + ' categories.',
-        meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: 'Onboarding · not deployed', action: '<button class="btn-link" data-refledit>Edit questions ⋮</button>',
-        actIcon: '<button class="tl-rowact" data-refledit title="Edit the reflection questions" aria-label="Edit Teacher Reflection Questions">' + ICONS.edit + '</button>',
+        meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: 'Onboarding · not deployed',
+        action: '<button class="tl-rowact" data-refledit title="Edit the reflection questions" aria-label="Edit Teacher Reflection Questions">' + ICONS.edit + '</button>',
         sort: { title: 'Teacher Reflection Questions', aud: 'Teacher reflection', phase: 0, status: rqN ? 1 : 3, history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
     }
     list.forEach(function (t) {
@@ -3095,8 +3095,7 @@
         badges: tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')),
         title: t.title, desc: t.desc, meta: tplMetaLine(t),
         foot: esc(t.phase) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span>',
-        action: '<button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button>',
-        actIcon: '<button class="tl-rowact" data-tpl="' + t.id + '" title="Edit — also duplicate, publish, archive or delete" aria-label="Edit ' + esc(t.title) + '">' + ICONS.edit + '</button>',
+        action: '<button class="tl-rowact" data-tpl="' + t.id + '" title="Edit — also duplicate, publish, archive or delete" aria-label="Edit ' + esc(t.title) + '">' + ICONS.edit + '</button>',
         // status rank: ★ Latest · Published · Older version · Draft · Archived
         sort: { title: t.title, aud: t.audience, phase: TPL_PHASE_RANK[t.phase] != null ? TPL_PHASE_RANK[t.phase] : 9,
           status: t.archived ? 4 : t.status !== 'Published' ? 3 : latest[t.phase + '|' + t.audience] === t.id ? 0 : 2,
@@ -3113,7 +3112,7 @@
       return '<tr' + (it.archived ? ' class="is-archived"' : '') + '><td class="name">' + esc(it.title) + '<small>' + esc(it.desc) + '</small></td>' +
         '<td>' + audChip(it.aud) + '</td><td>' + it.foot + '</td>' +
         '<td><span class="tt-badges">' + it.badges + '</span></td>' +
-        '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + (it.actIcon || it.action) + '</td></tr>';
+        '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + it.action + '</td></tr>';
     }
     var empty = '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>';
     var tplView = !items.length ? empty : asList
@@ -3142,7 +3141,7 @@
           return '<div class="tl-sg-card"><div class="sg-top"><div><div class="sg-name">' + esc(g.name) + '</div><div class="sg-full">' + esc(g.full) + '</div></div>' +
             statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</div>' +
             skillTagsHtml(g.skills) + '<div class="sg-desc">' + esc(g.desc) + '</div>' +
-            '<div class="sg-foot"><span class="sg-q">' + g.questions + ' items</span><button class="btn btn-outline btn-sm" data-manage="' + g.id + '">Manage</button></div></div>';
+            '<div class="sg-foot"><span class="sg-q">' + g.questions + ' items</span><button class="tl-rowact" data-manage="' + g.id + '" title="Manage this instrument" aria-label="Manage ' + esc(g.name) + '">' + ICONS.settings + '</button></div></div>';
         }).join('') + '</div>';
     var sgSection = sgView ? '<div class="ui-eyebrow tl-mini-head">Self-Guided Assessments</div>' +
       '<p class="ui-mod-note" style="margin:-4px 0 var(--page-gap)">' + ORG.selfGuided.length + ' gamified instruments — EMT, Hearts &amp; Flowers, Memory Game.</p>' + sgView : '';
