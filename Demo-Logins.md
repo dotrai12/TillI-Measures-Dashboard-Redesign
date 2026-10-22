@@ -79,6 +79,6 @@ Each school has 4 classes × 14 children (56 students), one teacher per class, a
 
 ## Student direct-assessment link (`assess.html`)
 
-Open `assess.html` (or **Preview** on the Direct Assessment master link in a school's Deployments tab). Enter a school code (`BNYN-7712`, `LOTS-3390`, `KNDY-8890`, `CLMB-6604`), then a **teacher** email from the tables above. No password.
+Open `assess.html` (or **Preview** on the Student assessments link in a school's Assessments tab → Links to share). Enter a school code (`BNYN-7712`, `LOTS-3390`, `KNDY-8890`, `CLMB-6604`), then a **teacher** email from the tables above. No password.
 
 To see the **own-class rule**: in the platform admin, open the school → Deployments, switch **Parents take part** off, and make sure **My School Check-in** is in use in the live phase. On `assess.html` the teacher's own class is then greyed out. Kandy Hill (Baseline live) is the quickest school to try it on.

@@ -1066,7 +1066,7 @@
     set({ step: 'role', role: null, school: '', schoolQuery: '', schoolListOpen: false, groupLink: null }));
 
   // School-group link (index.html?group=<code>&as=parent|teacher, from Platform
-  // Admin → Deployments → Master Links): skip the role step and limit the school
+  // Admin → a group's page → Group links): skip the role step and limit the school
   // picker to that group's active schools. Parents land on the picker; teachers
   // keep their email-first flow and meet the same short list if they're new.
   (function openGroupLink() {

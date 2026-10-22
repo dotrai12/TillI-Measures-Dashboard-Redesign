@@ -1,7 +1,7 @@
 /* ============================================================
    Tilli Measures — STUDENT DIRECT-ASSESSMENT page (assess.html)
    ------------------------------------------------------------
-   Opened from the school's student master link on each child's
+   Opened from the school's student link on each child's
    device. A teacher signs in with the school code + their email
    (no password), picks a class, then runs the direct assessments
    that happen AT SCHOOL for each child. It never links to a

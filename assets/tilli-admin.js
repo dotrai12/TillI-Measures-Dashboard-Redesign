@@ -17,7 +17,7 @@
      People · Platform Health · AI Assistant
    Phase 1 built Control Room + Schools (+ Hub + Merge). Phase 2 adds
    the assessment/authoring surfaces (Add Students w/ CSV, Observation
-   Form, Self-Guided, Master Links, Results & Data) and the New
+   Form, Self-Guided, Results & Data) and the New
    Template / Deployment / Group flows. AI Assistant (Ask Tilli /
    Knowledge Base) stays a deliberate cross-product placeholder (§10.1).
    ============================================================ */
@@ -186,7 +186,7 @@
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
   var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
-    observation: 'templates', template: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'deployments', gschool: 'groupoverview' };
+    observation: 'templates', template: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'schools', gschool: 'groupoverview' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
   function chrome(r) {
@@ -994,7 +994,7 @@
     }
     var live = inGroup.filter(function (s) { return !s.archived; }).length;
     gated({ title: 'Archive ' + g.name, danger: true, typed: 'ARCHIVE',
-      body: '<p>Archive <b>' + esc(g.name) + '</b> and its <b>' + live + '</b> active school' + (live === 1 ? '' : 's') + '. They leave the active lists and their deployments and master links are suspended. The group admin sees an “archived” notice. Nothing is deleted — un-archive restores it all.</p>',
+      body: '<p>Archive <b>' + esc(g.name) + '</b> and its <b>' + live + '</b> active school' + (live === 1 ? '' : 's') + '. They leave the active lists and their deployments and share links are suspended. The group admin sees an “archived” notice. Nothing is deleted — un-archive restores it all.</p>',
       confirmLabel: 'Archive group', audit: { action: 'group.archive', entity: g.name, entityType: 'group' },
       onConfirm: function () { ORG.server.archiveGroup(g.id, true); toast(g.name + ' archived.'); schState.tab = 'archived'; go('schools', {}); } });
   }
@@ -1438,9 +1438,9 @@
   function archiveSchool(s) {
     var sg = ORG.groupById(s.groupId);
     if (s.archived && sg && sg.id === s.groupId && sg.archived) { toast(sg.name + ' is archived — un-archive the group first (or move the school to another group).'); return; }
-    if (s.archived) { gated({ title: 'Un-archive ' + s.name, body: '<p>Restore this school to the active list and its deployments/master links.</p>', confirmLabel: 'Un-archive', audit: { action: 'school.archive', entity: s.name, entityType: 'school', schoolId: s.id }, onConfirm: function () { s.archived = false; toast(s.name + ' restored.'); go('school', { id: s.id }); } }); return; }
+    if (s.archived) { gated({ title: 'Un-archive ' + s.name, body: '<p>Restore this school to the active list, with its deployments and share links.</p>', confirmLabel: 'Un-archive', audit: { action: 'school.archive', entity: s.name, entityType: 'school', schoolId: s.id }, onConfirm: function () { s.archived = false; toast(s.name + ' restored.'); go('school', { id: s.id }); } }); return; }
     gated({ title: 'Archive ' + s.name, danger: true, typed: 'ARCHIVE',
-      body: '<p>Archiving hides the school from active lists and <b>suspends its deployments and master links</b>. Students and data are kept and can be restored.</p>',
+      body: '<p>Archiving hides the school from active lists and <b>suspends its deployments and share links</b>. Students and data are kept and can be restored.</p>',
       confirmLabel: 'Archive school', audit: { action: 'school.archive', entity: s.name, entityType: 'school', schoolId: s.id },
       onConfirm: function () { s.archived = true; toast(s.name + ' archived.'); go('schools', {}); } });
   }
@@ -2334,22 +2334,31 @@
   HUB.assessments = function (d, el) {
     var s = d.school;
 
-    var links = ['Parent', 'Teacher', 'Direct Assessment'].map(function (kind) {
-      var url = 'https://measures.tilli.app/' + s.code.toLowerCase() + '/' + kind.toLowerCase().replace(/\s+/g, '-');
-      var preview = kind === 'Direct Assessment' ? '<a class="btn btn-outline btn-sm" href="assess.html" target="_blank" rel="noopener" title="Open the student direct-assessment page (local prototype): school code → teacher email → pick a class.">Preview</a>' : '';
-      return '<div class="tl-linkrow"><div><b>' + esc(kind) + '</b><span class="mono">' + esc(url) + '</span></div><span class="tl-inline-actions">' + preview + '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
+    // What to send the school: who each link is for, and where it lands.
+    var SHARE = [
+      { slug: 'parent', label: 'Parents', note: 'Parents sign in and find their child at this school.' },
+      { slug: 'teacher', label: 'Teachers & school admins', note: 'Staff sign in straight into this school.' },
+      { slug: 'direct', label: 'Student assessments', note: 'Opened on each child’s device — a teacher signs in with the school code, picks a class and runs the assessments.', preview: 'assess.html' },
+    ];
+    var links = SHARE.map(function (k) {
+      var url = ORG.masterLinkUrl(s.code, k.slug);
+      var preview = k.preview ? '<a class="btn btn-outline btn-sm" href="' + k.preview + '" target="_blank" rel="noopener" title="Open the student assessment page (local prototype)">Preview</a>' : '';
+      return '<div class="tl-linkrow"><div><b>' + esc(k.label) + '</b><span class="tl-linknote">' + esc(k.note) + '</span><span class="mono">' + esc(url) + '</span></div><span class="tl-inline-actions">' + preview + '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
     }).join('');
+    var grp = s.groupId && s.groupId !== 'g-none' ? ORG.groupById(s.groupId) : null;
+    var grpNote = grp && !grp.archived ? '<p class="ui-mod-note mt-3">' + esc(s.name) + ' is part of <b>' + esc(grp.name) + '</b>. To reach every school in it with one link, use the <button class="btn-link" data-grouplinks="' + esc(grp.id) + '">group links</button>.</p>' : '';
 
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Deployments</h3></div>' +
         '<div class="tl-inline-actions">' +
           '<button class="btn btn-outline btn-sm" data-teacherlog title="Per-teacher status for every teacher assessment deployed to this school — Completed when every student in their sections is rated.">Teacher assessment log</button>' +
+          '<button class="btn btn-outline btn-sm" data-dlcsv title="Download this school’s assessment results as a CSV">Results CSV</button>' +
           '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
           '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Master Links</h3><p class="ui-mod-note">Per-school hub links. Same data as Deployments → Master Links.</p></div></div>' + links +
-        '<div class="mt-3"><button class="btn btn-outline btn-sm" data-dlcsv>Download this school\'s results (CSV)</button></div></div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Links to share</h3><p class="ui-mod-note">Send these to ' + esc(s.name) + '. Each one opens straight into this school.</p></div></div>' + links + grpNote + '</div>' +
       '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>';
     el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
+    var gl = el.querySelector('[data-grouplinks]'); if (gl) gl.addEventListener('click', function () { go('group', { id: gl.dataset.grouplinks }); });
     renderPlanner(d, el.querySelector('#dep-planner'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
     slBtn.addEventListener('click', function () {
@@ -3008,13 +3017,12 @@
   // Deployments (spec §6.4) — status server-derived
   function depStatusPill(st) { var m = { Scheduled: 'sched', Live: 'ok', Ended: 'muted' }; return statusPill(st, m[st] || ''); }
   SCREEN.deployments = function (params, body) {
-    var tab = (params.tab === 'results' || params.tab === 'master-links') ? params.tab : 'list';
-    var panels = { list: depList, results: depResults, 'master-links': depMasterLinks };
+    var tab = params.tab === 'results' ? 'results' : 'list';
+    var panels = { list: depList, results: depResults };
     body.innerHTML = screenHead('Deployments', 'Deploy assessments to schools and read their responses.') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (tab === 'list' ? ' on' : '') + '" data-deptab="list">Deployments <b>' + ORG.deployments.length + '</b></button>' +
         '<button class="ui-tab' + (tab === 'results' ? ' on' : '') + '" data-deptab="results">Results <b>' + ORG.results.length + '</b></button>' +
-        '<button class="ui-tab' + (tab === 'master-links' ? ' on' : '') + '" data-deptab="master-links">Master Links <b>' + ORG.masterLinks.hubs.length + '</b></button>' +
       '</div><div id="dep-panel"></div>';
     (panels[tab])(params, document.getElementById('dep-panel'));
     body.querySelectorAll('[data-deptab]').forEach(function (b) { b.addEventListener('click', function () { go('deployments', { tab: b.dataset.deptab }); }); });
@@ -4294,9 +4302,9 @@
   }
 
   // ============================================================
-  //  MASTER LINKS  (spec §6.5) — hub entry points + per-school
-  //  Now a tab under Deployments (§6 merge). Renders into a panel;
-  //  the old #/master-links route forwards to the Deployments tab.
+  //  SHARE LINKS — per school (school → Assessments → Links to share)
+  //  and per group (group page → Group links). The old Deployments →
+  //  Master Links tab is gone; #/master-links forwards to All Schools.
   // ============================================================
   // Group links (#7) — Parent + Teacher only; Direct Assessment stays per
   // school because it runs on a classroom device.
@@ -4311,31 +4319,8 @@
           '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></div></div>';
       }).join('') + '</div>';
   }
-  function depMasterLinks(p, el) {
-    var ml = ORG.masterLinks;
-    var actives = ORG.activeSchools();
-    var sections = ml.hubs.map(function (hub) {
-      var master = ORG.masterLinkUrl('all', hub.slug);
-      var perSchool = actives.map(function (s) {
-        var url = ORG.masterLinkUrl(s.code, hub.slug);
-        return '<div class="tl-linkrow"><div><b>' + esc(s.name) + '</b><span class="mono">' + esc(url) + '</span></div><button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></div>';
-      }).join('');
-      return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">' + esc(hub.label) + ' hub</h3><p class="ui-mod-note">Entry point for ' + esc(hub.label.toLowerCase()) + ' assessments.</p></div></div>' +
-        '<div class="tl-linkrow"><div><b>Master link (all schools)</b><span class="mono">' + esc(master) + '</span></div><button class="btn btn-primary btn-sm" data-copy="' + esc(master) + '">Copy Link</button></div>' +
-        '<details class="mt-2"><summary class="btn-link">Per-school links (' + actives.length + ') →</summary>' + perSchool + '</details></div>';
-    }).join('');
-
-    var groups = ORG.activeGroups().filter(function (g) { return g.id !== 'g-none' && ORG.schools.some(function (s) { return s.groupId === g.id && !s.archived; }); });
-    var groupCard = groups.length ? '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">School group links</h3>' +
-      '<p class="ui-mod-note">One link per group. Parents and teachers pick their school from the group\'s list, then carry on as usual.</p></div></div>' +
-      groups.map(groupLinksHtml).join('') + '</div>' : '';
-    el.innerHTML =
-      '<div class="ui-card"><div class="tl-toggle-row"><div class="tr-body"><b>Entry points only</b><span>Hide chained follow-up assessments from these links</span></div>' + switchHtml(ml.hideChained, ' id="ml-chain"') + '</div></div>' +
-      groupCard + sections;
-    var ch = el.querySelector('#ml-chain'); if (ch) ch.addEventListener('change', function () { ml.hideChained = ch.checked; toast('Entry-points-only ' + (ch.checked ? 'on.' : 'off.')); });
-    el.querySelectorAll('[data-copy]').forEach(function (btn) { btn.addEventListener('click', function () { copy(btn.dataset.copy); }); });
-  }
-  SCREEN['master-links'] = function (p, b) { go('deployments', { tab: 'master-links' }); };
+  // Old #/master-links bookmarks: the links now live on each school's and group's page.
+  SCREEN['master-links'] = function (p, b) { go('schools', {}); };
 
   // Results now live under Deployments (§6 merge). Keep the old #/results route
   // working by forwarding to the Deployments → Results tab, params preserved.
@@ -4384,10 +4369,10 @@
     { id: 'deployments', title: 'Deployments and links', keywords: 'deploy deployment window link master group link parent teacher share url',
       summary: 'Getting assessments to schools, and the links people use.',
       steps: [
-        { text: 'Deployments → + New deployment: pick the school, the template (Latest is listed first), the window, and publish.', link: ['deployments', {}, 'Deployments'] },
+        { text: 'Deployments → + New deployment: pick the school, the template and phase (its live version is used), the window, and publish.', link: ['deployments', {}, 'Deployments'] },
         { text: 'Inside a school: Assessments tab → the phase timeline, the planner, and the Teacher / Student assessment logs.' },
-        { text: 'Master Links: one link per school per hub (Parent, Teacher, Direct Assessment).', link: ['deployments', { tab: 'master-links' }, 'Master Links'] },
-        { text: 'School group links: one Parent link and one Teacher link for a whole group — people pick their school first, then carry on as usual.' },
+        { text: 'Links to share: on the school’s Assessments tab — one each for parents, teachers and student assessments.', link: ['schools', {}, 'All Schools'] },
+        { text: 'Group links: on the group’s page — one Parent link and one Teacher link for the whole group. People pick their school first, then carry on as usual.' },
       ] },
     { id: 'archiving', title: 'Archiving schools and groups', keywords: 'archive unarchive restore school group delete pause',
       summary: 'Pausing a school or a whole group without losing data.',
@@ -4507,7 +4492,7 @@
     'Open issues': 'Unresolved problem reports from this school.',
     'Group links': 'One link per audience for the whole group — people pick their school first.',
     'School group links': 'One Parent and one Teacher link per group. People pick their school, then carry on as usual.',
-    'Master Links': 'The fixed per-school links for the Parent, Teacher and Direct Assessment hubs.',
+    'Links to share': 'The links to send this school — parents, teachers and student assessments. Each opens straight into this school.',
     'Teacher join code': 'Anyone who enters this code joins the school as a Teacher — no invite needed.',
     'Staff at this school': 'School admins and teachers with access to this school.',
     'Teacher assessment log': 'Per teacher: Completed when every student in their sections is rated, In progress when some are, Not started when none are.',
@@ -4634,10 +4619,10 @@
       a: 'School page → Assessments → Teacher assessment log. Each teacher shows Completed, In progress (x/y) or Not started for every teacher assessment. You can also ask Ask Tilli “who hasn’t completed at [school]”.' },
     { id: 'logs-diff', topic: 'Assessments & templates', q: 'What’s the difference between the Teacher and Student assessment logs?', screens: ['school'],
       a: 'The Teacher log has one row per teacher for teacher assessments. The Student log has one row per student for parent and direct (student) assessments.' },
-    { id: 'links', topic: 'Deployments & links', q: 'What’s the difference between a master link and a group link?', screens: ['deployments', 'group'],
-      a: 'A master link belongs to one school. A group link is shared with a whole school group — each person picks their school from the group’s list first, then carries on as usual.' },
-    { id: 'direct-link', topic: 'Deployments & links', q: 'Why is there no group link for Direct Assessment?', screens: ['deployments', 'group'],
-      a: 'Direct Assessment runs on a classroom device set up for one school, so it keeps its per-school link.' },
+    { id: 'links', topic: 'Deployments & links', q: 'Where do I find the links to send a school?', screens: ['school', 'group', 'deployments'],
+      a: 'Open the school → Assessments → Links to share: one for parents, one for teachers and one for student assessments. For a school group, the group’s page has one Parent and one Teacher link for every school in it.' },
+    { id: 'direct-link', topic: 'Deployments & links', q: 'Why is there no group link for Direct Assessment?', screens: ['school', 'group'],
+      a: 'Student assessments run on a classroom device for one school, so each school has its own student link (on the school’s Assessments tab).' },
     { id: 'exports', topic: 'Deployments & links', q: 'How do I export data?', screens: ['schools', 'group', 'deployments', 'school'],
       a: 'All Schools → Schools CSV (the current view); a group page → Assessments CSV and Staff CSV; a school → Assessments → results CSV and Teacher assessment log CSV; Deployments → Results → Download CSV; Ask Tilli follow-up reports → CSV.' },
     { id: 'issue-count', topic: 'Issues & support', q: 'How are open issues counted on school cards?', screens: ['issues', 'schools'],

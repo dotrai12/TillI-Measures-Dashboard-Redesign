@@ -75,7 +75,7 @@ Only teachers can sign in to run these.
 |---|---|
 | Platform admin → School → Deployments | **Parents take part in Tilli Measures** switch above the phase tabs. My School Check-in is in every phase's direct-assessment list (on by default) and its place follows the switch. It can't be dragged or moved to the other place. A banner says when the own-class rule is on for a phase. |
 | Platform admin → Templates | **My School Check-in** template (Direct Assessment). |
-| Platform admin → School → Master Links | **Preview** on the Direct Assessment link opens the student page. |
+| Platform admin → School → Assessments → Links to share | **Preview** on the Student assessments link opens the student page. |
 | `assess.html` (student direct-assessment link) | School code → teacher email (no password) → pick a class (own class greyed out when the rule is on) → children → run each assessment. Skips the code + email when a teacher is already signed in on the device. Never links to a dashboard. |
 | Teacher dashboard → Assess → To-do | **Student assessments** card for the live phase: what runs at school, how much of the teacher's class is done, and **Assess another class** (rule on) or **Start student assessments** (rule off). |
 | Data layer (`tilli-api.js`) | The rule is enforced when a result is saved: a teacher can't record a direct assessment at school for their own class while the check-in runs at school. |

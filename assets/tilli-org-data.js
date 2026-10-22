@@ -644,15 +644,7 @@
     { id: 'sg-mem', name: 'Memory Game', full: 'Memory Game', skills: ['Cognitive', 'Working Memory'], status: 'Published', questions: 20, desc: 'Visuospatial working-memory span task.' },
   ];
 
-  // ---- Master Links (§6.5): three hub entry points + a global "entry points only" toggle ----
-  var MASTER_LINKS = {
-    hideChained: true, // "Entry points only / hide chained follow-up assessments"
-    hubs: [
-      { key: 'parent', label: 'Parent', slug: 'parent' },
-      { key: 'teacher', label: 'Teacher', slug: 'teacher' },
-      { key: 'direct', label: 'Direct Assessment', slug: 'direct' },
-    ],
-  };
+  // ---- Share links: one per school per audience (school → Assessments → Links to share) ----
   function masterLinkUrl(schoolCode, slug) { return 'https://measures.tilli.app/' + String(schoolCode).toLowerCase() + '/' + slug; }
   // One link for a whole school group: opens a pick-your-school page listing the
   // group's active schools, then continues to that school's normal flow.
@@ -1329,7 +1321,7 @@
     users: USERS, invitations: INVITATIONS, issues: ISSUES, templates: TEMPLATES,
     deployments: DEPLOYMENTS, deletionLogs: DELETION_LOGS, duplicates: DUPLICATES,
     mergeHistory: MERGE_HISTORY, health: HEALTH, audit: AUDIT,
-    observation: OBSERVATION, selfGuided: SELF_GUIDED, masterLinks: MASTER_LINKS, results: RESULTS,
+    observation: OBSERVATION, selfGuided: SELF_GUIDED, results: RESULTS,
     roles: ROLES,
     // helpers the client needs but must not re-derive
     daysFromNow: daysFromNow, iso: iso, normName: normName, masterLinkUrl: masterLinkUrl,

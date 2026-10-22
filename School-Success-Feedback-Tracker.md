@@ -76,7 +76,7 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 
 ### 7. School-group links on Deployments ✅ (21 Oct 2026)
 - Each group has a stable `code`. Group links look like `measures.tilli.app/g/<code>/parent` and `…/teacher`. Direct Assessment stays per school because it runs on a classroom device.
-- Shown in Deployments → Master Links → "School group links" (one block per active group) and on each group's page. Each link has Copy and **Open ↗**.
+- Shown on each group's page (Group links). Each link has Copy and **Open ↗**. *(22 Oct 2026: the Deployments → Master Links tab was removed — per-school links are on each school's Assessments tab as "Links to share".)*
 - **Open** goes to the landing page prototype (`index.html?group=<code>&as=parent|teacher`): the role step is skipped and the school picker lists only that group's active schools. Parents start at the picker; teachers keep the email-first flow and see the short list if they're new.
 - Gap: real `/g/<code>/…` routing needs the production app. Archived groups have no link.
 
@@ -204,7 +204,7 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 - 19 — Select a group first, then see its schools *(1 Sep)*
 - 20 — Everything inside the school: add / merge / delete students, deletion logs, assessment results *(1 Sep)*
 - 21 — Deployments inside the school's page *(1 Sep)*
-- 22 — Master links *(1 Sep: "Master links are good ✅")*
+- 22 — Master links *(1 Sep: "Master links are good ✅")* — now "Links to share" on each school's Assessments tab (22 Oct 2026)
 - 23 — Self-guided assessments moved under Templates *(1 Sep)*
 - 24 — Student observation report is part of Templates *(1 Sep)*
 
