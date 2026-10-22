@@ -431,31 +431,29 @@
   }
   var ISSUES = buildIssues();
 
-  // ---- Assessment templates (some Draft — feeds the "Draft assessments" card) ----
-  // Who made / last touched each template, and when it was last published
-  // (ms). publishedAt decides the "Latest" template per phase + audience.
-  function tplMeta(createdAgo, by, editedAgo, editor, publishedAgo) {
+  // ---- Assessment templates ----
+  // One template per assessment. Each phase (Baseline / Midline / Endline) has
+  // its own published versions (v1, v2 … — the last one is live) and at most
+  // one working draft. A template as a whole is only Active or Archived.
+  // `plan` (demo seed) is turned into t.slots once the question banks exist.
+  function tplMeta(createdAgo, by, editedAgo, editor) {
     var at = function (d) { return d == null ? null : TODAY.getTime() - d * DAY; };
-    return { createdAt: at(createdAgo), createdBy: by, updatedAt: at(editedAgo), updatedBy: editor || by, publishedAt: at(publishedAgo), archived: false };
+    return { createdAt: at(createdAgo), createdBy: by, updatedAt: at(editedAgo), updatedBy: editor || by, archived: false };
   }
   var TEMPLATES = [
-    { id: 'tpl-base-t', title: 'Baseline · Teacher Report', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '21-item teacher observation, start of term.', meta: tplMeta(40, 'Meera Krishnan', 9, 'Masoomi Shah', 9) },
-    { id: 'tpl-base-p', title: 'Baseline · Parent Report', audience: 'Parent', phase: 'Baseline', status: 'Published', desc: 'Home-context parent survey.', meta: tplMeta(52, 'Meera Krishnan', 30, null, 30) },
-    { id: 'tpl-mid-t', title: 'Midline · Teacher Report', audience: 'Teacher', phase: 'Midline', status: 'Draft', desc: 'Mid-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 3, null, null) },
-    { id: 'tpl-end-t', title: 'Endline · Teacher Report', audience: 'Teacher', phase: 'Endline', status: 'Draft', desc: 'End-of-term teacher self-report.', meta: tplMeta(14, 'Masoomi Shah', 14, null, null) },
-    { id: 'tpl-direct-emt', title: 'EMT · Direct Assessment', audience: 'Direct Assessment', phase: 'Baseline', phases: ['Baseline', 'Midline', 'Endline'], status: 'Published', desc: 'Gamified executive-function task.', meta: tplMeta(120, 'Ishani Rao', 60, null, 60) },
-    { id: 'tpl-direct-checkin', title: 'My School Check-in', audience: 'Direct Assessment', phase: 'Baseline', phases: ['Baseline', 'Midline', 'Endline'], status: 'Published', desc: 'IDELA’s school-safety and teacher-support questions, split out. Runs at home when parents take part, else at school — where no teacher runs it for their own class.', meta: tplMeta(1, 'Ishani Rao', 1, null, 1) },
-    { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', phase: 'Midline', phases: ['Baseline', 'Midline'], status: 'Published', desc: 'Inhibition / flexibility task.', meta: tplMeta(120, 'Ishani Rao', 75, null, 75) },
-    // Last year's version — still published, so it shows as "Older version" next to tpl-base-t.
-    { id: 'tpl-base-t-2025', title: 'Baseline · Teacher Report (2025)', audience: 'Teacher', phase: 'Baseline', status: 'Published', desc: '18-item teacher observation used in the 2025 cohort.', meta: tplMeta(400, 'Meera Krishnan', 380, null, 380) },
+    { id: 'tpl-teacher-report', title: 'Teacher Report', audience: 'Teacher', desc: 'The class teacher’s observation of each child.', meta: tplMeta(400, 'Meera Krishnan', 3, 'Masoomi Shah'),
+      plan: { Baseline: { versions: [['teacher2025', 380, 'Meera Krishnan', '2025 cohort'], ['teacher', 9, 'Masoomi Shah']] },
+              Midline: { draft: ['teacher', 3, 'Masoomi Shah'] }, Endline: { draft: ['teacher', 14, 'Masoomi Shah'] } } },
+    { id: 'tpl-parent-report', title: 'Parent Report', audience: 'Parent', desc: 'Home-context parent survey.', meta: tplMeta(52, 'Meera Krishnan', 30),
+      plan: { Baseline: { versions: [['parent', 30, 'Meera Krishnan']] } } },
+    { id: 'tpl-direct-emt', title: 'EMT · Emotion Matching Task', audience: 'Direct Assessment', desc: 'The child matches faces to feelings.', meta: tplMeta(120, 'Ishani Rao', 60),
+      plan: { Baseline: { versions: [['emt', 60, 'Ishani Rao']] } } },
+    { id: 'tpl-direct-checkin', title: 'My School Check-in', audience: 'Direct Assessment', desc: 'IDELA’s school-safety and teacher-support questions, split out. Runs at home when parents take part, else at school — where no teacher runs it for their own class.', meta: tplMeta(1, 'Ishani Rao', 1),
+      plan: { Baseline: { versions: [['checkin', 1, 'Ishani Rao']] }, Midline: { versions: [['checkin', 1, 'Ishani Rao']] }, Endline: { versions: [['checkin', 1, 'Ishani Rao']] } } },
+    { id: 'tpl-direct-hf', title: 'Hearts & Flowers', audience: 'Direct Assessment', desc: 'Inhibition / flexibility task.', meta: tplMeta(120, 'Ishani Rao', 75),
+      plan: { Baseline: { versions: [['hf', 75, 'Ishani Rao']] }, Midline: { versions: [['hf', 75, 'Ishani Rao']] } } },
   ];
-  // A template can be tagged with any set of phases (t.phases, in phase order);
-  // t.phase stays as the first one for older readers.
   var TPL_PHASES = ['Baseline', 'Midline', 'Endline'];
-  function setTemplatePhases(t, phases) {
-    var list = TPL_PHASES.filter(function (ph) { return (phases || []).indexOf(ph) >= 0; });
-    t.phases = list.length ? list : [t.phase || 'Baseline']; t.phase = t.phases[0];
-  }
   // ---- Question banks (DEMO content) — what each template asks, in order.
   // Each bank becomes builder questions (see bankQuestions): an opening
   // Section Break, then one Multiple Choice per item with scored options and
@@ -527,20 +525,18 @@
     ['Do you like coming to school?'], ['Do the grown-ups at school listen to you?'], ['Is anyone at school unkind to you?'],
     ['Do you feel happy in your classroom?'],
   ] };
-  var TPL_BANKS = { 'tpl-base-t': TPL_TEACHER_OBS, 'tpl-mid-t': TPL_TEACHER_OBS, 'tpl-end-t': TPL_TEACHER_OBS,
-    'tpl-base-p': TPL_PARENT, 'tpl-direct-emt': TPL_EMT, 'tpl-direct-hf': TPL_HF, 'tpl-direct-checkin': TPL_CHECKIN,
-    // last year's version had 18 items
-    'tpl-base-t-2025': Object.assign({}, TPL_TEACHER_OBS, { items: TPL_TEACHER_OBS.items.slice(0, 18) }) };
+  var TPL_BANKS = { teacher: TPL_TEACHER_OBS, parent: TPL_PARENT, emt: TPL_EMT, hf: TPL_HF, checkin: TPL_CHECKIN,
+    // the 2025 cohort's version had 18 items
+    teacher2025: Object.assign({}, TPL_TEACHER_OBS, { items: TPL_TEACHER_OBS.items.slice(0, 18) }) };
   // A builder question. type: 'section' | 'mc' | 'text'.
   function newQuestion(id, type, f) {
     return Object.assign({ id: id, type: type, title: '', desc: '', required: true, options: type === 'mc' ? [{ text: '', score: null }] : [],
       noneOfAbove: false, timed: false, seconds: 30, videoUrl: '', audioUrl: '', media: [], cond: null,
       scoring: type === 'mc' ? 'map' : 'none', skills: [], tr: {} }, f || {});
   }
-  function bankQuestions(t, ph) {
-    var b = TPL_BANKS[t.id]; if (!b) return [];
-    var pre = t.id + '-' + ph.toLowerCase();
-    var out = [newQuestion(pre + '-s0', 'section', { title: t.title, desc: b.intro })];
+  function bankQuestions(key, pre) {
+    var b = TPL_BANKS[key]; if (!b) return [];
+    var out = [newQuestion(pre + '-s0', 'section', { title: 'Before you start', desc: b.intro })];
     b.items.forEach(function (x, i) {
       out.push(newQuestion(pre + '-q' + (i + 1), 'mc', {
         title: x[0], scoring: b.scoring, timed: !!b.timed, seconds: b.timed || 30, skills: x[1] && TB_SKILL_OF[x[1]] ? [TB_SKILL_OF[x[1]]] : [],
@@ -554,19 +550,30 @@
     out.forEach(function (c) { if (c.cond) c.cond = ids[c.cond.q] ? { q: ids[c.cond.q], opt: c.cond.opt } : null; });
     return out;
   }
-  // Each tagged phase has its own version of the questions (t.versions[phase]).
-  // A newly tagged phase starts as a copy of the earliest existing version.
-  // Versions of untagged phases are kept (hidden) in case the phase comes back.
-  function ensureVersions(t) {
-    if (!t.versions) t.versions = {};
-    var from = TPL_PHASES.find(function (ph) { return t.versions[ph] && t.versions[ph].length; });
-    t.phases.forEach(function (ph) {
-      if (!t.versions[ph]) t.versions[ph] = from ? copyQuestions(t.versions[from], t.id + '-' + ph.toLowerCase() + '-' + Date.now().toString(36)) : [];
-    });
+  // ---- Phase slots: { versions: [{ v, questions, publishedAt, publishedBy, note }], draft: { questions, from, updatedAt, updatedBy } | null }
+  function slotOf(t, ph) { t.slots = t.slots || {}; return t.slots[ph] || (t.slots[ph] = { versions: [], draft: null }); }
+  function liveVersion(t, ph) { var v = slotOf(t, ph).versions; return v.length ? v[v.length - 1] : null; }
+  // Derived fields other screens read: phases with a live version, a status
+  // ('Published' once anything is live) and when it was last published.
+  function syncTemplate(t) {
+    t.phases = TPL_PHASES.filter(function (ph) { return liveVersion(t, ph); });
+    t.phase = t.phases[0] || null;
+    t.status = t.phases.length ? 'Published' : 'Draft';
+    t.hasDraft = TPL_PHASES.some(function (ph) { return slotOf(t, ph).draft; });
+    t.publishedAt = TPL_PHASES.reduce(function (m, ph) { var lv = liveVersion(t, ph); return lv && lv.publishedAt > m ? lv.publishedAt : m; }, null);
   }
   TEMPLATES.forEach(function (t) {
-    Object.assign(t, t.meta); delete t.meta; setTemplatePhases(t, t.phases || [t.phase]);
-    t.versions = {}; t.phases.forEach(function (ph) { t.versions[ph] = bankQuestions(t, ph); }); t.langs = [];
+    Object.assign(t, t.meta); delete t.meta; t.langs = [];
+    var at = function (d) { return TODAY.getTime() - d * DAY; };
+    TPL_PHASES.forEach(function (ph) {
+      var plan = (t.plan || {})[ph], slot = slotOf(t, ph), pre = t.id + '-' + ph.toLowerCase();
+      if (!plan) return;
+      (plan.versions || []).forEach(function (x, i) {
+        slot.versions.push({ v: i + 1, questions: bankQuestions(x[0], pre + '-v' + (i + 1)), publishedAt: at(x[1]), publishedBy: x[2], note: x[3] || '' });
+      });
+      if (plan.draft) slot.draft = { questions: bankQuestions(plan.draft[0], pre + '-d'), from: slot.versions.length || null, updatedAt: at(plan.draft[1]), updatedBy: plan.draft[2] };
+    });
+    delete t.plan; syncTemplate(t);
   });
 
   // ---- Deployments (status server-derived from window + publish state) ----
@@ -630,9 +637,9 @@
 
   // ---- Self-Guided assessments (§6.3): gamified instruments ----
   var SELF_GUIDED = [
-    { id: 'sg-emt1', name: 'EMT 1', full: 'Early Math Task · Level 1', skills: ['Cognitive', 'Working Memory'], status: 'Published', questions: 18, desc: 'Number sense and counting under time pressure.' },
-    { id: 'sg-emt2', name: 'EMT 2', full: 'Early Math Task · Level 2', skills: ['Cognitive', 'Working Memory'], status: 'Published', questions: 22, desc: 'Comparison and simple operations.' },
-    { id: 'sg-emt4', name: 'EMT 4', full: 'Early Math Task · Level 4', skills: ['Cognitive', 'Cognitive Flexibility'], status: 'Draft', questions: 24, desc: 'Applied problem solving; advanced tier.' },
+    { id: 'sg-emt1', name: 'EMT 1', full: 'Emotion Matching Task · Level 1', skills: ['SEL', 'Self-Awareness'], status: 'Published', questions: 18, desc: 'Match a face to the feeling it shows.' },
+    { id: 'sg-emt2', name: 'EMT 2', full: 'Emotion Matching Task · Level 2', skills: ['SEL', 'Social Awareness'], status: 'Published', questions: 22, desc: 'Find two faces that show the same feeling.' },
+    { id: 'sg-emt4', name: 'EMT 4', full: 'Emotion Matching Task · Level 4', skills: ['SEL', 'Social Awareness'], status: 'Draft', questions: 24, desc: 'Say how a character feels in a short story.' },
     { id: 'sg-hf', name: 'Hearts & Flowers', full: 'Hearts & Flowers', skills: ['Cognitive', 'Inhibitory Control', 'Cognitive Flexibility'], status: 'Published', questions: 48, desc: 'Classic inhibition / flexibility switching task.' },
     { id: 'sg-mem', name: 'Memory Game', full: 'Memory Game', skills: ['Cognitive', 'Working Memory'], status: 'Published', questions: 20, desc: 'Visuospatial working-memory span task.' },
   ];
@@ -824,7 +831,7 @@
       var d = daysFromNow(i.expires);
       return i.status === 'Expired' || (d >= 0 && d <= 7);
     });
-    var draftTpls = TEMPLATES.filter(function (t) { return t.status === 'Draft' && !t.archived; });
+    var draftTpls = TEMPLATES.filter(function (t) { return t.hasDraft && !t.archived; });   // a phase draft waiting to be published
     var depsAttn = DEPLOYMENTS.filter(function (d) {
       if (d.status === 'Live') return daysFromNow(d.end) <= 3;
       if (d.status === 'Scheduled') return daysFromNow(d.start) < 0; // start passed, not flipped
@@ -1058,41 +1065,63 @@
   }
   // Template writes stamp who/when (actor = the signed-in Tilli team member).
   function touchTemplate(t, actor) { t.updatedAt = Date.now(); t.updatedBy = actor || 'Tilli Team'; }
-  function createTemplate(t, actor) {
-    var now = Date.now(), status = t.status || 'Draft';
-    var tpl = { id: 'tpl-' + now, title: t.title, audience: t.audience, phase: t.phase,
-      status: status, desc: t.desc || '', createdAt: now, createdBy: actor || 'Tilli Team',
-      updatedAt: now, updatedBy: actor || 'Tilli Team', publishedAt: status === 'Published' ? now : null, archived: false };
-    setTemplatePhases(tpl, t.phases || [t.phase]);
-    // Duplicates carry the source's phase versions + languages; brand-new templates start empty.
-    tpl.versions = {}; Object.keys(t.versions || {}).forEach(function (ph) { tpl.versions[ph] = copyQuestions(t.versions[ph], tpl.id + '-' + ph.toLowerCase()); });
-    tpl.langs = (t.langs || []).slice(); ensureVersions(tpl);
+  // New template: no phases set up yet. Duplicate (src): each phase's live
+  // version (else its draft) becomes a draft of the copy — nothing is live.
+  function createTemplate(t, actor, src) {
+    var now = Date.now();
+    var tpl = { id: 'tpl-' + now, title: t.title, audience: t.audience, desc: t.desc || '', createdAt: now, createdBy: actor || 'Tilli Team',
+      updatedAt: now, updatedBy: actor || 'Tilli Team', archived: false, langs: src ? (src.langs || []).slice() : [], slots: {} };
+    if (src) TPL_PHASES.forEach(function (ph) {
+      var from = liveVersion(src, ph) || slotOf(src, ph).draft;
+      if (from) slotOf(tpl, ph).draft = { questions: copyQuestions(from.questions, tpl.id + '-' + ph.toLowerCase()), from: null, updatedAt: now, updatedBy: actor || 'Tilli Team' };
+    });
+    syncTemplate(tpl);
     TEMPLATES.unshift(tpl);
     return tpl;
   }
-  function publishTemplate(id, publish, actor) {
-    var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
-    t.status = publish ? 'Published' : 'Draft';
-    if (publish) t.publishedAt = Date.now();
-    touchTemplate(t, actor); return t;
+  function tplById(id) { return TEMPLATES.find(function (x) { return x.id === id; }); }
+  // Start (or keep) a draft of a phase — a copy of the live version, or empty.
+  function startDraft(id, ph, actor) {
+    var t = tplById(id); if (!t) return null;
+    var slot = slotOf(t, ph);
+    if (!slot.draft) {
+      var lv = liveVersion(t, ph);
+      slot.draft = { questions: lv ? copyQuestions(lv.questions, t.id + '-' + ph.toLowerCase() + '-' + Date.now().toString(36)) : [], from: lv ? lv.v : null, updatedAt: Date.now(), updatedBy: actor || 'Tilli Team' };
+      syncTemplate(t);
+    }
+    return slot.draft;
+  }
+  // Replace a phase's draft with a copy of another phase (its live version, else its draft).
+  function copyPhaseIntoDraft(id, ph, srcPh, actor) {
+    var t = tplById(id); if (!t) return null;
+    var src = liveVersion(t, srcPh) || slotOf(t, srcPh).draft; if (!src) return null;
+    var slot = slotOf(t, ph);
+    slot.draft = { questions: copyQuestions(src.questions, t.id + '-' + ph.toLowerCase() + '-' + Date.now().toString(36)), from: slot.draft ? slot.draft.from : null, updatedAt: Date.now(), updatedBy: actor || 'Tilli Team' };
+    syncTemplate(t); touchTemplate(t, actor); return slot.draft;
+  }
+  // Draft → the next version, which becomes live for NEW deployments
+  // (windows already running keep the version they started with).
+  function publishDraft(id, ph, actor) {
+    var t = tplById(id); if (!t) return null;
+    var slot = slotOf(t, ph); if (!slot.draft) return null;
+    var ver = { v: slot.versions.length + 1, questions: slot.draft.questions, publishedAt: Date.now(), publishedBy: actor || 'Tilli Team', note: '' };
+    slot.versions.push(ver); slot.draft = null;
+    syncTemplate(t); touchTemplate(t, actor); return ver;
+  }
+  function discardDraft(id, ph, actor) {
+    var t = tplById(id); if (!t) return;
+    slotOf(t, ph).draft = null; syncTemplate(t); touchTemplate(t, actor);
+  }
+  // An old version comes back as the draft (replacing any draft in progress).
+  function restoreVersion(id, ph, v, actor) {
+    var t = tplById(id); if (!t) return null;
+    var slot = slotOf(t, ph), old = slot.versions.find(function (x) { return x.v === v; }); if (!old) return null;
+    slot.draft = { questions: copyQuestions(old.questions, t.id + '-' + ph.toLowerCase() + '-r' + Date.now().toString(36)), from: v, restoredFrom: v, updatedAt: Date.now(), updatedBy: actor || 'Tilli Team' };
+    syncTemplate(t); touchTemplate(t, actor); return slot.draft;
   }
   function archiveTemplate(id, on, actor) {
     var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
     t.archived = !!on; touchTemplate(t, actor); return t;
-  }
-  // phase|audience → id of the newest published, non-archived template.
-  // A template tagged with several phases competes in each of them.
-  function latestTemplateIds() {
-    var best = {};
-    TEMPLATES.forEach(function (t) {
-      if (t.archived || t.status !== 'Published') return;
-      t.phases.forEach(function (ph) {
-        var k = ph + '|' + t.audience, cur = best[k];
-        if (!cur || (t.publishedAt || 0) > (cur.publishedAt || 0)) best[k] = t;
-      });
-    });
-    var out = {}; Object.keys(best).forEach(function (k) { out[k] = best[k].id; });
-    return out;
   }
   function deleteTemplate(id) { var i = TEMPLATES.findIndex(function (x) { return x.id === id; }); if (i >= 0) TEMPLATES.splice(i, 1); }
   function createDeployment(d) {
@@ -1118,10 +1147,7 @@
   // ---- Super-Admin edit helpers (v1 has full access; these do the real write) ----
   function updateTemplate(id, patch, actor) {
     var t = TEMPLATES.find(function (x) { return x.id === id; }); if (!t) return null;
-    var wasPublished = t.status === 'Published';
-    ['title', 'audience', 'status', 'desc'].forEach(function (k) { if (patch[k] != null) t[k] = patch[k]; });
-    if (patch.phases || patch.phase) { setTemplatePhases(t, patch.phases || [patch.phase]); ensureVersions(t); }
-    if (!wasPublished && t.status === 'Published') t.publishedAt = Date.now();
+    ['title', 'audience', 'desc'].forEach(function (k) { if (patch[k] != null) t[k] = patch[k]; });
     touchTemplate(t, actor);
     return t;
   }
@@ -1320,8 +1346,9 @@
       history: historyAcrossSchools, lastChange: lastChange,
       // §9 write helpers (gated in the client, computed here)
       createGroup: createGroup, createSchool: createSchool,
-      createTemplate: createTemplate, publishTemplate: publishTemplate, deleteTemplate: deleteTemplate,
-      archiveTemplate: archiveTemplate, latestTemplateIds: latestTemplateIds, newQuestion: newQuestion, touchTemplate: touchTemplate,
+      createTemplate: createTemplate, deleteTemplate: deleteTemplate, archiveTemplate: archiveTemplate,
+      newQuestion: newQuestion, touchTemplate: touchTemplate, slotOf: slotOf, liveVersion: liveVersion, startDraft: startDraft,
+      copyPhaseIntoDraft: copyPhaseIntoDraft, publishDraft: publishDraft, discardDraft: discardDraft, restoreVersion: restoreVersion, TPL_PHASES: TPL_PHASES,
       createDeployment: createDeployment, endDeployment: endDeployment,
       setObsPhasePublish: setObsPhasePublish, setObsAccess: setObsAccess,
       setObsAccessAll: setObsAccessAll, obsAccessCount: obsAccessCount,

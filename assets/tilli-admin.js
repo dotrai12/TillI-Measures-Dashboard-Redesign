@@ -1841,6 +1841,7 @@
             (dep.assessments || []).forEach(function (x, xi) {
               if (!byId[x.id]) byId[x.id] = { id: x.id, name: x.name || x.id, aud: ak, mode: tlFixMode(ak, x.mode) };
               else if (x.mode) byId[x.id].mode = tlFixMode(ak, x.mode);
+              if (x.version) byId[x.id].version = x.version;
               var oi = off.indexOf(x.id); if (oi >= 0) off.splice(oi, 1);
               placed.push({ id: x.id, ordered: x.ordered != null ? !!x.ordered : laneOrdered, pos: x.pos != null ? x.pos : ai * 100 + xi });
             });
@@ -1944,14 +1945,27 @@
   // read exactly this.
   // A teacher's own surveys — counted once per teacher, not once per child.
   var TL_PER_TEACHER = ['Pre-training', 'Post-training'];
+  // The template behind a planner item: added from Templates (id 'tpl-…'), or
+  // the catalogue name matching a template's name ('EMT 1' → 'EMT · …').
+  function tlTemplateFor(it) {
+    if (String(it.id).indexOf('tpl-') === 0) { var byId = ORG.templates.find(function (t) { return 'tpl-' + t.id === it.id; }); if (byId) return byId; }
+    var n = String(it.name).toLowerCase();
+    return ORG.templates.find(function (t) { var full = t.title.toLowerCase(), short = full.split(' · ')[0]; return !t.archived && (n === full || n === short || n.indexOf(short + ' ') === 0); }) || null;
+  }
   function tlPersistDeploy(s, phase) {
     if (!tlUsesApi(s)) return;
-    var p = tlPlan(s, phase);
+    var p = tlPlan(s, phase), deps = window.TilliAPI.getDeployments(s.id);
     Object.keys(TL_AUD_LABEL).forEach(function (k) {
+      var prev = deps.find(function (x) { return x.phase === phase && x.audience === TL_AUD_LABEL[k]; });
       var list = tlRunning(p, k).map(function (id) {
         // pos = place in its location's sequence — chains can cross audiences.
         var it = p.byId[id], at = p.ord[it.mode].indexOf(id), o = { id: id, name: it.name, mode: it.mode, ordered: at >= 0 };
         if (at >= 0) o.pos = at;
+        // Version pin: an item already deployed keeps the version it started with;
+        // a newly deployed one takes the template's live version for this phase.
+        var was = prev && (prev.assessments || []).find(function (x) { return x.id === id; }), tpl = tlTemplateFor(it), lv = tpl && tplLive(tpl, phase);
+        var ver = was && was.version ? was.version : (lv ? lv.v : null);
+        if (ver) { o.version = ver; it.version = ver; }
         if (k === 'teacher' && TL_PER_TEACHER.indexOf(it.name) >= 0) o.perTeacher = true;
         return o;
       });
@@ -2039,6 +2053,7 @@
       return '<div class="dep-node md-' + it.mode + (tlIsCheckin(it) ? ' is-checkin' : '') + '" draggable="true" data-item="' + esc(id) + '" title="' + esc(tip) + '">' +
         (n ? '<span class="dep-ord">' + n + '</span>' : '') +
         '<span class="dep-node-name">' + esc(it.name) + '</span>' +
+        (it.version ? '<span class="dep-ver" title="Deployed with v' + it.version + ' of this template — this window keeps it even if a newer version is published">v' + it.version + '</span>' : '') +
         '<span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_CHIP[it.aud]) + '</span>' +
         '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Options for ' + esc(it.name) + '">⋯</button></div>';
     };
@@ -2270,13 +2285,13 @@
   // "+ Add assessment" — put one assessment (from Templates) into a phase. Where
   // it runs follows its audience; it joins the end of that audience's row.
   function openAddAssessment(d) {
-    var s = d.school, latest = ORG.server.latestTemplateIds();
-    var tpls = ORG.templates.filter(function (t) { return !t.archived && t.status === 'Published' && TL_AUD_KEY[t.audience]; })
-      .sort(function (a, b) { return (tplLatestIn(b, latest).length > 0) - (tplLatestIn(a, latest).length > 0) || a.title.localeCompare(b.title); });
-    if (!tpls.length) { toast('No published templates to add — publish one in Templates first.'); return; }
+    var s = d.school;
+    var tpls = ORG.templates.filter(function (t) { return !t.archived && tplPhases(t).length && TL_AUD_KEY[t.audience]; })
+      .sort(function (a, b) { return a.title.localeCompare(b.title); });
+    if (!tpls.length) { toast('Nothing is live yet — publish a phase of a template in Templates first.'); return; }
     var phOpts = TL_PHASES.map(function (ph) { var st = tlPhaseStatus(s, ph).st; return '<option value="' + ph + '"' + (ph === TL_TAB[s.id] ? ' selected' : '') + '>' + ph + ' — ' + TL_ST_LABEL[st] + '</option>'; }).join('');
-    var tOpts = tpls.map(function (t) { var L = tplLatestIn(t, latest).length;
-      return '<option value="' + esc(t.id) + '" data-aud="' + esc(t.audience) + '" data-phases="' + esc(tplPhases(t).join(',')) + '">' + esc(t.title) + ' · ' + esc(t.audience) + (L ? ' · ★ Latest' : '') + '</option>'; }).join('');
+    var tOpts = tpls.map(function (t) {
+      return '<option value="' + esc(t.id) + '" data-aud="' + esc(t.audience) + '" data-phases="' + esc(tplPhases(t).join(',')) + '">' + esc(t.title) + ' · ' + esc(t.audience) + '</option>'; }).join('');
     openModal('Add assessment', '<p class="tl-muted">Add an assessment to one phase at ' + esc(s.name) + '. It goes at the end of its audience’s row.</p><div class="tl-stack">' +
       '<label class="field">Phase<select class="select" id="aa-phase">' + phOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="aa-tpl">' + tOpts + '</select></label>' +
@@ -2284,6 +2299,7 @@
       '<label class="field">Order<select class="select" id="aa-grp"><option value="order">In order — after the last one in that place’s sequence</option><option value="any">Any time — open as soon as the phase is live</option></select></label>' +
       '<p class="tl-muted" id="aa-note"></p></div>', function (close) {
         var phase = document.getElementById('aa-phase').value, sel = document.getElementById('aa-tpl'), o = sel.options[sel.selectedIndex];
+        if (o.dataset.phases.split(',').indexOf(phase) < 0) { toast('That template has no live ' + phase + ' version yet.'); return false; }
         var ak = TL_AUD_KEY[o.dataset.aud], mode = tlFixMode(ak, document.getElementById('aa-mode').value), p = tlPlan(s, phase);
         var id = 'tpl-' + sel.value;
         if (tlRunning(p, ak).indexOf(id) >= 0) { toast('That assessment is already in ' + phase + '.'); return false; }
@@ -2304,8 +2320,8 @@
         md.disabled = TL_WHERE[ak].length === 1; md.value = tlFixMode(ak, md.value);
         if (ak !== lastAud) { gr.value = TL_CHAIN_DEFAULT[ak]; lastAud = ak; }   // the audience's usual group
         var n = p.ord[tlFixMode(ak, md.value)].length, ordered = gr.value === 'order';
-        var tagged = o.dataset.phases.split(',');
-        note.textContent = (tagged.indexOf(ph.value) < 0 ? 'This template is tagged for ' + tagged.join(', ') + ', not ' + ph.value + '. ' : '') +
+        var tagged = o.dataset.phases.split(','), t0 = ORG.templates.find(function (x) { return x.id === sel.value; }), lv0 = t0 && tplLive(t0, ph.value);
+        note.textContent = (lv0 ? 'Uses ' + ph.value + ' v' + lv0.v + '. ' : 'No live ' + ph.value + ' version yet (live: ' + tagged.join(', ') + ') — publish one in Templates first. ') +
           TL_AUD_SHORT[ak] + ' assessments run ' + TL_WHERE_RULE[ak].toLowerCase() + '. ' +
           (ak === 'direct' ? 'Here ' + TL_DIRECT_WHO[md.value] + '. ' : '') +
           (ordered ? 'It will be #' + (n + 1) + ' ' + TL_WHERE_LABEL[tlFixMode(ak, md.value)].toLowerCase() + (n ? ', opening once #' + n + ' is done.' : ', opening first.') : 'It’s open any time, alongside the others.') +
@@ -3060,24 +3076,21 @@
   function whereText(aud) { var w = WHERE_BY_AUD[aud] || ['school']; return w.length > 1 ? 'At school or home' : (w[0] === 'home' ? 'At home' : 'At school'); }
 
   // "Latest" / "Older version" — only for published, non-archived templates.
-  // A template is tagged with any set of phases (chosen in its editor).
+  // A template has three phase slots (Baseline / Midline / Endline), each with
+  // its own published versions and at most one draft (ORG.server.slotOf).
+  // tplPhases(t) = the phases with a live version (what can be deployed).
   var TPL_PHASE_LIST = ['Baseline', 'Midline', 'Endline'];
-  function tplPhases(t) { return t.phases || [t.phase]; }
-  function tplPhaseText(t) { var ph = tplPhases(t); return ph.length === TPL_PHASE_LIST.length ? 'All phases' : ph.join(', '); }
-  // Phases where this template is the newest published one for its audience.
-  function tplLatestIn(t, latest) { return tplPhases(t).filter(function (ph) { return latest[ph + '|' + t.audience] === t.id; }); }
-  // Phase tick-boxes for the template editor / New template (read with readPhasePick).
-  function phasePickHtml(name, selected) {
-    return '<fieldset class="field tl-phasepick"><legend>Phases <span class="tl-muted">— pick every phase it can be used in</span></legend><div>' +
-      TPL_PHASE_LIST.map(function (ph) { return '<label><input type="checkbox" name="' + name + '" value="' + ph + '"' + (selected.indexOf(ph) >= 0 ? ' checked' : '') + '>' + ph + '</label>'; }).join('') + '</div></fieldset>';
-  }
-  function readPhasePick(name) { return [].slice.call(document.querySelectorAll('input[name="' + name + '"]:checked')).map(function (x) { return x.value; }); }
-  function tplVersionBadge(t, latest) {
-    if (t.archived || t.status !== 'Published') return '';
-    var inPh = tplLatestIn(t, latest);
-    return inPh.length
-      ? '<span class="ui-chip ok tl-latest" title="Newest published ' + esc(t.audience) + ' template for ' + esc(inPh.join(', ')) + ' — the one to deploy.">★ Latest</span>'
-      : '<span class="ui-chip muted" title="A newer ' + esc(t.audience) + ' template has been published for ' + esc(tplPhaseText(t)) + ' since.">Older version</span>';
+  function tplPhases(t) { return t.phases || []; }
+  function tplLive(t, ph) { return ORG.server.liveVersion(t, ph); }
+  function tplDraft(t, ph) { return ORG.server.slotOf(t, ph).draft; }
+  function tplCountQ(qs) { return (qs || []).filter(function (q) { return q.type !== 'section'; }).length; }
+  // One pill per phase: "Baseline v2" (live) · "Midline ✎" (draft only) · "Endline" (not set up).
+  function tplPhasePills(t) {
+    return '<span class="tl-phpills">' + TPL_PHASE_LIST.map(function (ph) {
+      var lv = tplLive(t, ph), dr = tplDraft(t, ph);
+      var tip = lv ? ph + ': v' + lv.v + ' is live' + (dr ? ' · a draft is in progress' : '') : dr ? ph + ': draft in progress — not live yet' : ph + ': not set up';
+      return '<span class="tl-phpill st-' + (lv ? 'live' : dr ? 'draft' : 'none') + '" title="' + esc(tip) + '">' + ph + (lv ? ' v' + lv.v : '') + (dr ? ' ✎' : '') + '</span>';
+    }).join('') + '</span>';
   }
   function fmtMs(ms) { return ms ? fmtJoined(ORG.iso(ms)) : '—'; }
   function tplMetaLine(t) {
@@ -3108,7 +3121,6 @@
   // List-view column sort, one state per table. key null = the default order.
   var tplSort = { tpl: { key: null, dir: 1 }, sg: { key: null, dir: 1 } };
   var TPL_SORT_DESC_FIRST = { history: 1, items: 1 };   // columns whose first click is newest / largest first
-  var TPL_PHASE_RANK = { Baseline: 1, Midline: 2, Endline: 3 };
   // Stable sort by it.sort[key]; empty values always sink to the bottom.
   function sortTplItems(arr, st) {
     if (!st.key) return arr;
@@ -3131,9 +3143,9 @@
     var arch = params.view === 'archived';
     var asList = tplLayout === 'list';
     var counts = { active: ORG.templates.filter(function (t) { return !t.archived; }).length, archived: ORG.templates.filter(function (t) { return t.archived; }).length };
-    var list = ORG.templates.filter(function (t) { return (arch ? t.archived : !t.archived) && (!stF || t.status === stF); });
-    var latest = ORG.server.latestTemplateIds();
-    var banner = stF ? '<div class="tl-filterbanner">Filtered to <b>' + esc(stF) + '</b> templates · <button class="btn-link" id="tpl-clear">clear</button></div>' : '';
+    // ?status=Draft (Control Room card) = templates with a phase draft waiting to be published.
+    var list = ORG.templates.filter(function (t) { return (arch ? t.archived : !t.archived) && (stF !== 'Draft' || t.hasDraft); });
+    var banner = stF ? '<div class="tl-filterbanner">Filtered to templates with a <b>draft</b> waiting to be published · <button class="btn-link" id="tpl-clear">clear</button></div>' : '';
     // One item model, rendered as a card (grid) or a table row (list).
     // { aud, badges, title, desc, meta, foot, action, archived }
     var items = [];
@@ -3143,63 +3155,58 @@
     if (!stF && !arch) {
       var obs = ORG.observation;
       var pub = obs.phases.filter(function (p) { return p.published; }).length;
-      items.push({ aud: 'Teacher', open: 'data-obsedit', badges: statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn'),
+      var obsPills = '<span class="tl-phpills">' + obs.phases.map(function (x, i) {
+        return '<span class="tl-phpill st-' + (x.published ? 'live' : 'none') + '" title="' + esc(x.label) + (x.published ? ' — published' : ' — not published') + '">' + TPL_PHASE_LIST[i] + '</span>'; }).join('') + '</span>';
+      items.push({ aud: 'Teacher', open: 'data-obsedit', badges: '',
         title: 'Teacher Observation Form', desc: obs.questions.length + '-item shared question bank, published per phase. Deploy from Deployments.',
-        meta: '', foot: 'Pre · Mid · Post',
+        meta: '', foot: obsPills,
         action: '<button class="tl-rowact" data-obsedit title="Edit the observation form — questions and which phases are published" aria-label="Edit Teacher Observation Form">' + ICONS.edit + '</button>',
-        sort: { title: 'Teacher Observation Form', aud: 'Teacher', phase: 0, status: pub ? 1 : 3, history: null } });
+        sort: { title: 'Teacher Observation Form', aud: 'Teacher', history: null } });
     }
     // Teacher Reflection Questions: the one-time onboarding reflection, edited in
     // its own screen (SCREEN.reflection). Not deployed — teachers get it on first login.
     var reflCfg = (!stF && !arch && window.TilliAPI && window.TilliAPI.getReflectionConfig) ? window.TilliAPI.getReflectionConfig() : null;
     if (reflCfg) {
       var rqN = (reflCfg.questions || []).length, rcN = (reflCfg.cats || []).length;
-      items.push({ aud: 'Teacher', open: 'data-refledit', badges: statusPill(rqN + ' questions', rqN ? 'ok' : 'warn'),
+      items.push({ aud: 'Teacher', open: 'data-refledit', badges: '',
         title: 'Teacher Reflection Questions', desc: 'One-time self-reflection every teacher completes during dashboard onboarding — ' + rqN + ' questions across ' + rcN + ' categories.',
-        meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: 'Onboarding · not deployed',
+        meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: '<span class="tl-phnote">Onboarding · ' + rqN + ' questions · not deployed</span>',
         action: '<button class="tl-rowact" data-refledit title="Edit the reflection questions" aria-label="Edit Teacher Reflection Questions">' + ICONS.edit + '</button>',
-        sort: { title: 'Teacher Reflection Questions', aud: 'Teacher', phase: 0, status: rqN ? 1 : 3, history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
+        sort: { title: 'Teacher Reflection Questions', aud: 'Teacher', history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
     }
     list.forEach(function (t) {
       items.push({ aud: t.audience, archived: t.archived, open: 'data-tplopen="' + t.id + '"',
-        badges: tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')),
-        title: t.title, desc: t.desc, meta: tplMetaLine(t),
-        foot: esc(tplPhaseText(t)) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span>',
-        action: '<button class="tl-rowact" data-tpl="' + t.id + '" title="Edit — also duplicate, publish, archive or delete" aria-label="Edit ' + esc(t.title) + '">' + ICONS.edit + '</button>',
-        // status rank: ★ Latest · Published · Older version · Draft · Archived
-        // phase: its earliest phase (ties keep the default order)
-        sort: { title: t.title, aud: t.audience, phase: Math.min.apply(null, tplPhases(t).map(function (ph) { return TPL_PHASE_RANK[ph] != null ? TPL_PHASE_RANK[ph] : 9; })),
-          status: t.archived ? 4 : t.status !== 'Published' ? 3 : tplLatestIn(t, latest).length ? 0 : 2,
-          history: +new Date(t.updatedAt || t.createdAt) || null } });
+        badges: t.archived ? statusPill('Archived', 'muted') : '',
+        title: t.title, desc: t.desc, meta: tplMetaLine(t), foot: tplPhasePills(t),
+        action: '<button class="tl-rowact" data-tpl="' + t.id + '" title="Edit details, duplicate, archive or delete" aria-label="Options for ' + esc(t.title) + '">' + ICONS.edit + '</button>',
+        sort: { title: t.title, aud: t.audience, history: +new Date(t.updatedAt || t.createdAt) || null } });
     });
-    function tplName(it) { return '<button type="button" class="tl-tpl-name" ' + it.open + ' title="Open — see and edit every question">' + esc(it.title) + '</button>'; }
+    function tplName(it) { return '<button type="button" class="tl-tpl-name" ' + it.open + ' title="Open — pick a phase to see or edit its questions">' + esc(it.title) + '</button>'; }
     function tplCard(it) {
       return '<div class="tl-tpl-card' + (it.archived ? ' is-archived' : '') + '"><div class="tt-top">' + audChip(it.aud) +
-        '<span class="tt-badges">' + it.badges + '</span></div>' +
+        (it.badges ? '<span class="tt-badges">' + it.badges + '</span>' : '') + '</div>' +
         '<div class="tt-title">' + tplName(it) + '</div><div class="tt-desc">' + esc(it.desc) + '</div>' +
         (it.meta ? '<div class="tt-meta">' + it.meta + '</div>' : '') +
         '<div class="tt-foot"><span class="tt-phase">' + it.foot + '</span>' + it.action + '</div></div>';
     }
     function tplRow(it) {
       return '<tr' + (it.archived ? ' class="is-archived"' : '') + '><td class="name">' + tplName(it) + '<small>' + esc(it.desc) + '</small></td>' +
-        '<td>' + audChip(it.aud) + '</td><td>' + it.foot + '</td>' +
-        '<td><span class="tt-badges">' + it.badges + '</span></td>' +
+        '<td>' + audChip(it.aud) + (it.badges ? ' ' + it.badges : '') + '</td><td>' + it.foot + '</td>' +
         '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + it.action + '</td></tr>';
     }
     var empty = '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>';
     var tplView = !items.length ? empty : asList
-      ? '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820 tl-tpl-table"><thead><tr>' +
+      ? '<div class="ui-tablewrap"><table class="ui-table mw-820 tl-tpl-table"><thead><tr>' +
           sortTh('tpl', 'title', 'Template', 'Sort by template name') + sortTh('tpl', 'aud', 'Audience', 'Sort by audience') +
-          sortTh('tpl', 'phase', 'Phase · where', 'Sort by phase — Baseline, Midline, Endline') +
-          sortTh('tpl', 'status', 'Status', 'Sort by status — ★ Latest, Published, Older version, Draft, Archived') +
+          '<th title="Each phase: v = the live version, ✎ = a draft in progress, plain = not set up">Phases</th>' +
           sortTh('tpl', 'history', 'History', 'Sort by last edited (newest first on the first click)') + '<th></th></tr></thead><tbody>' +
-          sortTplItems(items, tplSort.tpl).map(tplRow).join('') + '</tbody></table></div></div>'
+          sortTplItems(items, tplSort.tpl).map(tplRow).join('') + '</tbody></table></div>'
       : '<div class="tl-tpl-grid">' + items.map(tplCard).join('') + '</div>';
     // Self-Guided assessments live here too: gamified instruments (EMT, Hearts &
     // Flowers, Memory Game) shown as their own section under the template grid.
     var games = (stF || arch) ? [] : ORG.selfGuided;
     var sgView = !games.length ? '' : asList
-      ? '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-760 tl-tpl-table"><thead><tr>' +
+      ? '<div class="ui-tablewrap"><table class="ui-table mw-760 tl-tpl-table"><thead><tr>' +
           sortTh('sg', 'title', 'Instrument', 'Sort by instrument name') + '<th>Skills</th>' +
           sortTh('sg', 'items', 'Items', 'Sort by number of items (most first on the first click)') +
           sortTh('sg', 'status', 'Status', 'Sort by status — Published first') + '<th></th></tr></thead><tbody>' +
@@ -3208,7 +3215,7 @@
             return '<tr><td class="name">' + esc(g.name) + '<small>' + esc(g.full) + ' — ' + esc(g.desc) + '</small></td><td>' + skillTagsHtml(g.skills) + '</td>' +
               '<td>' + g.questions + '</td><td>' + statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</td>' +
               '<td class="r"><button class="tl-rowact" data-manage="' + g.id + '" title="Manage this instrument" aria-label="Manage ' + esc(g.name) + '">' + ICONS.settings + '</button></td></tr>';
-          }).join('') + '</tbody></table></div></div>'
+          }).join('') + '</tbody></table></div>'
       : '<div class="tl-sg-grid">' + games.map(function (g) {
           return '<div class="tl-sg-card"><div class="sg-top"><div><div class="sg-name">' + esc(g.name) + '</div><div class="sg-full">' + esc(g.full) + '</div></div>' +
             statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</div>' +
@@ -3220,7 +3227,7 @@
     var layoutSeg = '<div class="ui-seg tl-layoutseg" role="group" aria-label="Layout">' +
       '<button class="' + (asList ? '' : 'on') + '" data-tpllayout="grid" aria-pressed="' + !asList + '" title="Grid — one card per template">' + ICONS.grid + '<span>Grid</span></button>' +
       '<button class="' + (asList ? 'on' : '') + '" data-tpllayout="list" aria-pressed="' + asList + '" title="List — one row per template, easier to scan and compare">' + ICONS.list + '<span>List</span></button></div>';
-    body.innerHTML = screenHead('Templates', items.length + ' assessment templates. The newest published template for each phase + audience is marked Latest — deploy that one.', '<button class="btn btn-primary btn-sm" data-new>+ New template</button>') +
+    body.innerHTML = screenHead('Templates', items.length + ' templates. Open one and pick a phase — Baseline, Midline or Endline — to see or edit its questions.', '<button class="btn btn-primary btn-sm" data-new>+ New template</button>') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (!arch ? ' on' : '') + '" data-tplview="">Active <b>' + counts.active + '</b></button>' +
         '<button class="ui-tab' + (arch ? ' on' : '') + '" data-tplview="archived" title="Archived templates are hidden from new deployments but kept for reference.">Archived <b>' + counts.archived + '</b></button>' +
@@ -3279,9 +3286,8 @@
     eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>',
   };
-  // The phase version being viewed: the builder's pick for this template, else its first phase.
-  function tbPhaseOf(t) { return tbState.id === t.id && tbState.phase && tplPhases(t).indexOf(tbState.phase) >= 0 ? tbState.phase : tplPhases(t)[0]; }
-  function tbList(t, ph) { var v = t.versions || (t.versions = {}); return v[ph || tbPhaseOf(t)] || (v[ph || tbPhaseOf(t)] = []); }
+  // The builder edits a phase's DRAFT (tbState.phase). Live and old versions are read-only (tbVersionView).
+  function tbList(t, ph) { var d = tplDraft(t, ph || tbState.phase); return d ? d.questions : []; }
   // Questions only (Section Breaks aren't counted or numbered).
   function tbQuestions(t, ph) { return tbList(t, ph).filter(function (q) { return q.type !== 'section'; }); }
   // Text in the language being edited: the original, or its translation.
@@ -3299,9 +3305,9 @@
     var open = tbState.open[q.id], ph = function (f) { return tbState.lang ? ' placeholder="' + esc(q[f] || '') + '"' : ''; };
     var head = '<div class="tb-card-h">' +
       '<span class="tb-drag" data-drag title="Drag to reorder">' + TB_IC.drag + '</span>' +
-      '<span class="tb-swatch"></span><span class="tb-type">' + TB_TYPES[q.type] + '</span>' + (num ? '<span class="tb-num">Q' + num + '</span>' : '') +
-      (open ? '' : '<button type="button" class="tb-peek" data-toggle title="Open">' + esc(q.title || 'Untitled') + '</button>') +
-      '<span class="tb-req" title="Respondents must answer before moving on">Required' + switchHtml(q.required, ' data-req aria-label="Required"') + '</span>' +
+      '<span class="tb-type">' + TB_TYPES[q.type] + '</span>' + (num ? '<span class="tb-num">Q' + num + '</span>' : '') +
+      (open ? '<span class="tb-req" title="Respondents must answer before moving on">Required' + switchHtml(q.required, ' data-req aria-label="Required"') + '</span>'
+        : '<button type="button" class="tb-peek" data-toggle title="Open">' + esc(q.title || 'Untitled') + '</button>' + (q.required ? '' : '<span class="tb-opt-tag">Optional</span>')) +
       '<button type="button" class="tb-ic tb-chev" data-toggle aria-expanded="' + !!open + '" aria-label="' + (open ? 'Collapse' : 'Expand') + '">' + TB_IC.chev + '</button>' +
       '<button type="button" class="tb-ic" data-qmenu aria-label="More options">' + TB_IC.kebab + '</button></div>';
     if (!open) return '<div class="tb-card t-' + q.type + ' is-closed" data-q="' + esc(q.id) + '">' + head + '</div>';
@@ -3309,16 +3315,20 @@
     var body = '<input class="tb-title" data-f="title" value="' + esc(tbTx(q, 'title')) + '"' + (tbState.lang ? ph('title') : ' placeholder="' + (q.type === 'section' ? 'Section title' : 'Question') + '"') + '>' +
       '<textarea class="tb-desc" data-f="desc" rows="2"' + (tbState.lang ? ph('desc') : ' placeholder="Description (optional)…"') + '>' + esc(tbTx(q, 'desc')) + '</textarea>';
     if (q.type === 'mc') {
-      body += '<div class="tb-label">Answer Options</div><div class="tb-opts">' + q.options.map(function (o, i) {
-        return '<div class="tb-opt"><span class="tb-radio" aria-hidden="true"></span>' +
+      var correct = q.scoring === 'correct';
+      body += '<div class="tb-label">Answer Options' + (correct ? '<span class="tb-label-hint">tap ○ to mark the correct answer</span>' : '') + '</div><div class="tb-opts">' + q.options.map(function (o, i) {
+        var mark = correct
+          ? '<button type="button" class="tb-radio is-btn' + (o.score === 1 ? ' on' : '') + '" data-correct="' + i + '" aria-pressed="' + (o.score === 1) + '" title="' + (o.score === 1 ? 'The correct answer' : 'Mark as the correct answer') + '"></button>'
+          : '<span class="tb-radio" aria-hidden="true"></span>';
+        return '<div class="tb-opt">' + mark +
           '<input class="input" data-opt="' + i + '" value="' + esc(tbOptTx(q, i)) + '" placeholder="' + esc(tbState.lang ? o.text : 'Option ' + (i + 1)) + '">' +
-          '<input class="input tb-score" type="number" step="1" data-score="' + i + '" value="' + (o.score == null ? '' : o.score) + '" placeholder="Score" title="Score for this option (blank = not scored)"' + (q.scoring === 'none' ? ' disabled' : '') + '>' +
+          (q.scoring === 'map' ? '<input class="input tb-score" type="number" step="1" data-score="' + i + '" value="' + (o.score == null ? '' : o.score) + '" placeholder="Score" title="Score for this option (blank = not scored)">' : '') +
           '<button type="button" class="tb-ic" data-optimg="' + i + '" title="' + (o.img ? 'Replace image' : 'Add an image to this option') + '">' + TB_IC.img + '</button>' +
           '<button type="button" class="tb-ic" data-optdel="' + i + '" title="Remove option"' + (q.options.length < 2 ? ' disabled' : '') + '>' + TB_IC.x + '</button>' +
           (o.img ? '<span class="tb-optimg"><img src="' + esc(o.img) + '" alt=""></span>' : '') + '</div>';
       }).join('') + '</div><button type="button" class="btn btn-outline btn-sm tb-addopt" data-addopt>+ Add Option</button>' +
       '<div class="tb-row"><div><b>Include “None of the Above”</b><span>Adds a final option that asks for a written answer</span></div>' + switchHtml(q.noneOfAbove, ' data-none aria-label="Include None of the Above"') + '</div>' +
-      '<div class="tb-row"><div><b>Timed Question</b><span>' + (q.timed ? 'The respondent has ' + q.seconds + ' seconds to answer' : 'No time limit') + '</span></div>' +
+      '<div class="tb-row"><div><b>Timed Question</b>' + (q.timed ? '<span>The respondent has ' + q.seconds + ' seconds to answer</span>' : '') + '</div>' +
         (q.timed ? '<label class="tb-secs">Seconds<input class="input" type="number" min="1" data-secs value="' + q.seconds + '"></label>' : '') + switchHtml(q.timed, ' data-timed aria-label="Timed question"') + '</div>';
     } else if (q.type === 'text') {
       body += '<div class="tb-textans">Short written answer</div>';
@@ -3352,6 +3362,18 @@
     return '<div class="tb-card t-' + q.type + '" data-q="' + esc(q.id) + '">' + head + '<div class="tb-body">' + body + '</div></div>';
   }
 
+  // An empty draft: offer to start from a copy of another phase (its live version, else its draft).
+  function tbEmptyVersion(t) {
+    var from = TPL_PHASE_LIST.filter(function (ph) { var src = tplLive(t, ph) || tplDraft(t, ph); return ph !== tbState.phase && src && src.questions.length; });
+    if (!from.length) return '<div class="ui-empty">No questions yet — add the first one below.</div>';
+    return '<div class="tb-empty"><b>' + esc(tbState.phase) + ' has no questions yet.</b>' +
+      '<span>Start from a copy of another phase — you can change it freely afterwards, and the original stays as it is.</span>' +
+      '<div class="tb-empty-act">' + from.map(function (ph) {
+        var lv = tplLive(t, ph), n = tplCountQ((lv || tplDraft(t, ph)).questions);
+        return '<button type="button" class="btn btn-outline btn-sm" data-copyfrom="' + ph + '">Copy from ' + ph + (lv ? ' v' + lv.v : ' draft') + ' · ' + n + ' question' + (n === 1 ? '' : 's') + '</button>';
+      }).join('') + '</div><span class="tb-empty-or">or add the first question below</span></div>';
+  }
+
   // Scoring Configuration tab: what each skill is built from.
   function tbScoringView(t) {
     var qs = tbQuestions(t), by = {}, unscored = [];
@@ -3367,55 +3389,143 @@
       (unscored.length ? '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Not scored (' + unscored.length + ')</h3><p class="ui-mod-note">No scoring rule, no option scores or no skills picked.</p></div></div><ul class="tb-unscored">' + unscored.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '');
   }
 
+  // #/template?id=          → pick a phase (tbPhasePicker)
+  // #/template?id=&phase=    → that phase's draft in the builder; no draft → its live version, read-only
+  // #/template?id=&phase=&v= → one published version, read-only (tbVersionView)
   SCREEN.template = function (params, body) {
     var t = ORG.templates.find(function (x) { return x.id === params.id; });
     if (!t) { body.innerHTML = crumbs([{ label: 'Templates', screen: 'templates' }, { label: 'Not found' }]) + '<div class="ui-empty">That template no longer exists.</div>'; wireCrumbs(body); return; }
     if (tbState.id !== t.id) tbState = { id: t.id, phase: null, tab: 'questions', lang: null, open: {} };
-    tbState.phase = tbPhaseOf(t);
-    tbList(t).forEach(function (q, i) { if (tbState.open[q.id] == null) tbState.open[q.id] = i < TB_OPEN_FIRST; });
     if (!t.langs) t.langs = [];
-    var qs = tbList(t) || [], n = 0, published = t.status === 'Published';
-    var nQ = tbQuestions(t).length;
-    var cards = qs.map(function (q, i) { return tbCard(t, q, i, q.type === 'section' ? 0 : ++n); }).join('');
+    var ph = TPL_PHASE_LIST.indexOf(params.phase) >= 0 ? params.phase : null;
+    if (!ph) { tbPhasePicker(t, body); return; }
+    tbState.phase = ph;
+    var draft = tplDraft(t, ph);
+    if (params.v || !draft) { if (params.v || tplLive(t, ph)) { tbVersionView(t, ph, params.v ? +params.v : tplLive(t, ph).v, body); return; } go('template', { id: t.id }); return; }
+    tbList(t).forEach(function (q, i) { if (tbState.open[q.id] == null) tbState.open[q.id] = i < TB_OPEN_FIRST; });
+    var qs = tbList(t), n = 0, slot = ORG.server.slotOf(t, ph), lv = tplLive(t, ph), nextV = slot.versions.length + 1;
+    // A small + between cards inserts a question at that spot.
+    var cards = qs.map(function (q, i) {
+      return (i ? '<div class="tb-ins"><button type="button" class="tb-ins-btn" data-ins="' + i + '" title="Add a question here" aria-label="Add a question between ' + (i) + ' and ' + (i + 1) + '">+</button></div>' : '') +
+        tbCard(t, q, i, q.type === 'section' ? 0 : ++n);
+    }).join('');
     var langs = '<div class="tb-langs"><button type="button" class="tb-lang' + (!tbState.lang ? ' on' : '') + '" data-lang="">English (Original)</button>' +
       t.langs.map(function (l) { return '<button type="button" class="tb-lang' + (tbState.lang === l ? ' on' : '') + '" data-lang="' + esc(l) + '">' + esc(l) + '</button>'; }).join('') +
       '<button type="button" class="tb-addlang" data-addlang>+ Add Language</button></div>';
     var allOpen = qs.length && qs.every(function (q) { return tbState.open[q.id]; });
+    var basis = slot.draft.restoredFrom ? 'Restored from v' + slot.draft.restoredFrom + '. ' : slot.draft.from ? 'Based on v' + slot.draft.from + '. ' : '';
     body.innerHTML =
-      '<div class="tb-head"><button type="button" class="tb-ic tb-back" data-back aria-label="Back to Templates" title="Back to Templates">' + TB_IC.back + '</button>' +
-        '<div class="tb-head-txt"><input class="tb-name" data-tname value="' + esc(t.title) + '" aria-label="Template name">' +
-          '<input class="tb-tdesc" data-tdesc value="' + esc(t.desc || '') + '" placeholder="Add a description…" aria-label="Template description">' +
-          '<div class="tl-tm-chips">' + audChip(t.audience) + '<span class="tl-tm-phase">' + esc(tplPhaseText(t)) + ' · ' + esc(whereText(t.audience)) + '</span>' +
-            statusPill(t.archived ? 'Archived' : t.status, t.archived ? 'muted' : published ? 'ok' : 'warn') + tplVersionBadge(t, ORG.server.latestTemplateIds()) +
-            '<button type="button" class="btn-link" data-details title="Audience, phases and status">Edit details</button><span class="tb-saved" id="tb-saved"></span></div></div>' +
+      '<div class="tb-head"><button type="button" class="tb-ic tb-back" data-back aria-label="Back to the phases" title="Back to ' + esc(t.title) + '">' + TB_IC.back + '</button>' +
+        '<div class="tb-head-txt"><span class="tb-crumb">' + esc(t.title) + '</span>' +
+          '<h1 class="tb-h1">' + ph + ' <span class="tl-phpill st-draft">Draft v' + nextV + '</span></h1>' +
+          '<span class="tb-sub">' + esc(basis) + (lv ? 'v' + lv.v + ' stays live — schools keep using it until you publish.' : 'Nothing is live for ' + ph + ' yet — publish to make it deployable.') +
+            ' <span class="tb-saved" id="tb-saved"></span></span></div>' +
         '<div class="tb-head-act"><button type="button" class="btn btn-outline btn-sm" data-csv>' + TB_IC.download + 'Download CSV</button>' +
           '<button type="button" class="btn btn-outline btn-sm" data-preview>' + TB_IC.eye + 'Preview</button>' +
-          (t.archived ? '' : published ? '<button type="button" class="btn btn-primary btn-sm" disabled title="Live for new deployments. Unpublish from More ⋮.">Published</button>'
-            : '<button type="button" class="btn btn-primary btn-sm" data-publish title="Make it available for new deployments">Publish</button>') +
-          '<button type="button" class="tb-ic" data-more aria-label="More actions" title="Duplicate, unpublish, archive or delete">' + TB_IC.kebab + '</button></div></div>' +
-      '<div class="tb-phases" role="tablist" aria-label="Phase version"><span class="tb-phases-l">Version</span>' + TPL_PHASE_LIST.map(function (ph) {
-        var tagged = tplPhases(t).indexOf(ph) >= 0, on = ph === tbState.phase;
-        return '<button type="button" role="tab" class="tb-ph' + (on ? ' on' : '') + '" data-tbphase="' + ph + '" aria-selected="' + on + '"' +
-          (tagged ? ' title="The ' + ph + ' version of this template — its own questions"' : ' disabled title="Not tagged for ' + ph + ' — add it in Edit details"') + '>' +
-          ph + (tagged ? ' <b>' + tbQuestions(t, ph).length + '</b>' : '') + '</button>';
-      }).join('') + '</div>' +
-      '<div class="tb-tabs" role="tablist"><button type="button" role="tab" class="tb-tab' + (tbState.tab === 'questions' ? ' on' : '') + '" data-tbtab="questions" aria-selected="' + (tbState.tab === 'questions') + '">Questions <b>' + nQ + '</b></button>' +
+          (slot.versions.length ? '<button type="button" class="btn btn-outline btn-sm" data-history>History (' + slot.versions.length + ')</button>' : '') +
+          (t.archived ? '' : '<button type="button" class="btn btn-primary btn-sm" data-publish title="Make this draft v' + nextV + ', live for new deployments">Publish v' + nextV + '</button>') +
+          '<button type="button" class="tb-ic" data-more aria-label="More actions" title="Discard this draft">' + TB_IC.kebab + '</button></div></div>' +
+      '<div class="tb-tabs" role="tablist"><button type="button" role="tab" class="tb-tab' + (tbState.tab === 'questions' ? ' on' : '') + '" data-tbtab="questions" aria-selected="' + (tbState.tab === 'questions') + '">Questions</button>' +
         '<button type="button" role="tab" class="tb-tab' + (tbState.tab === 'scoring' ? ' on' : '') + '" data-tbtab="scoring" aria-selected="' + (tbState.tab === 'scoring') + '">Scoring Configuration</button></div>' +
       (tbState.tab === 'scoring' ? tbScoringView(t) :
-        langs + (tbState.lang ? '<div class="tl-filterbanner">Translating into <b>' + esc(tbState.lang) + '</b> — type over the English shown in each field. Options, scores and settings are shared with the original.</div>' : '') +
-        (qs.length ? '<div class="tb-tools"><button type="button" class="btn-link" data-openall="' + (allOpen ? 0 : 1) + '">' + (allOpen ? 'Collapse all' : 'Expand all') + '</button></div>' : '') +
-        '<div class="tb-list" id="tb-list">' + (cards || '<div class="ui-empty">No questions yet — add the first one below.</div>') + '</div>' +
+        '<div class="tb-tools">' + langs + (qs.length ? '<button type="button" class="btn-link" data-openall="' + (allOpen ? 0 : 1) + '">' + (allOpen ? 'Collapse all' : 'Expand all') + '</button>' : '') + '</div>' +
+        (tbState.lang ? '<div class="tl-filterbanner">Translating into <b>' + esc(tbState.lang) + '</b> — type over the English shown in each field. Options, scores and settings are shared with the original.</div>' : '') +
+        '<div class="tb-list" id="tb-list">' + (cards || tbEmptyVersion(t)) + '</div>' +
         '<div class="tb-add"><span>Add</span><button type="button" class="btn btn-outline btn-sm" data-addq="mc">Multiple Choice</button>' +
           '<button type="button" class="btn btn-outline btn-sm" data-addq="text">Short Answer</button><button type="button" class="btn btn-outline btn-sm" data-addq="section">Section Break</button></div>') +
       '<input type="file" id="tb-file" hidden>';
     tbWire(t, params, body);
   };
 
+  // Step 1 of opening a template: pick the phase.
+  function tbPhasePicker(t, body) {
+    var cards = TPL_PHASE_LIST.map(function (ph) {
+      var slot = ORG.server.slotOf(t, ph), lv = tplLive(t, ph), dr = slot.draft;
+      var lines = (lv ? '<div class="tb-pc-line"><span class="tl-phpill st-live">Live v' + lv.v + '</span>' + tplCountQ(lv.questions) + ' questions · published ' + esc(fmtMs(lv.publishedAt)) + ' by ' + esc(lv.publishedBy) + '</div>' : '') +
+        (dr ? '<div class="tb-pc-line"><span class="tl-phpill st-draft">Draft v' + (slot.versions.length + 1) + '</span>' + tplCountQ(dr.questions) + ' questions · edited ' + esc(fmtMs(dr.updatedAt)) + ' by ' + esc(dr.updatedBy) + '</div>' : '') +
+        (!lv && !dr ? '<div class="tb-pc-line tl-muted">Not set up yet.</div>' : '');
+      var main = dr ? '<button type="button" class="btn btn-primary btn-sm" data-pc-open="' + ph + '">Continue draft</button>'
+        : lv ? '<button type="button" class="btn btn-primary btn-sm" data-pc-edit="' + ph + '" title="Start a draft from v' + lv.v + ' — v' + lv.v + ' stays live until you publish">Edit</button>'
+        : '<button type="button" class="btn btn-primary btn-sm" data-pc-edit="' + ph + '">Set up ' + ph + '</button>';
+      return '<div class="tb-pcard st-' + (lv ? 'live' : dr ? 'draft' : 'none') + '"><h3 class="tb-pc-h">' + ph + '</h3>' + lines +
+        '<div class="tb-pc-act">' + main + (lv ? '<button type="button" class="btn btn-outline btn-sm" data-pc-view="' + ph + '">View v' + lv.v + '</button>' : '') +
+        (slot.versions.length ? '<button type="button" class="btn-link" data-pc-hist="' + ph + '">History (' + slot.versions.length + ')</button>' : '') + '</div></div>';
+    }).join('');
+    body.innerHTML = crumbs([{ label: 'Templates', screen: 'templates' }, { label: t.title }]) +
+      screenHead(t.title, t.desc || '', '<button class="btn btn-outline btn-sm" id="tp-more" title="Duplicate, archive or delete">More ⋮</button>' +
+        '<button class="btn btn-outline btn-sm" id="tp-edit" title="Name, audience and description">Edit details</button>') +
+      '<div class="tl-tm-chips">' + audChip(t.audience) + '<span class="tl-tm-phase">' + esc(whereText(t.audience)) + '</span>' + (t.archived ? statusPill('Archived', 'muted') : '') + '</div>' +
+      '<p class="tb-pc-intro">Which phase do you want to work on? Each phase has its own questions and its own versions.</p>' +
+      '<div class="tb-pcards">' + cards + '</div>' +
+      '<p class="tl-muted tb-pc-note">Publishing a new version never changes a window that’s already running — it keeps the version it started with. New windows get the newest live version.</p>';
+    wireCrumbs(body);
+    body.querySelector('#tp-edit').addEventListener('click', function () { openTemplateEditor(t); });
+    body.querySelector('#tp-more').addEventListener('click', function () { openTemplateMenu(t.id); });
+    body.querySelectorAll('[data-pc-open]').forEach(function (b) { b.addEventListener('click', function () { go('template', { id: t.id, phase: b.dataset.pcOpen }); }); });
+    body.querySelectorAll('[data-pc-edit]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.startDraft(t.id, b.dataset.pcEdit, me.name); go('template', { id: t.id, phase: b.dataset.pcEdit }); }); });
+    body.querySelectorAll('[data-pc-view]').forEach(function (b) { b.addEventListener('click', function () { go('template', { id: t.id, phase: b.dataset.pcView, v: tplLive(t, b.dataset.pcView).v }); }); });
+    body.querySelectorAll('[data-pc-hist]').forEach(function (b) { b.addEventListener('click', function () { tbHistory(t, b.dataset.pcHist); }); });
+  }
+  // Every version of one phase, newest first: open a draft, view, or restore an old one.
+  function tbHistory(t, ph) {
+    var slot = ORG.server.slotOf(t, ph), lv = tplLive(t, ph);
+    var rows = (slot.draft ? '<div class="tb-hist-row"><span class="tl-phpill st-draft">Draft v' + (slot.versions.length + 1) + '</span><span>Edited ' + esc(fmtMs(slot.draft.updatedAt)) + ' by ' + esc(slot.draft.updatedBy) + '</span>' +
+        '<button type="button" class="btn-link" data-h-open>Open</button></div>' : '') +
+      slot.versions.slice().reverse().map(function (x) {
+        var live = lv && x.v === lv.v;
+        return '<div class="tb-hist-row"><span class="tl-phpill st-' + (live ? 'live' : 'none') + '">v' + x.v + (live ? ' · Live' : ' · Retired') + '</span>' +
+          '<span>' + tplCountQ(x.questions) + ' questions · published ' + esc(fmtMs(x.publishedAt)) + ' by ' + esc(x.publishedBy) + (x.note ? ' · ' + esc(x.note) : '') + '</span>' +
+          '<button type="button" class="btn-link" data-h-view="' + x.v + '">View</button>' + (live ? '' : '<button type="button" class="btn-link" data-h-restore="' + x.v + '">Restore</button>') + '</div>';
+      }).join('');
+    openModal(t.title + ' · ' + ph + ' history', '<div class="tb-hist">' + (rows || '<div class="ui-empty">Nothing published yet.</div>') + '</div>', null);
+    var close = function () { document.getElementById('tl-modal-root').innerHTML = ''; };
+    var ho = document.querySelector('[data-h-open]'); if (ho) ho.addEventListener('click', function () { close(); go('template', { id: t.id, phase: ph }); });
+    document.querySelectorAll('[data-h-view]').forEach(function (b) { b.addEventListener('click', function () { close(); go('template', { id: t.id, phase: ph, v: +b.dataset.hView }); }); });
+    document.querySelectorAll('[data-h-restore]').forEach(function (b) { b.addEventListener('click', function () { close(); tbRestore(t, ph, +b.dataset.hRestore); }); });
+  }
+  function tbRestore(t, ph, v) {
+    var slot = ORG.server.slotOf(t, ph);
+    gated({ title: 'Restore ' + ph + ' v' + v + '?', confirmLabel: 'Restore as draft',
+      body: '<p>A copy of v' + v + ' becomes the ' + ph + ' draft' + (slot.draft ? ', <b>replacing the draft in progress</b>' : '') + '. Nothing changes for schools until you publish it.</p>',
+      audit: { action: 'template.restore', entity: t.title + ' · ' + ph + ' v' + v, entityType: 'template' },
+      onConfirm: function () { ORG.server.restoreVersion(t.id, ph, v, me.name); toast('v' + v + ' restored as a draft.'); go('template', { id: t.id, phase: ph }); } });
+  }
+  // One published version, read-only: what respondents get, with scores and skills.
+  function tbVersionView(t, ph, v, body) {
+    var slot = ORG.server.slotOf(t, ph), ver = slot.versions.find(function (x) { return x.v === v; }), lv = tplLive(t, ph);
+    if (!ver) { go('template', { id: t.id }); return; }
+    var live = lv && lv.v === v, n = 0;
+    var qs = ver.questions.map(function (q) {
+      if (q.type === 'section') return '<div class="tb-ro-sec"><h4>' + esc(q.title) + '</h4>' + (q.desc ? '<p>' + esc(q.desc) + '</p>' : '') + '</div>';
+      var opts = q.type === 'mc' ? '<ul class="tb-ro-opts">' + q.options.map(function (o) {
+        var mark = q.scoring === 'correct' ? (o.score === 1 ? ' <span class="ui-chip ok">Correct</span>' : '') : (q.scoring === 'map' && o.score != null ? ' <span class="tb-ro-score">' + o.score + '</span>' : '');
+        return '<li>' + esc(o.text) + mark + '</li>'; }).join('') + '</ul>' : '<div class="tb-textans">Short written answer</div>';
+      return '<div class="tb-ro-q"><b>Q' + (++n) + ' · ' + esc(q.title) + '</b>' + (q.desc ? '<p>' + esc(q.desc) + '</p>' : '') + opts +
+        '<div class="tb-ro-meta">' + [TB_SCORING[q.scoring], q.timed ? '⏱ ' + q.seconds + 's' : '', q.required ? '' : 'Optional', q.cond ? 'Conditional' : ''].filter(Boolean).map(esc).join(' · ') +
+        (q.skills.length ? ' · ' + q.skills.map(esc).join(', ') : '') + '</div></div>';
+    }).join('');
+    var act = live ? (slot.draft ? '<button type="button" class="btn btn-primary btn-sm" data-vv-draft>Continue draft</button>' : '<button type="button" class="btn btn-primary btn-sm" data-vv-edit title="Start a draft from v' + v + ' — it stays live until you publish">Edit</button>')
+      : '<button type="button" class="btn btn-primary btn-sm" data-vv-restore>Restore as draft</button>';
+    body.innerHTML =
+      '<div class="tb-head"><button type="button" class="tb-ic tb-back" data-back aria-label="Back to the phases" title="Back to ' + esc(t.title) + '">' + TB_IC.back + '</button>' +
+        '<div class="tb-head-txt"><span class="tb-crumb">' + esc(t.title) + '</span>' +
+          '<h1 class="tb-h1">' + ph + ' <span class="tl-phpill st-' + (live ? 'live' : 'none') + '">v' + v + (live ? ' · Live' : ' · Retired') + '</span></h1>' +
+          '<span class="tb-sub">Published ' + esc(fmtMs(ver.publishedAt)) + ' by ' + esc(ver.publishedBy) + (ver.note ? ' · ' + esc(ver.note) : '') + ' · read-only</span></div>' +
+        '<div class="tb-head-act"><button type="button" class="btn btn-outline btn-sm" data-history>History (' + slot.versions.length + ')</button>' + act + '</div></div>' +
+      '<div class="tb-ro">' + (qs || '<div class="ui-empty">This version has no questions.</div>') + '</div>';
+    body.querySelector('[data-back]').addEventListener('click', function () { go('template', { id: t.id }); });
+    body.querySelector('[data-history]').addEventListener('click', function () { tbHistory(t, ph); });
+    var e1 = body.querySelector('[data-vv-edit]'); if (e1) e1.addEventListener('click', function () { ORG.server.startDraft(t.id, ph, me.name); go('template', { id: t.id, phase: ph }); });
+    var e2 = body.querySelector('[data-vv-draft]'); if (e2) e2.addEventListener('click', function () { go('template', { id: t.id, phase: ph }); });
+    var e3 = body.querySelector('[data-vv-restore]'); if (e3) e3.addEventListener('click', function () { tbRestore(t, ph, v); });
+  }
+
   function tbWire(t, params, body) {
     var redraw = function () { SCREEN.template(params, body); };
     var savedT = null;
     function saved() {
       ORG.server.touchTemplate(t, me.name);
+      var d = tplDraft(t, tbState.phase); if (d) { d.updatedAt = Date.now(); d.updatedBy = me.name; }
       // One audit entry per editing visit, not one per keystroke.
       if (!tbState.logged) { tbState.logged = true; ORG.server.logAudit(me.name, 'template.edit', t.title, 'template'); }
       var el = body.querySelector('#tb-saved'); if (el) { el.textContent = 'Saved'; clearTimeout(savedT); savedT = setTimeout(function () { el.textContent = ''; }, 1500); }
@@ -3423,18 +3533,36 @@
     var qOf = function (el) { var c = el.closest('[data-q]'); return c ? tbList(t).find(function (q) { return q.id === c.dataset.q; }) : null; };
     var qIdx = function (q) { return tbList(t).indexOf(q); };
 
-    body.querySelector('[data-back]').addEventListener('click', function () { go('templates', {}); });
-    body.querySelector('[data-tname]').addEventListener('input', function (e) { if (e.target.value.trim()) { t.title = e.target.value; saved(); } });
-    body.querySelector('[data-tdesc]').addEventListener('input', function (e) { t.desc = e.target.value; saved(); });
-    body.querySelector('[data-details]').addEventListener('click', function () { openTemplateEditor(t); });
-    body.querySelector('[data-more]').addEventListener('click', function () { openTemplateMenu(t.id); });
+    var ph = tbState.phase, slot = ORG.server.slotOf(t, ph), nextV = slot.versions.length + 1, lv = tplLive(t, ph);
+    body.querySelector('[data-back]').addEventListener('click', function () { go('template', { id: t.id }); });
+    var hb = body.querySelector('[data-history]'); if (hb) hb.addEventListener('click', function () { tbHistory(t, ph); });
+    body.querySelector('[data-more]').addEventListener('click', function (e) {
+      closeItemMenu();
+      var pop = document.createElement('div'); pop.className = 'ui-menu dep-pop';
+      pop.innerHTML = '<button type="button" class="ui-menu-item danger" data-a="discard">Discard this draft</button>';
+      document.body.appendChild(pop); TL_POP = pop;
+      var r = e.currentTarget.getBoundingClientRect();
+      pop.style.top = (window.scrollY + r.bottom + 6) + 'px'; pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + 'px';
+      pop.addEventListener('click', function () {
+        closeItemMenu();
+        gated({ title: 'Discard the ' + ph + ' draft?', danger: true, confirmLabel: 'Discard draft',
+          body: '<p>Your unpublished changes to <b>' + esc(t.title) + ' · ' + ph + '</b> are thrown away.' + (lv ? ' v' + lv.v + ' stays live.' : '') + '</p>',
+          audit: { action: 'template.discard', entity: t.title + ' · ' + ph, entityType: 'template' },
+          onConfirm: function () { ORG.server.discardDraft(t.id, ph, me.name); toast('Draft discarded.'); go('template', { id: t.id }); } });
+      });
+      setTimeout(function () { document.addEventListener('mousedown', onPopOutside); document.addEventListener('keydown', onPopKey); }, 0);
+    });
     var pb = body.querySelector('[data-publish]'); if (pb) pb.addEventListener('click', function () {
       if (!tbQuestions(t).length) { toast('Add at least one question before publishing.'); return; }
-      ORG.server.publishTemplate(t.id, true, me.name); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → Published', 'template'); toast('Published.'); redraw();
+      gated({ title: 'Publish ' + ph + ' v' + nextV + '?', confirmLabel: 'Publish v' + nextV,
+        body: '<p><b>' + esc(t.title) + ' · ' + ph + ' v' + nextV + '</b> becomes the live version for new deployments.</p>' +
+          (lv ? '<p class="tl-muted">Windows already running keep v' + lv.v + ' until they end, so every child in a window answers the same questions. v' + lv.v + ' moves to History.</p>' : ''),
+        audit: { action: 'template.publish', entity: t.title + ' · ' + ph + ' v' + nextV, entityType: 'template' },
+        onConfirm: function () { ORG.server.publishDraft(t.id, ph, me.name); toast(ph + ' v' + nextV + ' is live.'); go('template', { id: t.id }); } });
     });
     body.querySelector('[data-csv]').addEventListener('click', function () {
       var n = 0;
-      downloadCsv((t.title + ' ' + tbState.phase).replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '-questions.csv', ['#', 'Type', 'Question', 'Description', 'Options (score)', 'Required', 'Timed (s)', 'Scoring', 'Skills', 'Shown if'],
+      downloadCsv((t.title + ' ' + tbState.phase + ' draft').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '-questions.csv', ['#', 'Type', 'Question', 'Description', 'Options (score)', 'Required', 'Timed (s)', 'Scoring', 'Skills', 'Shown if'],
         tbList(t).map(function (q) {
           var src = q.cond && tbList(t).find(function (x) { return x.id === q.cond.q; });
           return [q.type === 'section' ? '' : 'Q' + (++n), TB_TYPES[q.type], q.title, q.desc, (q.options || []).map(function (o) { return o.text + (o.score == null ? '' : ' (' + o.score + ')'); }).join(' | '),
@@ -3454,7 +3582,12 @@
           (q.timed ? '<span class="ui-chip info">⏱ ' + q.seconds + 's</span>' : '') + (q.cond ? '<span class="ui-chip muted">Conditional</span>' : '') + opts + '</div>';
       }).join('') + '</div>', null);
     });
-    body.querySelectorAll('[data-tbphase]').forEach(function (b) { b.addEventListener('click', function () { if (!b.disabled) { tbState.phase = b.dataset.tbphase; redraw(); } }); });
+    body.querySelectorAll('[data-copyfrom]').forEach(function (b) { b.addEventListener('click', function () {
+      var src = b.dataset.copyfrom;
+      ORG.server.copyPhaseIntoDraft(t.id, ph, src, me.name);
+      ORG.server.logAudit(me.name, 'template.copyversion', t.title + ': ' + src + ' → ' + ph, 'template');
+      saved(); toast('Copied ' + tbQuestions(t, ph).length + ' questions from ' + src + ' into ' + ph + '.'); redraw();
+    }); });
     body.querySelectorAll('[data-tbtab]').forEach(function (b) { b.addEventListener('click', function () { tbState.tab = b.dataset.tbtab; redraw(); }); });
     body.querySelectorAll('[data-lang]').forEach(function (b) { b.addEventListener('click', function () { tbState.lang = b.dataset.lang || null; redraw(); }); });
     var al = body.querySelector('[data-addlang]'); if (al) al.addEventListener('click', function () {
@@ -3490,15 +3623,23 @@
       else if (el.hasAttribute('data-timed')) q.timed = el.checked;
       else if (el.hasAttribute('data-condq')) q.cond = el.value ? { q: el.value, opt: 0 } : null;
       else if (el.hasAttribute('data-condo')) q.cond.opt = +el.value;
-      else if (el.hasAttribute('data-scoring')) q.scoring = el.value;
+      else if (el.hasAttribute('data-scoring')) {
+        if (el.value === 'correct' && q.scoring !== 'correct') {
+          var best = -1, bs = null; q.options.forEach(function (o, i) { if (o.score != null && (bs == null || o.score > bs)) { bs = o.score; best = i; } });
+          q.options.forEach(function (o, i) { o.score = i === best ? 1 : 0; });
+        }
+        q.scoring = el.value;
+      }
       else return;
       saved(); redraw();
     });
     list.addEventListener('click', function (e) {
       var el = e.target.closest('button'); if (!el) return;
+      if (el.dataset.ins != null) { tbInsertMenu(el, t, +el.dataset.ins, saved, redraw, body); return; }
       var q = qOf(el); if (!q) return;
       if (el.hasAttribute('data-toggle')) { tbState.open[q.id] = !tbState.open[q.id]; redraw(); return; }
       if (el.hasAttribute('data-addopt')) { q.options.push({ text: '', score: null }); saved(); redraw(); var ins = body.querySelectorAll('[data-q="' + q.id + '"] [data-opt]'); if (ins.length) ins[ins.length - 1].focus(); return; }
+      if (el.dataset.correct != null) { q.options.forEach(function (o, i) { o.score = i === +el.dataset.correct ? 1 : 0; }); saved(); redraw(); return; }
       if (el.dataset.optdel != null) { q.options.splice(+el.dataset.optdel, 1); if (q.cond) q.cond.opt = 0; saved(); redraw(); return; }
       if (el.dataset.skill) { var k = el.dataset.skill, at = q.skills.indexOf(k); if (at >= 0) q.skills.splice(at, 1); else q.skills.push(k); saved(); redraw(); return; }
       if (el.dataset.mediadel != null) { q.media.splice(+el.dataset.mediadel, 1); saved(); redraw(); return; }
@@ -3528,6 +3669,23 @@
       dragId = null; saved(); redraw();
     });
     list.addEventListener('dragend', function () { dragId = null; list.querySelectorAll('.tb-card').forEach(function (x) { x.removeAttribute('draggable'); x.classList.remove('dragging', 'drop-before'); }); });
+  }
+  // + between cards: pick a type, insert it at that position, open and focus it.
+  function tbInsertMenu(btn, t, at, saved, redraw, body) {
+    closeItemMenu();
+    var pop = document.createElement('div'); pop.className = 'ui-menu dep-pop';
+    pop.innerHTML = '<div class="ui-eyebrow dep-pop-h">Add here</div>' + Object.keys(TB_TYPES).map(function (k) { return '<button type="button" class="ui-menu-item" data-type="' + k + '">' + TB_TYPES[k] + '</button>'; }).join('');
+    document.body.appendChild(pop); TL_POP = pop;
+    var r = btn.getBoundingClientRect();
+    pop.style.top = (window.scrollY + r.bottom + 6) + 'px'; pop.style.left = Math.max(8, window.scrollX + r.left + r.width / 2 - pop.offsetWidth / 2) + 'px';
+    pop.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-type]'); if (!b) return;
+      closeItemMenu();
+      var q = ORG.server.newQuestion(t.id + '-n' + Date.now(), b.dataset.type);
+      tbList(t).splice(at, 0, q); tbState.open[q.id] = true; saved(); redraw();
+      var c = body.querySelector('[data-q="' + q.id + '"]'); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); var ti = c.querySelector('.tb-title'); if (ti) ti.focus(); }
+    });
+    setTimeout(function () { document.addEventListener('mousedown', onPopOutside); document.addEventListener('keydown', onPopKey); }, 0);
   }
   // ⋮ on a question: duplicate, move, change type, delete.
   function tbQuestionMenu(btn, t, q, saved, redraw) {
@@ -4214,13 +4372,14 @@
         { text: 'Merge Students: review suggested duplicates side by side and confirm by typing MERGE. Every merge is written to Merge History.' },
         { text: 'Delete: type DELETE to confirm. The deletion is recorded in Deletion Logs.', link: ['deletion', {}, 'Deletion Logs'] },
       ] },
-    { id: 'templates', title: 'Templates: latest versions and archiving', keywords: 'template latest version older archive publish draft duplicate deploy which',
-      summary: 'Which template to deploy, and how to retire old ones.',
+    { id: 'templates', title: 'Templates: phases, versions and archiving', keywords: 'template version phase baseline midline endline draft publish history restore archive duplicate deploy which',
+      summary: 'One template per assessment, with Baseline / Midline / Endline versions.',
       steps: [
-        { text: 'For each phase + audience, the most recently published template is marked ★ Latest. Deploy that one.', link: ['templates', {}, 'Templates'] },
-        { text: 'To make a new version: Duplicate (it starts as a Draft), edit, then Publish. Publishing makes it the Latest and the old one shows “Older version”.' },
-        { text: 'Archive templates you no longer use: they move to the Archived tab and can’t be picked for new deployments. Un-archive any time.' },
-        { text: 'Each card shows who created it and when it was last edited.' },
+        { text: 'Open a template and pick the phase you want: Baseline, Midline or Endline. Each phase has its own questions.', link: ['templates', {}, 'Templates'] },
+        { text: 'Edit starts a draft. The live version doesn’t change until you Publish — then the draft becomes the next version (v2, v3 …).' },
+        { text: 'History lists every version of a phase. Open an old one read-only, or Restore it as a new draft.' },
+        { text: 'A deployment keeps the version it started with. Publishing a new version only affects windows that start afterwards.' },
+        { text: 'Archive a whole template you no longer use: it moves to the Archived tab and can’t be picked for new deployments.' },
       ] },
     { id: 'deployments', title: 'Deployments and links', keywords: 'deploy deployment window link master group link parent teacher share url',
       summary: 'Getting assessments to schools, and the links people use.',
@@ -4323,7 +4482,7 @@
     'Analytics': 'Portfolio-wide roll-ups — outcomes by country, curriculum boards and the completion ranking.',
     'All Schools': 'Every partner school, grouped by school group. Use the country switch, search, or the Archived tab.',
     'Change History': 'Every change to student records and assessments — by teachers, school admins, parents and the Tilli team. Filter by date range, type and school.',
-    'Templates': 'Assessment templates. The newest published one for each phase + audience is marked ★ Latest — that’s the one to deploy.',
+    'Templates': 'One template per assessment. Each has a Baseline, Midline and Endline phase with its own questions and versions.',
     'Deployments': 'Assessments sent to schools, their results, and the links people use to take them.',
     'Teacher Reflection Questions': 'Questions teachers answer about themselves during dashboard onboarding. Edited here; not deployed.',
     'Users & Invitations': 'Everyone with a login (Users tab) and the invites sent to new school admins and teachers (Invitations tab).',
@@ -4467,8 +4626,8 @@
       a: 'Set the phase’s Start and End dates on its card, then Deploy phase. It shows as Scheduled until the start date, goes Live on it, and closes after the end date. You can change both dates any time — even after deploying — and the status updates itself.' },
     { id: 'add-assessment', topic: 'Assessments & templates', q: 'What’s the difference between “Deploy phase” and “+ Add assessment”?', screens: ['school'],
       a: 'Deploy phase sends a whole phase (Baseline, Midline or Endline) with all the assessments turned on in it. + Add assessment puts one more assessment from Templates into a phase — if that phase is already deployed, it joins straight away at the end of its audience’s chain.' },
-    { id: 'which-template', topic: 'Assessments & templates', q: 'Which template should I deploy?', screens: ['templates', 'deployments'],
-      a: 'The one marked ★ Latest — the newest published template for that phase + audience. New deployment lists it first and warns you if you pick an older version.' },
+    { id: 'which-template', topic: 'Assessments & templates', q: 'Which version does a deployment use?', screens: ['templates', 'deployments'],
+      a: 'There’s one template per assessment — pick it and the phase. The deployment uses that phase’s live version and keeps it for the whole window, even if a newer version is published later.' },
     { id: 'archive-template', topic: 'Assessments & templates', q: 'What does archiving a template do?', screens: ['templates'],
       a: 'It moves to the Archived tab and can’t be picked for new deployments. Existing deployments and results aren’t touched, and you can un-archive it any time.' },
     { id: 'teacher-log', topic: 'Assessments & templates', q: 'How do I see which teachers haven’t finished?', screens: ['school', 'deployments'],
@@ -4866,39 +5025,34 @@
     openModal('New template', '<p class="tl-muted">Create an assessment template. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
       '<label class="field">Title<input class="input" id="nt-title" placeholder="e.g. Endline · Parent Report"></label>' +
       '<label class="field">Audience<select class="select" id="nt-aud">' + audOpts + '</select></label>' +
-      phasePickHtml('nt-ph', ['Baseline']) +
+
       '<label class="field">Description<input class="input" id="nt-desc" placeholder="Short description"></label>' +
-      '<label class="field">Status<select class="select" id="nt-status"><option>Draft</option><option>Published</option></select></label>' +
       '</div>', function (close) {
         var title = (document.getElementById('nt-title').value || '').trim();
         if (!title) { toast('Title is required.'); return false; }
-        var phases = readPhasePick('nt-ph'); if (!phases.length) { toast('Pick at least one phase.'); return false; }
-        var t = ORG.server.createTemplate({ title: title, audience: document.getElementById('nt-aud').value, phases: phases, desc: document.getElementById('nt-desc').value.trim(), status: document.getElementById('nt-status').value }, me.name);
+        var t = ORG.server.createTemplate({ title: title, audience: document.getElementById('nt-aud').value, desc: document.getElementById('nt-desc').value.trim() }, me.name);
         ORG.server.logAudit(me.name, 'template.create', t.title, 'template');
-        close(); toast('Template “' + t.title + '” created.'); go('templates', {});
+        close(); toast('Template “' + t.title + '” created — set up a phase to add questions.'); go('template', { id: t.id });
       }, 'Create template');
   }
 
   function openTemplateMenu(id) {
     var t = ORG.templates.find(function (x) { return x.id === id; }); if (!t) return;
-    var pubLabel = t.status === 'Published' ? 'Unpublish' : 'Publish';
-    var rows = [['Created', fmtMs(t.createdAt) + ' · ' + (t.createdBy || '—')], ['Last edited', fmtMs(t.updatedAt) + ' · ' + (t.updatedBy || '—')], ['Last published', t.publishedAt ? fmtMs(t.publishedAt) : 'Never']];
-    // Name as the title; who/when/status as chips; Edit leads, Publish + Duplicate
-    // beside it; Archive + Delete set apart and quiet. × closes (no footer).
-    openModal(t.title, '<div class="tl-tm-chips">' + audChip(t.audience) + '<span class="tl-tm-phase">' + esc(tplPhaseText(t)) + '</span>' +
-        statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn') + tplVersionBadge(t, ORG.server.latestTemplateIds()) + (t.archived ? statusPill('Archived', 'muted') : '') + '</div>' +
-      '<div class="ws-review">' + rows.map(function (r) { return '<div class="ws-rev-row"><span>' + r[0] + '</span><b>' + esc(r[1]) + '</b></div>'; }).join('') + '</div>' +
-      '<div class="tl-tm-main"><button class="btn btn-primary btn-sm" id="tm-edit">' + ICONS.edit + 'Edit template</button>' +
-        (currentRoute().screen === 'template' ? '' : '<button class="btn btn-outline btn-sm" id="tm-open" title="See and edit every question in this template">Questions (' + tbQuestions(t).length + ')</button>') +
-        (t.archived ? '' : '<button class="btn btn-outline btn-sm" id="tm-pub" title="' + (t.status === 'Published' ? 'Hide it from new deployments until it’s published again.' : 'Make it available for new deployments.') + '">' + pubLabel + '</button>') +
-        '<button class="btn btn-outline btn-sm" id="tm-dup" title="Make an editable Draft copy">Duplicate</button></div>' +
-      '<div class="tl-tm-sub"><button class="btn-link" id="tm-arch" title="' + (t.archived ? 'Bring this template back to the active list.' : 'Hide from the active list and from new deployments. Nothing is deleted.') + '">' + (t.archived ? 'Un-archive' : 'Archive') + '</button>' +
+    var onPage = currentRoute().screen === 'template';
+    // Name as the title; phases under it; Edit-led actions; Archive + Delete set apart and quiet. × closes (no footer).
+    openModal(t.title, '<div class="tl-tm-chips">' + audChip(t.audience) + tplPhasePills(t) + (t.archived ? statusPill('Archived', 'muted') : '') + '</div>' +
+      '<div class="ws-review"><div class="ws-rev-row"><span>Created</span><b>' + esc(fmtMs(t.createdAt) + ' · ' + (t.createdBy || '—')) + '</b></div>' +
+        '<div class="ws-rev-row"><span>Last edited</span><b>' + esc(fmtMs(t.updatedAt) + ' · ' + (t.updatedBy || '—')) + '</b></div></div>' +
+      '<div class="tl-tm-main">' + (onPage ? '' : '<button class="btn btn-primary btn-sm" id="tm-open" title="Pick a phase to see or edit its questions">' + ICONS.edit + 'Open</button>') +
+        '<button class="btn btn-' + (onPage ? 'primary' : 'outline') + ' btn-sm" id="tm-edit" title="Name, audience and description">Edit details</button>' +
+        '<button class="btn btn-outline btn-sm" id="tm-dup" title="A new template whose phases start as drafts">Duplicate</button></div>' +
+      '<div class="tl-tm-sub"><button class="btn-link" id="tm-arch" title="' + (t.archived ? 'Bring this template back to the active list.' : 'Hide the whole template from the active list and from new deployments. Nothing is deleted.') + '">' + (t.archived ? 'Un-archive' : 'Archive') + '</button>' +
         '<button class="btn-link danger tl-tm-del" id="tm-del" title="Delete permanently — you’ll be asked to confirm">' + ICONS.trash + 'Delete</button></div>', null);
     setTimeout(function () {
+      var close = function () { document.getElementById('tl-modal-root').innerHTML = ''; };
+      var op = document.getElementById('tm-open'); if (op) op.addEventListener('click', function () { close(); go('template', { id: t.id }); });
       document.getElementById('tm-edit').addEventListener('click', function () { openTemplateEditor(t); });
-      var op = document.getElementById('tm-open'); if (op) op.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; go('template', { id: t.id }); });
-      document.getElementById('tm-dup').addEventListener('click', function () { var c = ORG.server.createTemplate({ title: t.title + ' (copy)', audience: t.audience, phases: tplPhases(t), desc: t.desc, status: 'Draft', versions: t.versions, langs: t.langs }, me.name); ORG.server.logAudit(me.name, 'template.duplicate', c.title, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Duplicated.'); go('templates', {}); });
-      var pb = document.getElementById('tm-pub'); if (pb) pb.addEventListener('click', function () { ORG.server.publishTemplate(t.id, t.status !== 'Published', me.name); ORG.server.logAudit(me.name, 'template.publish', t.title + ' → ' + t.status, 'template'); document.getElementById('tl-modal-root').innerHTML = ''; toast('Template ' + (t.status === 'Published' ? 'published.' : 'unpublished.')); tplAfterChange(); });
+      document.getElementById('tm-dup').addEventListener('click', function () { var c = ORG.server.createTemplate({ title: t.title + ' (copy)', audience: t.audience, desc: t.desc }, me.name, t); ORG.server.logAudit(me.name, 'template.duplicate', c.title, 'template'); close(); toast('Duplicated — its phases start as drafts.'); go('template', { id: c.id }); });
       document.getElementById('tm-arch').addEventListener('click', function () {
         document.getElementById('tl-modal-root').innerHTML = '';
         var on = !t.archived;
@@ -4917,13 +5071,11 @@
     openModal('Edit template', '<div class="tl-stack">' +
       '<label class="field">Title<input class="input" id="et-title" value="' + esc(t.title) + '"></label>' +
       '<label class="field">Audience<select class="select" id="et-aud">' + audOpts + '</select></label>' +
-      phasePickHtml('et-ph', tplPhases(t)) +
+
       '<label class="field">Description<input class="input" id="et-desc" value="' + esc(t.desc) + '"></label>' +
-      '<label class="field">Status<select class="select" id="et-status"><option' + (t.status === 'Draft' ? ' selected' : '') + '>Draft</option><option' + (t.status === 'Published' ? ' selected' : '') + '>Published</option></select></label>' +
       '</div>', function (close) {
         var title = (document.getElementById('et-title').value || '').trim(); if (!title) { toast('Title is required.'); return false; }
-        var phases = readPhasePick('et-ph'); if (!phases.length) { toast('Pick at least one phase.'); return false; }
-        ORG.server.updateTemplate(t.id, { title: title, audience: document.getElementById('et-aud').value, phases: phases, desc: document.getElementById('et-desc').value, status: document.getElementById('et-status').value }, me.name);
+        ORG.server.updateTemplate(t.id, { title: title, audience: document.getElementById('et-aud').value, desc: document.getElementById('et-desc').value }, me.name);
         ORG.server.logAudit(me.name, 'template.edit', title, 'template');
         close(); toast('Template updated.'); tplAfterChange();
       }, 'Save changes');
@@ -5036,27 +5188,24 @@
 
   function openNewDeployment(schoolId, afterHub) {
     var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
-    // Only published, non-archived templates; grouped per phase · audience with
-    // the Latest one first, so the team deploys the current version by default.
-    var latest = ORG.server.latestTemplateIds();
+    // Non-archived templates, grouped per phase · audience — only phases with a
+    // live version, which is the version the deployment starts on.
     var slots = {};
     ORG.templates.forEach(function (t) {
-      if (t.archived || t.status !== 'Published') return;
+      if (t.archived) return;
       tplPhases(t).forEach(function (ph) { (slots[ph + ' · ' + t.audience] = slots[ph + ' · ' + t.audience] || []).push(t); });
     });
     var PH = ['Baseline', 'Midline', 'Endline'];
     var tplOpts = Object.keys(slots).sort(function (a, b) { return PH.indexOf(a.split(' · ')[0]) - PH.indexOf(b.split(' · ')[0]) || a.localeCompare(b); }).map(function (k) {
-      var ts = slots[k].sort(function (a, b) { return (b.publishedAt || 0) - (a.publishedAt || 0); });
+      var ts = slots[k].sort(function (a, b) { return a.title.localeCompare(b.title); });
       var ph = k.split(' · ')[0];
       return '<optgroup label="' + esc(k) + '">' + ts.map(function (t) {
-        var isLatest = latest[ph + '|' + t.audience] === t.id;
-        return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(ph) + '" data-latest="' + (isLatest ? 1 : 0) + '">' + esc(t.title) + (isLatest ? ' — ★ Latest' : ' — older version') + '</option>';
+        return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(ph) + '">' + esc(t.title) + ' — v' + tplLive(t, ph).v + '</option>';
       }).join('') + '</optgroup>';
     }).join('');
     openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a school. Status is derived from the window + publish state. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
       '<label class="field">School<select class="select" id="nd-school">' + schoolOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="nd-assess">' + tplOpts + '</select></label>' +
-      '<p class="tl-muted tl-nd-older" id="nd-older" hidden>⚠ A newer template is published for this phase + audience. Pick the ★ Latest one unless you need the older version.</p>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="nd-aud"><option>Teacher</option><option>Parent</option><option>Direct Assessment</option></select></label>' +
       '<label class="field flex-1">Phase<select class="select" id="nd-phase"><option>Baseline</option><option>Midline</option><option>Endline</option></select></label></div>' +
       '<label class="field">Where it runs<select class="select" id="nd-mode"><option value="school">At school</option><option value="home">At home</option></select></label>' +
@@ -5089,7 +5238,6 @@
         var o = a.options[a.selectedIndex]; if (!o) return;
         if (o.dataset.aud) aud.value = o.dataset.aud;
         if (o.dataset.phase) document.getElementById('nd-phase').value = o.dataset.phase;
-        document.getElementById('nd-older').hidden = o.dataset.latest !== '0';
         syncWhere();
       };
       a.addEventListener('change', sync); aud.addEventListener('change', syncWhere); sync();

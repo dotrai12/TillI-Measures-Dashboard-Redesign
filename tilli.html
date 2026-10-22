@@ -520,36 +520,65 @@
     --tb-mc: var(--green-500);         /* Multiple Choice colour */
     --tb-text: var(--cyan-500);        /* Short Answer colour */
     --tb-thumb-w: 220px;               /* media attachment thumbnail width */
+    --tb-ins-h: 34px;                  /* gap between cards that holds the + insert button */
   }
   .tb-head { display: flex; align-items: flex-start; gap: 12px; max-width: var(--tb-max); margin-bottom: 18px; flex-wrap: wrap; }
   .tb-back { margin-top: 4px; }
   .tb-head-txt { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 2px; }
-  .tb-name, .tb-tdesc { border: 1px solid transparent; background: none; border-radius: var(--radius-sm); padding: 4px 8px; margin-left: -8px; font: inherit; color: var(--ink-900); width: 100%; box-sizing: border-box; }
-  .tb-name { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl, 24px); }
-  .tb-tdesc { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
-  .tb-name:hover, .tb-tdesc:hover { border-color: var(--line-200); }
-  .tb-name:focus, .tb-tdesc:focus { outline: none; border-color: var(--focus); background: var(--white); }
-  .tb-head .tl-tm-chips { margin: 6px 0 0; }
+  .tb-crumb { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); }
+  .tb-h1 { margin: 2px 0; display: flex; align-items: center; gap: 10px; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-xl, 24px); color: var(--ink-900); }
+  .tb-sub { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
+  /* Phase pills (Templates list, menu, picker, builder): live vN · draft ✎ · not set up */
+  .tl-phpills { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  .tl-phpill { display: inline-flex; align-items: center; font-size: var(--fs-xs); font-weight: 700; padding: 2px 9px; border-radius: var(--radius-pill); white-space: nowrap; border: 1px solid transparent; }
+  .tl-phpill.st-live { background: var(--status-done-bg); color: var(--status-done-fg); }
+  .tl-phpill.st-draft { background: var(--warn-wash); color: var(--warn-700); }
+  .tl-phpill.st-none { background: none; border: 1px dashed var(--line-200); color: var(--ink-300); }
+  .tl-phnote { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+  /* Phase picker (template page) */
+  .tb-pc-intro { margin: 18px 0 10px; font-weight: 700; color: var(--ink-700); }
+  .tb-pcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--page-gap); }
+  .tb-pcard { display: flex; flex-direction: column; gap: 8px; padding: 18px; background: var(--white); border: 1px solid var(--line-200); border-top: 4px solid var(--line-200); border-radius: var(--radius-md); }
+  .tb-pcard.st-live { border-top-color: var(--green-500); }
+  .tb-pcard.st-draft { border-top-color: var(--warn-500); }
+  .tb-pc-h { margin: 0; font-family: var(--font-heading); font-size: var(--fs-lg, 20px); }
+  .tb-pc-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+  .tb-pc-act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 8px; }
+  .tb-pc-note { margin-top: 14px; font-size: var(--fs-xs); }
+  /* Version history + read-only version */
+  .tb-hist { display: flex; flex-direction: column; }
+  .tb-hist-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-200); font-size: var(--fs-sm); color: var(--ink-600); }
+  .tb-hist-row > span:nth-child(2) { flex: 1; min-width: 160px; }
+  .tb-ro { display: flex; flex-direction: column; gap: 12px; max-width: var(--tb-max); }
+  .tb-ro-sec, .tb-ro-q { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 14px 18px; }
+  .tb-ro-sec h4 { margin: 0 0 4px; font-family: var(--font-heading); }
+  .tb-ro-sec p, .tb-ro-q p { margin: 4px 0; font-size: var(--fs-sm); color: var(--ink-450); }
+  .tb-ro-opts { margin: 8px 0 0; padding-left: 20px; font-size: var(--fs-sm); color: var(--ink-700); line-height: 1.8; }
+  .tb-ro-score { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); margin-left: 6px; }
+  .tb-ro-meta { margin-top: 8px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+  /* Planner: the template version a deployed item is pinned to */
+  .dep-ver { font-size: 11px; font-weight: 700; color: var(--ink-450); background: var(--surface-100); border-radius: var(--radius-sm); padding: 1px 6px; }
   .tb-saved { font-size: var(--fs-xs); font-weight: 700; color: var(--green-700); }
   .tb-head-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .tb-head-act .btn svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }
-  .tb-phases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; }
-  .tb-phases-l { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
-  .tb-ph { border: 1px solid var(--line-200); background: var(--white); font: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); padding: 7px 16px; border-radius: var(--radius-pill); cursor: pointer; }
-  .tb-ph b { margin-left: 4px; color: var(--ink-300); }
-  .tb-ph.on { background: var(--green-600); border-color: var(--green-600); color: var(--white); }
-  .tb-ph.on b { color: rgba(255,255,255,.8); }
-  .tb-ph:disabled { opacity: .45; cursor: not-allowed; border-style: dashed; }
   .tb-tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 14px; background: var(--surface-100); border-radius: var(--radius-md); }
   .tb-tab { border: none; background: none; font: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; }
   .tb-tab.on { background: var(--white); color: var(--ink-900); box-shadow: var(--shadow-card); }
   .tb-tab b { margin-left: 4px; color: var(--ink-300); }
-  .tb-langs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: var(--tb-max); padding: 10px; margin-bottom: 14px; border: 1px solid var(--line-200); border-radius: var(--radius-md); background: var(--white); }
+  .tb-langs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; }
   .tb-lang { border: 1px solid var(--line-200); background: var(--white); font: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); padding: 7px 14px; border-radius: var(--radius-pill); cursor: pointer; }
   .tb-lang.on { background: var(--green-600); border-color: var(--green-600); color: var(--white); }
   .tb-addlang { border: none; background: none; font: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--green-700); padding: 7px 10px; cursor: pointer; }
-  .tb-tools { max-width: var(--tb-max); display: flex; justify-content: flex-end; margin-bottom: 8px; }
-  .tb-list { display: flex; flex-direction: column; gap: 14px; max-width: var(--tb-max); }
+  .tb-tools { max-width: var(--tb-max); display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .tb-list { display: flex; flex-direction: column; max-width: var(--tb-max); }
+  /* + between cards (insert a question there) */
+  .tb-ins { display: flex; justify-content: center; align-items: center; height: var(--tb-ins-h); }
+  .tb-ins-btn { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line-200); border-radius: 50%; background: var(--white); color: var(--green-700); font: 700 18px/1 var(--font-body); cursor: pointer; box-shadow: var(--shadow-card); opacity: 0; transition: opacity .15s, transform .15s; }
+  /* Hidden until the gap is hovered (or the button is tabbed to). */
+  .tb-ins:hover .tb-ins-btn, .tb-ins-btn:focus-visible { opacity: 1; }
+  .tb-ins-btn:hover { transform: scale(1.1); border-color: var(--green-500); }
+  /* Touch screens can't hover — keep it faintly visible there. */
+  @media (hover: none) { .tb-ins-btn { opacity: .6; } }
   .tb-card { --tb-c: var(--tb-mc); background: var(--white); border: 1px solid var(--line-200); border-left: var(--tb-accent-w) solid var(--tb-c); border-radius: var(--radius-md); padding: 14px 18px; }
   .tb-card.t-section { --tb-c: var(--tb-section); }
   .tb-card.t-text { --tb-c: var(--tb-text); }
@@ -558,12 +587,12 @@
   .tb-card-h { display: flex; align-items: center; gap: 10px; }
   .tb-drag { display: grid; place-items: center; width: 20px; color: var(--ink-300); cursor: grab; }
   .tb-drag svg { width: 18px; height: 18px; }
-  .tb-swatch { width: 22px; height: 22px; border-radius: 6px; background: var(--tb-c); flex: none; }
   .tb-type { font-size: var(--fs-xs); font-weight: 700; padding: 3px 10px; border: 1px solid var(--line-200); border-radius: var(--radius-pill); color: var(--ink-700); white-space: nowrap; }
+  .tb-opt-tag { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
   .tb-num { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
   .tb-peek { flex: 1; min-width: 0; border: none; background: none; font: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; padding: 4px 0; }
   .tb-req { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
-  .tb-peek + .tb-req { margin-left: 0; }
+  .tb-peek + .tb-chev, .tb-opt-tag + .tb-chev { margin-left: 0; }
   .tb-ic { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: none; border-radius: var(--radius-sm); background: none; color: var(--ink-450); cursor: pointer; }
   .tb-ic:hover:not(:disabled) { background: var(--surface-100); color: var(--ink-900); }
   .tb-ic:disabled { opacity: .35; cursor: default; }
@@ -578,7 +607,11 @@
   .tb-opts { display: flex; flex-direction: column; gap: 8px; }
   .tb-opt { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .tb-opt > .input:not(.tb-score) { flex: 1; min-width: 160px; }
-  .tb-radio { width: 18px; height: 18px; flex: none; border: 2px solid var(--line-200); border-radius: 50%; }
+  .tb-radio { width: 18px; height: 18px; flex: none; border: 2px solid var(--line-200); border-radius: 50%; padding: 0; background: none; }
+  .tb-radio.is-btn { cursor: pointer; }
+  .tb-radio.is-btn:hover { border-color: var(--green-500); }
+  .tb-radio.on { border-color: var(--green-600); background: radial-gradient(var(--green-600) 0 45%, transparent 50%); }
+  .tb-label-hint { margin-left: 8px; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-300); }
   .tb-score { width: 92px; flex: none; }
   .tb-optimg { flex-basis: 100%; padding-left: 26px; }
   .tb-optimg img { max-height: 64px; border-radius: var(--radius-sm); border: 1px solid var(--line-200); }
@@ -614,6 +647,12 @@
   .tb-skill { border: 1px solid var(--line-200); background: var(--surface-100); font: inherit; font-weight: 700; font-size: var(--fs-xs); color: var(--ink-600); padding: 7px 14px; border-radius: var(--radius-pill); cursor: pointer; }
   .tb-skill:hover { border-color: var(--green-500); }
   .tb-skill.on { background: var(--green-600); border-color: var(--green-600); color: var(--white); }
+  /* Empty phase version: copy from another version */
+  .tb-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 16px; text-align: center; border: 1px dashed var(--line-200); border-radius: var(--radius-md); background: var(--white); }
+  .tb-empty b { font-size: var(--fs-md); color: var(--ink-900); }
+  .tb-empty > span { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); max-width: 460px; }
+  .tb-empty-act { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 8px 0 2px; }
+  .tb-empty .tb-empty-or { font-size: var(--fs-xs); color: var(--ink-300); }
   .tb-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: var(--tb-max); margin-top: 14px; padding: 12px 14px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
   .tb-add > span { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-450); margin-right: 4px; }
   .tb-unscored { margin: 0; padding-left: 20px; font-size: var(--fs-sm); color: var(--ink-600); line-height: 1.8; }
@@ -625,14 +664,6 @@
   .tb-pv-req { color: var(--danger-700); }
   .tb-pv-opts { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sm); }
   @media (max-width: 640px) { .tb-card { padding: 12px; } .tb-req { font-size: 0; } .tb-media-row { flex-direction: column; align-items: stretch; } .tb-fold-b { padding-left: 0; } }
-  /* Phase tick-boxes in the template editor (a template can be used in any set of phases) */
-  .tl-phasepick { border: none; margin: 0; padding: 0; min-width: 0; }
-  .tl-phasepick legend { padding: 0; margin-bottom: 7px; }
-  .tl-phasepick legend .tl-muted { font-weight: 600; }
-  .tl-phasepick > div { display: flex; flex-wrap: wrap; gap: 8px; }
-  .tl-phasepick label { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border: 1px solid var(--line-200); border-radius: var(--radius-pill); font-weight: 700; cursor: pointer; }
-  .tl-phasepick label:has(input:checked) { border-color: var(--green-500); background: var(--wash-green); color: var(--green-700); }
-  .tl-phasepick input { accent-color: var(--green-600); margin: 0; }
   /* Template name = link into its editor (list + grid) */
   .tl-tpl-name { padding: 0; border: none; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
   .tl-tpl-name:hover { color: var(--green-700); text-decoration: underline; text-underline-offset: 3px; }
@@ -792,8 +823,8 @@
 <script src="assets/school-data.js?v=20261020mx"></script>
 <script src="assets/tilli-api.js?v=20261022d"></script>
 <script src="assets/tilli-history.js?v=20261022a"></script>
-<script src="assets/tilli-org-data.js?v=20261022n"></script>
+<script src="assets/tilli-org-data.js?v=20261022s"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261022n"></script>
+<script src="assets/tilli-admin.js?v=20261022u"></script>
 </body>
 </html>
