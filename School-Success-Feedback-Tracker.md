@@ -9,6 +9,7 @@ Scope: the internal Tilli platform-admin dashboard (`tilli.html` → `assets/til
 **Status key:** ✅ Done · 🟡 Partial · ⬜ Not started · 💬 Needs discussion · ⏸ Parked
 
 Last updated: 21 Oct 2026 (Phase A: #4 #5 #6 #12 #14 #17 · Phase B: #1 #13 · Phase C: #7 · Phase D: #9 #10 #11)
+Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* below).
 
 ---
 
@@ -209,4 +210,4 @@ Last updated: 21 Oct 2026 (Phase A: #4 #5 #6 #12 #14 #17 · Phase B: #1 #13 · P
 
 ### Users — no change requested
 *Feedback (1 Sep): invitations not used so far; role change used only once.*
-- Could make Users / Invitations less prominent in the menu. Not decided.
+- 22 Oct 2026: Users and Invitations are now one menu item (**Users & Invitations**) with tabs, a shared filter bar (search · role · school · school group) and a paged Users table — one sidebar line instead of two.

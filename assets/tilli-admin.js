@@ -94,6 +94,14 @@
 
   // ---------- icons ----------
   var ICONS = {
+    // layout toggle (Templates)
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+    list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>',
+    // row actions (Users & Invitations tables)
+    role: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.4"/><path d="M3 20a6 6 0 0 1 9.5-4.9"/><path d="M17.5 13.5l3 3-5 5H12.5v-3z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><line x1="10" y1="11" x2="10" y2="16"/><line x1="14" y1="11" x2="14" y2="16"/></svg>',
+    resend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/></svg>',
+    revoke: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     controlroom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><line x1="12" y1="12" x2="16" y2="10"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
     analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="10" width="3" height="8"/><rect x="10.5" y="5" width="3" height="13"/><rect x="16" y="13" width="3" height="5"/></svg>',
     schools: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l7-5 7 5v12"/><rect x="9.5" y="13" width="5" height="8"/></svg>',
@@ -116,15 +124,15 @@
     // live inside each School Hub → Students tab, scoped to that school.
     // Observation Form is no longer its own surface — it's an Observation-audience
     // template (edited under Templates), deployed via Deployments, and its
-    // responses live in Deployments → Results.
+    // responses live in Deployments → Results. Teacher Reflection Questions are
+    // likewise a card on Templates rather than their own nav item.
     { icon: 'assessments', title: 'Assessments', items: [
       { key: 'templates', label: 'Templates' },
       { key: 'deployments', label: 'Deployments' },
-      { key: 'reflection', label: 'Reflection Questions' },
     ] },
     { icon: 'people', title: 'People', items: [
-      { key: 'users', label: 'Users' },
-      { key: 'invitations', label: 'Invitations' },
+      // Users + Invitations are one page with tabs; #/invitations is the second tab.
+      { key: 'users', label: 'Users & Invitations' },
     ] },
     { icon: 'health', title: 'Platform Health', items: [
       { key: 'issues', label: 'Issue Reports' },
@@ -176,7 +184,7 @@
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
   var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
-    observation: 'templates', results: 'deployments', 'master-links': 'deployments', gschool: 'groupoverview' };
+    observation: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'deployments', gschool: 'groupoverview' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
   function chrome(r) {
@@ -1533,10 +1541,16 @@
   var PAGE_SIZES = [20, 50, 100];   // rows-per-page options
   var STU_PAGE_KEY = 'tilliMeasures.admin.studentsPerPage';
   var STAFF_PAGE_KEY = 'tilliMeasures.admin.staffPerPage';
+  var USERS_PAGE_KEY = 'tilliMeasures.admin.usersPerPage';
+  var ISSUES_PAGE_KEY = 'tilliMeasures.admin.issuesPerPage';
   // Remembered rows-per-page for one table (falls back to the first size).
   function savedPageSize(key) { try { var v = +localStorage.getItem(key); return PAGE_SIZES.indexOf(v) >= 0 ? v : PAGE_SIZES[0]; } catch (e) { return PAGE_SIZES[0]; } }
   var stuPager = { schoolId: null, page: 1, q: '', size: savedPageSize(STU_PAGE_KEY) };
   var staffPager = { schoolId: null, page: 1, size: savedPageSize(STAFF_PAGE_KEY) };
+  // Users tab: `key` is the active role/kind/search — a new filter jumps back to page 1.
+  var usersPager = { key: null, page: 1, size: savedPageSize(USERS_PAGE_KEY) };
+  // Issue Reports: `key` is status tab + school — switching either jumps back to page 1.
+  var issuesPager = { key: null, page: 1, size: savedPageSize(ISSUES_PAGE_KEY) };
   // Page numbers to show: first, last, and a window around the current page, with … gaps.
   function pageList(page, pages) {
     var out = [], want = {}; [1, pages, page - 1, page, page + 1].forEach(function (n) { if (n >= 1 && n <= pages) want[n] = 1; });
@@ -1566,12 +1580,14 @@
     function staffRowHtml(u) {
       return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td><td>' + esc(u.role) + '</td>' +
         '<td>' + (u.sections && u.sections.length ? esc(u.sections.join(', ')) : '—') + '</td>' +
-        '<td class="r"><button class="btn-link" data-role="' + esc(u.email) + '">Change role</button> <button class="btn-link danger" data-remove="' + esc(u.name) + '">Remove</button></td></tr>';
+        '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-role="' + esc(u.email) + '" title="Change role" aria-label="Change role for ' + esc(u.name) + '">' + ICONS.role + '</button>' +
+        '<button class="tl-rowact danger" data-remove="' + esc(u.name) + '" title="Remove from school" aria-label="Remove ' + esc(u.name) + ' from this school">' + ICONS.trash + '</button></div></td></tr>';
     }
 
     var invRows = d.invitations.length ? d.invitations.map(function (i) {
       return '<tr><td class="name">' + esc(i.name) + '<small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + invStatusPill(i) + '</td><td>' + esc(i.expires) + '</td>' +
-        '<td class="r"><button class="btn-link" data-resend="' + esc(i.email) + '">Resend</button> <button class="btn-link danger" data-revoke="' + esc(i.email) + '">Revoke</button></td></tr>';
+        '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-resend="' + esc(i.email) + '" title="Resend invitation" aria-label="Resend invitation to ' + esc(i.email) + '">' + ICONS.resend + '</button>' +
+          '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
     }).join('') : '<tr><td colspan="5"><div class="ui-empty">No invitations.</div></td></tr>';
 
     // Teacher self-join: a teacher who enters this school code is auto-added
@@ -2521,63 +2537,159 @@
     var qi = body.querySelector('#dir-q'); if (qi) qi.addEventListener('input', function () { var pos = qi.selectionStart; SCREEN.directory({ q: qi.value }, body); var nq = body.querySelector('#dir-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
   };
 
+  // Users & Invitations share one page: same title + tab strip, each tab keeps
+  // its own route (#/users, #/invitations) so deep links and filters still work.
+  function peopleHead(tab, sub) {
+    return screenHead('Users & Invitations', sub, '<button class="btn btn-primary btn-sm" data-invite>+ Invite user</button>') +
+      '<div class="ui-tabs">' +
+        '<button class="ui-tab' + (tab === 'users' ? ' on' : '') + '" data-peopletab="users" title="Everyone with a login and their role.">Users <b>' + ORG.users.length + '</b></button>' +
+        '<button class="ui-tab' + (tab === 'invitations' ? ' on' : '') + '" data-peopletab="invitations" title="Invites sent to school admins and teachers — pending, accepted or expired.">Invitations <b>' + ORG.invitations.length + '</b></button>' +
+      '</div>';
+  }
+  // Shared filter bar (search · role · school · school group). Filters ride
+  // along in the hash, and carry over when you switch tabs.
+  function peopleFilters(params) {
+    return { q: params.q || '', role: params.role || '', school: params.school || '', group: params.group || '' };
+  }
+  // School / group / search test shared by both tabs (role is tab-specific).
+  // A row is in a group if it names that group directly (group admins) or its school is in it.
+  function peopleRowMatches(row, f) {
+    if (f.school && row.schoolId !== f.school) return false;
+    if (f.group) {
+      var sc = row.schoolId ? ORG.byId(row.schoolId) : null;
+      if (row.groupId !== f.group && !(sc && sc.groupId === f.group)) return false;
+    }
+    var q = f.q.trim().toLowerCase();
+    if (q && (row.name + ' ' + row.email).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }
+  function peopleFiltersHtml(tab, f) {
+    var roles = tab === 'users' ? ['', 'none'].concat(ORG.roles.filter(function (r) { return r !== 'none'; })) : [''].concat(ORG.roles.filter(function (r) { return r !== 'none'; }));
+    var roleOpts = roles.map(function (r) {
+      return '<option value="' + r + '"' + (f.role === r ? ' selected' : '') + '>' + (r === '' ? 'All roles' : (r === 'none' ? 'No role' : esc(r))) + '</option>';
+    }).join('');
+    // With a group picked, the school list narrows to that group's schools.
+    var schools = ORG.activeSchools().filter(function (sc) { return !f.group || sc.groupId === f.group; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var schoolOpts = '<option value="">All schools</option>' + schools.map(function (sc) {
+      return '<option value="' + esc(sc.id) + '"' + (f.school === sc.id ? ' selected' : '') + '>' + esc(sc.name) + '</option>';
+    }).join('');
+    var groupOpts = '<option value="">All school groups</option>' + ORG.activeGroups().map(function (g) {
+      return '<option value="' + esc(g.id) + '"' + (f.group === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>';
+    }).join('');
+    return '<div class="tl-filters">' +
+      '<label class="tl-filter-search grow"><span class="ic">' + ICONS.search + '</span>' +
+        '<input class="input" id="pf-q" type="search" placeholder="Search by name or email…" aria-label="Search by name or email" value="' + esc(f.q) + '" title="Matches any part of the person’s name or email."></label>' +
+      '<label class="select-wrap"><select class="select" id="pf-role" aria-label="Role" title="Show only this role.">' + roleOpts + '</select></label>' +
+      '<label class="select-wrap"><select class="select" id="pf-school" aria-label="School" title="Show only people at this school.">' + schoolOpts + '</select></label>' +
+      '<label class="select-wrap"><select class="select" id="pf-group" aria-label="School group" title="Show only people at schools in this group (plus that group’s admins).">' + groupOpts + '</select></label>' +
+    '</div>';
+  }
+  // Read the live bar (search may be typed but not yet in the hash).
+  function readPeopleFilters(body) {
+    var v = function (id) { var el = body.querySelector(id); return el ? el.value : ''; };
+    return { q: v('#pf-q'), role: v('#pf-role'), school: v('#pf-school'), group: v('#pf-group') };
+  }
+  // extra: tab-only params to keep (users: kind · invitations: filter).
+  // rerender(params): redraw in place for typing, so the caret survives.
+  function wirePeopleFilters(body, tab, extra, rerender) {
+    function params(f) { var o = {}; Object.keys(extra || {}).forEach(function (k) { o[k] = extra[k]; }); ['q', 'role', 'school', 'group'].forEach(function (k) { o[k] = f[k]; }); return o; }
+    ['#pf-role', '#pf-school', '#pf-group'].forEach(function (id) {
+      var el = body.querySelector(id); if (!el) return;
+      el.addEventListener('change', function () {
+        var f = readPeopleFilters(body);
+        // A school outside the newly picked group can't match — drop it.
+        if (id === '#pf-group' && f.group && f.school) { var sc = ORG.byId(f.school); if (!sc || sc.groupId !== f.group) f.school = ''; }
+        go(tab, params(f));
+      });
+    });
+    var qi = body.querySelector('#pf-q');
+    if (qi) qi.addEventListener('input', function () {
+      var pos = qi.selectionStart;
+      rerender(params(readPeopleFilters(body)));
+      var nq = body.querySelector('#pf-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+  }
+  function wirePeopleTabs(body) {
+    body.querySelectorAll('[data-peopletab]').forEach(function (b) { b.addEventListener('click', function () {
+      var f = readPeopleFilters(body);
+      if (f.role === 'none' && b.dataset.peopletab !== 'users') f.role = '';   // invitations always carry a role
+      go(b.dataset.peopletab, f);
+    }); });
+  }
+
   // Users (spec §7.1) — "No role" first-class filter
   SCREEN.users = function (params, body) {
-    var roleF = params.role || '';
+    var f = peopleFilters(params);
+    var roleF = f.role;
     var kindF = params.kind || '';
-    var q = (params.q || '').toLowerCase();
     var list = ORG.users.filter(function (u) {
       if (roleF === 'none' && u.role !== 'none') return false;
       if (roleF && roleF !== 'none' && u.role !== roleF) return false;
       if (kindF === 'staff' && (u.role === 'none' || u.role === 'Super Admin')) return false;
-      if (q && (u.name + ' ' + u.email).toLowerCase().indexOf(q) < 0) return false;
-      return true;
+      return peopleRowMatches(u, f);
     });
+    var filtered = !!(roleF || f.q.trim() || f.school || f.group);
     var banner = roleF === 'none' ? '<div class="tl-filterbanner">Filtered to <b>users with no role</b> — dead accounts to clean up · <button class="btn-link" id="u-clear">clear</button></div>' : '';
-    var rows = list.slice(0, 200).map(function (u) {
+    var pgKey = [roleF, kindF, f.q.trim().toLowerCase(), f.school, f.group].join('|');
+    if (usersPager.key !== pgKey) { usersPager.key = pgKey; usersPager.page = 1; }
+    var pages = Math.max(1, Math.ceil(list.length / usersPager.size));
+    usersPager.page = Math.min(Math.max(1, usersPager.page), pages);
+    var start = (usersPager.page - 1) * usersPager.size;
+    var rows = list.slice(start, start + usersPager.size).map(function (u) {
       var s = u.schoolId ? ORG.byId(u.schoolId) : null;
       return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td>' +
         '<td>' + (u.role === 'none' ? '<span class="ui-chip warn">No role</span>' : esc(u.role)) + '</td>' +
         '<td>' + (s ? esc(s.name) : (u.role === 'Super Admin' ? 'Tilli Team' : '—')) + '</td>' +
-        '<td class="r"><button class="btn-link" data-role="' + esc(u.email) + '">Change role</button> <button class="btn-link danger" data-del="' + esc(u.name) + '">Delete</button></td></tr>';
+        '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-role="' + esc(u.email) + '" title="Change role" aria-label="Change role for ' + esc(u.name) + '">' + ICONS.role + '</button>' +
+          '<button class="tl-rowact danger" data-del="' + esc(u.name) + '" title="Delete user" aria-label="Delete ' + esc(u.name) + '">' + ICONS.trash + '</button></div></td></tr>';
     }).join('') || '<tr><td colspan="4"><div class="ui-empty">No users match.</div></td></tr>';
-    var roleOpts = ['', 'none'].concat(ORG.roles.filter(function (r) { return r !== 'none'; })).map(function (r) {
-      return '<option value="' + r + '"' + (roleF === r ? ' selected' : '') + '>' + (r === '' ? 'All roles' : (r === 'none' ? 'No role' : r)) + '</option>';
-    }).join('');
-    body.innerHTML = screenHead('Users', list.length + ' users' + (roleF ? ' (filtered)' : '') + '.',
-      '<button class="btn btn-primary btn-sm" data-invite>+ Invite user</button>') + banner +
-      '<div class="ui-card"><div class="tl-filters"><label class="select-wrap"><select class="select" id="u-role">' + roleOpts + '</select></label>' +
-        '<input class="input grow tl-filter-q" id="u-q" placeholder="Search name or email…" value="' + esc(params.q || '') + '"></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>School</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-        (list.length > 200 ? '<p class="tl-muted mt-3">Showing first 200 — pagination/virtualisation lands with the full People screen.</p>' : '') + '</div>';
-    var rs = body.querySelector('#u-role'); if (rs) rs.addEventListener('change', function () { go('users', { role: rs.value, q: params.q }); });
+    body.innerHTML = peopleHead('users', list.length + ' users' + (filtered ? ' (filtered)' : '') + '.') + banner +
+      '<div class="ui-card">' + peopleFiltersHtml('users', f) +
+        '<div id="u-page"><div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>School</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        (list.length ? pagerHtml(list.length, usersPager.page, usersPager.size, filtered ? 'matching users' : 'users') : '') + '</div></div>';
+    wirePeopleTabs(body);
+    var um = body.querySelector('#u-page');
+    if (list.length) wirePager(um, function (page, size) {
+      if (size !== usersPager.size) { usersPager.size = size; usersPager.page = 1; try { localStorage.setItem(USERS_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
+      else usersPager.page = page;
+      SCREEN.users(params, body);
+      um = body.querySelector('#u-page'); if (um) um.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    wirePeopleFilters(body, 'users', kindF ? { kind: kindF } : {}, function (np) { SCREEN.users(np, body); });
     var uc = body.querySelector('#u-clear'); if (uc) uc.addEventListener('click', function () { go('users', {}); });
-    var uq = body.querySelector('#u-q'); if (uq) uq.addEventListener('input', function () { var pos = uq.selectionStart; SCREEN.users({ role: roleF, kind: kindF, q: uq.value }, body); var nq = body.querySelector('#u-q'); if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) {} } });
     var iv = body.querySelector('[data-invite]'); if (iv) iv.addEventListener('click', function () { openInvite(null); });
-    body.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('users', { role: roleF, q: params.q }); }); }); });
+    body.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('users', params); }); }); });
     body.querySelectorAll('[data-del]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Delete user', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(b.dataset.del) + '</b>? This cannot be undone.</p>', confirmLabel: 'Delete user', audit: { action: 'user.delete', entity: b.dataset.del, entityType: 'user' }, onConfirm: function () { toast('User deleted — logged.'); } }); }); });
   };
 
   // Invitations (spec §7.2)
   function invStatusPill(i) { var m = { 'Activated': 'ok', 'Account Created': 'sched', 'Expired': 'danger' }; return statusPill(i.status, m[i.status] || ''); }
   SCREEN.invitations = function (params, body) {
+    var f = peopleFilters(params);
     var attn = params.filter === 'attention';
     var list = ORG.invitations.filter(function (i) {
+      if (f.role && i.role !== f.role) return false;
+      if (!peopleRowMatches(i, f)) return false;
       if (!attn) return true;
       if (i.status === 'Activated') return false;
       var d = ORG.daysFromNow(i.expires);
       return i.status === 'Expired' || (d >= 0 && d <= 7);
     });
+    var filtered = !!(f.role || f.q.trim() || f.school || f.group);
     var banner = attn ? '<div class="tl-filterbanner">Filtered to <b>expiring / expired</b> invitations · <button class="btn-link" id="inv-clear">clear</button></div>' : '';
     var rows = list.map(function (i) {
       var s = i.schoolId ? ORG.byId(i.schoolId) : null;
       return '<tr><td class="name"><button class="btn-link text-strong" data-inv-detail="' + esc(i.email) + '">' + esc(i.name) + '</button><small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + (s ? esc(s.name) : '—') + '</td>' +
         '<td>' + invStatusPill(i) + '</td><td>' + esc(i.delivery) + '</td><td>' + esc(i.created) + '</td><td>' + esc(i.expires) + '</td>' +
-        '<td class="r"><button class="btn-link" data-resend="' + esc(i.email) + '">Resend</button> <button class="btn-link danger" data-revoke="' + esc(i.email) + '">Revoke</button></td></tr>';
+        '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-resend="' + esc(i.email) + '" title="Resend invitation" aria-label="Resend invitation to ' + esc(i.email) + '">' + ICONS.resend + '</button>' +
+          '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
     }).join('') || '<tr><td colspan="8"><div class="ui-empty">No invitations.</div></td></tr>';
-    body.innerHTML = screenHead('Invitations', list.length + ' invitations' + (attn ? ' needing attention' : '') + '.', '<button class="btn btn-primary btn-sm" data-invite>+ New invitation</button>') + banner +
-      '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Recipient</th><th>Role</th><th>School</th><th>Status</th><th>Delivery</th><th>Created</th><th>Expires</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
-    var c = body.querySelector('#inv-clear'); if (c) c.addEventListener('click', function () { go('invitations', {}); });
+    body.innerHTML = peopleHead('invitations', list.length + ' invitations' + (attn ? ' needing attention' : '') + (filtered ? ' (filtered)' : '') + '.') + banner +
+      '<div class="ui-card">' + peopleFiltersHtml('invitations', f) + '<div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Recipient</th><th>Role</th><th>School</th><th>Status</th><th>Delivery</th><th>Created</th><th>Expires</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    wirePeopleTabs(body);
+    wirePeopleFilters(body, 'invitations', attn ? { filter: 'attention' } : {}, function (np) { SCREEN.invitations(np, body); });
+    var c = body.querySelector('#inv-clear'); if (c) c.addEventListener('click', function () { go('invitations', readPeopleFilters(body)); });
     var iv = body.querySelector('[data-invite]'); if (iv) iv.addEventListener('click', function () { openInvite(null); });
     body.querySelectorAll('[data-inv-detail]').forEach(function (b) { b.addEventListener('click', function () { openInviteDetail(b.dataset.invDetail); }); });
     body.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation'); toast('Invitation resent.'); }); });
@@ -2717,7 +2829,12 @@
       withIssues.map(function (sc) { return '<option value="' + esc(sc.id) + '"' + (schF === sc.id ? ' selected' : '') + '>' + esc(sc.name) + (openBySchool[sc.id] ? ' (' + openBySchool[sc.id] + ' open)' : '') + '</option>'; }).join('') +
       '</select></label>';
 
-    var rows = list.map(function (i) {
+    var pgKey = st + '|' + schF;
+    if (issuesPager.key !== pgKey) { issuesPager.key = pgKey; issuesPager.page = 1; }
+    var pages = Math.max(1, Math.ceil(list.length / issuesPager.size));
+    issuesPager.page = Math.min(Math.max(1, issuesPager.page), pages);
+    var start = (issuesPager.page - 1) * issuesPager.size;
+    var rows = list.slice(start, start + issuesPager.size).map(function (i) {
       var s = ORG.byId(i.schoolId);
       return '<tr><td class="name">' + esc(i.reporter) + '<small>' + esc(i.role) + '</small></td><td>' + (s ? esc(s.name) : '—') + '</td><td>' + esc(i.page) + '</td><td>' + esc(i.device) + '</td><td>' + esc(i.date) + '</td><td>' + issueStatusPill(i.status) + '</td>' +
         '<td class="r"><button class="btn-link" data-status="' + i.id + '">Change status</button></td></tr>';
@@ -2733,8 +2850,16 @@
       strip +
       '<div class="ui-card"><div class="tl-filters">' + schoolSel + (schF ? '<button class="btn-link" id="is-clear">Clear school filter</button>' : '') + '</div><div class="ui-tabs">' +
         ['all', 'open', 'investigating', 'resolved'].map(function (k) { return '<button class="ui-tab' + (st === k ? ' on' : '') + '" data-istab="' + k + '">' + k.charAt(0).toUpperCase() + k.slice(1) + ' <b>' + (k === 'all' ? counts.all : counts[k]) + '</b></button>'; }).join('') + '</div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Reporter</th><th>School</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
+        '<div id="is-page"><div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Reporter</th><th>School</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        (list.length ? pagerHtml(list.length, issuesPager.page, issuesPager.size, st === 'all' ? 'issues' : st + ' issues') : '') + '</div></div>' +
       crashGroup;
+    var im = body.querySelector('#is-page');
+    if (list.length) wirePager(im, function (page, size) {
+      if (size !== issuesPager.size) { issuesPager.size = size; issuesPager.page = 1; try { localStorage.setItem(ISSUES_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
+      else issuesPager.page = page;
+      SCREEN.issues(params, body);
+      im = body.querySelector('#is-page'); if (im) im.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     body.querySelectorAll('[data-istab]').forEach(function (b) { b.addEventListener('click', function () { go('issues', { status: b.dataset.istab, school: schF }); }); });
     body.querySelectorAll('[data-isch]').forEach(function (b) { b.addEventListener('click', function () { go('issues', { status: st, school: schF === b.dataset.isch ? '' : b.dataset.isch }); }); });
     var isel = body.querySelector('#is-school'); if (isel) isel.addEventListener('change', function () { go('issues', { status: st, school: isel.value }); });
@@ -2833,54 +2958,163 @@
   }
 
   // Templates (spec §6.1)
+  // Audience chip: colour + icon per audience (colours: --aud-* in tilli.html).
+  var AUD_META = {
+    'Teacher':            { cls: 'teacher',     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20l4-4 4 4"/><line x1="7" y1="9" x2="13" y2="9"/></svg>' },
+    'Parent':             { cls: 'parent',      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17.5" cy="11" r="2.2"/><path d="M14.8 20a3.4 3.4 0 0 1 6.2-1.9"/></svg>' },
+    'Direct Assessment':  { cls: 'direct',      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4h4v2.5a1.5 1.5 0 1 0 3 0V4h3v6h-2.5a1.5 1.5 0 1 0 0 3H20v7h-6v-2.5a1.5 1.5 0 1 0-3 0V20H4v-7h2.5a1.5 1.5 0 1 0 0-3H4V4z"/></svg>' },
+    'Observation':        { cls: 'observation', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>' },
+    'Teacher reflection': { cls: 'reflection',  icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M12 15.5s-3-1.8-3-3.8a1.6 1.6 0 0 1 3-.8 1.6 1.6 0 0 1 3 .8c0 2-3 3.8-3 3.8z"/></svg>' },
+  };
+  var AUD_TIPS = {
+    'Teacher': 'Answered by the class teacher about each student.',
+    'Parent': 'Answered by a parent at home.',
+    'Direct Assessment': 'Done by the student — gamified tasks.',
+    'Observation': 'Teacher observation form — a shared question bank, published per phase.',
+    'Teacher reflection': 'Teachers reflect on themselves during dashboard onboarding.',
+  };
+  function audChip(aud) {
+    var m = AUD_META[aud] || { cls: 'other', icon: '' };
+    return '<span class="tl-audchip a-' + m.cls + '"' + (AUD_TIPS[aud] ? ' title="' + esc(AUD_TIPS[aud]) + '"' : '') + '>' + m.icon + esc(aud) + '</span>';
+  }
+
+  // Grid (cards) or List (table) — a per-viewer preference, remembered in this browser.
+  var TPL_LAYOUT_KEY = 'tilliMeasures.admin.templatesLayout';
+  var tplLayout = (function () { try { return localStorage.getItem(TPL_LAYOUT_KEY) === 'grid' ? 'grid' : 'list'; } catch (e) { return 'list'; } })();
+  // List-view column sort, one state per table. key null = the default order.
+  var tplSort = { tpl: { key: null, dir: 1 }, sg: { key: null, dir: 1 } };
+  var TPL_SORT_DESC_FIRST = { history: 1, items: 1 };   // columns whose first click is newest / largest first
+  var TPL_PHASE_RANK = { Baseline: 1, Midline: 2, Endline: 3 };
+  // Stable sort by it.sort[key]; empty values always sink to the bottom.
+  function sortTplItems(arr, st) {
+    if (!st.key) return arr;
+    return arr.map(function (it, i) { return { it: it, i: i }; }).sort(function (a, b) {
+      var x = a.it.sort[st.key], y = b.it.sort[st.key];
+      var nx = x == null || x === '', ny = y == null || y === '';
+      if (nx || ny) return nx === ny ? a.i - b.i : (nx ? 1 : -1);
+      var c = typeof x === 'string' ? x.localeCompare(y, undefined, { sensitivity: 'base' }) : x - y;
+      return c ? c * st.dir : a.i - b.i;
+    }).map(function (o) { return o.it; });
+  }
+  function sortTh(table, key, label, tip) {
+    var st = tplSort[table], on = st.key === key;
+    return '<th aria-sort="' + (on ? (st.dir > 0 ? 'ascending' : 'descending') : 'none') + '">' +
+      '<button type="button" class="tl-sortbtn' + (on ? ' on' : '') + '" data-tsort="' + table + ':' + key + '" title="' + esc(tip) + '">' + label +
+      '<span class="tl-sort-ic" aria-hidden="true">' + (on ? (st.dir > 0 ? '▲' : '▼') : '↕') + '</span></button></th>';
+  }
   SCREEN.templates = function (params, body) {
     var stF = params.status || '';
     var arch = params.view === 'archived';
+    var asList = tplLayout === 'list';
     var counts = { active: ORG.templates.filter(function (t) { return !t.archived; }).length, archived: ORG.templates.filter(function (t) { return t.archived; }).length };
     var list = ORG.templates.filter(function (t) { return (arch ? t.archived : !t.archived) && (!stF || t.status === stF); });
     var latest = ORG.server.latestTemplateIds();
     var banner = stF ? '<div class="tl-filterbanner">Filtered to <b>' + esc(stF) + '</b> templates · <button class="btn-link" id="tpl-clear">clear</button></div>' : '';
-    var cards = list.map(function (t) {
-      return '<div class="tl-tpl-card' + (t.archived ? ' is-archived' : '') + '"><div class="tt-top"><span class="tt-aud">' + esc(t.audience) + '</span>' +
-        '<span class="tt-badges">' + tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')) + '</span></div>' +
-        '<div class="tt-title">' + esc(t.title) + '</div><div class="tt-desc">' + esc(t.desc) + '</div>' +
-        '<div class="tt-meta">' + tplMetaLine(t) + '</div>' +
-        '<div class="tt-foot"><span class="tt-phase">' + esc(t.phase) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span></span><button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button></div></div>';
-    }).join('');
+    // One item model, rendered as a card (grid) or a table row (list).
+    // { aud, badges, title, desc, meta, foot, action, archived }
+    var items = [];
     // The Observation Form is a first-class template (audience: Observation): a
     // shared question bank published per phase. It opens its own editor rather
     // than the generic template menu. Hidden when a status filter is applied.
-    var obsCard = '';
     if (!stF && !arch) {
       var obs = ORG.observation;
       var pub = obs.phases.filter(function (p) { return p.published; }).length;
-      obsCard = '<div class="tl-tpl-card"><div class="tt-top"><span class="tt-aud">Observation</span>' +
-        statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn') + '</div>' +
-        '<div class="tt-title">Teacher Observation Form</div>' +
-        '<div class="tt-desc">' + obs.questions.length + '-item shared question bank, published per phase. Deploy from Deployments.</div>' +
-        '<div class="tt-foot"><span class="tt-phase">Pre · Mid · Post</span><button class="btn-link" data-obsedit>Configure ⋮</button></div></div>';
+      items.push({ aud: 'Observation', badges: statusPill(pub + '/' + obs.phases.length + ' phases live', pub ? 'ok' : 'warn'),
+        title: 'Teacher Observation Form', desc: obs.questions.length + '-item shared question bank, published per phase. Deploy from Deployments.',
+        meta: '', foot: 'Pre · Mid · Post', action: '<button class="btn-link" data-obsedit>Configure ⋮</button>',
+        sort: { title: 'Teacher Observation Form', aud: 'Observation', phase: 0, status: pub ? 1 : 3, history: null } });
     }
+    // Teacher Reflection Questions: the one-time onboarding reflection, edited in
+    // its own screen (SCREEN.reflection). Not deployed — teachers get it on first login.
+    var reflCfg = (!stF && !arch && window.TilliAPI && window.TilliAPI.getReflectionConfig) ? window.TilliAPI.getReflectionConfig() : null;
+    if (reflCfg) {
+      var rqN = (reflCfg.questions || []).length, rcN = (reflCfg.cats || []).length;
+      items.push({ aud: 'Teacher reflection', badges: statusPill(rqN + ' questions', rqN ? 'ok' : 'warn'),
+        title: 'Teacher Reflection Questions', desc: 'One-time self-reflection every teacher completes during dashboard onboarding — ' + rqN + ' questions across ' + rcN + ' categories.',
+        meta: reflCfg.updatedAt ? 'Last saved ' + esc(fmtMs(reflCfg.updatedAt)) : '', foot: 'Onboarding · not deployed', action: '<button class="btn-link" data-refledit>Edit questions ⋮</button>',
+        sort: { title: 'Teacher Reflection Questions', aud: 'Teacher reflection', phase: 0, status: rqN ? 1 : 3, history: reflCfg.updatedAt ? +new Date(reflCfg.updatedAt) : null } });
+    }
+    list.forEach(function (t) {
+      items.push({ aud: t.audience, archived: t.archived,
+        badges: tplVersionBadge(t, latest) + (t.archived ? statusPill('Archived', 'muted') : statusPill(t.status, t.status === 'Published' ? 'ok' : 'warn')),
+        title: t.title, desc: t.desc, meta: tplMetaLine(t),
+        foot: esc(t.phase) + ' · <span class="tt-where" title="Where this audience’s assessments run">' + esc(whereText(t.audience)) + '</span>',
+        action: '<button class="btn-link" data-tpl="' + t.id + '">Edit ⋮</button>',
+        // status rank: ★ Latest · Published · Older version · Draft · Archived
+        sort: { title: t.title, aud: t.audience, phase: TPL_PHASE_RANK[t.phase] != null ? TPL_PHASE_RANK[t.phase] : 9,
+          status: t.archived ? 4 : t.status !== 'Published' ? 3 : latest[t.phase + '|' + t.audience] === t.id ? 0 : 2,
+          history: +new Date(t.updatedAt || t.createdAt) || null } });
+    });
+    function tplCard(it) {
+      return '<div class="tl-tpl-card' + (it.archived ? ' is-archived' : '') + '"><div class="tt-top">' + audChip(it.aud) +
+        '<span class="tt-badges">' + it.badges + '</span></div>' +
+        '<div class="tt-title">' + esc(it.title) + '</div><div class="tt-desc">' + esc(it.desc) + '</div>' +
+        (it.meta ? '<div class="tt-meta">' + it.meta + '</div>' : '') +
+        '<div class="tt-foot"><span class="tt-phase">' + it.foot + '</span>' + it.action + '</div></div>';
+    }
+    function tplRow(it) {
+      return '<tr' + (it.archived ? ' class="is-archived"' : '') + '><td class="name">' + esc(it.title) + '<small>' + esc(it.desc) + '</small></td>' +
+        '<td>' + audChip(it.aud) + '</td><td>' + it.foot + '</td>' +
+        '<td><span class="tt-badges">' + it.badges + '</span></td>' +
+        '<td class="tl-tpl-meta">' + (it.meta || '—') + '</td><td class="r">' + it.action + '</td></tr>';
+    }
+    var empty = '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>';
+    var tplView = !items.length ? empty : asList
+      ? '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820 tl-tpl-table"><thead><tr>' +
+          sortTh('tpl', 'title', 'Template', 'Sort by template name') + sortTh('tpl', 'aud', 'Audience', 'Sort by audience') +
+          sortTh('tpl', 'phase', 'Phase · where', 'Sort by phase — Baseline, Midline, Endline') +
+          sortTh('tpl', 'status', 'Status', 'Sort by status — ★ Latest, Published, Older version, Draft, Archived') +
+          sortTh('tpl', 'history', 'History', 'Sort by last edited (newest first on the first click)') + '<th></th></tr></thead><tbody>' +
+          sortTplItems(items, tplSort.tpl).map(tplRow).join('') + '</tbody></table></div></div>'
+      : '<div class="tl-tpl-grid">' + items.map(tplCard).join('') + '</div>';
     // Self-Guided assessments live here too: gamified instruments (EMT, Hearts &
     // Flowers, Memory Game) shown as their own section under the template grid.
-    var sgCards = (stF || arch) ? '' : ORG.selfGuided.map(function (g) {
-      return '<div class="tl-sg-card"><div class="sg-top"><div><div class="sg-name">' + esc(g.name) + '</div><div class="sg-full">' + esc(g.full) + '</div></div>' +
-        statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</div>' +
-        skillTagsHtml(g.skills) + '<div class="sg-desc">' + esc(g.desc) + '</div>' +
-        '<div class="sg-foot"><span class="sg-q">' + g.questions + ' items</span><button class="btn btn-outline btn-sm" data-manage="' + g.id + '">Manage</button></div></div>';
-    }).join('');
-    var sgSection = sgCards ? '<div class="ui-eyebrow tl-mini-head">Self-Guided Assessments</div>' +
-      '<p class="ui-mod-note" style="margin:-4px 0 var(--page-gap)">' + ORG.selfGuided.length + ' gamified instruments — EMT, Hearts &amp; Flowers, Memory Game.</p>' +
-      '<div class="tl-sg-grid">' + sgCards + '</div>' : '';
-    body.innerHTML = screenHead('Templates', (list.length + (obsCard ? 1 : 0)) + ' assessment templates. The newest published template for each phase + audience is marked Latest — deploy that one.', '<button class="btn btn-primary btn-sm" data-new>+ New template</button>') +
+    var games = (stF || arch) ? [] : ORG.selfGuided;
+    var sgView = !games.length ? '' : asList
+      ? '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-760 tl-tpl-table"><thead><tr>' +
+          sortTh('sg', 'title', 'Instrument', 'Sort by instrument name') + '<th>Skills</th>' +
+          sortTh('sg', 'items', 'Items', 'Sort by number of items (most first on the first click)') +
+          sortTh('sg', 'status', 'Status', 'Sort by status — Published first') + '<th></th></tr></thead><tbody>' +
+          sortTplItems(games.map(function (g) { return { g: g, sort: { title: g.name, items: g.questions, status: g.status === 'Published' ? 0 : 1 } }; }), tplSort.sg).map(function (o) {
+            var g = o.g;
+            return '<tr><td class="name">' + esc(g.name) + '<small>' + esc(g.full) + ' — ' + esc(g.desc) + '</small></td><td>' + skillTagsHtml(g.skills) + '</td>' +
+              '<td>' + g.questions + '</td><td>' + statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</td>' +
+              '<td class="r"><button class="btn-link" data-manage="' + g.id + '">Manage</button></td></tr>';
+          }).join('') + '</tbody></table></div></div>'
+      : '<div class="tl-sg-grid">' + games.map(function (g) {
+          return '<div class="tl-sg-card"><div class="sg-top"><div><div class="sg-name">' + esc(g.name) + '</div><div class="sg-full">' + esc(g.full) + '</div></div>' +
+            statusPill(g.status, g.status === 'Published' ? 'ok' : 'warn') + '</div>' +
+            skillTagsHtml(g.skills) + '<div class="sg-desc">' + esc(g.desc) + '</div>' +
+            '<div class="sg-foot"><span class="sg-q">' + g.questions + ' items</span><button class="btn btn-outline btn-sm" data-manage="' + g.id + '">Manage</button></div></div>';
+        }).join('') + '</div>';
+    var sgSection = sgView ? '<div class="ui-eyebrow tl-mini-head">Self-Guided Assessments</div>' +
+      '<p class="ui-mod-note" style="margin:-4px 0 var(--page-gap)">' + ORG.selfGuided.length + ' gamified instruments — EMT, Hearts &amp; Flowers, Memory Game.</p>' + sgView : '';
+    var layoutSeg = '<div class="ui-seg tl-layoutseg" role="group" aria-label="Layout">' +
+      '<button class="' + (asList ? '' : 'on') + '" data-tpllayout="grid" aria-pressed="' + !asList + '" title="Grid — one card per template">' + ICONS.grid + '<span>Grid</span></button>' +
+      '<button class="' + (asList ? 'on' : '') + '" data-tpllayout="list" aria-pressed="' + asList + '" title="List — one row per template, easier to scan and compare">' + ICONS.list + '<span>List</span></button></div>';
+    body.innerHTML = screenHead('Templates', items.length + ' assessment templates. The newest published template for each phase + audience is marked Latest — deploy that one.', '<button class="btn btn-primary btn-sm" data-new>+ New template</button>') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (!arch ? ' on' : '') + '" data-tplview="">Active <b>' + counts.active + '</b></button>' +
         '<button class="ui-tab' + (arch ? ' on' : '') + '" data-tplview="archived" title="Archived templates are hidden from new deployments but kept for reference.">Archived <b>' + counts.archived + '</b></button>' +
-      '</div>' + banner +
-      '<div class="tl-tpl-grid">' + (obsCard + cards || '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>') + '</div>' + sgSection;
+        layoutSeg +
+      '</div>' + banner + tplView + sgSection;
+    body.querySelectorAll('[data-tsort]').forEach(function (b) { b.addEventListener('click', function () {
+      var parts = b.dataset.tsort.split(':'), st = tplSort[parts[0]], key = parts[1];
+      if (st.key === key) st.dir = -st.dir;
+      else { st.key = key; st.dir = TPL_SORT_DESC_FIRST[key] ? -1 : 1; }
+      SCREEN.templates(params, body);
+    }); });
+    body.querySelectorAll('[data-tpllayout]').forEach(function (b) { b.addEventListener('click', function () {
+      if (tplLayout === b.dataset.tpllayout) return;
+      tplLayout = b.dataset.tpllayout;
+      try { localStorage.setItem(TPL_LAYOUT_KEY, tplLayout); } catch (e) { /* per-viewer convenience only */ }
+      SCREEN.templates(params, body);
+    }); });
     var c = body.querySelector('#tpl-clear'); if (c) c.addEventListener('click', function () { go('templates', arch ? { view: 'archived' } : {}); });
     body.querySelectorAll('[data-tplview]').forEach(function (b) { b.addEventListener('click', function () { go('templates', b.dataset.tplview ? { view: b.dataset.tplview } : {}); }); });
     var nb = body.querySelector('[data-new]'); if (nb) nb.addEventListener('click', openNewTemplate);
     var ob = body.querySelector('[data-obsedit]'); if (ob) ob.addEventListener('click', function () { go('observation', {}); });
+    var rb = body.querySelector('[data-refledit]'); if (rb) rb.addEventListener('click', function () { go('reflection', {}); });
     body.querySelectorAll('[data-tpl]').forEach(function (b) { b.addEventListener('click', function () { openTemplateMenu(b.dataset.tpl); }); });
     body.querySelectorAll('[data-manage]').forEach(function (b) { b.addEventListener('click', function () { openManageGame(b.dataset.manage); }); });
   };
@@ -2959,12 +3193,13 @@
       '</div><div id="hist-list"></div></div>';
 
     var listEl = body.querySelector('#hist-list'), countEl = body.querySelector('#hist-count');
+    HU.wireSummary(listEl);   // one-line rows → click to expand (delegated; survives redraws)
     function drawList() {
       var win = histWindow();
       var all = ORG.server.history(histState.school ? [histState.school] : ids, { kind: histState.kind, q: histState.q })
         .filter(function (e) { return (win[0] == null || e.at >= win[0]) && (win[1] == null || e.at <= win[1]); });
       var more = all.length - histState.shown, rl = histRangeLabel();
-      listEl.innerHTML = histList(all.slice(0, histState.shown), { showSchool: !histState.school,
+      listEl.innerHTML = histList(all.slice(0, histState.shown), { showSchool: !histState.school, summary: true, all: all,
           empty: histState.q ? 'No changes match “' + histState.q + '”' + (rl ? ' ' + rl : '') + '.' : 'No changes ' + (rl || 'recorded yet') + '.' }) +
         (more > 0 ? '<button class="btn btn-outline btn-sm hist-morebtn" id="hist-more">Show ' + Math.min(HIST_PAGE, more) + ' more</button>' : '');
       countEl.textContent = all.length.toLocaleString() + ' change' + (all.length === 1 ? '' : 's') + (rl ? ' ' + rl : '');
@@ -3093,7 +3328,7 @@
       { title: 'Schools', rows: ORG.schools.filter(function (s) { return (s.name + ' ' + s.code).toLowerCase().indexOf(q) >= 0; }).slice(0, 8).map(function (s) { return { label: s.name, sub: s.code + ' · ' + s.groupName, go: ['school', { id: s.id }] }; }) },
       { title: 'Students', rows: ORG.server.studentDirectory().filter(function (r) { return (r.name + ' ' + r.admission).toLowerCase().indexOf(q) >= 0; }).slice(0, 8).map(function (r) { return { label: r.name, sub: r.admission, go: ['school', { id: r.schoolId, tab: 'students' }] }; }) },
       { title: 'Users', rows: ORG.users.filter(function (u) { return (u.name + ' ' + u.email).toLowerCase().indexOf(q) >= 0; }).slice(0, 8).map(function (u) { return { label: u.name, sub: u.email + ' · ' + u.role, go: ['users', { q: u.name }] }; }) },
-      { title: 'Invitations', rows: ORG.invitations.filter(function (i) { return (i.name + ' ' + i.email).toLowerCase().indexOf(q) >= 0; }).slice(0, 6).map(function (i) { return { label: i.name, sub: i.email + ' · ' + i.status, go: ['invitations', {}] }; }) },
+      { title: 'Invitations', rows: ORG.invitations.filter(function (i) { return (i.name + ' ' + i.email).toLowerCase().indexOf(q) >= 0; }).slice(0, 6).map(function (i) { return { label: i.name, sub: i.email + ' · ' + i.status, go: ['invitations', { q: i.name }] }; }) },
       { title: 'Deployments', rows: ORG.deployments.filter(function (d) { return d.assessment.toLowerCase().indexOf(q) >= 0; }).slice(0, 6).map(function (d) { return { label: d.assessment, sub: d.phase + ' · ' + d.status, go: ['deployments', {}] }; }) },
     ].filter(function (g) { return g.rows.length; });
     var html = groups.length ? groups.map(function (g) {
@@ -3311,7 +3546,8 @@
   var REFL_TYPES = [['scale', 'Scale 1–5'], ['choice', 'Multiple choice'], ['text', 'Written answer']];
   SCREEN.reflection = function (p, b) {
     var API = window.TilliAPI;
-    if (!API || !API.getReflectionConfig) { b.innerHTML = screenHead('Reflection Questions', 'Question store unavailable.'); return; }
+    var reflCrumbs = crumbs([{ label: 'Templates', screen: 'templates' }, { label: 'Teacher Reflection Questions' }]);
+    if (!API || !API.getReflectionConfig) { b.innerHTML = reflCrumbs + screenHead('Teacher Reflection Questions', 'Question store unavailable.'); wireCrumbs(b); return; }
     if (!reflDraft) { reflDraft = API.getReflectionConfig(); reflDirty = false; }
     var cats = reflDraft.cats || [], qs = reflDraft.questions || [];
     var n = 0;
@@ -3348,13 +3584,14 @@
         '<button class="btn btn-outline btn-sm" data-rq-add="' + esc(c.id) + '">+ Add question</button></div>' + rows + '</div>';
     }).join('');
     var saved = (reflDraft.updatedAt ? 'Last saved ' + timeAgo(reflDraft.updatedAt) + '. ' : '');
-    b.innerHTML = screenHead('Reflection Questions',
+    b.innerHTML = reflCrumbs + screenHead('Teacher Reflection Questions',
         saved + 'The one-time teacher reflection in dashboard onboarding — ' + qs.length + ' questions across ' + cats.length + ' categories. Changes reach teachers the next time they open the reflection.',
         '<button class="btn btn-outline btn-sm" id="rq-reset">Reset to default</button>' +
         '<button class="btn btn-outline btn-sm" id="rq-discard"' + (reflDirty ? '' : ' disabled') + '>Discard</button>' +
         '<button class="btn btn-primary btn-sm" id="rq-save"' + (reflDirty ? '' : ' disabled') + '>' + (reflDirty ? 'Save changes' : 'Saved') + '</button>') +
       (reflDirty ? '<div class="tl-filterbanner">Unsaved changes — teachers still see the last saved version.</div>' : '') +
       catCards;
+    wireCrumbs(b);
 
     function dirty() {
       if (reflDirty) return;
@@ -3643,7 +3880,8 @@
     'Change History': 'Every change to student records and assessments — by teachers, school admins, parents and the Tilli team. Filter by date range, type and school.',
     'Templates': 'Assessment templates. The newest published one for each phase + audience is marked ★ Latest — that’s the one to deploy.',
     'Deployments': 'Assessments sent to schools, their results, and the links people use to take them.',
-    'Reflection Questions': 'Questions teachers answer about themselves during dashboard onboarding.',
+    'Teacher Reflection Questions': 'Questions teachers answer about themselves during dashboard onboarding. Edited here; not deployed.',
+    'Users & Invitations': 'Everyone with a login (Users tab) and the invites sent to new school admins and teachers (Invitations tab).',
     'Users': 'Everyone with a login and their role. Change a role or remove access here.',
     'Invitations': 'Invites sent to school admins and teachers — pending, accepted or expired.',
     'Issue Reports': 'Problems reported from the apps, plus grouped auto-crash reports. Filter by status or school.',
@@ -3834,7 +4072,7 @@
     return '<details class="tl-faq"' + (open ? ' open' : '') + ' id="faq-' + f.id + '"><summary>' + esc(f.q) + '</summary><p>' + esc(f.a) + '</p></details>';
   }
   var SCREEN_TITLES = { controlroom: 'Control Room', analytics: 'Analytics', schools: 'All Schools', group: 'School group', school: 'School page', history: 'Change History',
-    templates: 'Templates', deployments: 'Deployments', reflection: 'Reflection Questions', users: 'Users', invitations: 'Invitations', issues: 'Issue Reports',
+    templates: 'Templates', deployments: 'Deployments', reflection: 'Teacher Reflection Questions', users: 'Users', invitations: 'Invitations', issues: 'Issue Reports',
     audit: 'Audit Trail', deletion: 'Deletion Logs', merge: 'Merge Students', 'add-students': 'Add Students', knowledge: 'Knowledge Base', student: 'Student report', observation: 'Observation Form' };
 
   // ---- Help panel (? Help on every page) ----

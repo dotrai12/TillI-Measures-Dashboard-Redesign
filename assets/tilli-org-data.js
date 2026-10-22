@@ -375,7 +375,7 @@
     return {
       id: 'inv-acct-' + String(acct.email || '').toLowerCase(),
       name: TITLES(local) || acct.email, email: acct.email, role: acct.role || 'School Admin',
-      schoolId: acct.school_id || null,
+      schoolId: acct.school_id || null, groupId: acct.group_id || null,
       status: acct.status === 'active' ? 'Activated' : 'Account Created',
       delivery: 'Email sent', created: iso(created), expires: iso(expires),
     };
@@ -1120,7 +1120,7 @@
         ev(base - 4 - r() * 3, { kind: 'assessment', action: 'assessment.complete', phase: P, audience: 'Teacher', section_name: secName, items: ['Teacher observation'], actor: teacher,
           count: Math.max(1, Math.round(s.students * (0.2 + r() * 0.5) / Math.max(1, s.sectionCount))) });
       });
-      if (r() < 0.6 && g0 && g0.sections.length > 1) ev(0.5 + r() * 9, { kind: 'student', action: 'student.edit', label: 'moved a student between sections', section_name: g0.grade, actor: coord,
+      if (r() < 0.6 && g0 && g0.sections.length > 1) ev(0.5 + r() * 9, { kind: 'student', action: 'student.edit', label: 'moved ' + pick(r, COORD_FIRST) + ' ' + pick(r, COORD_LAST).charAt(0) + '. between sections', section_name: g0.grade, actor: coord,
         changes: [{ label: 'Section', from: g0.grade + ' ' + g0.sections[0].name, to: g0.grade + ' ' + g0.sections[1].name }] });
     });
     return out;

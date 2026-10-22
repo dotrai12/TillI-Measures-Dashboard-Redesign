@@ -591,7 +591,8 @@ b, strong { font-weight: 700; }
 .ui-side-foot { margin-top: auto; font-family: var(--font-heading); font-size: var(--fs-xs); color: var(--ink-300); font-weight: 600; padding: 0 10px; line-height: 1.5; }
 .ui-side .lockup { padding: 4px 8px 14px; }
 /* Long navs (Tilli platform) scroll inside the sidebar so the profile stays pinned. */
-.ui-side .ui-nav { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.ui-side .ui-nav { min-height: 0; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.ui-side .ui-nav::-webkit-scrollbar { display: none; }
 
 /* Bottom-left stack, identical on every dashboard: [dev preview panel] then [profile]. */
 .ui-side-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding-top: 10px; width: 100%; }
@@ -1229,6 +1230,49 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 .hist-tools .hist-count { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); }
 .hist-morebtn { display: block; margin: 12px auto 0; }
 @media (max-width: 640px) { .hist-k { min-width: 0; display: block; } .hist-tools .hist-count { margin-left: 0; width: 100%; } }
+
+/* ---- Summary mode (TilliHistory.listHTML {summary:true}) — one-line rows, click to expand ---- */
+:root {
+  --hist-sum-pad-y: 8px;        /* vertical padding of a collapsed summary row */
+  --hist-detail-indent: 0px;    /* left inset of the expanded detail under a row */
+}
+.hist-dayhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 18px 0 4px; }
+.hist-dayblock:first-child .hist-dayhead { margin-top: 2px; }
+.hist-dayhead .hist-day { margin: 0; }
+.hist-daysum { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); }
+.hist-daysum b { color: var(--ink-600); font-weight: 700; }
+.hist-dk { display: inline-flex; align-items: center; gap: 5px; }
+.hist-dk i { width: 8px; height: 8px; border-radius: 50%; background: var(--hist-dot-student); }
+.hist-dk.k-asm i { background: var(--hist-dot-assessment); }
+.hist-expandall { margin-left: auto; font-size: var(--fs-xs); }
+.hist-item.hist-sum { padding: var(--hist-sum-pad-y) 0; }
+.hist-sum .hist-dot { margin-top: 12px; }
+.hist-sumrow { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 4px 6px; margin: 0 -6px; border: none; border-radius: var(--radius-sm); background: none; font: inherit; text-align: left; color: inherit; cursor: pointer; }
+.hist-sumrow:hover { background: var(--surface-100); }
+.hist-sumrow:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.hist-sumrow .hist-line { flex: 1; min-width: 0; }
+.hist-inline { margin-left: 8px; color: var(--ink-600); }
+.hist-inline b { color: var(--ink-900); }
+.hist-where { margin-left: 6px; color: var(--text-meta); font-weight: 600; }
+.hist-times { display: inline-block; margin-left: 2px; padding: 0 7px; border-radius: var(--radius-pill); background: var(--surface-100); color: var(--ink-600); font-size: var(--fs-xs); font-weight: 700; line-height: 1.7; vertical-align: 1px; }
+.hist-when { flex: none; font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); white-space: nowrap; }
+.hist-chev { flex: none; align-self: center; display: grid; place-items: center; color: var(--ink-300); transition: transform .15s; }
+.hist-chev svg { width: 16px; height: 16px; }
+.hist-sum.open .hist-chev { transform: rotate(90deg); }
+.hist-detail { margin: 4px 0 4px var(--hist-detail-indent); }
+.hist-detail .hist-changes { margin-top: 2px; }
+.hist-subs { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hist-subs li { display: flex; gap: 10px; align-items: flex-start; }
+.hist-subs time { flex: none; min-width: 64px; padding-top: 8px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
+.hist-sub-body { flex: 1; min-width: 0; }
+.hist-sub-body .hist-changes { margin-top: 0; }
+@media (max-width: 640px) {
+  .hist-sumrow { flex-wrap: wrap; }
+  .hist-sumrow .hist-line { flex-basis: 100%; }
+  .hist-inline, .hist-where { margin-left: 0; display: block; }
+  .hist-subs li { flex-direction: column; gap: 2px; }
+  .hist-subs time { padding-top: 0; }
+}
 
 /* Small round History icon button (student header). */
 :root {

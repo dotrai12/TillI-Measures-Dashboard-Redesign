@@ -244,6 +244,19 @@
   .tl-filters .select-wrap { min-width: 150px; }
   .tl-filters .grow { flex: 1; }
   .tl-filters .tl-filter-q { max-width: 340px; }
+  /* Search box with a leading icon (Users & Invitations filter bar). */
+  .tl-filter-search { position: relative; display: block; min-width: 200px; }
+  .tl-filter-search .ic { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-300); display: grid; place-items: center; pointer-events: none; }
+  .tl-filter-search .ic svg { width: 16px; height: 16px; }
+  .tl-filter-search .input { width: 100%; padding-left: 36px; }
+  /* Icon-only row actions (Users & Invitations). Label lives in title + aria-label. */
+  .tl-rowacts { display: inline-flex; gap: 4px; justify-content: flex-end; }
+  .tl-rowact { width: 32px; height: 32px; display: grid; place-items: center; border: none; border-radius: var(--radius-sm); background: none; color: var(--green-700); cursor: pointer; }
+  .tl-rowact svg { width: 18px; height: 18px; }
+  .tl-rowact:hover { background: var(--wash-green); }
+  .tl-rowact.danger { color: var(--danger-700); }
+  .tl-rowact.danger:hover { background: var(--danger-wash); }
+  .tl-rowact:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
   .tl-country-seg { flex-wrap: wrap; max-width: 100%; }
   .tl-country-seg b { font-weight: 700; font-size: var(--fs-xs); color: var(--ink-300); margin-left: 4px; }
   .tl-country-seg button.on b { color: var(--green-700); }
@@ -478,10 +491,42 @@
   .sr-legend { justify-content: center; }
 
   /* ---- Templates grid ---- */
+  /* Grid / List toggle sits at the right end of the Active / Archived tab strip. */
+  .tl-layoutseg { margin-left: auto; padding: 3px; }
+  .tl-layoutseg button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; }
+  .tl-layoutseg svg { width: 15px; height: 15px; }
+  /* List view */
+  .tl-tpl-table td { vertical-align: top; }
+  /* Sortable column headers (button fills the th; ↕ idle, ▲/▼ active) */
+  .tl-sortbtn { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: none; background: none; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; white-space: nowrap; }
+  .tl-sortbtn:hover, .tl-sortbtn.on { color: var(--green-700); }
+  .tl-sortbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+  .tl-sort-ic { font-size: 9px; color: var(--ink-300); }
+  .tl-sortbtn.on .tl-sort-ic { color: var(--green-700); }
+  .tl-tpl-table td.name small { max-width: 360px; white-space: normal; }
+  .tl-tpl-table .tt-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+  /* Audience chips (Templates grid + list). bg = chip fill, fg = text + icon. */
+  :root {
+    --aud-teacher-bg: var(--wash-green);                                       --aud-teacher-fg: var(--green-700);
+    --aud-parent-bg: color-mix(in srgb, var(--pink-600) 11%, var(--white));    --aud-parent-fg: color-mix(in srgb, var(--pink-600) 72%, black);
+    --aud-direct-bg: var(--wash-cyan);                                         --aud-direct-fg: color-mix(in srgb, var(--cyan-700) 85%, black);
+    --aud-observation-bg: color-mix(in srgb, var(--yellow-500) 22%, var(--white)); --aud-observation-fg: color-mix(in srgb, var(--warn-700) 85%, black);
+    --aud-reflection-bg: var(--surface-100);                                   --aud-reflection-fg: var(--ink-600);
+    --aud-chip-icon: 14px;   /* icon size inside an audience chip */
+  }
+  .tl-audchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 8px; border-radius: var(--radius-pill); font-weight: 700; font-size: var(--fs-xs); line-height: 1.4; white-space: nowrap; background: var(--surface-100); color: var(--ink-600); }
+  .tl-audchip svg { width: var(--aud-chip-icon); height: var(--aud-chip-icon); flex: none; }
+  .tl-audchip.a-teacher     { background: var(--aud-teacher-bg);     color: var(--aud-teacher-fg); }
+  .tl-audchip.a-parent      { background: var(--aud-parent-bg);      color: var(--aud-parent-fg); }
+  .tl-audchip.a-direct      { background: var(--aud-direct-bg);      color: var(--aud-direct-fg); }
+  .tl-audchip.a-observation { background: var(--aud-observation-bg); color: var(--aud-observation-fg); }
+  .tl-audchip.a-reflection  { background: var(--aud-reflection-bg);  color: var(--aud-reflection-fg); }
+  .tl-tpl-meta { font-size: var(--fs-xs); color: var(--ink-450); min-width: 180px; }
+  .tl-tpl-table tr.is-archived td { opacity: .7; }
+  @media (max-width: 640px) { .tl-layoutseg button span { display: none; } }
   .tl-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--page-gap); }
   .tl-tpl-card { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-card); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
   .tl-tpl-card .tt-top { display: flex; align-items: center; justify-content: space-between; }
-  .tl-tpl-card .tt-aud { font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--cyan-700); }
   .tl-tpl-card .tt-title { font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
   .tl-tpl-card .tt-desc { font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); flex: 1; }
   .tl-tpl-card .tt-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line-200); }
@@ -541,7 +586,7 @@
 
   /* ---- Cross-product placeholder ---- */
 
-  /* ---- Reflection Questions editor (Platform Admin → Assessments) ---- */
+  /* ---- Reflection Questions editor (Platform Admin → Templates → Teacher Reflection) ---- */
   .tl-refl-cat { margin-bottom: var(--page-gap); }
   .tl-refl-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
   .tl-refl-q { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-200); }
