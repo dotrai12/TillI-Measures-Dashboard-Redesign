@@ -21,6 +21,15 @@
   var CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
 
   function roleLabel(r) { return ROLE[r] || ''; }
+  // Section as shown: the name it had when the change happened (the stored
+  // snapshot), plus the fixed base in brackets when they differ — so a row from
+  // before a rename still reads "Grade 1 A", and one after reads "Rose (Grade 1A)".
+  function secName(e) {
+    var A = window.TilliAPI, shown = e.section_name || '';
+    if (!shown || !e.section_id || !A || !A.sectionBase) return shown;
+    var base = A.sectionBase(e.school_id, e.section_id);
+    return base && base.replace(/\s+/g, '').toLowerCase() !== shown.replace(/\s+/g, '').toLowerCase() ? shown + ' (' + base + ')' : shown;
+  }
 
   function timeAgo(ms) {
     var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -65,14 +74,14 @@
     if (e.label) return esc(e.label);
     var subj = subjectHTML(e), hide = opts.hideStudent && (e.students || []).length === 1;
     var lane = esc(e.phase || '') + ' ' + esc(AUD[e.audience] || low(e.audience));
-    var sec = e.section_name ? ' to <b>' + esc(e.section_name) + '</b>' : '';
+    var sec = e.section_name ? ' to <b>' + esc(secName(e)) + '</b>' : '';
     switch (e.action) {
       case 'student.add':        return hide ? 'added this student' + sec : 'added ' + subj + sec;
       case 'student.edit':       return hide ? 'edited the details' : 'edited ' + subj + '’s details';
       case 'student.offboard':   return hide ? 'marked as left the school' : 'marked ' + subj + ' as left the school';
       case 'parent.link':        return hide ? 'linked a parent' : 'linked a parent to ' + subj;
       case 'parent.unlink':      return hide ? 'removed a parent link' : 'removed a parent link from ' + subj;
-      case 'teacher.reassign':   return 'changed the teacher for <b>' + esc(e.section_name || 'a section') + '</b>';
+      case 'teacher.reassign':   return 'changed the teacher for <b>' + esc(secName(e) || 'a section') + '</b>';
       case 'phase.deploy':       return 'deployed the <b>' + lane + '</b>';
       case 'phase.update':       return 'updated the <b>' + lane + '</b>';
       case 'phase.end':          return 'ended the <b>' + lane + '</b>';
@@ -108,7 +117,7 @@
     var meta = ['<time datetime="' + new Date(e.at).toISOString() + '" title="' + esc(fullDate(e.at)) + '">' + esc(timeAgo(e.at)) + '</time>'];
     var rl = roleLabel(e.actor && e.actor.role); if (rl) meta.push(esc(rl));
     if (opts.showSchool && opts.schoolName) { var sn = opts.schoolName(e.school_id); if (sn) meta.push(esc(sn)); }
-    if (opts.showSection !== false && e.section_name && e.action !== 'student.add' && e.action !== 'teacher.reassign') meta.push(esc(e.section_name));
+    if (opts.showSection !== false && e.section_name && e.action !== 'student.add' && e.action !== 'teacher.reassign') meta.push(esc(secName(e)));
     var items = (e.action === 'assessment.complete' && (e.items || []).length > 1) ? '<div class="hist-names">' + esc(e.items.join(' · ')) + '</div>' : '';
     return '<div class="hist-item k-' + (e.kind === 'assessment' ? 'asm' : 'stu') + '">' +
       '<span class="hist-dot" aria-hidden="true"></span>' +
@@ -178,7 +187,7 @@
     var meta = ['<time datetime="' + new Date(e.at).toISOString() + '">' + esc(fullDate(e.at)) + '</time>'];
     var rl = roleLabel(e.actor && e.actor.role); if (rl) meta.push(esc(rl));
     if (opts.schoolName) { var sn = opts.schoolName(e.school_id); if (sn) meta.push(esc(sn)); }
-    if (e.section_name && e.action !== 'student.add' && e.action !== 'teacher.reassign') meta.push(esc(e.section_name));
+    if (e.section_name && e.action !== 'student.add' && e.action !== 'teacher.reassign') meta.push(esc(secName(e)));
     return '<div class="hist-meta">' + meta.join('<span class="hist-sep">·</span>') + '</div>';
   }
   var sumSeq = 0;

@@ -73,7 +73,8 @@
     var ids = kidsOf(sectionId).map(function (k) { return k.student_id; }), its = items().map(function (i) { return i.id; });
     return A.itemCompletion(S.school.school_id, S.phase, AUD, ids, its);
   }
-  function sectionName(id) { var s = A.sectionsForSchool(S.school.school_id).find(function (x) { return x.section_id === id; }); return s ? s.name : ''; }
+  // Shown name: the school's name, with the fixed base in brackets when renamed ("Rose (Grade 1A)").
+  function sectionName(id) { var s = A.sectionsForSchool(S.school.school_id).find(function (x) { return x.section_id === id; }); return s ? A.sectionLabel(S.school.school_id, id) : ''; }
 
   // ---------- views ----------
   function topBar() {
@@ -103,7 +104,7 @@
   }
   function pickView() {
     var secs = A.assessableSections(S.email, S.school.school_id, S.phase), on = ruleOn();
-    var own = secs.filter(function (x) { return x.own; }).map(function (x) { return x.name; });
+    var own = secs.filter(function (x) { return x.own; }).map(function (x) { return sectionName(x.section_id); });
     var rule = on
       ? '<div class="as-rule">My School Check-in runs at school this phase, so you can’t assess your own class' + (own.length ? ' (' + esc(own.join(', ')) + ')' : '') + '. Another teacher assesses it — pick a different class.</div>'
       : '';
@@ -112,7 +113,7 @@
       var c = classDone(x.section_id), pct = c.expected ? Math.round(c.done * 100 / c.expected) : 0;
       var why = x.blocked ? 'Your class — another teacher assesses it' : (x.own ? 'Your class' : '');
       return '<button class="as-class" data-section="' + esc(x.section_id) + '"' + (x.blocked ? ' disabled aria-disabled="true" title="You can’t assess your own class while My School Check-in runs at school."' : '') + '>' +
-        '<b>' + esc(x.name) + '</b><span>' + x.students + ' children · ' + pct + '% done</span>' +
+        '<b>' + esc(sectionName(x.section_id)) + '</b><span>' + x.students + ' children · ' + pct + '% done</span>' +
         (why ? '<span class="as-own">' + esc(why) + '</span>' : '') + '</button>';
     }).join('') || '<p class="as-sub">This school has no classes yet.</p>';
     return '<h1 class="as-h1">Pick a class to assess</h1><p class="as-sub">' + esc(S.phase) + ' · these run at school:</p>' +

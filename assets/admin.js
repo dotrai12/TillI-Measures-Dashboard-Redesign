@@ -50,6 +50,46 @@
   function countNoun(n, singular, plural) { return n + ' ' + (Number(n) === 1 ? singular : plural); }
   function initials(name) { var p = String(name || '').trim().split(/\s+/); return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || ''); }
   function plural(n, s) { return n + ' ' + s + (n === 1 ? '' : 's'); }
+
+  // ---------- grade / section display names ----------
+  // Every grade and section keeps a fixed base (Grade 1, Grade 1A) however the
+  // school renames it. Screens show the school's name with the base in brackets
+  // when they differ — "Sunflowers (Grade 1)", "Sunflowers Rose (Grade 1A)" — and
+  // the plain name otherwise. DISPLAY ONLY: keys, filters, data-* and anything
+  // stored keep the school's raw names. Cached per render (each TilliAPI read
+  // re-parses the local store).
+  var lblCache = {};
+  function lblMemo(k, fn) { return k in lblCache ? lblCache[k] : (lblCache[k] = fn()); }
+  function gLbl(g) {
+    var A = window.TilliAPI;
+    if (g == null || g === '' || !A || !A.gradeLabel) return String(g == null ? '' : g);
+    return lblMemo('g|' + g, function () { return A.gradeLabel(currentSchoolId(), g); });
+  }
+  // A grade list as stored on a user row ("Grade 1, Grade 2").
+  function gradesLbl(str) { return String(str || '').split(/,\s*/).filter(Boolean).map(gLbl).join(', '); }
+  // (grade, section) strings, or a section-shaped object → "Sunflowers Rose (Grade 1A)".
+  // Students carry their own .name, so pass them as strings, not the object.
+  function sLbl(grade, section) {
+    if (grade && typeof grade === 'object') { section = grade.section; grade = grade.grade; }
+    var A = window.TilliAPI, plain = ((grade || '') + ' ' + (section || '')).trim();
+    if (!A || !A.sectionLabel) return plain;
+    return lblMemo('s|' + grade + '|' + section, function () { return A.sectionLabel(currentSchoolId(), grade || '', section || ''); });
+  }
+  // Fixed bases: "Grade 1" / "Grade 1A" ('' when unknown).
+  function baseG(g) { var A = window.TilliAPI; return A && A.baseGradeOf ? lblMemo('bg|' + g, function () { return A.baseGradeOf(currentSchoolId(), g) || ''; }) : ''; }
+  function baseS(g, s) { var A = window.TilliAPI; return A && A.sectionBase ? lblMemo('bs|' + g + '|' + s, function () { return A.sectionBase(currentSchoolId(), g, s) || ''; }) : ''; }
+  // Section letter alone, where the grade is already on screen: "A", or
+  // "Rose (Grade 1A)" once the grade or section has been renamed.
+  function secShort(g, s) {
+    var b = baseS(g, s), squash = function (x) { return String(x || '').replace(/\s+/g, '').toLowerCase(); };
+    return b && squash(b) !== squash(g + s) ? s + ' (' + b + ')' : String(s == null ? '' : s);
+  }
+  // A user row's section list ("A, B") read against its grade. A teacher spread
+  // over several grades can't be paired letter-to-grade, so that list stays as stored.
+  function userSecLbl(u) {
+    var g = String(u.grade || ''), list = String(u.section || '');
+    return /,/.test(g) ? list : list.split(/,\s*/).filter(Boolean).map(function (x) { return secShort(g, x); }).join(', ');
+  }
   var SCREENS = ['overview', 'implementation', 'outcomes', 'roster', 'history', 'reports', 'asktilli'];
 
   var toastTimer;
@@ -113,11 +153,12 @@
 
       var rosterRows = students.length ? students.map(function (s) {
         return '<tr><td class="name">' + esc(s.name) + '</td><td class="mono">' + esc(s.student_id) + '</td>' +
-          '<td>' + esc(s.grade + ' ' + s.section) + '</td><td class="mono">' + esc(s.claimCode) + '</td></tr>';
+          '<td>' + esc(API.sectionLabel ? API.sectionLabel(id, s.grade, s.section) : s.grade + ' ' + s.section) + '</td><td class="mono">' + esc(s.claimCode) + '</td></tr>';
       }).join('') : '<tr><td colspan="4"><div class="ui-empty">No students yet.</div></td></tr>';
 
       var staffRows = staff.map(function (u) {
-        var secName = u.section_id ? (sections.find(function (x) { return x.section_id === u.section_id; }) || {}).name : '';
+        var sec = u.section_id ? sections.find(function (x) { return x.section_id === u.section_id; }) : null;
+        var secName = sec ? (API.sectionLabel ? API.sectionLabel(id, sec) : sec.name) : '';
         return '<tr><td class="name">' + esc(u.name) + '</td><td>' + (u.role === 'coordinator' ? 'School admin' : 'Teacher') + '</td>' +
           '<td>' + esc(secName || '—') + '</td><td class="mono">' + esc(u.email) + '</td></tr>';
       }).join('');
@@ -599,7 +640,7 @@
   //  RENDER
   // ========================================================
   function render() {
-    lastHash = location.hash;
+    lastHash = location.hash; lblCache = {};
     var r = currentRoute();
     if ((r.screen === 'roster' || r.screen === 'history') && !isCoordinator) { go('overview', {}, { replace: true }); return; }
     if (r.screen === 'implementation') { go('overview', {}, { replace: true }); return; }   // Implementation removed from nav
@@ -762,8 +803,9 @@
   // Tree for the focused node. Kid nodes carry their student.
   function dlTree(scope) {
     function kidNodes(sd) { return AD.studentsInSection(sd).map(function (s) { return { type: 'kid', id: s.adm, student: s, grade: sd.grade }; }); }
-    function secNode(sd) { return { type: 'section', id: sd.id, name: sd.name, grade: sd.grade, teacher: AD.teacherFor(sd), children: kidNodes(sd) }; }
-    function gradeNode(g) { return { type: 'grade', id: g, name: g, children: AD.sections.filter(function (s) { return s.grade === g; }).map(secNode) }; }
+    // `name` is display text (base in brackets when renamed); `id` stays the key.
+    function secNode(sd) { return { type: 'section', id: sd.id, name: sLbl(sd), grade: sd.grade, section: sd.section, teacher: AD.teacherFor(sd), children: kidNodes(sd) }; }
+    function gradeNode(g) { return { type: 'grade', id: g, name: gLbl(g), children: AD.sections.filter(function (s) { return s.grade === g; }).map(secNode) }; }
     if (scope.level === 'section') return secNode(AD.sections.find(function (s) { return s.id === scope.sectionId; }));
     if (scope.level === 'grade') return gradeNode(scope.grade);
     return { type: 'school', id: 'school', name: (AD.school && AD.school.name) || 'Your school', children: AD.grades.map(gradeNode) };
@@ -1082,7 +1124,7 @@
         (nav ? ' data-dl-nav="' + nav + '" tabindex="0" role="button" aria-label="' + esc((nav === 'up' ? 'Step back from ' : 'Look closer at ') + n.name + ', ' + sum.text) + '"' : '') + '>' +
         '<circle class="dl-hit" r="' + (n.base + 6) + '"/>' +
         dlHubSVG(n.base, sum.segs, n.key) + '</g>';
-      var lbl = n.type === 'section' && scope.level !== 'school' && !ctx ? n.name.replace(n.grade + ' ', 'Section ') : n.name;
+      var lbl = n.type === 'section' && scope.level !== 'school' && !ctx ? 'Section ' + secShort(n.grade, n.section) : n.name;
       // Big schools: at whole-school zoom (and for faded neighbours) show grade labels only.
       if (n.type === 'section' && (scope.level === 'school' || ctx) && AD.sections.length > DL_CFG.sectionLabelMax) return;
       labels += '<text class="dl-name d' + Math.min(n.depth, 2) + ctx + '" data-dl-i="' + i + '" font-size="' + (n.depth === 2 ? 11 : 13) + '" text-anchor="middle">' + esc(lbl) + '</text>';
@@ -1303,13 +1345,13 @@
       var cs = AD.collectionStatus(), stalled = cs.rows.filter(function (r) { return r.flag === 'stalled'; }), slow = cs.rows.filter(function (r) { return r.flag === 'slow'; });
       var sdOf = function (r) { return AD.sections.find(function (x) { return x.id === r.id; }); };
       if (stalled.length) out.push({ kind: 'warn', eyebrow: 'Not started',
-        head: stalled.length === 1 ? dlHl(stalled[0].name, warn) + ' hasn' + '’' + 't started ' + esc(op.label) + ' yet.' : dlHl(countNoun(stalled.length, 'section hasn', 'sections haven') + '’' + 't started', warn) + ' ' + esc(op.label) + ' yet.',
-        body: stalled.length === 1 ? esc(stalled[0].teacher) + ' may need a hand getting going.' : stalled.slice(0, 4).map(function (r) { return esc(r.name) + ' (' + esc(r.teacher) + ')'; }).join(', ') + (stalled.length > 4 ? ' and more.' : '.'),
+        head: stalled.length === 1 ? dlHl(sLbl(stalled[0]), warn) + ' hasn' + '’' + 't started ' + esc(op.label) + ' yet.' : dlHl(countNoun(stalled.length, 'section hasn', 'sections haven') + '’' + 't started', warn) + ' ' + esc(op.label) + ' yet.',
+        body: stalled.length === 1 ? esc(stalled[0].teacher) + ' may need a hand getting going.' : stalled.slice(0, 4).map(function (r) { return esc(sLbl(r)) + ' (' + esc(r.teacher) + ')'; }).join(', ') + (stalled.length > 4 ? ' and more.' : '.'),
         hl: stalled.reduce(function (a, r) { return a.concat(dlSecKeys(sdOf(r))); }, []), sep: true });
       else if (slow.length && cs.lead) {
         var back = slow.reduce(function (b, r) { return !b || r.pct < b.pct ? r : b; }, null);
         out.push({ kind: 'warn', eyebrow: 'Falling behind',
-          head: dlHl(back.name, warn) + ' is at ' + back.pct + '% while ' + esc(cs.lead.name) + ' is at ' + cs.lead.pct + '%.',
+          head: dlHl(sLbl(back), warn) + ' is at ' + back.pct + '% while ' + esc(sLbl(cs.lead)) + ' is at ' + cs.lead.pct + '%.',
           body: esc(back.teacher) + ' may need a hand or a little more time.' + (slow.length > 1 ? ' ' + countNoun(slow.length - 1, 'other section is', 'other sections are') + ' behind too.' : ''),
           hl: dlSecKeys(sdOf(back)).concat(dlSecKeys(sdOf(cs.lead))), sep: true });
       }
@@ -1325,7 +1367,7 @@
     var invited = {}; seedUsers().forEach(function (u) { if (u.status === 'Invited') invited[String(u.email || '').toLowerCase()] = 1; });
     var noSection = AD.teachers.filter(function (t) { return !invited[String(t.email || '').toLowerCase()] && !AD.sections.some(function (sd) { return sd.teacherId === t.id; }); });
     var newConcerns = AD.concernCounts().New, gaps = [];
-    if (noTeacher.length) gaps.push(noTeacher.length === 1 ? esc(noTeacher[0].name) + ' has no teacher' : countNoun(noTeacher.length, 'section has', 'sections have') + ' no teacher');
+    if (noTeacher.length) gaps.push(noTeacher.length === 1 ? esc(sLbl(noTeacher[0])) + ' has no teacher' : countNoun(noTeacher.length, 'section has', 'sections have') + ' no teacher');
     if (noSection.length) gaps.push(noSection.length === 1 ? esc(noSection[0].name) + ' has no section' : countNoun(noSection.length, 'teacher has', 'teachers have') + ' no section');
     if (newConcerns) gaps.push(countNoun(newConcerns, 'new concern', 'new concerns') + ' to route');
     if (gaps.length) out.push({ kind: 'warn', eyebrow: 'Needs a look',
@@ -1354,7 +1396,7 @@
       var lead = rows.reduce(function (b, r) { return !b || r.pct > b.pct ? r : b; }, null), back = rows.reduce(function (b, r) { return !b || r.pct < b.pct ? r : b; }, null);
       if (lead && !rows.some(function (r) { return r.flag; })) out.push({ kind: 'progress', eyebrow: 'Moving together',
         head: 'Every section is within ' + dlHl((lead.pct - back.pct) + ' points', ink) + ' of the one furthest along.',
-        body: esc(lead.name) + ' leads at ' + lead.pct + '%.', sep: true });
+        body: esc(sLbl(lead)) + ' leads at ' + lead.pct + '%.', sep: true });
     }
     var drafts = studs.filter(function (s) { return AD.checkinStatus(s) === 'draft'; });
     if (drafts.length) out.push({ kind: 'progress', eyebrow: 'Almost there',
@@ -1394,8 +1436,8 @@
       var ranked = secs.map(function (x) { return { sd: x, pct: dlDist(AD.studentsInSection(x), pt.key).pct.secure }; }).sort(function (a, b) { return b.pct - a.pct; });
       var top = ranked[0], low = ranked[ranked.length - 1];
       out.push({ kind: 'result', tone: 'bloom', eyebrow: 'Furthest along',
-        head: dlHl(top.sd.name, blm.ink) + ' has the most Blooming, at ' + top.pct + '%.',
-        body: esc(low.sd.name) + ' is at ' + low.pct + '%. Groups grow at different speeds; both are worth a look.',
+        head: dlHl(sLbl(top.sd), blm.ink) + ' has the most Blooming, at ' + top.pct + '%.',
+        body: esc(sLbl(low.sd)) + ' is at ' + low.pct + '%. Groups grow at different speeds; both are worth a look.',
         hl: dlSecKeys(top.sd).concat(dlSecKeys(low.sd)), sep: true });
     }
     if (AD.completedPoints.length >= 2) {
@@ -1412,9 +1454,9 @@
   function dlActivity(scope) {
     var pt = AD.latestComplete, best = null;
     var pct = function (studs, key) { return AD.distribution(studs, key, pt.key).pct.secure; };
-    var groups = scope.level === 'school' ? AD.grades.map(function (g) { return { label: g, grade: g, studs: AD.studentsInGrade(g) }; })
-      : scope.level === 'grade' ? [{ label: scope.grade, grade: scope.grade, studs: AD.studentsInGrade(scope.grade) }]
-      : (function () { var sd = AD.sections.find(function (x) { return x.id === scope.sectionId; }); return [{ label: sd.name, grade: sd.grade, sd: sd, studs: AD.studentsInSection(sd) }]; })();
+    var groups = scope.level === 'school' ? AD.grades.map(function (g) { return { label: gLbl(g), grade: g, studs: AD.studentsInGrade(g) }; })
+      : scope.level === 'grade' ? [{ label: gLbl(scope.grade), grade: scope.grade, studs: AD.studentsInGrade(scope.grade) }]
+      : (function () { var sd = AD.sections.find(function (x) { return x.id === scope.sectionId; }); return [{ label: sLbl(sd), grade: sd.grade, sd: sd, studs: AD.studentsInSection(sd) }]; })();
     groups.forEach(function (g) { AD.skills.forEach(function (sk) { var v = pct(g.studs, sk.key); if (!best || v < best.v) best = { g: g, sk: sk, v: v }; }); });
     if (!best) return null;
     // The class to talk to: the section itself, or the section in that grade with the least Blooming in this skill.
@@ -1423,7 +1465,7 @@
     var teacher = AD.teacherFor(sd), act = AD.activityFor(best.sk.key), spr = AD.bandMeta('emerging');
     return { kind: 'activity', tone: 'sprout', eyebrow: 'Try this next',
       head: 'From ' + esc(pt.label) + ', ' + dlHl(best.g.label, spr.ink) + ' needs the most help with ' + dlHl(best.sk.name, spr.ink) + ' (' + best.v + '% Blooming).',
-      body: '<b>Activity:</b> ' + esc(act.activity) + '<br><b>Talk it through with ' + esc(teacher) + '</b> (' + esc(sd.name) + '): ' + esc(act.talk) +
+      body: '<b>Activity:</b> ' + esc(act.activity) + '<br><b>Talk it through with ' + esc(teacher) + '</b> (' + esc(sLbl(sd)) + '): ' + esc(act.talk) +
         (act.sample ? ' <span class="ui-tag dl-sample" title="Placeholder copy until the real activity library is connected">Sample</span>' : ''),
       hl: dlKidKeys(dlInBand(best.g.studs, best.sk.key, pt.scoreField, 'emerging')) };
   }
@@ -1513,7 +1555,7 @@
   }
   function dlAskSugs() {
     var g = AD.grades[Math.min(1, AD.grades.length - 1)];
-    return ['Is the programme working?', 'Where are we weakest?', 'How is ' + g + ' doing?',
+    return ['Is the programme working?', 'Where are we weakest?', 'How is ' + gLbl(g) + ' doing?',
       AD.openPoint ? 'Who still needs to finish?' : 'Draft a board paragraph'];
   }
   function dlAskThreadHTML() {
@@ -1614,10 +1656,10 @@
   var DL_SUG_MS = 3500, dlSugTimer = 0;
   function dlSugList() {
     var g = AD.grades, sd = AD.sections[Math.min(6, AD.sections.length - 1)];
-    var list = ['How is ' + (g[1] || g[0]) + ' doing?', 'Is the programme working?', 'Where are we weakest?', 'What is our strongest skill?'];
+    var list = ['How is ' + gLbl(g[1] || g[0]) + ' doing?', 'Is the programme working?', 'Where are we weakest?', 'What is our strongest skill?'];
     if (AD.openPoint) list.splice(2, 0, 'Who still needs to finish?');
-    if (g[3]) list.push('How is ' + g[3] + ' doing?');
-    if (sd) list.push('How is ' + sd.name + ' doing?');
+    if (g[3]) list.push('How is ' + gLbl(g[3]) + ' doing?');
+    if (sd) list.push('How is ' + sLbl(sd) + ' doing?');
     list.push('Which skill needs the most help?', 'Draft a board paragraph');
     return list;
   }
@@ -1647,7 +1689,7 @@
     if (!modes.length) return '<div class="ov-dl"><div class="dl-story"><h2 class="dl-headline">Nothing to show yet</h2><p class="dl-body">Your school appears here once the first check-in opens.</p></div></div>';
     var scope = dlScope(params), mode = dlMode(params), root = dlTree(scope);
     var crumbs = '<div class="ui-crumbs dl-crumbs">' + (scope.level === 'school' ? '<span class="cur">School</span>' : '<button data-dl-crumb="school">School</button>');
-    if (scope.level !== 'school') crumbs += '<span class="sep">›</span>' + (scope.level === 'section' ? '<button data-dl-crumb="grade">' + esc(scope.grade) + '</button>' : '<span class="cur">' + esc(scope.grade) + '</span>');
+    if (scope.level !== 'school') crumbs += '<span class="sep">›</span>' + (scope.level === 'section' ? '<button data-dl-crumb="grade">' + esc(gLbl(scope.grade)) + '</button>' : '<span class="cur">' + esc(gLbl(scope.grade)) + '</span>');
     if (scope.level === 'section') crumbs += '<span class="sep">›</span><span class="cur">' + esc(root.name) + '</span>';
     crumbs += '</div>';
     var seg = modes.length > 1 ? '<div class="ui-seg dl-seg" role="tablist" aria-label="What the dandelion shows">' + modes.map(function (m) {
@@ -1658,7 +1700,7 @@
     var outLink = '<button class="btn-link dl-out" data-tooutcomes="1">See outcomes →</button>';
     // Left: what's selected (follows the zoom), its headcounts + source, then the cards.
     var sd = scope.level === 'section' ? AD.sections.find(function (x) { return x.id === scope.sectionId; }) : null;
-    var selName = scope.level === 'school' ? root.name : scope.level === 'grade' ? scope.grade : root.name;
+    var selName = scope.level === 'school' ? root.name : scope.level === 'grade' ? gLbl(scope.grade) : root.name;
     var selSub = scope.level === 'school' ? [AD.school.city, AD.school.country].filter(Boolean).join(', ')
       : scope.level === 'grade' ? AD.school.name : (sd ? 'Teacher: ' + AD.teacherFor(sd) : '');
     var selected = '<div class="dl-sel"><p class="dl-sel-eyebrow">Currently selected</p><h2 class="dl-sel-name">' + esc(selName) + '</h2>' +
@@ -1749,7 +1791,7 @@
       if (pinned === el) { unpin(); return; }
       var n = dlSim.g.nodes[el.dataset.dlI], st = n.student; if (!st || !dlKidNames(mode)) return;
       pinned = null; showTip(el);
-      tipEl.innerHTML += '<span>' + esc(st.adm) + ' · ' + esc(st.grade + ' ' + st.section) + '</span>' +
+      tipEl.innerHTML += '<span>' + esc(st.adm) + ' · ' + esc(sLbl(st.grade, st.section)) + '</span>' +
         '<button type="button" class="dl-tip-open" data-open-stu="' + esc(st.adm) + '">Open profile →</button>';
       tipEl.classList.add('pinned'); pinned = el;
       tipEl.querySelector('[data-open-stu]').onclick = function (e) { e.stopPropagation(); var adm = this.dataset.openStu; unpin(); openStudentHistory(adm); };
@@ -1839,13 +1881,13 @@
       '<button class="ui-tab' + (onGrades ? '' : ' on') + '" role="tab" aria-selected="' + !onGrades + '" data-scope="school">School</button>' +
       '<button class="ui-tab' + (onGrades ? ' on' : '') + '" role="tab" aria-selected="' + onGrades + '" data-scope="grades">All grades</button></div>';
     var crumbs = tabs;
-    if (grade) crumbs += '<div class="ui-crumbs"><button data-scope="grades">All grades</button><span class="sep">›</span>' + (section ? '<button data-scope="grade">' + esc(grade) + '</button>' : '<span class="cur">' + esc(grade) + '</span>');
-    if (section) { var sd = AD.sections.find(function (s) { return s.id === section; }); crumbs += '<span class="sep">›</span><span class="cur">' + esc(sd ? sd.name : '') + '</span>'; }
+    if (grade) crumbs += '<div class="ui-crumbs"><button data-scope="grades">All grades</button><span class="sep">›</span>' + (section ? '<button data-scope="grade">' + esc(gLbl(grade)) + '</button>' : '<span class="cur">' + esc(gLbl(grade)) + '</span>');
+    if (section) { var sd = AD.sections.find(function (s) { return s.id === section; }); crumbs += '<span class="sep">›</span><span class="cur">' + esc(sd ? sLbl(sd) : '') + '</span>'; }
     if (grade) crumbs += '</div>';
 
     // scope + point controls
-    var gradeOpts = [{ v: '', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
-    var secOpts = [{ v: '', t: grade ? 'All sections' : 'Pick a grade first' }].concat(AD.sections.filter(function (s) { return !grade || s.grade === grade; }).map(function (s) { return { v: s.id, t: s.name }; }));
+    var gradeOpts = [{ v: '', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: gLbl(g) }; }));
+    var secOpts = [{ v: '', t: grade ? 'All sections' : 'Pick a grade first' }].concat(AD.sections.filter(function (s) { return !grade || s.grade === grade; }).map(function (s) { return { v: s.id, t: sLbl(s) }; }));
     var pointOpts = AD.completedPoints.map(function (p) { return { v: p.key, t: pointLabel(p) }; });
     var filters = '<div class="ad-filters">' +
       selectWrap('o-grade', gradeOpts, grade, 'Grade') +
@@ -1887,7 +1929,7 @@
           '<div class="lbl">' + esc(seMeta.label) + ' at ' + esc(gPt ? gPt.label : '') + '</div></div>' +
         '<div class="gs-bar">' + bandBar(gd, true) + '<div style="margin-top:10px">' + bandLegend() + '</div></div></div>';
       var gNote = plural(gSecs.length, 'section') + ' · Open a section for its full skill view. ' + nNote(gStuds.length);
-      navCards = '<div class="mb-gap">' + card(grade, gNote, snap + sectionNavHTML(grade, point), 'span2') + '</div>';
+      navCards = '<div class="mb-gap">' + card(gLbl(grade), gNote, snap + sectionNavHTML(grade, point), 'span2') + '</div>';
     }
 
     // Focus areas / Strengths (grade + section scope). Section scope also
@@ -1912,7 +1954,7 @@
     if (cmpTwo.b && validIds.indexOf(cmpTwo.b) < 0) cmpTwo.b = null;
     function cmp2Options(sel, side) {
       return '<option value=""' + (sel ? '' : ' selected') + ' disabled>Select section ' + (side === 'a' ? 'A' : 'B') + '…</option>' +
-        AD.sections.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+        AD.sections.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(sLbl(s)) + '</option>'; }).join('');
     }
     // Single-word standing for one skill in one class: whichever band most of
     // the children sit in. Used for the little status chip on each skill row.
@@ -2011,9 +2053,9 @@
         var studs = AD.studentsInGrade(g), secs = AD.sections.filter(function (s) { return s.grade === g; });
         var d = distAllSkills(studs, point);
         return '<div class="ui-card tight ad-gradebreak">' +
-          '<div class="gb-head"><div><div class="ui-title">' + esc(g) + '</div>' +
+          '<div class="gb-head"><div><div class="ui-title">' + esc(gLbl(g)) + '</div>' +
             '<div class="ui-meta gb-meta">' + plural(studs.length, 'student') + ' · ' + plural(secs.length, 'section') + '</div></div>' +
-            '<button class="btn-link" data-gradenav="' + esc(g) + '" aria-label="View ' + esc(g) + '">View →</button></div>' +
+            '<button class="btn-link" data-gradenav="' + esc(g) + '" aria-label="View ' + esc(gLbl(g)) + '">View →</button></div>' +
           '<div class="gb-snap"><div class="ui-kpi"><div class="num">' + d.pct.secure + '%</div>' +
             '<div class="lbl">' + esc(se.label) + '</div></div>' +
             '<div class="gb-bar">' + bandBar(d) + '</div></div>' +
@@ -2023,7 +2065,7 @@
   function sectionNavHTML(grade, point) {
     return '<div class="ad-navcards">' + AD.sections.filter(function (s) { return s.grade === grade; }).map(function (s) {
       var studs = AD.studentsInSection(s), d = distAllSkills(studs, point);
-      return '<button class="ui-card tight link ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="ui-title md">' + esc(s.name) + '</span><span class="text-muted">›</span></div>' +
+      return '<button class="ui-card tight link ad-navcard" data-sectionnav="' + esc(s.id) + '"><div class="nc-top"><span class="ui-title md">' + esc(sLbl(s)) + '</span><span class="text-muted">›</span></div>' +
         '<div class="ui-meta nc-meta">' + plural(studs.length, 'student') + (studs.length < SMALL_N ? ' · small group' : '') + '</div>' + bandBar(d) + pctLine(d) + '</button>';
     }).join('') + '</div>';
   }
@@ -2041,11 +2083,11 @@
         var studs = AD.studentsInGrade(g);
         var secs = AD.sections.filter(function (s) { return s.grade === g; });
         var teacherLine = '<div class="nc-pcts">' + secs.map(function (s) {
-          return '<span>' + esc(s.section) + ' · ' + esc(AD.teacherFor(s)) + '</span>';
+          return '<span>' + esc(secShort(s.grade, s.section)) + ' · ' + esc(AD.teacherFor(s)) + '</span>';
         }).join('') + '</div>';
         // Each grade's own colour — the same one its hub has on the dandelion.
         return '<button class="ui-card tight link ad-navcard ad-gradecard" style="--grade-c:' + gradeColor(g) + '" data-graderoster="' + esc(g) + '">' +
-          '<div class="nc-top"><span class="ui-title md">' + esc(g) + '</span><span class="text-muted">›</span></div>' +
+          '<div class="nc-top"><span class="ui-title md">' + esc(gLbl(g)) + '</span><span class="text-muted">›</span></div>' +
           '<div class="ui-meta nc-meta">' + plural(studs.length, 'student') + '</div>' +   // sections are listed below, so no section count
           teacherLine + '</button>';
       }).join('') + '</div>';
@@ -2084,8 +2126,8 @@
       return '<tr><td class="name"><button class="btn-link text-strong" data-userdetail="' + i + '" style="font:inherit;text-align:left" title="View details">' + esc(u.name) + '</button></td><td>' + esc(u.email) + '</td><td>' + esc(u.role) + '</td>' +
         // Invited teachers add their own sections after accepting, so they show nothing here yet;
         // "No section yet" is only for a teacher who has joined and still has none.
-        '<td>' + (isTeacher && u.grade ? esc(u.grade) : isTeacher && u.status === 'Active' ? '<span class="text-muted nowrap">No section yet</span>' : dash) + '</td>' +
-        '<td>' + (isTeacher && u.section ? esc(u.section) : dash) + '</td>' + boardCell +
+        '<td>' + (isTeacher && u.grade ? esc(gradesLbl(u.grade)) : isTeacher && u.status === 'Active' ? '<span class="text-muted nowrap">No section yet</span>' : dash) + '</td>' +
+        '<td>' + (isTeacher && u.section ? esc(userSecLbl(u)) : dash) + '</td>' + boardCell +
         '<td>' + statusCellHTML(u) + '</td>' +
         // Row actions live in a ⋮ menu (View details, Show password, Resend, Revoke).
         '<td class="text-right ad-useracts">' + (isSelf(u) ? '<span class="text-muted">You</span>' :
@@ -2197,13 +2239,14 @@
     var HU = window.TilliHistory; if (!HU || !list.length) return;
     var two = function (n) { return (n < 10 ? '0' : '') + n; };
     var lines = ['# Tilli Measures change history · ' + AD.school.name + ' · ' + histRangeLabel() + (histState.kind ? ' · ' + histState.kind : '') + (histState.q ? ' · search "' + histState.q + '"' : '') + ' · Generated ' + genStamp(),
-      'Date,Time,Who,Role,What happened,Student(s),Section,Field changes'];
+      'Date,Time,Who,Role,What happened,Student(s),Section,Base section,Field changes'];
     list.forEach(function (e) {
       var d = new Date(e.at), a = e.actor || {};
       lines.push([d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()), two(d.getHours()) + ':' + two(d.getMinutes()),
         a.name || a.email || '', HU.roleLabel(a.role), HU.sentence(e, {}),
         (e.students || []).map(function (x) { return (x.name || '') + (x.id ? ' (' + x.id + ')' : ''); }).join('; '),
         e.section_name || '',
+        e.section_id && window.TilliAPI && TilliAPI.sectionBase ? TilliAPI.sectionBase(currentSchoolId(), e.section_id) : '',
         (e.changes || []).map(function (c) { return c.label + ': ' + (c.from == null ? '' : c.from) + ' → ' + (c.to == null ? '' : c.to); }).join('; ')
       ].map(csvCell).join(','));
     });
@@ -2325,7 +2368,7 @@
       pwRow = row('Temporary password', '<span class="text-muted" style="font-weight:600">Used — set their own</span>');
 
     var rows = row('Email', esc(u.email)) + row('Role', esc(u.role));
-    if (isTeacher) { rows += row('Grade', u.grade ? esc(u.grade) : '—') + row('Section', u.section ? esc(u.section) : '—'); }
+    if (isTeacher) { rows += row('Grade', u.grade ? esc(gradesLbl(u.grade)) : '—') + row('Section', u.section ? esc(userSecLbl(u)) : '—'); }
     if (board) rows += row('Board', esc(board));
     rows += row('Status', statusChip);
     if (invitedAt) rows += row('Date of invite', esc(fmtInvDate(invitedAt)));
@@ -2360,25 +2403,25 @@
       secs.map(function (s) {
         var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
         return '<div class="row" style="gap:8px">' +
-          '<span class="ui-metachip" style="padding:7px 13px"><b>' + esc(s.section) + '</b></span>' +
+          '<span class="ui-metachip" style="padding:7px 13px"><b>' + esc(secShort(s.grade, s.section)) + '</b></span>' +
           '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label></div>';
       }).join('') + '</div>';
 
     var tableHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Student ID</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '</tr></thead><tbody id="gr-tbody">' +
       rows.map(function (r) {
         var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ui-badge lvl-' + r.stage.lvl + '"><span class="d"></span>' + esc(r.stage.label) + '</span>' : '<span class="text-muted">not yet measured</span>') + '</td>' : '';
-        return '<tr class="clickable" data-stuhist="' + esc(r.adm) + '" title="See ' + esc(r.first || r.name) + '\'s status and class history" data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(r.section) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
+        return '<tr class="clickable" data-stuhist="' + esc(r.adm) + '" title="See ' + esc(r.first || r.name) + '\'s status and class history" data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(secShort(r.grade, r.section)) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
       }).join('') + '</tbody></table></div>';
 
-    openModal(modalHead(grade + ' · roster') +
+    openModal(modalHead(gLbl(grade) + ' · roster') +
       '<p class="ui-mod-note mb-3">' + plural(rows.length, 'student') + ' · ' + plural(secs.length, 'section') + '. ' + (SHOW_STUDENT_STAGE ? 'Identity, enrolment and a temporary stage column.' : 'Identity and enrolment only — no SEL results.') + '</p>' +
       (SHOW_STUDENT_STAGE ? '<div class="ui-note mt-3"><span aria-hidden="true">⚠️</span><span><b>Temporary:</b> the developmental-stage column shows an individual child\'s SEL result, which leadership is not normally shown (spec §2). It is behind a flag and will be removed.</span></div>' : '') +
       '<div class="ui-eyebrow dark mb-2">Teachers</div>' + teacherBlock +
       '<div class="row wrap mb-3" style="gap:8px">' +
         '<button type="button" class="ui-filterchip on" data-secfilter="" aria-pressed="true">All sections</button>' +
-        secs.map(function (s) { return '<button type="button" class="ui-filterchip" data-secfilter="' + esc(s.section) + '" aria-pressed="false">Section ' + esc(s.section) + '</button>'; }).join('') +
+        secs.map(function (s) { return '<button type="button" class="ui-filterchip" data-secfilter="' + esc(s.section) + '" aria-pressed="false">Section ' + esc(secShort(s.grade, s.section)) + '</button>'; }).join('') +
       '</div>' +
-      '<input class="input mb-3" id="gr-q" placeholder="Search name or student ID…" style="max-width:280px" aria-label="Search students in ' + esc(grade) + '">' +
+      '<input class="input mb-3" id="gr-q" placeholder="Search name or student ID…" style="max-width:280px" aria-label="Search students in ' + esc(gLbl(grade)) + '">' +
       tableHTML, { wide: true });
 
     var q = document.getElementById('gr-q');
@@ -2463,9 +2506,9 @@
           (o.note ? '<div class="ui-inset ad-hist-note"><span class="ui-eyebrow mb-1">Handover note from ' + esc(o.teacher) + '</span><p>' + esc(o.note) + '</p></div>' : '') +
         '</div></div>';
     };
-    var rows = [row({ now: true, cls: r.grade + ' ' + r.section, year: AD.academicYears[0], teacher: teacher ? teacher.name : '—', done: 'in progress' })]
+    var rows = [row({ now: true, cls: sLbl(r.grade, r.section), year: AD.academicYears[0], teacher: teacher ? teacher.name : '—', done: 'in progress' })]
       .concat(past.slice().reverse().map(function (y) {
-        return row({ cls: y.grade + ' ' + y.section, year: y.year, teacher: y.teacher, done: y.windowsDone + ' of 3 assessments completed', note: y.note });
+        return row({ cls: sLbl(y.grade, y.section), year: y.year, teacher: y.teacher, done: y.windowsDone + ' of 3 assessments completed', note: y.note });
       })).join('');
     var historyPane = '<div class="ui-card sm">' + rows + '</div>' +
       (past.length ? '' : '<p class="ui-mod-note mt-3">No earlier classes on Tilli for this child.</p>');
@@ -2486,7 +2529,7 @@
     ov.innerHTML = '<div class="ui-modal-card wide" role="dialog" aria-modal="true" aria-label="' + esc(r.name) + '">' +
       '<button class="dialog-close focus" data-stuclose aria-label="Close and go back to the roster">×</button>' +
       modalHead(r.name) +
-      '<p class="ui-mod-note mb-4">' + esc(r.adm) + ' · ' + esc(r.grade + ' ' + r.section) + ' · ' + plural(past.length + 1, 'year') + ' at ' + esc(AD.school.name) + '</p>' +
+      '<p class="ui-mod-note mb-4">' + esc(r.adm) + ' · ' + esc(sLbl(r.grade, r.section)) + ' · ' + plural(past.length + 1, 'year') + ' at ' + esc(AD.school.name) + '</p>' +
       stages +
       '<div class="ui-tabs ad-stutabs" role="tablist" aria-label="' + esc(r.name) + ' details">' + tabBtn('history', 'Class history', past.length + 1) + tabBtn('changes', 'Record changes', stuHist.length) + '</div>' +
       '<div id="ad-stupane">' + (stuTab === 'changes' ? changesPane : historyPane) + '</div>' +
@@ -2658,7 +2701,7 @@
     }
     var scope = params.rscope || 'school';        // school | <grade>
     var point = params.rpoint || AD.latestComplete.key;
-    var scopeOpts = [{ v: 'school', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: g }; }));
+    var scopeOpts = [{ v: 'school', t: 'Whole school' }].concat(AD.grades.map(function (g) { return { v: g, t: gLbl(g) }; }));
     var pointOpts = AD.completedPoints.map(function (p) { return { v: p.key, t: pointLabel(p) }; });
 
     var summaryBody = '<p class="ui-mod-note mb-3">One page for your board or management committee: sections taking part, children assessed, skill-by-skill results and progress since Baseline. Groups only — no individual children, no teacher comparisons.</p>' +
@@ -2699,7 +2742,7 @@
   var newsVariant = 0;
   function newsletterText(scope, point) {
     var pt = AD.points.find(function (p) { return p.key === point; });
-    var where = scope === 'school' ? 'across the school' : 'in ' + scope;
+    var where = scope === 'school' ? 'across the school' : 'in ' + gLbl(scope);
     var secs = sectionsInScope(scope).length;
     var idx = AD.points.indexOf(pt), next = AD.points[idx + 1];
     var close = next ? 'we look forward to sharing more after our ' + next.label + ' check-in.' : 'we look forward to building on this next year.';
@@ -2731,7 +2774,7 @@
     var pt = AD.points.find(function (p) { return p.key === point; });
     var students = scopeStudentsForReport(scope);
     var secs = sectionsInScope(scope);
-    var scopeName = scope === 'school' ? AD.school.name : scope;
+    var scopeName = scope === 'school' ? AD.school.name : gLbl(scope);
     var skillRows = AD.skills.map(function (sk) {
       var d = AD.distribution(students, sk.key, point);
       var m = point !== 'baseline' ? AD.movement(students, sk.key, point) : null;
@@ -2768,19 +2811,19 @@
   function exportCSV(kind, scope, point) {
     var pt = AD.points.find(function (p) { return p.key === point; });
     var lines = [], name;
-    var header = '# Tilli Measures export · ' + (scope === 'school' ? AD.school.name : scope) + ' · Assessment point: ' + pt.label + ' · Generated ' + genStamp();
+    var header = '# Tilli Measures export · ' + (scope === 'school' ? AD.school.name : gLbl(scope)) + ' · Assessment point: ' + pt.label + ' · Generated ' + genStamp();
     if (kind === 'roster') {
       name = 'roster';
-      lines.push(header); lines.push('Student ID,Name,Grade,Section,Enrolment,Parent claim');
-      AD.rosterRows().forEach(function (r) { if (scope !== 'school' && r.grade !== scope) return; lines.push([r.adm, r.name, r.grade, r.section, r.enrolment, r.claim].map(csvCell).join(',')); });
+      lines.push(header); lines.push('Student ID,Name,Grade,Base grade,Section,Base section,Enrolment,Parent claim');
+      AD.rosterRows().forEach(function (r) { if (scope !== 'school' && r.grade !== scope) return; lines.push([r.adm, r.name, r.grade, baseG(r.grade), r.section, baseS(r.grade, r.section), r.enrolment, r.claim].map(csvCell).join(',')); });
     } else {
       name = 'aggregate-outcomes';
-      lines.push(header); lines.push('Scope,Level,Skill,Sprouting %,Growing %,Blooming %');
+      lines.push(header); lines.push('Scope,Base grade/section,Level,Skill,Sprouting %,Growing %,Blooming %');
       var scopes = [];
-      if (scope === 'school') { scopes.push({ label: AD.school.name, level: 'School', students: AD.students }); AD.grades.forEach(function (g) { scopes.push({ label: g, level: 'Grade', students: AD.studentsInGrade(g) }); }); }
-      else scopes.push({ label: scope, level: 'Grade', students: AD.studentsInGrade(scope) });
-      AD.sections.filter(function (s) { return scope === 'school' || s.grade === scope; }).forEach(function (s) { scopes.push({ label: s.name, level: 'Section', students: AD.studentsInSection(s) }); });
-      scopes.forEach(function (sc) { AD.skills.forEach(function (sk) { var d = AD.distribution(sc.students, sk.key, point); lines.push([sc.label, sc.level, sk.name, d.pct.emerging, d.pct.developing, d.pct.secure].map(csvCell).join(',')); }); });
+      if (scope === 'school') { scopes.push({ label: AD.school.name, base: '', level: 'School', students: AD.students }); AD.grades.forEach(function (g) { scopes.push({ label: g, base: baseG(g), level: 'Grade', students: AD.studentsInGrade(g) }); }); }
+      else scopes.push({ label: scope, base: baseG(scope), level: 'Grade', students: AD.studentsInGrade(scope) });
+      AD.sections.filter(function (s) { return scope === 'school' || s.grade === scope; }).forEach(function (s) { scopes.push({ label: s.name, base: baseS(s.grade, s.section), level: 'Section', students: AD.studentsInSection(s) }); });
+      scopes.forEach(function (sc) { AD.skills.forEach(function (sk) { var d = AD.distribution(sc.students, sk.key, point); lines.push([sc.label, sc.base, sc.level, sk.name, d.pct.emerging, d.pct.developing, d.pct.secure].map(csvCell).join(',')); }); });
     }
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     var url = URL.createObjectURL(blob);
@@ -2836,8 +2879,8 @@
   // "Answering about" scope: whole school, one grade, or one section.
   function askScopeData(scope) {
     var sec = AD.sections.find(function (x) { return x.id === scope; });
-    if (sec) return { label: sec.name, tag: ' · ' + sec.name, students: AD.studentsInSection(sec), match: function (a) { return a.id === sec.id; } };
-    if (scope && AD.grades.indexOf(scope) >= 0) return { label: scope, tag: ' · ' + scope, students: AD.studentsInGrade(scope), match: function (a) { return a.grade === scope; } };
+    if (sec) return { label: sLbl(sec), tag: ' · ' + sLbl(sec), students: AD.studentsInSection(sec), match: function (a) { return a.id === sec.id; } };
+    if (scope && AD.grades.indexOf(scope) >= 0) return { label: gLbl(scope), tag: ' · ' + gLbl(scope), students: AD.studentsInGrade(scope), match: function (a) { return a.grade === scope; } };
     return { label: 'Whole school', tag: '', students: AD.students, match: function () { return true; } };
   }
   // Everyday words for skills whose names people won't type exactly.
@@ -2855,11 +2898,17 @@
       if (/^kindergarten$/i.test(g)) a.push('kg', 'kinder');
       return a;
     };
+    // A grade answers to its own name AND its fixed base ("Sunflowers" also matches "grade 1").
+    var gradeAliases = function (g) { var b = baseG(g); return aliases(g).concat(b && b.toLowerCase() !== String(g).toLowerCase() ? aliases(b) : []); };
+    var secHit = function (list, letter) { return !!letter && list.some(function (a) { return new RegExp('\\b' + a + ' *-? *' + rx(letter) + '\\b').test(t); }); };
     var sec = AD.sections.find(function (sd) {
-      return aliases(sd.grade).some(function (a) { return new RegExp('\\b' + a + ' *-? *' + rx(sd.section) + '\\b').test(t); });
+      if (secHit(gradeAliases(sd.grade), sd.section)) return true;
+      // ...and its fixed base section: "grade 1a" still finds "Sunflowers Rose" (base Grade 1A).
+      var bg = baseG(sd.grade), code = baseS(sd.grade, sd.section);
+      return !!bg && code.indexOf(bg) === 0 && secHit(aliases(bg), code.slice(bg.length).trim());
     });
     if (sec) return sec.id;
-    var g = AD.grades.find(function (gr) { return aliases(gr).some(function (a) { return new RegExp('\\b' + a + '\\b').test(t); }); });
+    var g = AD.grades.find(function (gr) { return gradeAliases(gr).some(function (a) { return new RegExp('\\b' + a + '\\b').test(t); }); });
     return g || 'school';
   }
   function askAnswer(q, scope) {
@@ -2895,7 +2944,7 @@
       var done = rows.reduce(function (a, x) { return a + x.completion.done; }, 0), total = rows.reduce(function (a, x) { return a + x.completion.total; }, 0);
       var left = AD.daysLeft(AD.openPoint);
       var s1 = '<b>' + done + ' of ' + total + '</b> students are assessed for ' + esc(AD.openPoint.label) + (left != null ? ' (' + countNoun(left, 'day', 'days') + ' left)' : '') + '. ';
-      s1 += open.length ? open.length + ' of ' + rows.length + ' sections are still finishing — furthest behind is <b>' + esc(open[0].name) + '</b> at ' + open[0].completion.done + ' of ' + open[0].completion.total + '.' : 'Every section is complete.';
+      s1 += open.length ? open.length + ' of ' + rows.length + ' sections are still finishing — furthest behind is <b>' + esc(sLbl(open[0])) + '</b> at ' + open[0].completion.done + ' of ' + open[0].completion.total + '.' : 'Every section is complete.';
       var waiting = sc.students.filter(function (s) { return AD.checkinStatus(s) !== 'done'; });
       return { dl: { hl: kidKeys(waiting), note: waiting.length ? 'Lit up: children not assessed yet' : '' },
         html: s1 + srcTag('Overview · window progress' + sc.tag, AD.openPoint, total) + askLink('overview', 'Open the Overview') };
@@ -3067,7 +3116,7 @@
     };
     var group = function (h, list) { return list.length ? '<div class="askx-gh">' + h + '</div>' + list.map(item).join('') : ''; };
     var recent = chats.filter(function (x) { return x.at >= weekAgo; }), older = chats.filter(function (x) { return x.at < weekAgo; });
-    var scopeOpts = [['school', 'Whole school']].concat(AD.grades.map(function (g) { return [g, g]; })).concat(AD.sections.map(function (x) { return [x.id, x.name]; }))
+    var scopeOpts = [['school', 'Whole school']].concat(AD.grades.map(function (g) { return [g, gLbl(g)]; })).concat(AD.sections.map(function (x) { return [x.id, sLbl(x)]; }))
       .map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === askx.scope ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
     var firstName = (me && me.name ? String(me.name).replace(/^[A-Z]\.\s*/, '').split(' ')[0] : '') || '';
     var thread = c ? c.thread : [];
@@ -3284,7 +3333,7 @@
     openModal(modalHead('Invite teachers') +
       '<p class="ui-mod-note mb-3">Add teachers one row at a time, or paste rows / upload a CSV. Each becomes an invite with a one-time temporary password.</p>' +
       boardNote +
-      '<datalist id="inv-grades">' + gradeList.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist>' +
+      '<datalist id="inv-grades">' + gradeList.map(function (g) { return '<option value="' + esc(g) + '" label="' + esc(gLbl(g)) + '">'; }).join('') + '</datalist>' +
       '<datalist id="inv-secs">' + secList.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
       '<div class="ui-tablewrap"><table class="ui-table compact mw-520"><thead><tr>' +
         th('Grade') + th('Section') + th('Teacher name') + th('Email') + boardHead + '<th></th>' +
@@ -3373,7 +3422,7 @@
     function td(t, mono) { return '<td' + (mono ? ' class="mono" style="font-weight:700;letter-spacing:.04em"' : '') + '>' + t + '</td>'; }
     var head = '<tr>' + th('Grade') + th('Section') + th('Teacher') + th('Email') + (multi ? th('Board') : '') + th('Invited') + th('Temp password') + '</tr>';
     var bodyRows = rows.map(function (r) {
-      return '<tr>' + td(esc(r.grade)) + td(esc(r.section)) + td(esc(r.name)) + td(esc(r.email)) +
+      return '<tr>' + td(esc(gLbl(r.grade))) + td(esc(secShort(r.grade, r.section))) + td(esc(r.name)) + td(esc(r.email)) +
         (multi ? td(esc(r.board || '—')) : '') + td(fmtInvDate(r.createdAt)) +
         td(r.ok ? esc(r.tempPassword) : '<span class="text-danger">failed</span>', r.ok) + '</tr>';
     }).join('');
@@ -3399,7 +3448,18 @@
   var GRADE_LADDER = ['Pre-K', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'];
   var SECTION_LIMIT = 30;
   var mig;
-  function nextGrade(g) { var i = GRADE_LADDER.indexOf(g); return i >= 0 && i < GRADE_LADDER.length - 1 ? GRADE_LADDER[i + 1] : g; }
+  // The fixed base ladder (matches TilliAPI's BASE GRADES).
+  var BASE_LADDER = ['Nursery', 'LKG', 'UKG'].concat([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (n) { return 'Grade ' + n; }));
+  function nextGrade(g) {
+    var i = GRADE_LADDER.indexOf(g);
+    if (i >= 0) return i < GRADE_LADDER.length - 1 ? GRADE_LADDER[i + 1] : g;
+    // Not a ladder name (renamed "Sunflowers", or past Grade 5): step its base up one,
+    // then use the school's own name for that base when it has one ("Daisies" for Grade 2).
+    var bi = BASE_LADDER.indexOf(baseG(g));
+    if (bi < 0 || bi === BASE_LADDER.length - 1) return g;
+    var nb = BASE_LADDER[bi + 1];
+    return AD.grades.filter(function (x) { return baseG(x) === nb; })[0] || nb;
+  }
   function startMigration() {
     mig = {
       step: 'entry',
@@ -3418,12 +3478,12 @@
       html += '<p class="ui-mod-note mb-3">Adjust any student. Bulk-set a whole grade with the header control.</p>';
       AD.grades.forEach(function (g) {
         var gr = mig.rows.filter(function (r) { return r.grade === g; });
-        html += '<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-family:var(--font-heading);font-size:var(--fs-md)">' + esc(g) + ' → ' + esc(nextGrade(g)) + '</b>' +
+        html += '<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-family:var(--font-heading);font-size:var(--fs-md)">' + esc(gLbl(g)) + ' → ' + esc(gLbl(nextGrade(g))) + '</b>' +
           '<label class="select-wrap" style="max-width:190px"><select class="select" data-bulk="' + esc(g) + '"><option value="">Bulk action…</option><option value="promote">Promote all</option><option value="retain">Retain all</option><option value="graduate">Mark all graduating</option></select></label></div>' +
           '<div class="ui-tablewrap"><table class="ui-table mw-520"><tbody>' +
           gr.map(function (r) {
             return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num text-muted">' + esc(r.adm) + '</td><td><label class="select-wrap"><select class="select" data-act="' + r.adm + '">' +
-              [['promote', 'Promote → ' + nextGrade(r.grade)], ['retain', 'Retain in ' + r.grade], ['graduate', 'Graduating'], ['remove', 'Remove (left school)']].map(function (o) { return '<option value="' + o[0] + '"' + (r.action === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
+              [['promote', 'Promote → ' + gLbl(nextGrade(r.grade))], ['retain', 'Retain in ' + gLbl(r.grade)], ['graduate', 'Graduating'], ['remove', 'Remove (left school)']].map(function (o) { return '<option value="' + o[0] + '"' + (r.action === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
               '</select></label></td></tr>';
           }).join('') + '</tbody></table></div></div>';
       });
@@ -3439,7 +3499,7 @@
         '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:18px">' +
         [['Promoted', sum.promote], ['Retained', sum.retain], ['Graduating', sum.graduate], ['Removed', sum.remove], ['Added', sum.add]].map(function (p) { return '<div class="ui-kpi"><div class="num">' + p[1] + '</div><div class="lbl">' + p[0] + '</div></div>'; }).join('') + '</div>' +
         '<div class="ui-eyebrow dark mb-2">Resulting section headcounts</div><div class="ui-tablewrap"><table class="ui-table mw-360"><tbody>' +
-        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(k) + '</td><td class="ad-num">' + countNoun(n, 'student', 'students') + (n > SECTION_LIMIT ? ' <span class="ui-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(sum.headLabels[k] || k) + '</td><td class="ad-num">' + countNoun(n, 'student', 'students') + (n > SECTION_LIMIT ? ' <span class="ui-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
         '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="add">Back</button><button class="btn btn-primary btn-sm" data-mig="commit">Commit migration</button></div>';
     } else if (mig.step === 'commit') {
       var s2 = migSummary();
@@ -3457,7 +3517,7 @@
     ov.querySelectorAll('[data-addfield]').forEach(function (f) { f.addEventListener('input', function () {}); });
   }
   function addRowHTML(a, i) {
-    var gOpts = AD.grades.map(function (g) { return '<option' + (a.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('');
+    var gOpts = AD.grades.map(function (g) { return '<option value="' + esc(g) + '"' + (a.grade === g ? ' selected' : '') + '>' + esc(gLbl(g)) + '</option>'; }).join('');
     return '<div style="display:grid;grid-template-columns:1fr 130px 90px;gap:8px;margin-bottom:8px" data-addidx="' + i + '">' +
       '<input class="input" data-addfield="name" data-i="' + i + '" placeholder="Full name" value="' + esc(a.name) + '">' +
       '<label class="select-wrap"><select class="select" data-addfield="grade" data-i="' + i + '">' + gOpts + '</select></label>' +
@@ -3469,14 +3529,14 @@
   function migSummary() {
     var s = { promote: 0, retain: 0, graduate: 0, remove: 0, add: mig.adds.filter(function (a) { return (a.name || '').trim(); }).length };
     mig.rows.forEach(function (r) { s[r.action]++; });
-    var hc = {};
+    var hc = {}, hl = {};   // headcount per "grade section" key + its display label
     mig.rows.forEach(function (r) {
       if (r.action === 'remove' || r.action === 'graduate') return;
       var g = r.action === 'promote' ? nextGrade(r.grade) : r.grade;
-      var key = g + ' ' + r.section; hc[key] = (hc[key] || 0) + 1;
+      var key = g + ' ' + r.section; hc[key] = (hc[key] || 0) + 1; hl[key] = sLbl(g, r.section);
     });
-    mig.adds.forEach(function (a) { if (!(a.name || '').trim()) return; var key = a.grade + ' ' + (a.section || 'A'); hc[key] = (hc[key] || 0) + 1; });
-    return { promote: s.promote, retain: s.retain, graduate: s.graduate, remove: s.remove, add: s.add, headcounts: hc };
+    mig.adds.forEach(function (a) { if (!(a.name || '').trim()) return; var key = a.grade + ' ' + (a.section || 'A'); hc[key] = (hc[key] || 0) + 1; hl[key] = sLbl(a.grade, a.section || 'A'); });
+    return { promote: s.promote, retain: s.retain, graduate: s.graduate, remove: s.remove, add: s.add, headcounts: hc, headLabels: hl };
   }
 
   // ============================================================

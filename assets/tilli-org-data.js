@@ -119,7 +119,7 @@
   function nextSectionName(g) {
     for (var c = 0; c < 26; c++) {
       var n = String.fromCharCode(65 + c);
-      if (!g.sections.some(function (sec) { return sec.name === n; })) return n;
+      if (!g.sections.some(function (sec) { return sec.name === n || sec.base === n; })) return n;
     }
     return String(g.sections.length + 1);
   }
@@ -266,7 +266,7 @@
   function buildOrgRecordFromApi(api) {
     var st = window.TilliAPI.schoolStats(api.school_id);
     var grades = st.grades.map(function (g) {
-      return { grade: g.grade, students: 0, sections: g.sections.map(function (sec) { return { name: sec.name, students: sec.students }; }) };
+      return { grade: g.grade, base: g.base || '', students: 0, sections: g.sections.map(function (sec) { return { id: sec.id, name: sec.name, base: sec.base || sec.name, students: sec.students }; }) };
     });
     var coord = st.coordinator ? { name: st.coordinator.name, email: st.coordinator.email } : { name: '—', email: '' };
     var grp = (api.group_id && GROUPS.find(function (g) { return g.id === api.group_id; })) || GROUPS[0];
@@ -1025,8 +1025,8 @@
     while (byId(id)) { id = slugBase + '-' + (++n); }
 
     var grades = (input.grades || []).map(function (g) {
-      return { grade: g.grade, students: Math.max(0, parseInt(g.students, 10) || 0), sections: (g.sections || []).map(function (sec) {
-        return { name: sec.name, students: Math.max(0, parseInt(sec.students, 10) || 0) };
+      return { grade: g.grade, base: g.base || '', students: Math.max(0, parseInt(g.students, 10) || 0), sections: (g.sections || []).map(function (sec) {
+        return { name: sec.name, base: sec.base || sec.name, students: Math.max(0, parseInt(sec.students, 10) || 0) };
       }) };
     }).filter(function (g) { return g.grade; });
     var sectionTotal = grades.reduce(function (a, g) { return a + g.sections.length; }, 0);
@@ -1215,17 +1215,55 @@
     var s = byId(schoolId); if (!s) return null;
     var g = s.structure.grades.find(function (x) { return x.grade === gradeName; }); if (!g) return null;
     var nm = sectionName && !g.sections.some(function (x) { return x.name === sectionName; }) ? sectionName : nextSectionName(g);
-    g.sections.push({ name: nm, students: 0, addedAt: iso(TODAY) });
+    g.sections.push({ name: nm, base: nm, students: 0, addedAt: iso(TODAY) });
     recomputeStructure(s); return s;
   }
-  function addGrade(schoolId, name, sectionNames) {
+  // base = fixed grade (TilliAPI.BASE_GRADES) the school's name maps to.
+  function addGrade(schoolId, name, sectionNames, base) {
     var s = byId(schoolId); if (!s) return null;
     if (!s.structure.grades.some(function (g) { return g.grade === name; })) {
-      s.structure.grades.push({ grade: name, addedAt: iso(TODAY),
-        sections: (sectionNames && sectionNames.length ? sectionNames : ['A']).map(function (n) { return { name: n, students: 0, addedAt: iso(TODAY) }; }) });
+      s.structure.grades.push({ grade: name, base: base || '', addedAt: iso(TODAY),
+        sections: (sectionNames && sectionNames.length ? sectionNames : ['A']).map(function (n) { return { name: n, base: n, students: 0, addedAt: iso(TODAY) }; }) });
       recomputeStructure(s);
     }
     return s;
+  }
+  // Rename a grade / section. The base is locked first so it never changes.
+  // Created schools live in TilliAPI (students + invites carry the names too);
+  // their structure is re-read from there so the hub matches.
+  function inferBase(name) { return window.TilliAPI && window.TilliAPI.inferBaseGrade ? window.TilliAPI.inferBaseGrade(name) : ''; }
+  function refreshCreatedStructure(s) {
+    var fresh = buildOrgRecordFromApi(window.TilliAPI.resolveSchool(s.id));
+    s.structure = fresh.structure; s.gradeCount = fresh.gradeCount; s.sectionCount = fresh.sectionCount;
+  }
+  function renameGrade(schoolId, oldName, newName) {
+    var s = byId(schoolId); newName = String(newName || '').trim();
+    if (!s || !newName) return { ok: false, reason: 'empty' };
+    if (s.created && window.TilliAPI && window.TilliAPI.renameGrade) {
+      var r = window.TilliAPI.renameGrade(schoolId, oldName, newName);
+      if (r.ok) refreshCreatedStructure(s);
+      return r;
+    }
+    var g = s.structure.grades.find(function (x) { return x.grade === oldName; }); if (!g) return { ok: false, reason: 'not_found' };
+    if (s.structure.grades.some(function (x) { return x !== g && x.grade.toLowerCase() === newName.toLowerCase(); })) return { ok: false, reason: 'exists' };
+    if (!g.base) g.base = inferBase(g.grade);
+    g.sections.forEach(function (sec) { if (!sec.base) sec.base = sec.name; });
+    g.grade = newName; return { ok: true };
+  }
+  function renameSection(schoolId, gradeName, oldSec, newSec) {
+    var s = byId(schoolId); newSec = String(newSec || '').trim();
+    if (!s || !newSec) return { ok: false, reason: 'empty' };
+    var g = s.structure.grades.find(function (x) { return x.grade === gradeName; }); if (!g) return { ok: false, reason: 'not_found' };
+    var sec = g.sections.find(function (x) { return x.name === oldSec; }); if (!sec) return { ok: false, reason: 'not_found' };
+    if (g.sections.some(function (x) { return x !== sec && x.name.toLowerCase() === newSec.toLowerCase(); })) return { ok: false, reason: 'exists' };
+    if (s.created && window.TilliAPI && window.TilliAPI.renameSection && sec.id) {
+      var r = window.TilliAPI.renameSection(schoolId, sec.id, newSec);
+      if (r.ok) refreshCreatedStructure(s);
+      return r;
+    }
+    if (!g.base) g.base = inferBase(g.grade);
+    if (!sec.base) sec.base = sec.name;
+    sec.name = newSec; return { ok: true };
   }
   // Put back a grade/section the system auto-removed (school asked for it again).
   function restoreStructure(schoolId, idx) {
@@ -1360,7 +1398,7 @@
       // Super-Admin edits
       updateTemplate: updateTemplate, renameGroup: renameGroup, deleteGroup: deleteGroup, archiveGroup: archiveGroup,
       updateSchool: updateSchool, deleteSchool: deleteSchool, setUserRole: setUserRole,
-      addSection: addSection, addGrade: addGrade, updateGame: updateGame,
+      addSection: addSection, addGrade: addGrade, renameGrade: renameGrade, renameSection: renameSection, updateGame: updateGame,
       emptyStructure: emptyStructure, restoreStructure: restoreStructure,
       addInvitation: addInvitation,
     },

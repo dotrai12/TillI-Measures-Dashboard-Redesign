@@ -216,7 +216,7 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 
 ## Known issues to share with Mayur (23 Oct 2026)
 
-Changes made on 23 Oct 2026: **Rollout stage removed** (no wizard step, no Stage column/chip/CSV column, not in Ask Tilli), **Country + City** required, **Add School wizard trimmed** (Grades step text cut, hover reason on a greyed-out Next), **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
+Changes made on 23 Oct 2026: **Base grades** (every grade/section keeps a fixed base, shown as "Sunflowers (Grade 1)" / "Rose (Grade 1A)" when renamed, used by Ask Tilli; rename in Grades & sections; teacher sign-up lists the school's own grades), **Rollout stage removed** (no wizard step, no Stage column/chip/CSV column, not in Ask Tilli), **Country + City** required, **Add School wizard trimmed** (Grades step text cut, hover reason on a greyed-out Next), **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
 
 Open issues that came out of those changes:
 
@@ -243,6 +243,16 @@ Open issues that came out of those changes:
 - **Edit school uses free-text Country and City, but the wizard uses fixed dropdown lists.** A typo or "india" in Edit school won't match "India", and that school drops out of Analytics → Outcomes by region and the country grouping. *Possible fix:* give Edit school the same Country → City dropdowns as the wizard.
 - **The hover reason on a greyed-out Next may not appear in Firefox or Safari.** It uses the browser's built-in tooltip, which those browsers don't always show on disabled buttons. *Possible fix:* show the reason as small text under Next while it's disabled.
 - **The 60-day auto-remove rule is only visible after a grade is added.** It moved into a ⓘ next to the totals line, which is hidden while there are no grades. *Possible fix:* mention it in the Profile step's intro if people get caught out.
+
+**Base grades**
+- **Demo schools now read "Kindergarten (UKG)" / "Kindergarten A (UKG A)".** Kindergarten counts as UKG, so the base shows in brackets. *Possible fix:* if it looks noisy, take `kindergarten` out of the inference list in `tilli-api.js` so it's no longer read as UKG.
+- **One grade per base.** A school can't add two separate Grade 1s (e.g. English- and Tamil-medium). *Workaround:* one grade with renamed sections ("English (Grade 1A)", "Tamil (Grade 1B)"). *Possible fix if needed:* allow repeated bases and give their sections distinct letters.
+- **Rename reloads a wizard-created school's structure, which drops unsaved additions.** Adding a grade or section in Grades & sections for these schools only lasts until reload, so a rename undoes anything added since. *Possible fix:* save add-grade and add-section to the school's stored data, as rename now does.
+- **Teacher invites are matched by grade and section name on rename.** Names that differ only in spacing won't update. *Possible fix:* store a section ID on invites.
+- **CSV columns moved.** Roster, teacher and history CSVs gained Base grade / Base section columns, so anything reading them by column position is off by one or two.
+- **Promotion changed for Grade 6 and above.** These grades used to "promote" to themselves; they now step up a base (Grade 6 → Grade 7).
+- **Labels are cached per screen.** A rename made in another tab shows after the next screen change or reload.
+- **Long names can crowd the school admin's overview diagram.** Labels like "Sunflowers (Grade 1)" may overlap at the whole-school view.
 
 **Change History**
 - **A school's sample history disappears when it goes live.** Sample history is only generated for schools without a live data store. When a school switches to live, its sample rows disappear and only copied Audit Trail rows are left. *Possible fix:* pre-fill the live store with the sample history when the school switches.

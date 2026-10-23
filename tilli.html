@@ -412,7 +412,12 @@
   .ws-gradename:focus { outline: none; border-color: var(--focus); background: var(--white); box-shadow: 0 0 0 3px var(--wash-cyan); }
   .ws-secs { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
   .ws-sec { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-100); border-radius: var(--radius-sm); padding: 3px 6px 3px 9px; }
-  .ws-sec-name { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); }
+  .ws-secname { width: auto; min-width: 1.6em; max-width: 9em; font-family: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-600); border: 1px solid transparent; border-radius: var(--radius-xs); padding: 1px 3px; background: transparent; cursor: text; }
+  .ws-secname:hover { border-color: var(--line-200); background: var(--white); }
+  .ws-secname:focus { outline: none; border-color: var(--focus); background: var(--white); box-shadow: 0 0 0 3px var(--wash-cyan); }
+  .ws-gradeid { display: flex; flex-direction: column; flex: 0 0 auto; }
+  .ws-base { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); white-space: nowrap; padding-left: 9px; }
+  .ws-base.sec { padding-left: 0; }
   .ws-secnum, .ws-gradenum { border: 1px solid var(--line-200); border-radius: var(--radius-xs); padding: 1px 4px; font: inherit; font-size: var(--fs-sm); font-weight: 700; color: var(--ink-700); text-align: center; -moz-appearance: textfield; }
   .ws-secnum { width: 46px; }
   .ws-gradenum { width: 52px; }
@@ -424,8 +429,6 @@
   .ws-gradenum-wrap { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; font-size: var(--fs-sm); font-weight: 700; color: var(--ink-600); }
   .ws-grade-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; margin-left: auto; }
   .ws-add-sec { white-space: nowrap; }
-  .ws-grade-del { background: none; border: none; color: var(--ink-300); font-family: inherit; font-weight: 700; font-size: var(--fs-sm); cursor: pointer; padding: 0; white-space: nowrap; }
-  .ws-grade-del:hover { color: var(--danger-700); text-decoration: underline; }
   .ws-addbar { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); background: var(--surface-100); }
   .ws-addbar-lbl { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-450); }
   .ws-presets { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -825,10 +828,10 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261022d"></script>
-<script src="assets/tilli-history.js?v=20261022a"></script>
-<script src="assets/tilli-org-data.js?v=20261022v"></script>
+<script src="assets/tilli-api.js?v=20261023bh"></script>
+<script src="assets/tilli-history.js?v=20261023bh"></script>
+<script src="assets/tilli-org-data.js?v=20261023bh"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261022w"></script>
+<script src="assets/tilli-admin.js?v=20261023bh"></script>
 </body>
 </html>

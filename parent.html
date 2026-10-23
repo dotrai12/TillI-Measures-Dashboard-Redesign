@@ -317,7 +317,7 @@
 <div id="app"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261022d"></script>
+<script src="assets/tilli-api.js?v=20261023bh"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
@@ -504,7 +504,7 @@
         name: lk.first || lk.name || 'Your child', grade: lk.grade, section: lk.section, adm: lk.student_id,
         // Carry the backbone ids so a created-school child can key its REAL
         // deployments/completions (findByAdm misses these students — full===null).
-        student_id: lk.student_id, school_id: lk.school_id,
+        student_id: lk.student_id, school_id: lk.school_id, section_id: lk.section_id,
         pronoun: (full && full.pronoun) || (lk.gender === 'm' ? 'he' : 'she'),
         teacher: (full && full.teacherName) || 'your teacher', unlocked: i === 0,
       };
@@ -623,7 +623,7 @@
         <span class="ui-avatar sm" style="background:${smileColor(i)}"><img src="${SMILEY}" alt=""></span>
         <span class="flex-1">
           <span class="nm">${esc(k.name)}</span>
-          <span class="mt">${[k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ') || 'No grade set'}</span>
+          <span class="mt">${esc(classMeta(k)) || 'No grade set'}</span>
         </span>
         ${i === state.selected ? '<span class="ck">✓</span>' : ''}
       </button>`).join('');
@@ -705,12 +705,24 @@
     </div>`;
   }
 
+  // "Grade 1 · Section A" — or, once the school has renamed the class, its name
+  // with the fixed base in brackets: "Sunflowers Rose (Grade 1A)".
+  function classMeta(k) {
+    const A = window.TilliAPI;
+    const plain = [k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ');
+    if (!A || !A.sectionLabel || !k.school_id || !k.grade) return plain;
+    if (!k.section) return A.gradeLabel(k.school_id, k.grade);
+    const label = k.section_id ? A.sectionLabel(k.school_id, k.section_id) : A.sectionLabel(k.school_id, k.grade, k.section);
+    const base = k.section_id ? A.sectionBase(k.school_id, k.section_id) : A.sectionBase(k.school_id, k.grade, k.section);
+    return base && label.endsWith(' (' + base + ')') ? label : plain;
+  }
+
   // Hero info chips (school · grade/section · admission) — shared by the demo
   // home and the created-school home.
   function heroChips(c, schoolName) {
     return [
       `<span class="pill-info"><span class="ui-dot sm dot-cyan"></span>${esc(schoolName)}</span>`,
-      c.grade ? `<span class="ui-chip lg ok"><span class="ui-dot sm dot-green"></span>${esc(c.grade)}${c.section ? ' · Section ' + esc(c.section) : ''}</span>` : '',
+      c.grade ? `<span class="ui-chip lg ok"><span class="ui-dot sm dot-green"></span>${esc(classMeta(c))}</span>` : '',
       c.adm ? `<span class="ui-chip lg prog"><span class="ui-dot sm dot-yellow"></span>Admission ${esc(c.adm)}</span>` : '',
     ].filter(Boolean).join('');
   }
@@ -1040,7 +1052,7 @@
       </div>
       <div class="p-main" data-rise>
 
-        <p class="p-eyebrow spaced">${esc(w.label)} · ${esc(school)} · ${[c.grade, c.section && 'Section ' + c.section].filter(Boolean).join(' · ')}</p>
+        <p class="p-eyebrow spaced">${esc(w.label)} · ${esc(school)} · ${esc(classMeta(c))}</p>
         <h1 class="p-title">${esc(c.name)}'s garden</h1>
         <p class="p-sub narrow">${esc(c.name)}'s garden is growing — ${blooms} of ${skills.length} skills are blooming, with a few still finding the sun. Here's the whole picture.</p>
 
@@ -1290,7 +1302,7 @@
       const remaining = total - done;
       const pct = Math.round((done / total) * 100);
       const col = smileColor(i);
-      const meta = [k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ') || 'No grade set';
+      const meta = classMeta(k) || 'No grade set';
       return `<button class="ui-card sm link kid-card focus" data-select="${i}">
         <span class="ui-avatar lg" style="background:${col}"><img src="${SMILEY}" alt=""></span>
         <span class="kid-info"><b>${esc(k.name)}</b><span>${esc(meta)}</span></span>

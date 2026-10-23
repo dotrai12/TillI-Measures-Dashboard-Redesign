@@ -162,36 +162,59 @@
   // ---------- school structure (Platform Admin provisioning) ----------
   // The grades/sections a school was set up with on the platform. The demographic
   // step must only offer THESE — a teacher cannot claim to teach a grade/section
-  // the school doesn't have. Derived from the school's provisioned sections and
-  // expressed as indices into DEMO_GRADES so every existing key (`gi`, `gi-<sec>`)
-  // stays consistent. Null when we have no school on file (standalone demo), in
-  // which case we fall back to the full DEMO_GRADES / DEMO_SECTIONS universe.
+  // the school doesn't have. Built from the school's own section records, so
+  // renamed grades ("Sunflowers") and sections ("Rose") come through as named,
+  // ordered by their fixed base grade (Nursery → Grade 12). Keys stay `gi` (index
+  // into GRADES) and `gi-<section name>`. Null when we have no school on file
+  // (standalone demo), in which case we fall back to DEMO_GRADES / DEMO_SECTIONS.
   const SCHOOL_STRUCT = (function () {
-    if (!INVITE || !INVITE.school || !window.TilliAPI || !window.TilliAPI.sectionsForSchool) return null;
+    const A = window.TilliAPI;
+    if (!INVITE || !INVITE.school || !A || !A.sectionsForSchool) return null;
     let secs = [];
-    try { secs = window.TilliAPI.sectionsForSchool(INVITE.school.school_id) || []; } catch (e) { return null; }
+    try { secs = A.sectionsForSchool(INVITE.school.school_id) || []; } catch (e) { return null; }
     if (!secs.length) return null;
-    const gradeIdx = [], secsByGi = {};
+    const bases = A.BASE_GRADES || [];
+    const baseRank = (s) => { const i = bases.indexOf(s.base_grade || (A.baseGradeOf ? A.baseGradeOf(INVITE.school.school_id, s.grade) : '')); return i < 0 ? 999 : i; };
+    const letterOf = (s) => String(s.base_section || s.section || '');
+    const grades = [], rank = {}, secsByName = {};
     secs.forEach(function (s) {
-      const gi = DEMO_GRADES.findIndex((x) => x.toLowerCase() === String(s.grade || '').toLowerCase());
-      if (gi < 0) return; // grade outside the demo ladder — skip
-      if (gradeIdx.indexOf(gi) < 0) gradeIdx.push(gi);
-      const sx = String(s.section || '').toUpperCase();
-      if (!sx) return;
-      (secsByGi[gi] = secsByGi[gi] || []);
-      if (secsByGi[gi].indexOf(sx) < 0) secsByGi[gi].push(sx);
+      const g = String(s.grade || '').trim(); if (!g) return;
+      if (grades.indexOf(g) < 0) { grades.push(g); rank[g] = baseRank(s); }
+      const sx = String(s.section || '').trim(); if (!sx) return;
+      (secsByName[g] = secsByName[g] || []);
+      if (!secsByName[g].some((x) => x.name === sx)) secsByName[g].push({ name: sx, letter: letterOf(s) });
     });
-    if (!gradeIdx.length) return null;
-    gradeIdx.sort((a, b) => a - b);
-    Object.keys(secsByGi).forEach((gi) => secsByGi[gi].sort((a, b) => DEMO_SECTIONS.indexOf(a) - DEMO_SECTIONS.indexOf(b)));
-    return { gradeIdx: gradeIdx, secsByGi: secsByGi };
+    if (!grades.length) return null;
+    grades.sort((a, b) => (rank[a] - rank[b]) || a.localeCompare(b));
+    const secsByGi = {};
+    grades.forEach((g, gi) => { secsByGi[gi] = (secsByName[g] || []).sort((a, b) => a.letter.localeCompare(b.letter)).map((x) => x.name); });
+    return { grades: grades, secsByGi: secsByGi };
   })();
+  // The grade list the sign-up step offers: the school's own, else the demo ladder.
+  const GRADES = SCHOOL_STRUCT ? SCHOOL_STRUCT.grades : DEMO_GRADES;
 
-  // Grade indices (into DEMO_GRADES) the teacher may pick from, and the sections
-  // allowed under a given grade. Fall back to the full universe when the school
-  // has no structure on file.
-  function allowedGradeIdx() { return SCHOOL_STRUCT ? SCHOOL_STRUCT.gradeIdx : DEMO_GRADES.map((_, i) => i); }
+  // Grade indices (into GRADES) the teacher may pick from, and the sections
+  // allowed under a given grade. Fall back to the full demo universe when the
+  // school has no structure on file.
+  function allowedGradeIdx() { return GRADES.map((_, i) => i); }
   function allowedSecs(gi) { return SCHOOL_STRUCT ? (SCHOOL_STRUCT.secsByGi[gi] || []) : DEMO_SECTIONS; }
+
+  // ---------- base grades (display only) ----------
+  // A school can rename "Grade 1" → "Sunflowers"; labels keep the school's name
+  // and add the fixed base in brackets when it differs. Values / keys stay raw.
+  const SCHOOL_ID = INVITE && INVITE.school ? INVITE.school.school_id : null;
+  const sameName = (a, b) => String(a || '').toLowerCase().replace(/\s+/g, '') === String(b || '').toLowerCase().replace(/\s+/g, '');
+  function gradeShown(grade) { const A = window.TilliAPI; return A && A.gradeLabel ? A.gradeLabel(SCHOOL_ID, grade) : String(grade || ''); }
+  function secBase(grade, sx) { const A = window.TilliAPI; return A && A.sectionBase && grade ? A.sectionBase(SCHOOL_ID, grade, sx || '') : ''; }
+  // Section letter on its own ("A", or "Rose (Grade 1A)").
+  function sxShown(grade, sx) { const b = secBase(grade, sx); return b && !sameName(b, grade + sx) ? sx + ' (' + b + ')' : sx; }
+  // "Grade 1 · Section A" picker value → its label.
+  function gsShown(gs) {
+    if (!gs) return gs;
+    const p = splitGS(gs), b = p[1] ? secBase(p[0], p[1]) : '';
+    if (!p[1]) return gradeShown(p[0]);
+    return b && !sameName(b, p[0] + p[1]) ? gs + ' (' + b + ')' : gs;
+  }
 
   // Pre-fill the demographic step from what the platform already knows. Every
   // field stays editable — the teacher just checks and changes anything wrong.
@@ -204,15 +227,16 @@
       if (INVITE.school.city) d.city = INVITE.school.city;
     }
     // Grades + sections: prefer the teacher's provisioned sections, else the
-    // single grade/section carried on their invite. Map grade names → the demo
-    // grade ladder; unrecognised grades are simply left for the teacher to pick.
+    // single grade/section carried on their invite. Map grade names → GRADES;
+    // unrecognised grades are simply left for the teacher to pick.
     const pairs = (INVITE.sections || []).map((s) => [s.grade, s.section]);
     if (!pairs.length && INVITE.acct && INVITE.acct.grade) pairs.push([INVITE.acct.grade, INVITE.acct.section]);
     pairs.forEach(function (p) {
-      const gi = DEMO_GRADES.findIndex((x) => x.toLowerCase() === String(p[0] || '').toLowerCase());
+      const gi = GRADES.findIndex((x) => x.toLowerCase() === String(p[0] || '').toLowerCase());
       if (gi < 0) return;
       d.gradesSel[gi] = true;
-      if (p[1]) d.secs[gi + '-' + String(p[1]).toUpperCase()] = true;
+      const sx = p[1] ? allowedSecs(gi).find((x) => x.toLowerCase() === String(p[1]).toLowerCase()) : '';
+      if (sx) d.secs[gi + '-' + sx] = true;
     });
     return d;
   }
@@ -493,19 +517,19 @@
   function demoStep3() {
     const d = state.demo;
     const gradePills = allowedGradeIdx().map((gi) =>
-      `<button class="ui-filterchip solid focus${d.gradesSel[gi] ? ' on' : ''}" data-grade="${gi}">${esc(DEMO_GRADES[gi])}</button>`).join('');
+      `<button class="ui-filterchip solid focus${d.gradesSel[gi] ? ' on' : ''}" data-grade="${gi}">${esc(gradeShown(GRADES[gi]))}</button>`).join('');
     const hasGrades = Object.keys(d.gradesSel).length > 0;
     const secCards = !hasGrades ? '' : allowedGradeIdx().map((gi) => {
-      const name = DEMO_GRADES[gi];
+      const name = GRADES[gi];
       if (!d.gradesSel[gi]) return '';
       const gradeSecs = allowedSecs(gi);
       const count = gradeSecs.filter((sx) => d.secs[gi + '-' + sx]).length;
       const secs = gradeSecs.map((sx) => {
         const on = !!d.secs[gi + '-' + sx];
-        return `<button class="onb-check focus" data-sec="${gi}-${sx}"><span class="ui-check${on ? ' on' : ''}">${on ? '✓' : ''}</span>${sx}</button>`;
+        return `<button class="onb-check focus" data-sec="${gi}-${esc(sx)}"><span class="ui-check${on ? ' on' : ''}">${on ? '✓' : ''}</span>${esc(sxShown(name, sx))}</button>`;
       }).join('');
       return `<div class="ui-card sm subtle onb-seccard">
-        <div class="onb-sechead"><span style="font-size:var(--fs-sm);font-weight:700;color:var(--ink-700)">${esc(name)}</span>
+        <div class="onb-sechead"><span style="font-size:var(--fs-sm);font-weight:700;color:var(--ink-700)">${esc(gradeShown(name))}</span>
           ${count ? `<span class="ui-chip ok">${count} selected</span>` : ''}</div>
         <div class="onb-secgrid">${secs}</div>
       </div>`;
@@ -645,7 +669,7 @@
   function gradeSectionOpts() {
     const d = state.demo, out = [];
     Object.keys(d.gradesSel).sort((a, b) => a - b).forEach((gi) => {
-      DEMO_SECTIONS.forEach((sx) => { if (d.secs[gi + '-' + sx]) out.push(DEMO_GRADES[gi] + ' · Section ' + sx); });
+      allowedSecs(gi).forEach((sx) => { if (d.secs[gi + '-' + sx]) out.push(GRADES[gi] + ' · Section ' + sx); });
     });
     return out;
   }
@@ -669,9 +693,9 @@
     const all = opts.slice();
     if (current && all.indexOf(current) < 0) all.unshift(current);   // keep an off-list value visible
     const menu = all.map((o) =>
-      `<button type="button" class="ui-menu-item onb-sel-opt focus${o === current ? ' on' : ''}" data-gs-opt="${gi}" data-gs-val="${esc(o)}"><span>${esc(o)}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
+      `<button type="button" class="ui-menu-item onb-sel-opt focus${o === current ? ' on' : ''}" data-gs-opt="${gi}" data-gs-val="${esc(o)}"><span>${esc(gsShown(o))}</span>${o === current ? '<span class="onb-sel-tick">✓</span>' : ''}</button>`).join('');
     return `<div class="onb-sel${open ? ' open' : ''}">
-      <button type="button" class="input onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-gs-toggle="${gi}" aria-label="Grade and section for this group"><span class="onb-sel-val">${esc(current || 'Choose grade · section')}</span></button>
+      <button type="button" class="input onb-sel-trigger focus${current ? '' : ' is-placeholder'}" data-gs-toggle="${gi}" aria-label="Grade and section for this group"><span class="onb-sel-val">${esc(current ? gsShown(current) : 'Choose grade · section')}</span></button>
       ${open ? `<div class="ui-menu onb-sel-menu">${menu}</div>` : ''}
     </div>`;
   }
@@ -1102,7 +1126,7 @@
   function toggleGrade(gi) {
     const g = Object.assign({}, state.demo.gradesSel);
     const secs = Object.assign({}, state.demo.secs);
-    if (g[gi]) { delete g[gi]; DEMO_SECTIONS.forEach((sx) => delete secs[gi + '-' + sx]); }
+    if (g[gi]) { delete g[gi]; allowedSecs(gi).forEach((sx) => delete secs[gi + '-' + sx]); }
     else g[gi] = true;
     setDemo({ gradesSel: g, secs });
   }

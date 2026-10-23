@@ -732,12 +732,24 @@
     </div>`;
   }
 
+  // "Grade 1, Section A" — or, once the school has renamed the class, its name
+  // with the fixed base in brackets: "Sunflowers Rose (Grade 1A)".
+  function classMeta(m) {
+    const A = window.TilliAPI;
+    const plain = [m.grade, m.section && 'Section ' + m.section].filter(Boolean).join(', ');
+    const sc = A && A.sectionLabel && A.resolveSchool ? A.resolveSchool(state.school) : null;
+    if (!sc || !m.grade) return plain;
+    if (!m.section) return A.gradeLabel(sc.school_id, m.grade);
+    const label = A.sectionLabel(sc.school_id, m.grade, m.section), base = A.sectionBase(sc.school_id, m.grade, m.section);
+    return base && label.endsWith(' (' + base + ')') ? label : plain;
+  }
+
   // ===== B3 — reveal + confirm (only reached after a correct second factor) =====
   function childConfirmView() {
     // Details come from the verified reveal, never from a client-side roster lookup.
     const m = state.claim.reveal || state.match || {};
     const full = (m.name || `${m.first || ''} ${m.last || ''}`).trim();
-    const gradeSection = [m.grade, m.section && 'Section ' + m.section].filter(Boolean).join(', ');
+    const gradeSection = classMeta(m);
     return `<div class="sheet">
       <div class="sheet-wrap">
         <div class="sheet-head">

@@ -1066,7 +1066,7 @@
     var grades = (input.grades||[]).map(function(g){
       var secs = (g.sections||[]).slice();
       if (!secs.length && (parseInt(g.students,10)||0) > 0) secs = [{ name:'A', students:parseInt(g.students,10)||0 }];
-      return { grade:g.grade, sections:secs };
+      return { grade:g.grade, base:g.base || inferBaseGrade(g.grade), sections:secs };
     }).filter(function(g){ return g.grade && g.sections.length; });
 
     var teachers = [];
@@ -1078,7 +1078,8 @@
         // with the school code (resolveJoinCode → ensureTeacherScope). The old
         // "one teacher per section" auto-seed was removed per product rule.
         db.sections[secId] = { section_id:secId, school_id:id, grade:g.grade, section:sec.name,
-          name:(g.grade+' '+sec.name).trim(), teacherId:null };
+          name:(g.grade+' '+sec.name).trim(), teacherId:null,
+          base_grade: g.base || '', base_section: sec.base || sec.name };
 
         // Students are NOT seeded here either — the section is created empty so
         // the coordinator can add students via the roster / CSV flow and
@@ -1159,16 +1160,107 @@
     return Object.keys(db.students).map(function(k){ return db.students[k]; })
       .filter(function(s){ return s.school_id===schoolId && (opts.includeLeft || s.status!=='left'); })
       .map(pubStudent); }
+  /* ======================================================================
+     BASE GRADES — every grade/section keeps a fixed base (Grade 1, Grade 1A)
+     however the school renames it. Ask Tilli, matching and promotion read the
+     base; screens show the school's name with the base in brackets when they
+     differ: "Sunflowers (Grade 1)", "Rose (Grade 1A)".
+     ====================================================================== */
+  var BASE_GRADES = ['Nursery', 'LKG', 'UKG'].concat(Array.apply(null, Array(12)).map(function(_, i){ return 'Grade ' + (i + 1); }));
+  var BASE_EARLY = { 'playgroup':'Nursery', 'pre-nursery':'Nursery', 'prenursery':'Nursery', 'nursery':'Nursery', 'pre-k':'Nursery', 'prek':'Nursery',
+    'lkg':'LKG', 'ukg':'UKG', 'kg':'UKG', 'kindergarten':'UKG' };
+  // Best guess for names that never had a base stored (demo data, CSV imports).
+  function inferBaseGrade(name){
+    var n = low(name);
+    if (BASE_EARLY[n]) return BASE_EARLY[n];
+    var m = n.match(/^(?:grade|class|std|standard|year|gr)?\.?\s*(\d{1,2})$/);
+    if (m && +m[1] >= 1 && +m[1] <= 12) return 'Grade ' + (+m[1]);
+    return '';
+  }
+  function baseGradeIn(db, schoolId, grade){
+    var hit = Object.keys(db.sections).map(function(k){ return db.sections[k]; })
+      .filter(function(s){ return s.school_id===schoolId && low(s.grade)===low(grade) && s.base_grade; })[0];
+    return hit ? hit.base_grade : inferBaseGrade(grade);
+  }
+  function baseGradeOf(schoolId, grade){ return baseGradeIn(getDB(), schoolId, grade); }
+  // "Grade 1" + "A" → "Grade 1A"; "LKG" + "A" → "LKG A".
+  function baseSectionCode(baseGrade, letter){
+    if (!baseGrade) return '';
+    return baseGrade + (/\d$/.test(baseGrade) ? '' : ' ') + (letter || '');
+  }
+  function sameName(a, b){ return low(a).replace(/\s+/g, '') === low(b).replace(/\s+/g, ''); }
+  // "Sunflowers (Grade 1)" — or just the name when it already is the base.
+  function gradeLabel(schoolId, grade, base){
+    var b = base != null ? base : baseGradeOf(schoolId, grade);
+    return b && !sameName(b, grade) ? grade + ' (' + b + ')' : String(grade == null ? '' : grade);
+  }
+  // Fixed base code for a section ("Grade 1A"), from (grade, section) strings or a section_id.
+  function sectionBase(schoolId, grade, section){
+    var db = getDB(), rec = section === undefined ? db.sections[grade] : Object.keys(db.sections).map(function(k){ return db.sections[k]; })
+      .filter(function(s){ return s.school_id===schoolId && low(s.grade)===low(grade) && low(s.section||'')===low(section); })[0];
+    if (rec) return baseSectionCode(rec.base_grade || baseGradeOf(schoolId, rec.grade), rec.base_section || rec.section);
+    return baseSectionCode(baseGradeOf(schoolId, grade), section);
+  }
+  // A section record ({grade, section, name, base_grade, base_section}), a
+  // section_id, or (grade, section) strings → "Rose (Grade 1A)" / "Grade 1 A".
+  function sectionLabel(schoolId, sec, section){
+    var rec = sec;
+    if (typeof sec === 'string' && section === undefined) rec = getDB().sections[sec] || { name: sec };
+    else if (typeof sec === 'string') {
+      var db = getDB();
+      rec = Object.keys(db.sections).map(function(k){ return db.sections[k]; })
+        .filter(function(s){ return s.school_id===schoolId && low(s.grade)===low(sec) && low(s.section||'')===low(section); })[0]
+        || { grade: sec, section: section };
+    }
+    rec = rec || {};
+    var shown = rec.name || ((rec.grade || '') + ' ' + (rec.section || '')).trim();
+    var bg = rec.base_grade || (rec.grade != null ? baseGradeOf(schoolId || rec.school_id, rec.grade) : '');
+    var code = baseSectionCode(bg, rec.base_section || rec.section);
+    return code && !sameName(code, shown) ? shown + ' (' + code + ')' : shown;
+  }
+
+  // Rename a grade / section. The base is locked in first (stored if it was only
+  // inferred), so Ask Tilli and matching keep knowing what it really is. Students
+  // and teacher invites carry the names as text, so they're renamed too.
+  function lockBase(db, sec){
+    if (!sec.base_grade) sec.base_grade = baseGradeIn(db, sec.school_id, sec.grade);
+    if (!sec.base_section) sec.base_section = sec.section || '';
+  }
+  function schoolSections(db, schoolId){ return Object.keys(db.sections).map(function(k){ return db.sections[k]; }).filter(function(s){ return s.school_id===schoolId; }); }
+  function renameGrade(schoolId, oldGrade, newGrade){
+    var db = getDB(); newGrade = norm(newGrade);
+    if (!newGrade) return { ok:false, reason:'empty' };
+    var secs = schoolSections(db, schoolId);
+    var hit = secs.filter(function(s){ return low(s.grade)===low(oldGrade); });
+    if (!hit.length) return { ok:false, reason:'not_found' };
+    if (low(oldGrade)!==low(newGrade) && secs.some(function(s){ return low(s.grade)===low(newGrade); })) return { ok:false, reason:'exists' };
+    hit.forEach(function(s){ lockBase(db, s); s.grade = newGrade; s.name = (newGrade + ' ' + (s.section||'')).trim(); });
+    Object.keys(db.students).forEach(function(k){ var st = db.students[k]; if (st.school_id===schoolId && low(st.grade)===low(oldGrade)) st.grade = newGrade; });
+    Object.keys(db.accounts).forEach(function(k){ var a = db.accounts[k]; if (a.school_id===schoolId && low(a.grade)===low(oldGrade)) a.grade = newGrade; });
+    write(db); return { ok:true };
+  }
+  function renameSection(schoolId, sectionId, newSection){
+    var db = getDB(); newSection = norm(newSection); var sec = db.sections[sectionId];
+    if (!sec || sec.school_id!==schoolId) return { ok:false, reason:'not_found' };
+    if (!newSection) return { ok:false, reason:'empty' };
+    if (schoolSections(db, schoolId).some(function(s){ return s!==sec && low(s.grade)===low(sec.grade) && low(s.section)===low(newSection); })) return { ok:false, reason:'exists' };
+    var old = sec.section; lockBase(db, sec);
+    sec.section = newSection; sec.name = (sec.grade + ' ' + newSection).trim();
+    Object.keys(db.students).forEach(function(k){ var st = db.students[k]; if (st.school_id===schoolId && st.section_id===sectionId) st.section = newSection; });
+    Object.keys(db.accounts).forEach(function(k){ var a = db.accounts[k]; if (a.school_id===schoolId && low(a.grade)===low(sec.grade) && low(a.section)===low(old)) a.section = newSection; });
+    write(db); return { ok:true };
+  }
+
   // Grade/section structure + counts, for the org portfolio hub.
   function schoolStats(schoolId){
     var secs = sectionsForSchool(schoolId);
     var studs = studentsForSchool(schoolId);
     var byGrade = {};
     secs.forEach(function(sec){
-      (byGrade[sec.grade] = byGrade[sec.grade] || []).push({ name:sec.section, id:sec.section_id,
+      (byGrade[sec.grade] = byGrade[sec.grade] || []).push({ name:sec.section, id:sec.section_id, base:sec.base_section || sec.section,
         students: studs.filter(function(s){ return s.section_id===sec.section_id; }).length });
     });
-    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, sections:byGrade[g] }; });
+    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, base:baseGradeOf(schoolId, g), sections:byGrade[g] }; });
     var staff = staffFor(schoolId);
     return { students:studs.length, sections:secs.length, grades:grades,
       staff:staff.length, teachers:staff.filter(function(x){return x.role==='teacher';}).length,
@@ -1186,7 +1278,8 @@
     var secId = 'sec_' + schoolId + '_' + slugify(grade + '_' + (section||'na'));
     if (!db.sections[secId]){
       db.sections[secId] = { section_id:secId, school_id:schoolId, grade:grade, section:section,
-        name:(grade+' '+(section||'')).trim(), teacherId:null };
+        name:(grade+' '+(section||'')).trim(), teacherId:null,
+        base_grade: baseGradeIn(db, schoolId, grade), base_section: section };
       write(db);
     }
     return secId;
@@ -1932,6 +2025,16 @@
     historyFor: historyFor,
     historyAcross: historyAcross,
     setSchoolGroup: setSchoolGroup,
+    // base grades (fixed identity behind a renamed grade / section)
+    BASE_GRADES: BASE_GRADES,
+    inferBaseGrade: inferBaseGrade,
+    baseGradeOf: baseGradeOf,
+    baseSectionCode: baseSectionCode,
+    gradeLabel: gradeLabel,
+    sectionLabel: sectionLabel,
+    sectionBase: sectionBase,
+    renameGrade: renameGrade,
+    renameSection: renameSection,
     setSchoolBoards: setSchoolBoards,
     // dev
     reset: reset,

@@ -1076,7 +1076,22 @@
     'India': ['Bengaluru', 'Mumbai', 'Delhi', 'Gurugram', 'Chennai', 'Hyderabad', 'Kolkata', 'Pune', 'Jaipur'],
     'Sri Lanka': ['Colombo', 'Kandy', 'Galle', 'Jaffna', 'Negombo'],
   };
-  var ADD_GRADE_PRESETS = ['LKG', 'UKG', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'];
+  // Fixed base grades (TilliAPI.BASE_GRADES): every grade picks one, however the school names it.
+  var BASE_GRADES = (window.TilliAPI && window.TilliAPI.BASE_GRADES) || ['Nursery', 'LKG', 'UKG', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
+  function inferBase(name) { return window.TilliAPI && window.TilliAPI.inferBaseGrade ? window.TilliAPI.inferBaseGrade(name) : ''; }
+  function sameName(a, b) { return String(a || '').replace(/\s+/g, '').toLowerCase() === String(b || '').replace(/\s+/g, '').toLowerCase(); }
+  // Small "(Grade 1)" bracket shown only when the school's name differs from the base.
+  function baseTag(shown, base, extraCls) {
+    return base && !sameName(shown, base) ? ' <small class="ws-base' + (extraCls ? ' ' + extraCls : '') + '" title="Base: ' + esc(base) + '. Fixed, so Tilli and Ask Tilli always know which grade this is.">(' + esc(base) + ')</small>' : '';
+  }
+  // Display label with bracket, for read-only places: "Sunflowers (Grade 1)".
+  function gradeLbl(name, base) { var b = base || inferBase(name); return b && !sameName(name, b) ? name + ' (' + b + ')' : name; }
+  // "Rose (Grade 1A)" for a student's grade + section at a school (bracket only when renamed).
+  function secLbl(schoolId, grade, section) {
+    if (window.TilliAPI && window.TilliAPI.sectionLabel) return window.TilliAPI.sectionLabel(schoolId, grade || '', section || '');
+    return ((grade || '') + ' ' + (section || '')).trim();
+  }
+  function baseCode(base, letter) { return window.TilliAPI && window.TilliAPI.baseSectionCode ? window.TilliAPI.baseSectionCode(base, letter) : (base || '') + (letter || ''); }
   var WIZ_STEPS = [
     { key: 'profile', label: 'Profile' },
     { key: 'structure', label: 'Grades' }, { key: 'admin', label: 'First admin', optional: true },
@@ -1096,7 +1111,7 @@
   }
   function sortGrades(list) {
     list.sort(function (a, b) {
-      var ra = gradeRank(a.grade), rb = gradeRank(b.grade);
+      var ra = gradeRank(a.base || a.grade), rb = gradeRank(b.base || b.grade);
       return ra !== rb ? ra - rb : a.grade.localeCompare(b.grade);
     });
     return list;
@@ -1175,29 +1190,33 @@
     }
 
     function bodyStructure() {
-      var presetBtns = ADD_GRADE_PRESETS.filter(function (p) { return !d.grades.some(function (g) { return g.grade.toLowerCase() === p.toLowerCase(); }); })
-        .map(function (p) { return '<button class="ui-filterchip" type="button" data-preset="' + esc(p) + '">＋ ' + esc(p) + '</button>'; }).join('');
+      var freeBases = BASE_GRADES.filter(function (b) { return !d.grades.some(function (g) { return g.base === b; }); });
+      var presetBtns = freeBases.map(function (p) { return '<button class="ui-filterchip" type="button" data-preset="' + esc(p) + '">＋ ' + esc(p) + '</button>'; }).join('');
+      var baseOpts = '<option value="">Base grade…</option>' + freeBases.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('');
       var list = d.grades.length ? d.grades.map(function (g, gi) {
         var secs = g.sections.length ? g.sections.map(function (sec, si) {
-          return '<span class="ws-sec"><span class="ws-sec-name">' + esc(sec.name) + '</span>' +
+          return '<span class="ws-sec"><input class="ws-secname" data-gi="' + gi + '" data-si="' + si + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. Base stays ' + esc(baseCode(g.base, sec.base)) + '.">' +
+            baseTag(sec.name, sec.base, 'sec') +
             '<input class="ws-secnum" type="number" min="0" data-gi="' + gi + '" data-si="' + si + '" value="' + (parseInt(sec.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade + ' ' + sec.name) + '">' +
             '<button class="ws-secx" type="button" data-gi="' + gi + '" data-si="' + si + '" title="Remove section" aria-label="Remove section">×</button></span>';
         }).join('') : '<span class="ws-nosec">No sections</span>' +
           '<label class="ws-gradenum-wrap">Students' +
             '<input class="ws-gradenum" type="number" min="0" data-gi="' + gi + '" value="' + (parseInt(g.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade) + '"></label>';
         return '<div class="ws-grade-card">' +
-          '<input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename">' +
+          '<div class="ws-gradeid"><input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. Base stays ' + esc(g.base) + '.">' + baseTag(g.grade, g.base) + '</div>' +
           '<div class="ws-secs">' + secs + '</div>' +
           '<div class="ws-grade-actions">' +
             '<button class="btn-link ws-add-sec" type="button" data-addsec="' + gi + '">＋ Section</button>' +
-            '<button class="ws-grade-del" type="button" data-delgrade="' + gi + '" title="Remove grade">Remove</button>' +
+            '<button class="tl-rowact danger" type="button" data-delgrade="' + gi + '" title="Remove grade" aria-label="Remove ' + esc(g.grade) + '">' + ICONS.trash + '</button>' +
           '</div></div>';
       }).join('') : '';
       return '<p class="tl-muted">Add the grades this school teaches.</p>' +
         '<div class="ws-grades">' + list + '</div>' +
         '<div class="ws-addbar">' +
           (presetBtns ? '<div class="ws-addbar-lbl">Quick add</div><div class="ws-presets">' + presetBtns + '</div>' : '') +
-          '<div class="ws-newgrade-row"><input class="input grow" id="ws-newgrade" placeholder="Custom grade (e.g. Grade 7)"><button class="btn btn-outline btn-sm" id="ws-addgrade" type="button">Add grade</button></div>' +
+          (freeBases.length ? '<div class="ws-newgrade-row"><select class="select" id="ws-newbase" aria-label="Base grade" title="The fixed grade this maps to. Tilli and Ask Tilli use it even if the school renames the grade.">' + baseOpts + '</select>' +
+            '<input class="input grow" id="ws-newgrade" placeholder="School’s name for it (optional)" aria-label="School’s name for this grade">' +
+            '<button class="btn btn-outline btn-sm" id="ws-addgrade" type="button">Add</button></div>' : '') +
         '</div>' +
         (d.grades.length ? '<div class="ws-total">' + d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students' +
           ' <span class="tl-tip" tabindex="0" role="button" aria-label="About empty grades and sections" data-tip="Any grade or section still without students ' + ORG.emptyStructureTtlDays + ' days after it’s added is removed automatically. It can be added back.">i</span></div>' : '');
@@ -1223,6 +1242,7 @@
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
           row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
           row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
+          row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base); }).join(', ')) +
           row('First admin', admin) +
         '</div>';
     }
@@ -1299,23 +1319,30 @@
         var body = document.getElementById('ws-body');
         body.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { addGrade(b.dataset.preset); }); });
         var ag = document.getElementById('ws-addgrade');
-        ag.addEventListener('click', function () { var v = (document.getElementById('ws-newgrade').value || '').trim(); if (!v) { toast('Grade name required.'); return; } addGrade(v); });
-        document.getElementById('ws-newgrade').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ag.click(); } });
+        if (ag) {
+          ag.addEventListener('click', function () {
+            var base = document.getElementById('ws-newbase').value;
+            if (!base) { toast('Pick the base grade it maps to.'); return; }
+            addGrade(base, (document.getElementById('ws-newgrade').value || '').trim());
+          });
+          document.getElementById('ws-newgrade').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); ag.click(); } });
+        }
         body.querySelectorAll('[data-addsec]').forEach(function (b) { b.addEventListener('click', function () {
           var g = d.grades[+b.dataset.addsec];
           // First section inherits any grade-level count, so the cohort you already
           // typed becomes Section A rather than being silently dropped.
           if (!g.sections.length && (parseInt(g.students, 10) || 0) > 0) {
-            g.sections.push({ name: secLetter(0), students: parseInt(g.students, 10) || 0 }); g.students = 0;
+            g.sections.push({ name: secLetter(0), base: secLetter(0), students: parseInt(g.students, 10) || 0 }); g.students = 0;
           } else {
-            g.sections.push({ name: secLetter(g.sections.length), students: 0 });
+            g.sections.push({ name: secLetter(g.sections.length), base: secLetter(g.sections.length), students: 0 });
           }
           rerenderStructure();
         }); });
         body.querySelectorAll('[data-delgrade]').forEach(function (b) { b.addEventListener('click', function () { d.grades.splice(+b.dataset.delgrade, 1); rerenderStructure(); }); });
         body.querySelectorAll('.ws-secx').forEach(function (b) { b.addEventListener('click', function () {
           var g = d.grades[+b.dataset.gi]; g.sections.splice(+b.dataset.si, 1);
-          g.sections.forEach(function (sec, i) { sec.name = secLetter(i); }); // keep A,B,C… contiguous
+          // Keep base letters A,B,C… contiguous (nothing exists yet); renamed sections keep their name.
+          g.sections.forEach(function (sec, i) { if (sameName(sec.name, sec.base)) sec.name = secLetter(i); sec.base = secLetter(i); });
           rerenderStructure();
         }); });
         body.querySelectorAll('.ws-secnum').forEach(function (inp) { inp.addEventListener('input', function () {
@@ -1336,7 +1363,18 @@
             var gi = +inp.dataset.gi, nv = (inp.value || '').trim();
             if (!nv) { toast('Grade name can’t be empty.'); rerenderStructure(); return; }
             if (d.grades.some(function (g, i) { return i !== gi && g.grade.toLowerCase() === nv.toLowerCase(); })) { toast('That grade already exists.'); rerenderStructure(); return; }
-            d.grades[gi].grade = nv; sortGrades(d.grades); rerenderStructure();
+            d.grades[gi].grade = nv; rerenderStructure();   // base is fixed, so the order doesn't change
+          });
+        });
+        // Section rename — the base letter (A, B…) never changes.
+        body.querySelectorAll('.ws-secname').forEach(function (inp) {
+          inp.addEventListener('input', function () { inp.size = Math.max(1, inp.value.length); });
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+          inp.addEventListener('change', function () {
+            var g = d.grades[+inp.dataset.gi], si = +inp.dataset.si, nv = (inp.value || '').trim();
+            if (!nv) { toast('Section name can’t be empty.'); rerenderStructure(); return; }
+            if (g.sections.some(function (x, i) { return i !== si && x.name.toLowerCase() === nv.toLowerCase(); })) { toast('That section already exists in ' + g.grade + '.'); rerenderStructure(); return; }
+            g.sections[si].name = nv; rerenderStructure();
           });
         });
       } else if (step === 2) {
@@ -1345,11 +1383,14 @@
       }
     }
 
-    function addGrade(name) {
-      if (d.grades.some(function (g) { return g.grade.toLowerCase() === name.toLowerCase(); })) { toast('Grade already added.'); return; }
+    // base = fixed grade from BASE_GRADES; name = what the school calls it (defaults to the base).
+    function addGrade(base, name) {
+      name = name || base;
+      if (d.grades.some(function (g) { return g.base === base; })) { toast(base + ' is already added — rename it instead.'); return; }
+      if (d.grades.some(function (g) { return g.grade.toLowerCase() === name.toLowerCase(); })) { toast('A grade called “' + name + '” already exists.'); return; }
       // Grades start with no sections — a school may run a grade as a single
       // ungrouped cohort. Sections are added explicitly via "+ Section".
-      d.grades.push({ grade: name, sections: [], students: 0 });
+      d.grades.push({ grade: name, base: base, sections: [], students: 0 });
       sortGrades(d.grades);
       rerenderStructure();
     }
@@ -1501,9 +1542,9 @@
     var structure = d.structure.grades.length
       ? '<div class="tl-tree">' + d.structure.grades.map(function (g) {
           var body = g.sections.length
-            ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i></span>'; }).join('')
+            ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + baseTag(sec.name, sec.base, 'sec') + ' <i>' + sec.students + '</i></span>'; }).join('')
             : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i></span>';
-          return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + body + '</div>';
+          return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + baseTag(g.grade, g.base || inferBase(g.grade)) + body + '</div>';
         }).join('') + '</div>'
       : '<div class="ui-empty">No grades/sections yet.</div>';
 
@@ -1530,7 +1571,7 @@
     var roster = s.id === 'little-sprouts' && TS ? TS.students.map(function (st) {
       return { name: st.first + ' ' + st.last, admission: st.adm, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
     }) : (s.created && window.TilliAPI) ? window.TilliAPI.studentsForSchool(s.id).map(function (st) {
-      return { name: st.name, admission: st.student_id, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
+      return { name: st.name, admission: st.student_id, gradeSection: secLbl(s.id, st.grade, st.section), status: 'Active' };
     }) : [];
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
         '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button><button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
@@ -1648,7 +1689,7 @@
         return { adm: st.student_id, name: st.name, grade: st.grade, section: st.section, claimCode: st.claimCode };
       }));
       var cRows = claims.map(function (c) {
-        return '<div class="ws-rev-row"><span>' + esc(c.name) + ' · ' + esc(c.grade + ' ' + c.section) + ' · adm ' + esc(c.adm) + '</span><b class="mono">' + esc(c.claimCode) + '</b></div>';
+        return '<div class="ws-rev-row"><span>' + esc(c.name) + ' · ' + esc(secLbl(s.id, c.grade, c.section)) + ' · adm ' + esc(c.adm) + '</span><b class="mono">' + esc(c.claimCode) + '</b></div>';
       }).join('');
       codesCard = '<div class="ui-card mb-gap"><div class="ui-mod-h"><div>' +
           '<h3 class="ui-mod-title">Demo access & codes</h3>' +
@@ -2516,7 +2557,7 @@
 
     body.innerHTML = crumbs(crumbParts) +
       '<div class="tl-hub-head"><div><h1 class="ui-screen-title" style="margin-bottom:4px">' + esc(stu.name) + '</h1>' +
-        '<p class="ui-screen-sub m-0"><span class="mono">' + esc(stu.adm) + '</span> · ' + esc(stu.grade + ' ' + stu.section) + ' · ' + esc(s.name) + (stu.teacherName ? ' · Teacher: ' + esc(stu.teacherName) : '') + '</p></div>' +
+        '<p class="ui-screen-sub m-0"><span class="mono">' + esc(stu.adm) + '</span> · ' + esc(secLbl(s.id, stu.grade, stu.section)) + ' · ' + esc(s.name) + (stu.teacherName ? ' · Teacher: ' + esc(stu.teacherName) : '') + '</p></div>' +
         '<div class="tl-hub-actions"><div class="ui-card tight ui-kpi tl-kpi" style="min-width:120px"><div class="num">' + pct(stu.overallPct) + '%</div><div class="lbl">Overall skill score</div></div></div></div>' +
       '<div class="ui-tabs hub">' + STUDENT_TABS.map(function (t) {
         return '<button class="ui-tab' + (t.key === tab ? ' on' : '') + '" data-sttab="' + t.key + '">' + esc(t.label) + '</button>';
@@ -4011,7 +4052,7 @@
     if (addState.mode === 'manual') {
       var batchRows = addState.batch.length ? addState.batch.map(function (r, i) {
         return '<tr><td class="name">' + esc(r.name) + '</td><td class="mono">' + esc(r.admission) + '</td><td>' + esc((r.grade + ' ' + (r.section || '')).trim()) + '</td>' +
-          '<td class="r"><button class="btn-link danger" data-drop="' + i + '">Remove</button></td></tr>';
+          '<td class="r"><button class="tl-rowact danger" data-drop="' + i + '" title="Remove from the batch" aria-label="Remove from the batch">' + ICONS.trash + '</button></td></tr>';
       }).join('') : '<tr><td colspan="4"><div class="ui-empty">No students staged yet — add one above.</div></td></tr>';
       // Grade / section come from the school's structure and are chosen ONCE —
       // the selection is sticky (kept in addState) so you can keep adding
@@ -4027,13 +4068,13 @@
 
       var gradeControl = grades.length
         ? '<select class="select" id="m-grade">' + grades.map(function (g) {
-            return '<option value="' + esc(g.grade) + '"' + (g.grade === addState.grade ? ' selected' : '') + '>' + esc(g.grade) + '</option>';
+            return '<option value="' + esc(g.grade) + '"' + (g.grade === addState.grade ? ' selected' : '') + '>' + esc(gradeLbl(g.grade, g.base)) + '</option>';
           }).join('') + '</select>'
         : '<input class="input" id="m-grade" value="' + esc(addState.grade) + '" placeholder="Grade 1">';
       var sectionControl = grades.length
         ? '<select class="select" id="m-sec">' +
             '<option value="">— No section —</option>' +
-            secs.map(function (s) { return '<option value="' + esc(s.name) + '"' + (s.name === addState.section ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('') +
+            secs.map(function (s) { return '<option value="' + esc(s.name) + '"' + (s.name === addState.section ? ' selected' : '') + '>' + esc(s.name + (s.base && !sameName(s.name, s.base) ? ' (' + s.base + ')' : '')) + '</option>'; }).join('') +
           '</select>'
         : '<input class="input" id="m-sec" value="' + esc(addState.section) + '" placeholder="A">';
 
@@ -5174,9 +5215,13 @@
     }
     var tree = s.structure.grades.length ? s.structure.grades.map(function (g) {
       var body = g.sections.length
-        ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + ' <i>' + sec.students + '</i>' + emptyTag(g.grade + '|' + sec.name) + '</span>'; }).join('')
+        ? g.sections.map(function (sec) {
+            return '<span class="tl-tree-sec"><input class="ws-secname" data-rs-grade="' + esc(g.grade) + '" data-rs="' + esc(sec.name) + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. The base stays the same.">' +
+              baseTag(sec.name, sec.base, 'sec') + ' <i>' + sec.students + '</i>' + emptyTag(g.grade + '|' + sec.name) + '</span>';
+          }).join('')
         : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i>' + emptyTag(g.grade + '|') + '</span>';
-      return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + body +
+      return '<div class="tl-tree-grade"><div class="ws-gradeid"><input class="ws-gradename" data-rg="' + esc(g.grade) + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. The base stays ' + esc(g.base || inferBase(g.grade) || 'the same') + '.">' +
+        baseTag(g.grade, g.base || inferBase(g.grade)) + '</div>' + body +
         '<button class="btn-link" data-addsec="' + esc(g.grade) + '">+ Section</button></div>';
     }).join('') : '<div class="ui-empty">No grades yet — add one below.</div>';
     // Grades/sections the daily job removed — one click puts them back with a fresh window.
@@ -5188,9 +5233,16 @@
           '<button class="btn-link" data-restore="' + i + '" title="Add this back for the school. It gets a fresh ' + ttl + ' days to receive students.">Add back</button></div>';
       }).join('') + '</div>' : '';
     openModal('Grades & sections · ' + s.name,
-      '<p class="tl-muted">Grades and sections with no students are removed automatically ' + ttl + ' days after they’re added. If the school needs one again, add it back — it gets a fresh ' + ttl + ' days.</p>' +
+      '<p class="tl-muted">Click a grade or section name to rename it — its base (in brackets) never changes. Empty grades and sections are removed automatically ' + ttl + ' days after they’re added; add them back below if needed.</p>' +
       '<div class="tl-tree mb-4">' + tree + '</div>' +
-      '<div style="display:flex;gap:8px"><input class="input grow" id="sg-newgrade" placeholder="New grade (e.g. Grade 6)"><button class="btn btn-outline btn-sm" id="sg-addgrade">Add grade</button></div>' +
+      (function () {
+        var used = s.structure.grades.map(function (g) { return g.base || inferBase(g.grade); });
+        var free = BASE_GRADES.filter(function (b) { return used.indexOf(b) < 0; });
+        return free.length ? '<div class="ws-newgrade-row"><select class="select" id="sg-newbase" aria-label="Base grade" title="The fixed grade this maps to. Tilli and Ask Tilli use it even if the school renames the grade.">' +
+            '<option value="">Base grade…</option>' + free.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('') + '</select>' +
+          '<input class="input grow" id="sg-newgrade" placeholder="School’s name for it (optional)" aria-label="School’s name for this grade">' +
+          '<button class="btn btn-outline btn-sm" id="sg-addgrade">Add grade</button></div>' : '';
+      })() +
       removedHtml,
       function (close) { close(); return true; }, 'Done');
     setTimeout(function () {
@@ -5200,12 +5252,39 @@
         ORG.server.logAudit(me.name, 'school.structure', label + ' added back', 'school', s.id);
         toast(label + ' added back.'); openStructureEditor(s);
       }); });
+      // Inline rename (grade + section). Commit on blur / Enter; the base never changes.
+      var RENAME_ERR = { exists: 'That name is already used in this school.', empty: 'The name can’t be empty.' };
+      function wireRename(sel, run) {
+        document.querySelectorAll(sel).forEach(function (inp) {
+          inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } if (e.key === 'Escape') { inp.value = inp.defaultValue; inp.blur(); } });
+          inp.addEventListener('change', function () {
+            var nv = (inp.value || '').trim();
+            if (nv === inp.defaultValue) return;
+            var r = run(inp, nv);
+            if (!r || !r.ok) { toast(RENAME_ERR[r && r.reason] || 'Couldn’t rename that.'); inp.value = inp.defaultValue; return; }
+            toast('Renamed to “' + nv + '”.'); openStructureEditor(s);
+          });
+        });
+      }
+      wireRename('[data-rg]', function (inp, nv) {
+        var r = ORG.server.renameGrade(s.id, inp.dataset.rg, nv);
+        if (r.ok) ORG.server.logAudit(me.name, 'school.structure', 'grade ' + inp.dataset.rg + ' renamed to ' + nv, 'school', s.id);
+        return r;
+      });
+      wireRename('[data-rs]', function (inp, nv) {
+        var r = ORG.server.renameSection(s.id, inp.dataset.rsGrade, inp.dataset.rs, nv);
+        if (r.ok) ORG.server.logAudit(me.name, 'school.structure', inp.dataset.rsGrade + ' section ' + inp.dataset.rs + ' renamed to ' + nv, 'school', s.id);
+        return r;
+      });
+      document.querySelectorAll('.tl-tree .ws-secname').forEach(function (inp) { inp.addEventListener('input', function () { inp.size = Math.max(1, inp.value.length); }); });
       document.querySelectorAll('[data-addsec]').forEach(function (b) { b.addEventListener('click', function () {
         ORG.server.addSection(s.id, b.dataset.addsec); ORG.server.logAudit(me.name, 'school.structure', 'section added to ' + b.dataset.addsec, 'school', s.id); openStructureEditor(s);
       }); });
       var ag = document.getElementById('sg-addgrade'); if (ag) ag.addEventListener('click', function () {
-        var nm = (document.getElementById('sg-newgrade').value || '').trim(); if (!nm) { toast('Grade name required.'); return; }
-        ORG.server.addGrade(s.id, nm); ORG.server.logAudit(me.name, 'school.structure', 'grade ' + nm + ' added', 'school', s.id); openStructureEditor(s);
+        var base = document.getElementById('sg-newbase').value; if (!base) { toast('Pick the base grade it maps to.'); return; }
+        var nm = (document.getElementById('sg-newgrade').value || '').trim() || base;
+        if (s.structure.grades.some(function (g) { return g.grade.toLowerCase() === nm.toLowerCase(); })) { toast('A grade called “' + nm + '” already exists.'); return; }
+        ORG.server.addGrade(s.id, nm, null, base); ORG.server.logAudit(me.name, 'school.structure', 'grade ' + gradeLbl(nm, base) + ' added', 'school', s.id); openStructureEditor(s);
       });
     }, 0);
   }

@@ -441,6 +441,7 @@
   // transition) so the back button is never out of step with a fast tap.
   function render() {
     syncHistory();
+    S._baseMemo = {};   // base-grade lookups read the whole store — cache them per render
     const key = screenKey();
     const changed = lastScreenKey !== null && key !== lastScreenKey;
     lastScreenKey = key;
@@ -508,7 +509,7 @@
       ? `<button class="ui-filterchip solid${S.sectionId === 'all' ? ' on' : ''}" data-section="all">All</button>` : '';
     const chips = showChips ? `<div class="dash-chips">${allChip}${S.data.sections.map((sec) => {
       const on = sec.id === S.sectionId;
-      return `<button class="ui-filterchip solid${on ? ' on' : ''}" data-section="${sec.id}">${esc(sec.name)}</button>`;
+      return `<button class="ui-filterchip solid${on ? ' on' : ''}" data-section="${sec.id}">${esc(secLabel(sec))}</button>`;
     }).join('')}</div>` : '';
 
     // Header left = context title (school), like the admin header; right = the section picker.
@@ -693,15 +694,15 @@
   function heroAsk(sec) {
     const n = sec.students.length;
     const starters = [
-      ['An activity for a restless class', `Suggest a 10-minute activity to settle a restless ${sec.grade} class of about ${n} children, with limited materials.`],
-      ["Help me plan tomorrow's lesson", `Help me plan tomorrow's lesson for my ${sec.grade} class. Ask me what to focus on, then give a simple structure.`],
-      ['A calm-down idea for one child', `Give me a gentle calm-down idea I can use with one child who gets overwhelmed, in a ${sec.grade} classroom.`],
+      ['An activity for a restless class', `Suggest a 10-minute activity to settle a restless ${askGrade(sec.grade)} class of about ${n} children, with limited materials.`],
+      ["Help me plan tomorrow's lesson", `Help me plan tomorrow's lesson for my ${askGrade(sec.grade)} class. Ask me what to focus on, then give a simple structure.`],
+      ['A calm-down idea for one child', `Give me a gentle calm-down idea I can use with one child who gets overwhelmed, in a ${askGrade(sec.grade)} classroom.`],
     ];
     return `<section class="mg-hero ui-card mg-hero-ask">
       <div class="ui-eyebrow pill">Do what you came for</div>
       <div class="mg-hero-askhead"><span class="ui-icontile mg-hero-askic">${chatIcon('var(--green-700)')}</span><h2 class="ui-title xl mg-hero-t">Ask Tilli</h2></div>
       <p class="mg-hero-b">Your teaching changes every day — even when the scores don't.</p>
-      <div class="mg-starters">${starters.map(([lb, pr]) => `<button class="mg-starter focus" data-ask-prompt="${esc(pr)}" data-ask-ctx="${esc(sec.name + ' · quick start')}"><span>${esc(lb)}</span><span class="mg-starter-ar" aria-hidden="true">→</span></button>`).join('')}</div>
+      <div class="mg-starters">${starters.map(([lb, pr]) => `<button class="mg-starter focus" data-ask-prompt="${esc(pr)}" data-ask-ctx="${esc(secLabel(sec) + ' · quick start')}"><span>${esc(lb)}</span><span class="mg-starter-ar" aria-hidden="true">→</span></button>`).join('')}</div>
     </section>`;
   }
 
@@ -731,7 +732,7 @@
       <div class="ui-card sm mg-tend-card">
         <div class="mg-tend-top"><span class="mg-tend-pl">${flowerArt('tending', 46, 0)}</span><span class="ui-title md mg-tend-nm">${esc(st.dispFirst)}</span></div>
         <p class="mg-tend-reason">${esc(st.tendReason)}</p>
-        <button class="btn btn-primary sm btn-ask-a focus" data-ask-prompt="${esc('How can I gently support ' + st.name + ', a ' + st.grade + ' child working on ' + st.lowestSkill.name + '? Give me one small thing to try this week.')}" data-ask-ctx="${esc(st.first + ' · ' + st.lowestSkill.name)}">${chatIcon('var(--white)')} Ask Tilli for an idea</button>
+        <button class="btn btn-primary sm btn-ask-a focus" data-ask-prompt="${esc('How can I gently support ' + st.name + ', a ' + askGrade(st.grade) + ' child working on ' + st.lowestSkill.name + '? Give me one small thing to try this week.')}" data-ask-ctx="${esc(st.first + ' · ' + st.lowestSkill.name)}">${chatIcon('var(--white)')} Ask Tilli for an idea</button>
       </div>`).join('');
     return `<section class="mg-tend">
       <div class="mg-tend-head"><h3 class="ui-title mg-tend-h">Who could use you</h3><span class="ui-meta mg-tend-note">${esc(notes[state] || '')}</span></div>
@@ -757,7 +758,7 @@
       bandBlock = `<div class="ui-card sm subtle mg-bandmix mg-bandmix-empty">${countNoun(N, 'child', 'children')}, ready to begin their year.</div>`;
     } else {
       const note = state === 'between' ? `Last measured at baseline · ${countNoun(N, 'child', 'children')}`
-        : state === 'midline' ? `Your ${sec.name} · ${countNoun(N, 'child', 'children')}`
+        : state === 'midline' ? `Your ${secLabel(sec)} · ${countNoun(N, 'child', 'children')}`
         : `The year's story · ${countNoun(N, 'child', 'children')}`;
       bandBlock = bandMix(ld, note);
     }
@@ -769,7 +770,7 @@
       <div class="mg-greet">
         <div>
           <h1 class="ui-screen-title greet">${greetWord()}, ${esc(firstName())} 🌱</h1>
-          <p class="ui-screen-sub flush">Your <b>${esc(sec.name)}</b> garden</p>
+          <p class="ui-screen-sub flush">Your <b>${esc(secLabel(sec))}</b> garden</p>
         </div>
         <button class="ui-avatar focus" data-nav="profile" title="Your profile & sign out" aria-label="Your profile">${esc(initials())}</button>
       </div>
@@ -853,11 +854,11 @@
     return `<div class="ui-scrim cm-backdrop" data-close-hist>
       <div class="ui-modal-card cm-card hist-card" data-stop role="dialog" aria-label="Change history">
         <div class="cm-head">
-          <div><div class="ui-title xl cm-title">Change history</div><div class="ui-meta cm-sub">${esc(sec.name)} · student records and assessments, newest first</div></div>
+          <div><div class="ui-title xl cm-title">Change history</div><div class="ui-meta cm-sub">${esc(secLabel(sec))} · student records and assessments, newest first</div></div>
           <button class="btn-icon" data-close-hist aria-label="Close">✕</button>
         </div>
         <div class="hist-tools">${HU.kindChipsHTML(S.histKind, 'dark')}<span class="hist-count">${countNoun(list.length, 'change', 'changes')}</span></div>
-        <div class="hist-scroll">${HU.listHTML(list, histOpts({ showSection: sec.id === 'all', empty: 'Nothing has changed in ' + sec.name + ' yet.' }))}</div>
+        <div class="hist-scroll">${HU.listHTML(list, histOpts({ showSection: sec.id === 'all', empty: 'Nothing has changed in ' + secLabel(sec) + ' yet.' }))}</div>
       </div>
     </div>`;
   }
@@ -917,7 +918,7 @@
       <div class="roster-titlebar">
         <div>
           <h1 class="ui-screen-title">Students</h1>
-          <p class="ui-screen-sub flush">${esc(sec.name)} · ${countNoun(sec.students.length, 'student', 'students')}</p>
+          <p class="ui-screen-sub flush">${esc(secLabel(sec))} · ${countNoun(sec.students.length, 'student', 'students')}</p>
         </div>
         <div class="roster-actions">
           ${HU ? `<button class="btn-line ui-tooltip down end hover-only focus" data-class-hist data-tip="${esc(tip)}" aria-label="History · ${esc(tip)}">🕘 History</button>` : ''}
@@ -1144,7 +1145,7 @@
       </div>
       <div class="pr-hero">
         <h1>Hello, <span>${esc(name)}&rsquo;s family</span> 👋</h1>
-        <div class="pr-meta">${esc(stu.section || '')}${uid ? ' · ' + esc(uid) : ''} · Teacher: ${esc(teacher)}${school ? ' · ' + esc(school) : ''}</div>
+        <div class="pr-meta">${esc(stuSecLabel(stu))}${uid ? ' · ' + esc(uid) : ''} · Teacher: ${esc(teacher)}${school ? ' · ' + esc(school) : ''}</div>
         <p>This report brings together what we&rsquo;ve seen across three different lenses — your survey as a parent, ${esc(name)}&rsquo;s direct assessment, and their teacher&rsquo;s observations — to give you a full picture of how ${esc(name)} is growing.</p>
       </div>
 
@@ -1221,7 +1222,7 @@
       <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
       <div class="stu-meta">
         <h1 class="ui-title xl stu-name">${esc(stu.name)}</h1>
-        <div class="ui-meta stu-sub">${esc(stu.section)} · ${esc(stu.parentEmail)}</div>
+        <div class="ui-meta stu-sub">${esc(stuSecLabel(stu))} · ${esc(stu.parentEmail)}</div>
         ${uidLine(stu)}
         ${extra || ''}
       </div>
@@ -1388,10 +1389,10 @@
       { title: 'Endline', meta: 'Teacher observation', status: 'In progress', dot: ST.in_progress.dot, color: ST.in_progress.fg },
       { title: 'Midline', meta: 'Teacher · Parent report · complete', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
       { title: 'Baseline', meta: 'Teacher · Parent · Student-direct', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
-      { title: 'Enrolled', meta: 'Added to ' + stu.section, status: '—', dot: STATE_DOT.waiting, color: 'var(--ink-300)' },
+      { title: 'Enrolled', meta: 'Added to ' + stuSecLabel(stu), status: '—', dot: STATE_DOT.waiting, color: 'var(--ink-300)' },
     ].map((h) => `<div class="hist-row"><span class="dot" style="background:${h.dot}"></span><div class="hm"><div class="nm">${esc(h.title)}</div><div class="sub">${esc(h.meta)}</div></div><div class="st" style="color:${h.color}">${esc(h.status)}</div></div>`).join('');
     const past = stuPastHistory(stu, true);
-    return past + (past ? `<h3 class="ui-title hist-sec-h">This year · ${esc(stu.section)}</h3>` : '') + `<div class="ui-card td-rows">${rows}</div>` + stuChangesCard(stu);
+    return past + (past ? `<h3 class="ui-title hist-sec-h">This year · ${esc(stuSecLabel(stu))}</h3>` : '') + `<div class="ui-card td-rows">${rows}</div>` + stuChangesCard(stu);
   }
 
   // ---------------- Students: previous classes (multi-year history) ----------------
@@ -1416,7 +1417,7 @@
     const past = pastClasses(stu);
     if (!past.length) return '';
     const chip = (y) => {
-      const inner = `<span class="pc-cls">${esc(y.grade)} ${esc(y.section)} · ${esc(y.year)}</span>${levelBadge(levelName(pastYearAvg(y, 1)))}`;
+      const inner = `<span class="pc-cls">${esc(pastClassLabel(y))} · ${esc(y.year)}</span>${levelBadge(levelName(pastYearAvg(y, 1)))}`;
       return linked
         ? `<button class="stu-past-chip focus" data-stab="history" title="See ${esc(stu.dispFirst || stu.first)}'s full history">${inner}</button>`
         : `<span class="stu-past-chip">${inner}</span>`;
@@ -1440,8 +1441,8 @@
   function stuPastHistory(stu, withNow) {
     const past = pastClasses(stu);
     if (!past.length) return '';
-    const cols = past.map((y) => ({ label: y.grade, sub: y.year, val: (k) => (y.skills[k] ? y.skills[k][1] : 0) }));
-    if (withNow) cols.push({ label: stu.grade, sub: 'This year', now: true, val: (k) => { const sk = stu.skills.find((x) => x.key === k); return sk ? sk.pct : 0; } });
+    const cols = past.map((y) => ({ label: gradeLabel(y.grade), sub: y.year, val: (k) => (y.skills[k] ? y.skills[k][1] : 0) }));
+    if (withNow) cols.push({ label: gradeLabel(stu.grade), sub: 'This year', now: true, val: (k) => { const sk = stu.skills.find((x) => x.key === k); return sk ? sk.pct : 0; } });
     const overall = cols.map((c) => Math.round(stu.skills.reduce((a, sk) => a + c.val(sk.key), 0) / stu.skills.length));
 
     const head = `<tr><th>Skill</th>${cols.map((c) => `<th${c.now ? ' class="now"' : ''}>${esc(c.label)}<small>${esc(c.sub)}</small></th>`).join('')}<th>Trend</th></tr>`;
@@ -1454,7 +1455,7 @@
       const start = pastYearAvg(y, 0), end = pastYearAvg(y, 1);
       return `<div class="ui-card sm past-year">
         <div class="py-head">
-          <div><div class="ui-title py-t">${esc(y.grade)} ${esc(y.section)} · ${esc(y.year)}</div>
+          <div><div class="ui-title py-t">${esc(pastClassLabel(y))} · ${esc(y.year)}</div>
           <div class="ui-meta py-sub">Teacher: ${esc(y.teacher)} · ${y.windowsDone} of 3 assessments completed</div></div>
           ${levelBadge(levelName(end))}
         </div>
@@ -1576,7 +1577,7 @@
     const subTabs = [['todo', 'To-do'], ['completed', 'Done so far']]
       .map(([k, l]) => `<button class="ui-filterchip dark atab${onTab === k ? ' on' : ''}" data-assesstab="${k}">${l}</button>`).join('');
     let body, subtitle;
-    if (tab === 'enter') { body = obsEnter(); subtitle = sec.name + ' · recording an observation'; }
+    if (tab === 'enter') { body = obsEnter(); subtitle = secLabel(sec) + ' · recording an observation'; }
     else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
     else if (S.todoView === 'pending') { body = pendingView(); subtitle = 'Who still needs a teacher observation in this window.'; }
     else { body = studentAssessCard() + obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
@@ -1820,7 +1821,7 @@
     const ini = ((stu.first || '')[0] || '') + ((stu.last || '')[0] || '');
     return `${saved}${redoNote}${resumed}<div class="obs-enter">
       <div class="obs-enter-head"><span class="ui-avatar obs-av" aria-hidden="true">${esc(ini.toUpperCase())}</span>
-        <div><h1 class="obs-name">${esc(stu.dispFirst || stu.first)}</h1><div class="sub">${esc(stuSec.name)} · ${esc(winLabel)} observation</div></div></div>
+        <div><h1 class="obs-name">${esc(stu.dispFirst || stu.first)}</h1><div class="sub">${esc(secLabel(stuSec))} · ${esc(winLabel)} observation</div></div></div>
       <div class="obs-progwrap" role="progressbar" aria-valuemin="0" aria-valuemax="${nQ}" aria-valuenow="${answered}" aria-label="${esc(stu.dispFirst || stu.first)}: ${answered} of ${nQ} answered">   <!-- sticks under the header while you scroll the questions -->
         <div class="obs-ringbox">${ring}<span class="obs-ringnum">${answered}</span></div>
         <div class="obs-progtxt"><div class="obs-progname">${esc(stu.dispFirst || stu.first)}</div>
@@ -2065,14 +2066,14 @@
       const fully = s.students.filter((st) => (logOf(st, wk) || {}).status === 'done').length;
       const pct = n ? Math.round((fully / n) * 100) : 0;
       const on = s.id === S.sectionId;
-      return `<button class="ui-card sm ui-pick strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(s.name)}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
+      return `<button class="ui-card sm ui-pick strip-card${on ? ' on' : ''}" data-section="${s.id}"><div class="strip-top"><span class="nm">${esc(secLabel(s))}</span><span class="pct">${pct}%</span></div><div class="ui-meter strip-bar"><div style="width:${pct}%"></div></div><div class="strip-cap">${fully} of ${n} complete for ${esc(w.label)}</div></button>`;
     }).join('');
     // Parents still to finish this window (T18): a list the teacher can act on,
     // a no-names reminder for the class group, and a per-child message for a DM.
     const teacherName = (S.teacher.demo && S.teacher.demo.name) || 'Your class teacher';
     const closes = w.date ? ' closes on ' + w.date : ' is open now';
     const parentPending = sorted.filter((st) => { const pe = (logOf(st, wk) || { persp: [] }).persp.find((x) => x.key === 'parent'); return pe && !pe.done; });
-    const groupMsg = `Hello parents 🌱 A gentle reminder: the Tilli ${w.label} parent survey for ${sec.name}${closes}. It helps us see how your child is growing at home. If you've already finished it, thank you! — ${teacherName}`;
+    const groupMsg = `Hello parents 🌱 A gentle reminder: the Tilli ${w.label} parent survey for ${secLabel(sec)}${closes}. It helps us see how your child is growing at home. If you've already finished it, thank you! — ${teacherName}`;
     const oneMsg = (st) => `Hello! A gentle reminder that ${st.first}'s Tilli ${w.label} parent survey${closes}. It helps us see how ${st.first} is growing at home. Thank you! — ${teacherName}`;
     const remind = !P.some((p) => p.key === 'parent') ? ''
       : !parentPending.length ? `<div class="ui-card sm par-remind done">🏠 Every parent has finished for ${esc(w.label)} 🌸</div>`
@@ -2150,10 +2151,12 @@
     const rows = [];
     S.data.sections.forEach((sec) => {
       const gs = (sec.grade || '') + (sec.section ? ' - ' + sec.section : '');
+      // School's own names stay in "Grade + Section"; the fixed base sits beside them.
+      const bg = baseGradeOf(sec.grade), bs = sectionBaseOf(sec);
       [...sec.students].sort((a, b) => (a.last || '').localeCompare(b.last || '') || (a.first || '').localeCompare(b.first || ''))
-        .forEach((st) => rows.push([gs, board, st.adm || '', st.name].concat(cols.map((c) => cell(st, c)))));
+        .forEach((st) => rows.push([gs, bg, bs, board, st.adm || '', st.name].concat(cols.map((c) => cell(st, c)))));
     });
-    const head = ['Grade + Section', 'Board', 'Admission Number', 'Student Name'].concat(cols.map((c) => c.label));
+    const head = ['Grade + Section', 'Base Grade', 'Base Section', 'Board', 'Admission Number', 'Student Name'].concat(cols.map((c) => c.label));
     const csv = [head].concat(rows).map((r) => r.map(q).join(',')).join('\n') + '\n';
     const file = String((sc && sc.name) || S.teacher.school || 'Tilli').trim().replace(/[^A-Za-z0-9]+/g, '_') + '-assessment-logs.csv';
     saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), file);
@@ -2207,7 +2210,7 @@
     }).join('');
     return `<button class="btn-link mb-3 focus" data-tracker-back>← Back to Done so far</button>
       <div class="ui-card logstu-head"><span class="pl">${flowerArt(st.state, 60, 0)}</span>
-        <div class="m"><h2 class="ui-title xl stu-name" style="font-size:var(--fs-xl)">${esc(st.name)}</h2><div class="ui-meta stu-sub">${esc(sec.name)} · ${st.perspDone} of ${total} parts done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
+        <div class="m"><h2 class="ui-title xl stu-name" style="font-size:var(--fs-xl)">${esc(st.name)}</h2><div class="ui-meta stu-sub">${esc(secLabel(sec))} · ${st.perspDone} of ${total} parts done</div><div class="ui-meter logstu-bar"><div style="width:${pct}%"></div></div></div>
         <button class="btn-soft green focus" data-open-student="${esc(st.id)}">Open full profile →</button></div>
       <div class="tl">${timeline}</div>`;
   }
@@ -2306,7 +2309,7 @@
 
     return `<div class="dash-wrap" style="max-width:1040px">
       <h1 class="ui-screen-title">Insights</h1>
-      <p class="ui-screen-sub flush">A quiet place to plan — where ${esc(scope.name)} is strong, growing, and ready for focus.</p>
+      <p class="ui-screen-sub flush">A quiet place to plan — where ${esc(secLabel(scope))} is strong, growing, and ready for focus.</p>
       ${S._insSample ? '<div class="ui-note sample mt-3">🌱 Sample view — your class&rsquo;s real insights replace this once Baseline is complete.</div>' : ''}
       <div class="log-tabs mt-4" role="tablist">${tabs}</div>
       ${body}
@@ -2320,7 +2323,7 @@
       <div class="ui-empty empty-hero">
         <div class="empty-plant">${flowerArt('waiting', 92, 0)}</div>
         <h2 class="ui-empty-t">Your first insights arrive after baseline 🌱</h2>
-        <p class="ui-empty-b">Once ${esc(scope.name)} has its Baseline window in, this page fills with where your class is strong, where to focus, and how they grow across the year. Nothing to read yet — and that's honest, not broken.</p>
+        <p class="ui-empty-b">Once ${esc(secLabel(scope))} has its Baseline window in, this page fills with where your class is strong, where to focus, and how they grow across the year. Nothing to read yet — and that's honest, not broken.</p>
         <div class="actions"><button class="btn btn-primary md focus" data-nav="assess">Go to Baseline</button></div>
       </div>
     </div>`;
@@ -2375,7 +2378,7 @@
       }).join('') || '<div class="ui-empty">No skills in this group right now.</div>';
     return `<div class="ui-card ins-card ov mt-4">
       <div class="cso-h">Class Skill Overview ${infoBtn('info-ov')}</div>${infoPop('info-ov', SCORE_INFO)}
-      <p class="cso-desc">Where most of ${esc(scope.name)}&rsquo;s ${countNoun(N, 'student', 'students')} sit on each skill. Tap a skill to see who&rsquo;s where.${notAssessed ? ` <span class="cso-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet.</span>` : ''}</p>
+      <p class="cso-desc">Where most of ${esc(secLabel(scope))}&rsquo;s ${countNoun(N, 'student', 'students')} sit on each skill. Tap a skill to see who&rsquo;s where.${notAssessed ? ` <span class="cso-note">${countNoun(notAssessed, 'student', 'students')} not assessed yet.</span>` : ''}</p>
       <div class="cso-chips" role="group" aria-label="Filter skills">${chips}</div>
       <div class="cso-list">${rows}</div>
     </div>`;
@@ -2633,12 +2636,12 @@
     if (!grades.length) return '';
     const active = grades.find((g) => g.grade === S.compareGrade) || grades[0];
     const gsel = grades.length > 1
-      ? `<div class="log-tabs">${grades.map((g) => `<button class="ui-filterchip dark${g.grade === active.grade ? ' on' : ''}" data-cmpgrade="${esc(g.grade)}">${esc(g.grade)}</button>`).join('')}</div>` : '';
+      ? `<div class="log-tabs">${grades.map((g) => `<button class="ui-filterchip dark${g.grade === active.grade ? ' on' : ''}" data-cmpgrade="${esc(g.grade)}">${esc(gradeLabel(g.grade))}</button>`).join('')}</div>` : '';
     const secs = active.sections;
     const secStats = secs.map((sec) => ({ sec, stats: skillStatsFor(sec.students) }));
     const cols = `repeat(${secs.length}, minmax(0,1fr))`;
 
-    const head = `<div class="cmp2-row cmp2-head"><div class="cmp2-skill"></div><div class="cmp2-cells" style="grid-template-columns:${cols}">${secs.map((sec) => `<div class="cmp2-secname">${esc(sec.name)}</div>`).join('')}</div></div>`;
+    const head = `<div class="cmp2-row cmp2-head"><div class="cmp2-skill"></div><div class="cmp2-cells" style="grid-template-columns:${cols}">${secs.map((sec) => `<div class="cmp2-secname">${esc(secLabel(sec))}</div>`).join('')}</div></div>`;
     const rows = S.data.skills.map((sk) => {
       const cells = secStats.map(({ stats }) => {
         const v = (stats.find((x) => x.key === sk.key) || {}).post || 0;
@@ -2655,15 +2658,15 @@
       return { name: sk.name, gap: hi.v - lo.v, hi, lo };
     }).sort((a, b) => b.gap - a.gap).filter((d) => d.gap >= 10).slice(0, 3);
     const prompts = diffs.length ? `<div class="wcl-list mt-4">${diffs.map((d) => `<div class="wcl-item">
-      <div class="ui-title md wcl-skill">${esc(d.name)} <span class="wcl-gap">${esc(d.hi.sec.name)} +${d.gap}</span></div>
-      <p class="wcl-text">${esc(d.hi.sec.name)} is ahead of ${esc(d.lo.sec.name)} on ${esc(d.name)}. What's working in ${esc(d.hi.sec.name)} that could help ${esc(d.lo.sec.name)}?</p>
-      <button class="btn-soft green focus" data-ask="cmp" data-skill="${esc(d.name)}" data-hi="${esc(d.hi.sec.name)}" data-lo="${esc(d.lo.sec.name)}">Ask Tilli for an activity to bring to ${esc(d.lo.sec.name)} →</button>
+      <div class="ui-title md wcl-skill">${esc(d.name)} <span class="wcl-gap">${esc(secLabel(d.hi.sec))} +${d.gap}</span></div>
+      <p class="wcl-text">${esc(secLabel(d.hi.sec))} is ahead of ${esc(secLabel(d.lo.sec))} on ${esc(d.name)}. What's working in ${esc(secLabel(d.hi.sec))} that could help ${esc(secLabel(d.lo.sec))}?</p>
+      <button class="btn-soft green focus" data-ask="cmp" data-skill="${esc(d.name)}" data-hi="${esc(d.hi.sec.name)}" data-lo="${esc(d.lo.sec.name)}">Ask Tilli for an activity to bring to ${esc(secLabel(d.lo.sec))} →</button>
     </div>`).join('')}</div>` : '';
 
     return `<div class="persp-note green">Two of your own classes, side by side. This is for learning from yourself — what's working in one room you could carry to the other. Never a ranking. 🌿</div>
       ${gsel}
       <div class="ui-card ins-card">
-        <div class="ui-title md ins-h">${esc(active.grade)} — section by section</div>
+        <div class="ui-title md ins-h">${esc(gradeLabel(active.grade))} — section by section</div>
         <div class="ui-meta ins-sub">Current level per skill. No grade average, no benchmark — just your rooms compared to each other.</div>
         <div class="cmp2-table">${head}${rows}</div>
       </div>
@@ -2677,6 +2680,37 @@
     S._schoolId = sc ? sc.school_id : null;
     return S._schoolId;
   }
+  // Base grades — DISPLAY ONLY. A school can rename "Grade 1" → "Sunflowers";
+  // labels keep the school's name and add the fixed base in brackets when it
+  // differs ("Sunflowers A (Grade 1A)"). Keys, filters and data-* stay raw.
+  const sameName = (a, b) => String(a || '').toLowerCase().replace(/\s+/g, '') === String(b || '').toLowerCase().replace(/\s+/g, '');
+  function baseMemo(k, fn) { const m = S._baseMemo || (S._baseMemo = {}); return k in m ? m[k] : (m[k] = fn()); }
+  function baseGradeOf(grade) {
+    const A = window.TilliAPI;
+    return A && A.baseGradeOf && grade ? baseMemo('g|' + grade, () => A.baseGradeOf(schoolId(), grade)) : '';
+  }
+  function sectionBaseOf(sec) {
+    const A = window.TilliAPI;
+    if (!(A && A.sectionBase && sec && sec.grade && sec.id !== 'all')) return '';
+    return baseMemo('s|' + sec.grade + '|' + (sec.section || ''), () => A.sectionBase(schoolId(), sec.grade, sec.section || ''));
+  }
+  function gradeLabel(grade) { const A = window.TilliAPI; return A && A.gradeLabel ? A.gradeLabel(schoolId(), grade, baseGradeOf(grade)) : String(grade == null ? '' : grade); }
+  function secLabel(sec) {
+    if (!sec) return '';
+    const b = sectionBaseOf(sec);
+    return b && !sameName(b, sec.name) ? sec.name + ' (' + b + ')' : sec.name;
+  }
+  // A student only carries its section's display name; resolve the section for the base.
+  function stuSecLabel(stu) {
+    const sec = S.data.sections.find((x) => x.name === stu.section && x.students.some((y) => y.id === stu.id));
+    return sec ? secLabel(sec) : (stu.section || '');
+  }
+  // Past-year class ("Grade 1 A · 2024–25" on the history cards).
+  function pastClassLabel(y) { return secLabel({ name: ((y.grade || '') + ' ' + (y.section || '')).trim(), grade: y.grade, section: y.section }); }
+  // Ask Tilli context: spell the base out so age-appropriate advice is right
+  // even when the class has a custom name ("Sunflowers (base grade: Grade 1)").
+  function askGrade(grade) { const b = baseGradeOf(grade); return b && !sameName(b, grade) ? grade + ' (base grade: ' + b + ')' : String(grade || ''); }
+  function askClass(sec) { const b = sectionBaseOf(sec); return b && !sameName(b, sec.name) ? sec.name + ' (base: ' + b + ')' : sec.name; }
   // The child's unique Tilli Measures code. Carried on the roster record when
   // known, else looked up / derived from the guard layer by admission number.
   function uidOf(stu) {
@@ -2836,7 +2870,7 @@
   function addGradeName() {
     const a = S.add;
     if (a.sectionId === 'new') return ((a.newGrade || '').trim() + ' ' + (a.newSection || '').trim().toUpperCase()).trim() || 'a new section';
-    const s = S.baseData.sections.find((x) => x.id === a.sectionId); return s ? s.name : 'your class';
+    const s = S.baseData.sections.find((x) => x.id === a.sectionId); return s ? secLabel(s) : 'your class';
   }
   const ADD_ICON_EXPAND = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
   const ADD_ICON_SHRINK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>';
@@ -2844,7 +2878,7 @@
     if (!S.add.active) return '';
     const a = S.add;
     const secChips = S.baseData.sections.map((x) =>
-      `<button class="ui-filterchip focus${a.sectionId === x.id ? ' on' : ''}" data-add-sec="${esc(x.id)}">${esc(x.name)}</button>`).join('');
+      `<button class="ui-filterchip focus${a.sectionId === x.id ? ' on' : ''}" data-add-sec="${esc(x.id)}">${esc(secLabel(x))}</button>`).join('');
     const secPick = `<div class="add-secpick">
         <div class="ui-eyebrow mb-2">Grade · section</div>
         <div class="add-secchips">${secChips}<button class="ui-filterchip focus${a.sectionId === 'new' ? ' on' : ''}" data-add-sec="new">+ New</button></div>
@@ -3150,7 +3184,15 @@
   }
 
   function scopeSection(scope) { return S.data.sections.find((x) => x.id === scope); }
-  function scopeName(scope) { const sec = scopeSection(scope); return sec ? sec.name : 'All my classes'; }
+  function scopeName(scope) { const sec = scopeSection(scope); return sec ? secLabel(sec) : 'All my classes'; }
+  // Base grade in scope when a class there has a custom name, so canned answers
+  // still say the real grade. "" when unknown, mixed, or the names are already the base.
+  function scopeBase(scope) {
+    const sec = scopeSection(scope), secs = sec ? [sec] : S.data.sections;
+    const bases = secs.map((x) => baseGradeOf(x.grade));
+    if (!bases[0] || bases.some((b) => b !== bases[0])) return '';
+    return secs.some((x) => !sameName(bases[0], x.grade)) ? bases[0] : '';
+  }
   function scopeStudents(scope) {
     const sec = scopeSection(scope);
     return (sec ? sec.students : S.data.sections.flatMap((x) => x.students)).filter((st) => st.state !== 'waiting');
@@ -3166,7 +3208,8 @@
   function askReply(q, scope) {
     const t = q.toLowerCase(), where = scopeName(scope), kids = scopeStudents(scope);
     if (/activity|idea|game|lesson|routine/.test(t) && !SKILL_WORDS.some(([w]) => t.includes(w))) {
-      return "Here's a warm, practical idea you can try today — open with a **3-minute feelings check-in**, then a **paired activity** where partners take turns naming one thing that was tricky this week, and close with one sentence of specific praise.\n\nWant me to tailor it to a skill or a group of students?";
+      const base = scopeBase(scope);
+      return "Here's a warm, practical idea you can try today" + (base ? ' with your **' + base + '** children' : '') + " — open with a **3-minute feelings check-in**, then a **paired activity** where partners take turns naming one thing that was tricky this week, and close with one sentence of specific praise.\n\nWant me to tailor it to a skill or a group of students?";
     }
     if (!kids.length) return `I don't have assessment results for ${where} yet. Once the Baseline is complete I can point to specific students and skills — until then, ask me for activities or ideas any time.`;
     const hit = SKILL_WORDS.find(([w]) => t.includes(w));
@@ -3262,7 +3305,7 @@
       </div>`;
     const group = (h, list) => list.length ? `<div class="askx-gh">${h}</div>${list.map(item).join('')}` : '';
     const recent = S.chats.filter((c) => +new Date(c.at) >= weekAgo), older = S.chats.filter((c) => +new Date(c.at) < weekAgo);
-    const opts = [['all', 'All my classes']].concat(S.data.sections.map((x) => [x.id, x.name]))
+    const opts = [['all', 'All my classes']].concat(S.data.sections.map((x) => [x.id, secLabel(x)]))
       .map(([v, l]) => `<option value="${esc(v)}"${v === a.scope ? ' selected' : ''}>${esc(l)}</option>`).join('');
     const body = (a.thread.length || a.thinking)
       ? `<div class="askx-thread">${a.thread.map((m) => `<div class="ask-msg ${m.role}">${fmtMsg(m.text)}</div>`).join('')}${a.thinking ? '<div class="ask-msg tilli ask-typing"><span></span><span></span><span></span></div>' : ''}</div>`
@@ -3394,7 +3437,7 @@
     return t && !isNaN(t) ? t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   }
   // Grades · sections this teacher teaches = the sections of their class.
-  function gradesTaught() { return (S.baseData.sections || []).filter((x) => x.students && x.students.length).map((x) => x.name); }
+  function gradesTaught() { return (S.baseData.sections || []).filter((x) => x.students && x.students.length).map(secLabel); }
 
   // Teaching Mirror — the teacher's own reflection answers played back: average
   // 1–5 per category (reverse-worded items flipped so higher = more of that
@@ -3671,11 +3714,11 @@
     root.querySelectorAll('[data-ask-stu]').forEach((b) => b.addEventListener('click', () => {
       const stu = section().students.find((x) => x.id === S.studentId); if (!stu) return;
       if (b.dataset.askStu === 'grew') openAsk(`${stu.first} · ${stu.topGrower.name}`, `${stu.first} is doing well in ${stu.topGrower.name}. How can I keep this growing and help ${stu.first} stretch further?`);
-      else openAsk(`${stu.first} · ${stu.lowestSkill.name}`, `How can I support ${stu.name}, a ${stu.grade} student at ${stu.lowestSkill.band} level in ${stu.lowestSkill.name}? Teacher score ${stu.lowestSkill.teacher}%, parent ${stu.lowestSkill.parent}%, student-direct ${stu.lowestSkill.student}%.`);
+      else openAsk(`${stu.first} · ${stu.lowestSkill.name}`, `How can I support ${stu.name}, a ${askGrade(stu.grade)} student at ${stu.lowestSkill.band} level in ${stu.lowestSkill.name}? Teacher score ${stu.lowestSkill.teacher}%, parent ${stu.lowestSkill.parent}%, student-direct ${stu.lowestSkill.student}%.`);
     }));
     root.querySelectorAll('[data-ask-skill]').forEach((b) => b.addEventListener('click', () => {
       const stu = section().students.find((x) => x.id === S.studentId); if (!stu) return;
-      openAsk(`${stu.first} · ${b.dataset.askSkill}`, `How can I support ${stu.name}, a ${stu.grade} student at ${b.dataset.band} level in ${b.dataset.askSkill}?`);
+      openAsk(`${stu.first} · ${b.dataset.askSkill}`, `How can I support ${stu.name}, a ${askGrade(stu.grade)} student at ${b.dataset.band} level in ${b.dataset.askSkill}?`);
     }));
 
     // assess: sub-tabs + observation flow
@@ -3787,8 +3830,8 @@
     root.querySelectorAll('[data-cmpgrade]').forEach((b) => b.addEventListener('click', () => { S.compareGrade = b.dataset.cmpgrade; render(); }));
     root.querySelectorAll('[data-ask-ins]').forEach((b) => b.addEventListener('click', () => {
       const sec = section();
-      if (b.dataset.askIns === 'grow') openAsk(`${sec.name} · class growth`, `My ${sec.name} class data shows most skills rising since baseline, with a few still at Sprouting level. What are 2–3 practical next steps?`);
-      else openAsk(`${sec.name} · perspective gaps`, `My ${sec.name} class shows notable gaps between teacher, parent and student views on some skills. What are 2–3 practical next steps to reconcile these kindly?`);
+      if (b.dataset.askIns === 'grow') openAsk(`${secLabel(sec)} · class growth`, `My ${askClass(sec)} class data shows most skills rising since baseline, with a few still at Sprouting level. What are 2–3 practical next steps?`);
+      else openAsk(`${secLabel(sec)} · perspective gaps`, `My ${askClass(sec)} class shows notable gaps between teacher, parent and student views on some skills. What are 2–3 practical next steps to reconcile these kindly?`);
     }));
 
     // add student flow
@@ -3812,11 +3855,16 @@
       const sec = section();
       const skill = b.dataset.skill, band = b.dataset.band;
       const PN = { teacher: 'you (the teacher)', parent: 'parents at home', student: 'the children themselves' };
-      if (b.dataset.ask === 'activity') openAsk(`${sec.name} · ${skill}`, `Suggest a 10-minute classroom activity to build ${skill} for a ${sec.grade} student currently at ${band} level. My class has ~${sec.students.length} students and limited materials.`);
-      else if (b.dataset.ask === 'build') openAsk(`${sec.name} · ${skill}`, `Most of my ${sec.grade} class sit at ${band} level on ${skill}. Give me 2–3 practical, low-prep ways to build this skill across the whole class over the next few weeks.`);
-      else if (b.dataset.ask === 'persp') openAsk(`${sec.name} · ${skill} · perspectives`, `On ${skill}, ${PN[b.dataset.hi] || b.dataset.hi} rate my ${sec.grade} class noticeably higher than ${PN[b.dataset.lo] || b.dataset.lo} do. Why might this happen, and what could I try — kindly, without assuming anyone is wrong?`);
-      else if (b.dataset.ask === 'cmp') openAsk(`${b.dataset.hi} → ${b.dataset.lo} · ${skill}`, `In my ${sec.grade}, ${b.dataset.hi} is ahead of ${b.dataset.lo} on ${skill}. Give me one activity or routine that might be working in ${b.dataset.hi} that I could bring to ${b.dataset.lo}.`);
-      else openAsk(`${sec.name} · ${skill}`, `Give me a whole-class ${sec.grade} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Sprouting level in it.`);
+      if (b.dataset.ask === 'activity') openAsk(`${secLabel(sec)} · ${skill}`, `Suggest a 10-minute classroom activity to build ${skill} for a ${askGrade(sec.grade)} student currently at ${band} level. My class has ~${sec.students.length} students and limited materials.`);
+      else if (b.dataset.ask === 'build') openAsk(`${secLabel(sec)} · ${skill}`, `Most of my ${askGrade(sec.grade)} class sit at ${band} level on ${skill}. Give me 2–3 practical, low-prep ways to build this skill across the whole class over the next few weeks.`);
+      else if (b.dataset.ask === 'persp') openAsk(`${secLabel(sec)} · ${skill} · perspectives`, `On ${skill}, ${PN[b.dataset.hi] || b.dataset.hi} rate my ${askGrade(sec.grade)} class noticeably higher than ${PN[b.dataset.lo] || b.dataset.lo} do. Why might this happen, and what could I try — kindly, without assuming anyone is wrong?`);
+      else if (b.dataset.ask === 'cmp') {
+        // data-hi/-lo hold the raw section names; resolve them for labels + the real grade.
+        const byName = (n) => S.data.sections.find((x) => x.name === n) || { name: n, grade: sec.grade };
+        const hi = byName(b.dataset.hi), lo = byName(b.dataset.lo);
+        openAsk(`${secLabel(hi)} → ${secLabel(lo)} · ${skill}`, `In my ${askGrade(hi.grade)}, ${askClass(hi)} is ahead of ${askClass(lo)} on ${skill}. Give me one activity or routine that might be working in ${hi.name} that I could bring to ${lo.name}.`);
+      }
+      else openAsk(`${secLabel(sec)} · ${skill}`, `Give me a whole-class ${askGrade(sec.grade)} activity to strengthen ${skill}. ${b.dataset.beg} of my students are at Sprouting level in it.`);
     }));
 
     // profile: Teaching Mirror timeline
