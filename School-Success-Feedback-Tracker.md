@@ -254,5 +254,11 @@ Open issues that came out of those changes:
 - **Labels are cached per screen.** A rename made in another tab shows after the next screen change or reload.
 - **Long names can crowd the school admin's overview diagram.** Labels like "Sunflowers (Grade 1)" may overlap at the whole-school view.
 
+**Assessments across years**
+- **Deploying a phase overwrites that phase's previous deployment.** Each school keeps one Baseline / Midline / Endline per audience, so redeploying replaces the old record and its completions. Being fixed by the multi-year build (see `Multi-Year-Schools.md`).
+
+**Demo access & codes card**
+- The parent claim codes list now reads the live roster. It used to read a copy saved when the school was created, which was always empty, so it never listed anyone. The Teacher join code now has a copy button.
+
 **Change History**
 - **A school's sample history disappears when it goes live.** Sample history is only generated for schools without a live data store. When a school switches to live, its sample rows disappear and only copied Audit Trail rows are left. *Possible fix:* pre-fill the live store with the sample history when the school switches.

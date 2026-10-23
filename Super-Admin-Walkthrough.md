@@ -45,19 +45,19 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 ## Mission 2 — Onboard a new school (10 min)
 
 **Create it**
-- [ ] Control Room → **+ Add School** (or All Schools → **+ Add School**).
-- [ ] **Profile**: name it (e.g. *Test Academy*), tick a board (try **Other** → type a name), pick **Sri Lanka** → a city, choose a group — or **＋ New group…** to make one on the spot — and leave **Joined** as today. Name, board, country and city are required.
-- [ ] **Grades**: quick-add **Grade 1** and **Grade 2**, add a section to one, rename a grade by clicking its name, watch the total update.
-- [ ] **First admin**: enter a name + email (or **Skip this step →**).
-- [ ] **Review** → **Create school**.
+- [x] Control Room → **+ Add School** (or All Schools → **+ Add School**).
+- [x] **Profile**: name it (e.g. *Test Academy*), tick a board (try **Other** → type a name), pick **Sri Lanka** → a city, choose a group — or **＋ New group…** to make one on the spot — and leave **Joined** as today. Name, board, country and city are required.
+- [x] **Grades**: quick-add **Grade 1** and **Grade 2**, add a section to one, rename a grade or section by clicking its name (its base shows in brackets, e.g. *Sunflowers (Grade 1)*), add a custom grade by picking its **Base grade…**, watch the total update.
+- [x] **First admin**: enter a name + email (or **Skip this step →**).
+- [x] **Review** → **Create school**.
 
 ✅ The new school's page opens with a toast. Its **Staff & Access** tab shows a **Demo access & codes** card (coordinator login, teacher join code).
 
 **Fill it**
-- [ ] **Students** tab → **+ Add Students** → **Manual**: add two children to a section → **Import 2 students**.
-- [ ] **+ Add Students** again → **CSV import** → **Insert sample** → **Validate** (one row has an error) → **Import N valid rows**.
-- [ ] **Staff & Access** → **Copy code** on the **Teacher join code** (teachers who enter it join as teachers).
-- [ ] **+ Invite to this school** → invite a teacher → note the **Temporary password** in **Invitation created** → **Copy credentials**.
+- [x] **Students** tab → **+ Add Students** → **Manual**: add two children to a section → **Import 2 students**.
+- [x] **+ Add Students** again → **CSV import** → **Insert sample** → **Validate** (one row has an error) → **Import N valid rows**.
+- [x] **Staff & Access** → **Copy code** on the **Teacher join code** (teachers who enter it join as teachers).
+- [x] **+ Invite to this school** → invite a teacher → note the **Temporary password** in **Invitation created** → **Copy credentials**.
 
 ✅ Students show in the directory with a pager; the invitation shows under **Invitations**.
 
