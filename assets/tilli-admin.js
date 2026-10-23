@@ -2408,8 +2408,149 @@
     }, 0);
   }
 
+  // ---------- Academic years (TilliAPI schools) ----------
+  // The current year lives in the planner as before; past years are archived
+  // read-only (TilliAPI.yearSummary). Only the Tilli team starts a new year.
+  var HUB_YEAR = {};   // sid -> year id being viewed on the Assessments tab
+  var PH_ORDER = ['Baseline', 'Midline', 'Endline'];
+  function schoolYears(s) {
+    var API = window.TilliAPI;
+    return tlUsesApi(s) && API && API.yearsFor ? API.yearsFor(s.id) : null;
+  }
+  function yearRange(y) { return fmtJoined(y.start) + ' → ' + fmtJoined(y.end); }
+  function yearBarHtml(s, yrs, selId) {
+    var cur = yrs.filter(function (y) { return y.status === 'current'; })[0], viewingCur = cur && selId === cur.id;
+    var seg = '<div class="ui-seg tl-yearseg" role="group" aria-label="Academic year">' + yrs.map(function (y) {
+      return '<button class="' + (y.id === selId ? 'on' : '') + '" data-year="' + esc(y.id) + '" title="' + esc(yearRange(y)) + (y.status === 'current' ? ' · current year' : ' · closed, read-only') + '">' +
+        esc(y.label) + (y.status === 'current' ? ' · current' : '') + '</button>';
+    }).join('') + '</div>';
+    var n = yrs.indexOf(cur) + 1;
+    return '<div class="ui-card mb-gap tl-yearbar"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Academic year</h3>' +
+        '<p class="ui-mod-note">' + (cur ? esc(yearRange(cur)) + ' · year ' + n + ' with Tilli' : '') + '</p></div>' +
+        '<div class="tl-inline-actions">' +
+          (viewingCur ? '<button class="btn btn-outline btn-sm" data-yearedit title="Change this year’s name or dates. Dates are set per school.">Edit dates</button>' : '') +
+          (GROUP ? '' : '<button class="btn btn-primary btn-sm" data-yearnew title="Close ' + esc(cur ? cur.label : 'this year') + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>') +
+        '</div></div>' + seg + '</div>';
+  }
+  function laneChip(st) { return '<span class="ui-chip ' + (st === 'Ended' ? 'ok' : st === 'Live' ? 'active' : 'muted') + '">' + esc(st) + '</span>'; }
+  // Read-only view of a closed year: what ran, how complete, results, classes.
+  function pastYearHtml(s, sum) {
+    var y = sum.year;
+    var phases = sum.phases.map(function (p) {
+      if (!p.lanes.length) return '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">' + esc(p.phase) + '</h3></div><div class="ui-empty">Not deployed in ' + esc(y.label) + '.</div></div>';
+      var rows = p.lanes.map(function (l) {
+        var items = l.assessments.map(function (a) { return esc(a.name) + ' <small class="tl-ver">v' + a.version + '</small>'; }).join(', ');
+        return '<tr><td class="name">' + esc(l.audience) + '</td><td>' + esc(l.window || (l.start + ' → ' + l.end)) + '</td><td>' + items + '</td>' +
+          '<td class="tl-num">' + l.done + ' / ' + l.expected + '</td><td class="tl-num"><b>' + (l.expected ? l.pct + '%' : '—') + '</b></td><td>' + laneChip(l.status) + '</td></tr>';
+      }).join('');
+      return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">' + esc(p.phase) + '</h3>' +
+          '<p class="ui-mod-note">' + (p.pct == null ? '' : p.pct + '% complete') + (p.avgSkill == null ? '' : ' · average skill score ' + p.avgSkill + '%') + '</p></div></div>' +
+        '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Audience</th><th>Window</th><th>Assessments</th><th>Responses</th><th>Done</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    }).join('');
+    var classes = sum.classes.length ? '<div class="tl-tree-grade">' + sum.classes.map(function (c) { return '<span class="tl-tree-sec">' + esc(c.label) + ' <i>' + c.students + '</i></span>'; }).join('') + '</div>' : '<div class="ui-empty">No classes recorded.</div>';
+    return '<div class="ui-note tl-yearnote"><span class="ui-tag">Read-only</span><span><b>' + esc(y.label) + '</b> is closed (' + esc(yearRange(y)) + '). Nothing here can be changed — switch to the current year to deploy.</span></div>' +
+      '<div class="tl-kpis four mt-3">' + kpi(sum.students, 'Students that year') + kpi(sum.classes.length, 'Classes') +
+        kpi(sum.phases.filter(function (p) { return p.lanes.length; }).length + ' of 3', 'Phases run') +
+        kpi((function () { var ps = sum.phases.filter(function (p) { return p.pct != null; }); return ps.length ? Math.round(ps.reduce(function (n, p) { return n + p.pct; }, 0) / ps.length) + '%' : '—'; })(), 'Avg completion') + '</div>' +
+      phases +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Classes in ' + esc(y.label) + '</h3><p class="ui-mod-note">Names as they were that year; a renamed class shows its base in brackets.</p></div></div>' + classes + '</div>';
+  }
+  // Phase × year: completion and average skill, flagging template version changes.
+  function yearOverYearHtml(s, yrs) {
+    if (yrs.length < 2) return '';
+    var API = window.TilliAPI, sums = yrs.map(function (y) { return API.yearSummary(s.id, y.id); });
+    var rows = sums.map(function (sm, i) {
+      var prev = i ? sums[i - 1] : null;
+      return '<tr><td class="name">' + esc(sm.year.label) + (sm.current ? ' <small>current</small>' : '') + '</td>' + sm.phases.map(function (p, pi) {
+        if (!p.lanes.length) return '<td class="text-muted">—</td>';
+        var pp = prev && prev.phases[pi], warn = '';
+        if (pp && pp.versions.length && p.versions.length && pp.versions.join() !== p.versions.join())
+          warn = ' <span class="ui-chip warn" title="The template changed since ' + esc(prev.year.label) + ' — compare these results with care.">⚠ ' + esc(pp.versions.join('/')) + ' → ' + esc(p.versions.join('/')) + '</span>';
+        return '<td><b>' + (p.pct == null ? '—' : p.pct + '%') + '</b> done' + (p.avgSkill == null ? '' : ' · skill ' + p.avgSkill + '%') + warn + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Year over year</h3>' +
+        '<p class="ui-mod-note">Completion and average skill score per phase, every year with Tilli. Skill scores show once a phase has ended.</p></div></div>' +
+      '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Year</th>' + PH_ORDER.map(function (p) { return '<th>' + p + '</th>'; }).join('') + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+  function openYearEdit(s, y) {
+    openModal('Edit ' + y.label,
+      '<div class="tl-stack"><label class="field">Name<input class="input" id="yr-label" value="' + esc(y.label) + '"></label>' +
+      '<div class="tl-fieldrow"><label class="field flex-1">Starts<input class="input" type="date" id="yr-start" value="' + esc(y.start) + '"></label>' +
+      '<label class="field flex-1">Ends<input class="input" type="date" id="yr-end" value="' + esc(y.end) + '"></label></div></div>',
+      function (close) {
+        var r = window.TilliAPI.setYearDates(s.id, y.id, { label: document.getElementById('yr-label').value, start: document.getElementById('yr-start').value, end: document.getElementById('yr-end').value });
+        if (!r.ok) { toast(r.reason === 'dates' ? 'The year must end after it starts.' : r.reason === 'label_taken' ? 'Another year already has that name.' : 'Couldn’t save the dates.'); return false; }
+        ORG.server.logAudit(me.name, 'school.edit', s.name + ' · ' + r.year.label + ' dates', 'school', s.id);
+        close(); toast('Year updated.'); go('school', { id: s.id, tab: 'assessments' });
+      }, 'Save');
+  }
+  // Start next year: close this one (read-only), move children up by base grade, empty planner.
+  function openNewYear(s) {
+    var API = window.TilliAPI, rd = API.yearReadiness(s.id), cur = rd.year;
+    var isoPlusDays = function (iso, n) { var t = new Date(iso + 'T00:00:00'); t.setDate(t.getDate() + n); return localISO(t); };
+    var nStart = isoPlusDays(cur.end, 1), nEnd = isoPlusDays(nStart.replace(/^(\d{4})/, function (y) { return String(+y + 1); }), -1);
+    var autoLabel = function (a, b) { return a.slice(0, 4) === b.slice(0, 4) ? a.slice(0, 4) : a.slice(0, 4) + '–' + b.slice(2, 4); };
+    var open = rd.live.length
+      ? '<label class="tl-check"><input type="checkbox" id="ny-endopen"> End the ' + rd.live.length + ' live assessment window' + (rd.live.length === 1 ? '' : 's') + ' now (' + esc(rd.live.map(function (l) { return l.phase + ' · ' + l.audience; }).join(', ')) + ')</label>'
+      : '<p class="tl-muted m-0">Nothing is live — every window has ended or not started.</p>';
+    var sched = rd.scheduled.length ? '<p class="tl-muted">' + rd.scheduled.length + ' scheduled window' + (rd.scheduled.length === 1 ? '' : 's') + ' never ran — kept in ' + esc(cur.label) + ' as “Not run”.</p>' : '';
+    var grades = rd.grades.length ? rd.grades.map(function (g) {
+      var names = g.names.filter(function (n) { return !sameName(n, g.base); });
+      var def = g.next ? 'promote' : 'graduate';
+      return '<div class="tl-nyrow"><span><b>' + esc(g.base) + '</b>' + (names.length ? ' <small>(' + esc(names.join(', ')) + ')</small>' : '') + ' · ' + g.students + ' student' + (g.students === 1 ? '' : 's') + '</span>' +
+        '<select class="select" data-nyg="' + esc(g.base) + '" aria-label="What happens to ' + esc(g.base) + '">' +
+          (g.next ? '<option value="promote"' + (def === 'promote' ? ' selected' : '') + '>Move up to ' + esc(g.next) + '</option>' : '') +
+          '<option value="retain">Stay in ' + esc(g.base) + '</option>' +
+          '<option value="graduate"' + (def === 'graduate' ? ' selected' : '') + '>Graduate (leave the roster)</option></select></div>';
+    }).join('') : '<p class="tl-muted m-0">No students on the roster yet.</p>';
+    openModal('Start a new academic year · ' + s.name,
+      '<p class="tl-muted">' + esc(cur.label) + ' closes and becomes read-only — its deployments, completion and results stay viewable. The next year starts with an empty planner. <span class="ui-tag">gated</span></p>' +
+      '<div class="tl-stack">' +
+        '<div class="ui-eyebrow">1 · Close ' + esc(cur.label) + '</div>' + open + sched +
+        '<div class="ui-eyebrow mt-3">2 · New year</div>' +
+        '<div class="tl-fieldrow"><label class="field flex-1">Starts<input class="input" type="date" id="ny-start" value="' + nStart + '"></label>' +
+        '<label class="field flex-1">Ends<input class="input" type="date" id="ny-end" value="' + nEnd + '"></label></div>' +
+        '<label class="field">Name<input class="input" id="ny-label" value="' + esc(autoLabel(nStart, nEnd)) + '"></label>' +
+        '<div class="ui-eyebrow mt-3">3 · Students</div>' +
+        '<p class="tl-muted m-0">By base grade — renamed classes move with their base (Grade 1 A → Grade 2 A).</p>' + grades +
+      '</div>',
+      function (close) {
+        var eo = document.getElementById('ny-endopen');
+        if (eo && !eo.checked) { toast('End the live windows first (tick the box).'); return false; }
+        var acts = {}; document.querySelectorAll('[data-nyg]').forEach(function (sel) { acts[sel.dataset.nyg] = sel.value; });
+        var r = API.startNewYear(s.id, { label: document.getElementById('ny-label').value, start: document.getElementById('ny-start').value, end: document.getElementById('ny-end').value,
+          endOpen: !!(eo && eo.checked), gradeActions: acts, actorEmail: me.email });
+        if (!r.ok) {
+          toast({ dates: 'The new year must end after it starts.', before_current: 'The new year must start after ' + cur.label + ' starts.', label_taken: 'A year with that name already exists.', open_lanes: 'End the live windows first.' }[r.reason] || 'Couldn’t start the year.');
+          return false;
+        }
+        ORG.server.logAudit(me.name, 'year.start', s.name + ' · ' + r.year.label, 'school', s.id);
+        delete TL_PLAN[s.id]; delete TL_CHAIN[s.id]; delete TL_TAB[s.id]; delete HUB_YEAR[s.id];
+        close();
+        toast(r.year.label + ' started · ' + r.moved.promoted + ' moved up, ' + r.moved.retained + ' stayed, ' + r.moved.graduated + ' graduated.');
+        go('school', { id: s.id, tab: 'assessments' });
+      }, 'Start new year');
+    var st = document.getElementById('ny-start'), en = document.getElementById('ny-end'), lb = document.getElementById('ny-label'), touched = false;
+    lb.addEventListener('input', function () { touched = true; });
+    [st, en].forEach(function (x) { x.addEventListener('change', function () { if (!touched && st.value && en.value) lb.value = autoLabel(st.value, en.value); }); });
+  }
+  function wireYearBar(s, d, el) {
+    el.querySelectorAll('[data-year]').forEach(function (b) { b.addEventListener('click', function () { HUB_YEAR[s.id] = b.dataset.year; HUB.assessments(d, el); }); });
+    var ed = el.querySelector('[data-yearedit]'); if (ed) ed.addEventListener('click', function () { openYearEdit(s, window.TilliAPI.currentYear(s.id)); });
+    var ny = el.querySelector('[data-yearnew]'); if (ny) ny.addEventListener('click', function () { openNewYear(s); });
+  }
+
   HUB.assessments = function (d, el) {
     var s = d.school;
+    var yrs = schoolYears(s), curY = yrs && yrs.filter(function (y) { return y.status === 'current'; })[0];
+    var selY = yrs && curY ? (yrs.some(function (y) { return y.id === HUB_YEAR[s.id]; }) ? HUB_YEAR[s.id] : curY.id) : null;
+    var yearBar = yrs && curY ? yearBarHtml(s, yrs, selY) : '';
+    if (yrs && curY && selY !== curY.id) {
+      el.innerHTML = yearBar + pastYearHtml(s, window.TilliAPI.yearSummary(s.id, selY));
+      wireYearBar(s, d, el);
+      return;
+    }
 
     // What to send the school: who each link is for, and where it lands.
     var SHARE = [
@@ -2433,7 +2574,8 @@
           '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Links to share</h3><p class="ui-mod-note">Send these to ' + esc(s.name) + '. Each one opens straight into this school.</p></div></div>' + links + grpNote + '</div>' +
-      '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>';
+      '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>' + (yrs ? yearOverYearHtml(s, yrs) : '');
+    if (yearBar) { el.insertAdjacentHTML('afterbegin', yearBar); wireYearBar(s, d, el); }
     el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
     var gl = el.querySelector('[data-grouplinks]'); if (gl) gl.addEventListener('click', function () { go('group', { id: gl.dataset.grouplinks }); });
     renderPlanner(d, el.querySelector('#dep-planner'));
@@ -3093,7 +3235,7 @@
   }
 
   // Deployments (spec §6.4) — status server-derived
-  function depStatusPill(st) { var m = { Scheduled: 'sched', Live: 'ok', Ended: 'muted' }; return statusPill(st, m[st] || ''); }
+  function depStatusPill(st) { var m = { Scheduled: 'sched', Live: 'ok', Ended: 'muted', 'Not run': 'muted' }; return statusPill(st, m[st] || ''); }
   SCREEN.deployments = function (params, body) {
     var tab = params.tab === 'results' ? 'results' : 'list';
     var panels = { list: depList, results: depResults };
@@ -3106,9 +3248,32 @@
     body.querySelectorAll('[data-deptab]').forEach(function (b) { b.addEventListener('click', function () { go('deployments', { tab: b.dataset.deptab }); }); });
   };
 
+  // Mock portfolio rows have no academic year of their own — label them with
+  // the year their window starts in (Jun → May), like the seeded schools.
+  function mockYearLabel(iso) { var y = +String(iso || TODAY_ISO).slice(0, 4), m = +String(iso || TODAY_ISO).slice(5, 7); if (m < 6) y--; return y + '–' + String(y + 1).slice(2); }
+  // Shared-store schools: every lane of every year (current + archived), one row per assessment.
+  function apiDeploymentRows() {
+    var API = window.TilliAPI, out = [];
+    if (!API || !API.yearsFor) return out;
+    ORG.schools.forEach(function (s) {
+      if (s.archived || !tlUsesApi(s)) return;
+      API.yearsFor(s.id).forEach(function (y) {
+        API.deploymentsIn(s.id, y.id).forEach(function (l) {
+          (l.assessments || []).forEach(function (a) {
+            out.push({ assessment: a.name, schoolId: s.id, audience: l.audience, mode: a.mode, phase: l.phase, start: l.start || '', end: l.end || '',
+              chain: !!l.chained, status: l.status, year: y.label, current: y.status === 'current', version: a.version || 1 });
+          });
+        });
+      });
+    });
+    return out;
+  }
   function depList(params, el) {
-    var attn = params.filter === 'attention';
-    var list = ORG.deployments.filter(function (d) {
+    var attn = params.filter === 'attention', yearF = params.year || '';
+    var all = ORG.deployments.map(function (d) { return Object.assign({}, d, { year: mockYearLabel(d.start) }); }).concat(apiDeploymentRows());
+    var years = all.reduce(function (acc, d) { if (acc.indexOf(d.year) < 0) acc.push(d.year); return acc; }, []).sort().reverse();
+    var list = all.filter(function (d) {
+      if (yearF && d.year !== yearF) return false;
       if (!attn) return true;
       if (d.status === 'Live') return ORG.daysFromNow(d.end) <= 3;
       if (d.status === 'Scheduled') return ORG.daysFromNow(d.start) < 0;
@@ -3118,11 +3283,14 @@
     var rows = list.map(function (d) {
       var s = ORG.byId(d.schoolId);
       // Rows deep-link into the Results tab, pre-filtered to that assessment.
-      return '<tr class="clickable" data-depres="' + esc(d.assessment) + '"><td class="name">' + esc(d.assessment) + (d.gamified ? ' <span class="ui-tag plain pink tl-badge-gam">Gamified</span>' : '') + '</td><td>' + (s ? esc(s.name) : '—') + '</td><td>' + esc(d.audience) + '</td><td>' + esc((d.mode || (d.audience === 'Parent' ? 'home' : 'school')) === 'home' ? 'At home' : 'At school') + '</td><td>' + esc(d.phase) + '</td><td>' + esc(d.start + ' → ' + d.end) + '</td><td>' + (d.chain ? '⛓' : '—') + '</td><td>' + depStatusPill(d.status) + '</td></tr>';
-    }).join('') || '<tr><td colspan="8"><div class="ui-empty">No deployments in this view.</div></td></tr>';
+      return '<tr class="clickable" data-depres="' + esc(d.assessment) + '"><td class="name">' + esc(d.assessment) + (d.version > 1 ? ' <small class="tl-ver">v' + d.version + '</small>' : '') + (d.gamified ? ' <span class="ui-tag plain pink tl-badge-gam">Gamified</span>' : '') + '</td><td>' + (s ? esc(s.name) : '—') + '</td><td>' + esc(d.year) + '</td><td>' + esc(d.audience) + '</td><td>' + esc((d.mode || (d.audience === 'Parent' ? 'home' : 'school')) === 'home' ? 'At home' : 'At school') + '</td><td>' + esc(d.phase) + '</td><td>' + esc(d.start + ' → ' + d.end) + '</td><td>' + (d.chain ? '⛓' : '—') + '</td><td>' + depStatusPill(d.status) + '</td></tr>';
+    }).join('') || '<tr><td colspan="9"><div class="ui-empty">No deployments in this view.</div></td></tr>';
+    var yearSel = '<label class="select-wrap" style="max-width:200px"><select class="select" id="dep-year" aria-label="Academic year" title="Show deployments from one academic year. Past years are read-only.">' +
+      '<option value="">All years</option>' + years.map(function (y) { return '<option value="' + esc(y) + '"' + (y === yearF ? ' selected' : '') + '>' + esc(y) + '</option>'; }).join('') + '</select></label>';
     el.innerHTML = banner +
-      '<div class="row end mb-3"><button class="btn btn-primary btn-sm" data-newdep>+ New deployment</button></div>' +
-      '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Assessment</th><th>School</th><th>Audience</th><th>Where</th><th>Phase</th><th>Window</th><th>Chain</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      '<div class="row mb-3" style="justify-content:space-between;gap:8px;flex-wrap:wrap">' + yearSel + '<button class="btn btn-primary btn-sm" data-newdep>+ New deployment</button></div>' +
+      '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Assessment</th><th>School</th><th>Year</th><th>Audience</th><th>Where</th><th>Phase</th><th>Window</th><th>Chain</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    el.querySelector('#dep-year').addEventListener('change', function (ev) { go('deployments', Object.assign({}, attn ? { filter: 'attention' } : {}, ev.target.value ? { year: ev.target.value } : {})); });
     var c = el.querySelector('#dep-clear'); if (c) c.addEventListener('click', function () { go('deployments', {}); });
     var nd = el.querySelector('[data-newdep]'); if (nd) nd.addEventListener('click', function () { openNewDeployment(null); });
     el.querySelectorAll('[data-depres]').forEach(function (b) { b.addEventListener('click', function () { go('deployments', { tab: 'results', q: b.dataset.depres }); }); });
@@ -3999,7 +4167,7 @@
     body.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
   };
   function actionLabelG(a) {
-    return ({ 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template', 'template.archive': 'Archived template', 'template.unarchive': 'Restored template',
+    return ({ 'year.start': 'Started academic year', 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template', 'template.archive': 'Archived template', 'template.unarchive': 'Restored template',
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
       'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',

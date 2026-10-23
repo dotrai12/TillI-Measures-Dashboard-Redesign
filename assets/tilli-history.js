@@ -87,6 +87,7 @@
       case 'phase.end':          return 'ended the <b>' + lane + '</b>';
       case 'phase.undeploy':     return 'withdrew the <b>' + lane + '</b>';
       case 'assessment.complete': return 'completed the <b>' + lane + '</b>' + (hide || !subj ? '' : ' for ' + subj);
+      case 'year.start':         return 'started the <b>' + esc(((e.changes || [])[0] || {}).to || 'new') + '</b> academic year';
     }
     return esc(e.action || 'made a change');
   }

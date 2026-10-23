@@ -403,6 +403,15 @@
   .ws-board-opt input { accent-color: var(--green-500); width: 16px; height: 16px; cursor: pointer; }
   .ws-board-other { margin-top: 8px; }
   .tl-coderow { display: inline-flex; align-items: center; gap: 4px; }
+  /* ---- Academic years (school page → Assessments) ---- */
+  .tl-yearseg { flex-wrap: wrap; width: auto; max-width: 100%; }
+  .tl-yearnote { align-items: center; gap: 10px; }
+  .tl-ver { color: var(--ink-450); font-weight: 700; }
+  .tl-check { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-700); cursor: pointer; }
+  .tl-check input { accent-color: var(--green-500); width: 16px; height: 16px; margin-top: 2px; }
+  .tl-nyrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line-200); font-size: var(--fs-sm); }
+  .tl-nyrow:last-child { border-bottom: none; }
+  .tl-nyrow .select { max-width: 240px; }
   .ws-board-other[hidden] { display: none; }
   /* Grades step: editable section counts + rename */
   .ws-grades { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
@@ -829,10 +838,10 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261023bh"></script>
-<script src="assets/tilli-history.js?v=20261023bh"></script>
-<script src="assets/tilli-org-data.js?v=20261023bh"></script>
+<script src="assets/tilli-api.js?v=20261023my"></script>
+<script src="assets/tilli-history.js?v=20261023my"></script>
+<script src="assets/tilli-org-data.js?v=20261023my"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261023bi"></script>
+<script src="assets/tilli-admin.js?v=20261023my"></script>
 </body>
 </html>

@@ -1,6 +1,12 @@
 # Multi-year schools: spec
 
-*Draft · 23 Oct 2026 · status: **not built**. This is the design to agree before any code. Share with Mayur.*
+*23 Oct 2026 · status: **core built** (data layer + platform admin + Heritage Oaks demo). Share with Mayur.*
+
+**Decided:** year dates are **free per school** (set when the year starts, editable after) · only the **Tilli team** starts a new year · cross-year comparisons **show with a warning** when template versions differ.
+
+**Built:** academic years per school; past years archived read-only (deployments, completions, results, classes, who sat where); **Start new year** (close the year, end live windows, move children by base grade, empty planner); year bar + read-only past year + **Year over year** on the school's Assessments tab; **Year** column + filter on Deployments; the leadership dashboard shows the real current year; **Heritage Oaks** seeded in its 3rd year; Mission 15 in the walkthrough.
+
+**Next:** year switcher on the leadership dashboard, Trends (per child / base grade / cohort), teacher and parent past years, Ask Tilli year questions, year-scoped teacher observations.
 
 ## The scenario
 

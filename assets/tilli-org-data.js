@@ -148,6 +148,11 @@
       city: 'Chennai', country: 'India', region: 'India', board: 'ICSE', groupId: 'g-vidya',
       students: 430, staff: 27, coordinator: { name: 'Suresh Raman', email: 'suresh.r@banyantree.edu' }, joined: 'Jan 2025',
       stage: 'endline', status: 'active', sessionsPerWeek: 388, completion: 84, sel: 67, cog: 63 },
+    // 3rd year with Tilli — two archived years in the shared store (TilliAPI.yearsFor).
+    { id: 'heritage-oaks', name: 'Heritage Oaks School', code: 'HROK-4410', type: 'CBSE school',
+      city: 'Bengaluru', country: 'India', region: 'India', board: 'CBSE', groupId: 'g-none',
+      students: 56, staff: 5, coordinator: { name: 'Nandini Rao', email: 'admin@heritageoaks.edu' }, joined: 'Jun 2024',
+      stage: 'baseline', status: 'active', sessionsPerWeek: 142, completion: 60, sel: 64, cog: 61 },
     // ---- Onboarding stalls: 0 students (feeds the Control Room "0 students" card) ----
     // seedGrades: grades/sections set up in the wizard but never filled. Asian
     // Grammar is 50 days in (auto-removal warning); Royal College is long past it.
@@ -867,7 +872,7 @@
       'template.duplicate': 'duplicated template', 'template.delete': 'deleted template', 'template.edit': 'edited template',
       'template.archive': 'archived template', 'template.unarchive': 'restored template',
       'student.merge': 'merged students', 'student.delete': 'deleted students', 'student.add': 'imported students', 'student.edit': 'edited student',
-      'school.add': 'added school', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
+      'school.add': 'added school', 'year.start': 'started academic year', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
       'role.change': 'changed role', 'deployment.create': 'created deployment', 'deployment.end': 'ended deployment',
       'observation.publish': 'published observation phase', 'observation.access': 'changed form access',
       'selfguided.publish': 'published self-guided game', 'selfguided.edit': 'edited self-guided game',

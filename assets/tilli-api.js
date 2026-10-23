@@ -271,7 +271,7 @@
        colombo-kids  Baseline, Midline and Endline all scheduled (future)
      Dates are relative to the day it seeds. Runs once per browser
      (db.heroSeedVer) — bump HERO_SEED_VER to re-seed. Logins: Demo-Logins.md. */
-  var HERO_SEED_VER = 1;
+  var HERO_SEED_VER = 2;   // 2: + Heritage Oaks (a school in its 3rd year)
   var HERO_SECTION_SIZE = 14;   // children per class (kept small: every lookup re-reads the store)
   var HERO_PHASES = ['Baseline', 'Midline', 'Endline'];
   var HERO_WIN = { Baseline: 'baseline', Midline: 'mid', Endline: 'post' };
@@ -302,6 +302,13 @@
       domain: 'colombokids.lk', prefix: 'CK', admin: ['Dilani Perera', 'dilani.p@colombokids.lk'],
       classes: [['Kindergarten', 'A'], ['Grade 1', 'A'], ['Grade 1', 'B'], ['Grade 2', 'A']],
       plan: { Baseline: [12, 33, 0], Midline: [100, 121, 0], Endline: [190, 211, 0] } },
+    // 3rd year with Tilli: two archived years (Jun → May) + this year's Baseline live.
+    // Last year Grade 2 was called "Tulips"; Midline moved to template v2 last year.
+    { id: 'heritage-oaks', name: 'Heritage Oaks School', code: 'HROK-4410', board: 'CBSE', city: 'Bengaluru', country: 'India', group_id: null,
+      domain: 'heritageoaks.edu', prefix: 'HO', admin: ['Nandini Rao', 'admin@heritageoaks.edu'], joined: '2024-06-01',
+      classes: [['Grade 1', 'A'], ['Grade 2', 'A'], ['Grade 3', 'A'], ['Grade 4', 'A']],
+      plan: { Baseline: [-25, 12, 0.6], Midline: [60, 81, 0] },
+      pastYears: 2, renamed: { yearsBack: 1, base: 'Grade 2', name: 'Tulips' } },
   ];
   var HERO_FIRST_F = ['Aanya', 'Diya', 'Ira', 'Kavya', 'Meera', 'Navya', 'Riya', 'Saanvi', 'Tara', 'Zara', 'Dinithi', 'Sanduni', 'Hiruni', 'Nethmi'];
   var HERO_FIRST_M = ['Aarav', 'Arjun', 'Dhruv', 'Ishaan', 'Kabir', 'Reyansh', 'Vihaan', 'Yash', 'Advik', 'Kian', 'Kaveen', 'Thisal', 'Sehan', 'Dinuka'];
@@ -321,6 +328,77 @@
     });
     return a;
   }
+  // Past academic years for a hero school (see ACADEMIC YEARS below): each
+  // archived year has its own lanes (all Ended), completions, outcomes, class
+  // names and who sat where. Children step back one base grade per year;
+  // today's youngest class wasn't at the school yet.
+  function seedHeroYears(db, H, id, classes, team, now, history){
+    var R = schoolRng(id + ':years'), skills = (window.TILLI_SCHOOL && window.TILLI_SCHOOL.skills) || [];
+    var t = new Date(now), y0 = t.getMonth() >= 5 ? t.getFullYear() : t.getFullYear() - 1;   // years run Jun → May
+    var span = function(y){ var a = y + '-06-01', b = (y + 1) + '-05-31'; return { start: a, end: b, label: yearLabel(a, b) }; };
+    var WIN = { Baseline: ['-07-01', '-07-21', 0], Midline: ['-10-15', '-11-05', 0], Endline: ['-02-10', '-03-02', 1] };
+    var bases = classes.map(function(cl){ var sec = db.sections[cl.secId]; sec.base_grade = inferBaseGrade(sec.grade); sec.base_section = sec.section; return sec.base_grade; });
+    db.years = db.years || {}; db.archive = db.archive || {}; db.archive[id] = db.archive[id] || {};
+    var list = [];
+    for (var k = H.pastYears; k >= 1; k--){
+      var y = y0 - k, sp = span(y), yid = yearId(sp.label);
+      var secSnap = {}, enrol = {}, deps = {}, comps = {}, outs = {};
+      classes.forEach(function(cl){
+        var sec = db.sections[cl.secId], renamed = H.renamed && H.renamed.yearsBack === k && H.renamed.base === sec.base_grade;
+        var g = renamed ? H.renamed.name : sec.grade;
+        secSnap[cl.secId] = { grade: g, section: sec.section, name: g + ' ' + sec.section, base_grade: sec.base_grade, base_section: sec.base_section };
+      });
+      // Who sat where that year: today's Grade N A was Grade N-k A.
+      var teacherOf = {};
+      classes.forEach(function(cl){
+        var pb = BASE_GRADES[BASE_GRADES.indexOf(db.sections[cl.secId].base_grade) - k];
+        var pi = bases.indexOf(pb); if (pi < 0) return;
+        var past = classes[pi], snap = secSnap[past.secId];
+        cl.kids.forEach(function(r){ enrol[r.student_id] = { grade: snap.grade, section: snap.section, section_id: past.secId, status: 'active' }; teacherOf[r.student_id] = past.teacher; });
+      });
+      HERO_PHASES.forEach(function(ph){
+        var w = WIN[ph], yy = y + w[2], start = yy + w[0], end = yy + w[1];
+        Object.keys(HERO_ITEMS[ph]).forEach(function(aud){
+          var items = HERO_ITEMS[ph][aud].map(function(x, xi){
+            var mode = aud === 'Parent' ? 'home' : aud === 'Teacher' ? 'school' : (xi % 2 ? 'home' : 'school');
+            var it = { id: x[0], name: x[1], mode: mode, version: k === 1 && ph === 'Midline' ? 2 : 1 };
+            if (x[2]) it.perTeacher = true;
+            return it;
+          });
+          deps[ph + '|' + aud] = { phase: ph, audience: aud, deployed: true, status: 'Ended', window: start + ' → ' + end, start: start, end: end,
+            assessments: items, deployedAt: Date.parse(start) - 7 * DAY_MS, endedAt: Date.parse(end + 'T18:00:00') };
+          var rate = 0.84 + R() * 0.12;
+          Object.keys(enrol).forEach(function(sid){
+            if (R() > rate) return;
+            var st = db.students[keyOf(id, sid)] || {}, by = aud === 'Parent' ? st.parentEmail : teacherOf[sid].email;
+            var at = Date.parse(start) + Math.floor(R() * 18) * DAY_MS;
+            items.filter(function(x){ return !x.perTeacher; }).forEach(function(x, xi){ comps[ph + '|' + aud + '|' + sid + '|' + x.id] = { by: low(by), at: at + xi * 3600000 }; });
+          });
+        });
+        history.push({ at: Date.parse(start) - 7 * DAY_MS, school_id: id, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'phase.deploy',
+          phase: ph, audience: 'Teacher', changes: [{ label: 'Window', from: '', to: start + ' → ' + end }], items: [], actor: team });
+      });
+      // Results that year: the same generator, a little lower for each year back.
+      if (skills.length) Object.keys(enrol).forEach(function(sid){
+        var st = db.students[keyOf(id, sid)] || {}, shift = 7 * k;
+        outs[sid] = genSkills({ first: st.first, student_id: sid + ':' + yid }, skills).map(function(sk){
+          var o = Object.assign({}, sk);
+          ['pct', 'baseline', 'mid', 'post', 'teacher', 'parent', 'student'].forEach(function(f){ o[f] = _clamp(o[f] - shift, 2, 99); });
+          o.band = _band(o.pct); return o;
+        });
+      });
+      db.archive[id][yid] = { deployments: deps, completions: comps, outcomes: outs, selfReports: {}, sections: secSnap, enrolments: enrol, closedAt: Date.parse(sp.end + 'T18:00:00') };
+      list.push({ id: yid, label: sp.label, start: sp.start, end: sp.end, status: 'closed', startedAt: Date.parse(sp.start), startedBy: team.email, closedAt: Date.parse(sp.end + 'T18:00:00') });
+    }
+    var cur = span(y0);
+    list.push({ id: yearId(cur.label), label: cur.label, start: cur.start, end: cur.end, status: 'current', startedAt: Date.parse(cur.start), startedBy: team.email });
+    list.forEach(function(yr, i){
+      if (!i) return;
+      history.push({ at: yr.startedAt, school_id: id, section_id: null, section_name: '', students: [], items: [], kind: 'assessment', action: 'year.start',
+        changes: [{ label: 'Academic year', from: list[i - 1].label, to: yr.label }], actor: team });
+    });
+    db.years[id] = list;
+  }
   function seedHeroSchools(db){
     var now = Date.now();
     if (!db.selfReports) db.selfReports = {};
@@ -331,7 +409,7 @@
       if (db.schools[H.id]) return;   // never overwrite a school that's already in the store
       var R = schoolRng(H.id + ':hero'), id = H.id;
       var firstStart = Math.min.apply(null, HERO_PHASES.filter(function(ph){ return H.plan[ph]; }).map(function(ph){ return H.plan[ph][0]; }));
-      var created = now + (firstStart - 30) * DAY_MS;
+      var created = H.joined ? Date.parse(H.joined + 'T09:00:00') : now + (firstStart - 30) * DAY_MS;
       db.schools[id] = { school_id: id, name: H.name, board: H.board, city: H.city, country: H.country,
         verified: true, status: 'active', claimMethod: 'code', joinCode: makeJoinCode(id), code: H.code,
         source: 'created', seeded: true, createdAt: created, group_id: H.group_id };
@@ -451,6 +529,7 @@
             groups: [{ gs: sec.grade + ' · Section ' + sec.section, rows: cl.kids.map(function(r){ return { first: r.first, last: r.last, adm: r.student_id }; }) }] },
           observations: observations, obsDrafts: {} })); } catch (e) {}
       });
+      if (H.pastYears) seedHeroYears(db, H, id, classes, team, now, history);
       history.forEach(function(e, i){ e.id = 'h_hero_' + id + '_' + i; db.history.push(e); });
     });
     db.history.sort(function(a, b){ return a.at - b.at; });
@@ -1158,7 +1237,7 @@
   // parent claim + teacher scope still go through the guarded functions above).
   function studentsForSchool(schoolId, opts){ var db=getDB(); opts=opts||{};
     return Object.keys(db.students).map(function(k){ return db.students[k]; })
-      .filter(function(s){ return s.school_id===schoolId && (opts.includeLeft || s.status!=='left'); })
+      .filter(function(s){ return s.school_id===schoolId && (opts.includeLeft || (s.status!=='left' && s.status!=='graduated')); })
       .map(pubStudent); }
   /* ======================================================================
      BASE GRADES — every grade/section keeps a fixed base (Grade 1, Grade 1A)
@@ -1549,16 +1628,211 @@
   // respond). expected = students × assessments in the lane.
   function completionStats(schoolId, phase, audience, studentIds){
     var db = getDB();
-    var dep = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
+    return statsFrom(db.deployments[schoolId] || {}, db.completions[schoolId] || {}, phase, audience, studentIds);
+  }
+  // Same count over any year's lanes + completions (current store or an archived year).
+  function statsFrom(deps, comp, phase, audience, studentIds){
+    var dep = deps[depKey(phase, audience)];
     // Per-student items only — a teacher's own Pre/Post-training survey is counted per teacher (selfReportsFor).
     var assessments = ((dep && dep.assessments) || []).filter(function(a){ return !a.perTeacher; });
-    var ids = studentIds || [], comp = db.completions[schoolId] || {};
+    var ids = studentIds || [];
     var expected = ids.length * assessments.length;
     var done = 0;
     ids.forEach(function(sid){ assessments.forEach(function(a){ if (comp[compKey(phase, audience, sid, a.id)]) done++; }); });
     return { done:done, expected:expected, pct: expected ? Math.round(done*100/expected) : 0,
       assessments:assessments.length, students:ids.length,
       status: effectiveStatus(dep), start: dep ? dep.start : '', end: dep ? dep.end : '' };
+  }
+
+  /* ======================================================================
+     ACADEMIC YEARS — a school runs Baseline → Midline → Endline once per year.
+     ----------------------------------------------------------------------
+     The CURRENT year lives where it always has (deployments / completions /
+     outcomes / selfReports), so every reader keeps working unchanged. Starting
+     a new year (Tilli team only) snapshots all of it into db.archive[school]
+     [yearId] — read-only from then on — and moves students up by base grade.
+       db.years[school]   = [{ id, label, start, end, status:'current'|'closed', … }]
+       db.archive[school][yearId] = { deployments, completions, outcomes,
+         selfReports, sections:{id→{grade,section,name,base_grade,base_section}},
+         enrolments:{student_id→{grade,section,section_id,status}}, closedAt }
+     Dates are free per school (set when the year starts, editable after).
+     ====================================================================== */
+  var PHASE_FIELD = { Baseline: 'baseline', Midline: 'mid', Endline: 'post' };
+  function isoAddDays(iso, n){ var t = new Date(iso + 'T00:00:00'); t.setDate(t.getDate() + n); return heroISO(t.getTime()); }
+  // "2026-06-01" → "2027-05-31" → "2026–27" (a Jan–Dec year reads "2026").
+  function yearLabel(start, end){
+    var a = +String(start).slice(0, 4), b = +String(end).slice(0, 4);
+    return a === b ? String(a) : a + '–' + String(b).slice(2);
+  }
+  function yearId(label){ return String(label).replace(/[^0-9A-Za-z]+/g, '-'); }
+  function yearsIn(db, schoolId){
+    if (!db.years) db.years = {};
+    if (!db.years[schoolId] && db.schools[schoolId]){
+      // First read for this school: one current year, from its earliest window.
+      var starts = Object.keys(db.deployments[schoolId] || {}).map(function(k){ return db.deployments[schoolId][k].start; }).filter(Boolean).sort();
+      var sc = db.schools[schoolId];
+      // Nothing to go on → the Jun–May year we're in (editable: dates are free per school).
+      var t = todayLocalISO(), junStart = (+t.slice(5, 7) >= 6 ? t.slice(0, 4) : String(+t.slice(0, 4) - 1)) + '-06-01';
+      var start = starts[0] || (sc.createdAt ? heroISO(sc.createdAt) : junStart);
+      var end = isoAddDays(isoAddDays(start, 0).replace(/^(\d{4})/, function(y){ return String(+y + 1); }), -1);
+      var label = yearLabel(start, end);
+      db.years[schoolId] = [{ id: yearId(label), label: label, start: start, end: end, status: 'current', startedAt: sc.createdAt || Date.now(), startedBy: '' }];
+      write(db);
+    }
+    return db.years[schoolId] || [];
+  }
+  function currentIn(db, schoolId){ return yearsIn(db, schoolId).filter(function(y){ return y.status === 'current'; })[0] || null; }
+  function yearsFor(schoolId){ return clone(yearsIn(getDB(), schoolId)); }
+  function currentYear(schoolId){ var y = currentIn(getDB(), schoolId); return y ? Object.assign({}, y) : null; }
+  function setYearDates(schoolId, id, patch){
+    var db = getDB(), y = yearsIn(db, schoolId).filter(function(x){ return x.id === id; })[0];
+    if (!y) return { ok: false, reason: 'not_found' };
+    var start = patch.start || y.start, end = patch.end || y.end;
+    if (start > end) return { ok: false, reason: 'dates' };
+    var label = norm(patch.label) || y.label;
+    if (yearsIn(db, schoolId).some(function(x){ return x !== y && low(x.label) === low(label); })) return { ok: false, reason: 'label_taken' };
+    y.start = start; y.end = end; y.label = label; write(db);
+    return { ok: true, year: Object.assign({}, y) };
+  }
+  // The archived snapshot for a past year (null for the current one).
+  function archiveIn(db, schoolId, id){ return (db.archive && db.archive[schoolId] && db.archive[schoolId][id]) || null; }
+  function yearArchive(schoolId, id){ var a = archiveIn(getDB(), schoolId, id); return a ? clone(a) : null; }
+  // A year's lanes: the live store for the current year, the snapshot otherwise.
+  function deploymentsIn(schoolId, id){
+    var db = getDB(), a = archiveIn(db, schoolId, id);
+    if (!a) return getDeployments(schoolId);
+    return Object.keys(a.deployments || {}).map(function(k){ var d = a.deployments[k]; return Object.assign({}, d, { status: d.notRun ? 'Not run' : 'Ended' }); });
+  }
+  function enrolledIn(db, schoolId, id){
+    var a = archiveIn(db, schoolId, id);
+    if (a) return Object.keys(a.enrolments || {});
+    return studentsForSchool(schoolId).map(function(s){ return s.student_id; });
+  }
+  function completionStatsIn(schoolId, id, phase, audience, studentIds){
+    var db = getDB(), a = archiveIn(db, schoolId, id);
+    if (!a) return completionStats(schoolId, phase, audience, studentIds || enrolledIn(db, schoolId, id));
+    var st = statsFrom(a.deployments || {}, a.completions || {}, phase, audience, studentIds || enrolledIn(db, schoolId, id));
+    var dep = (a.deployments || {})[depKey(phase, audience)];
+    st.status = dep ? (dep.notRun ? 'Not run' : 'Ended') : 'Not deployed';
+    return st;
+  }
+  function outcomesIn(schoolId, id){
+    var db = getDB(), a = archiveIn(db, schoolId, id);
+    return clone(a ? (a.outcomes || {}) : ((db.outcomes || {})[schoolId] || {}));
+  }
+  // Everything the platform admin shows for one year, in one read.
+  function yearSummary(schoolId, id){
+    var db = getDB(), years = yearsIn(db, schoolId), y = years.filter(function(x){ return x.id === id; })[0] || currentIn(db, schoolId);
+    if (!y) return null;
+    var a = archiveIn(db, schoolId, y.id), current = !a;
+    var deps = a ? (a.deployments || {}) : (db.deployments[schoolId] || {});
+    var comps = a ? (a.completions || {}) : (db.completions[schoolId] || {});
+    var outs = a ? (a.outcomes || {}) : ((db.outcomes || {})[schoolId] || {});
+    var ids = enrolledIn(db, schoolId, y.id);
+    var phases = ['Baseline', 'Midline', 'Endline'].map(function(ph){
+      var lanes = Object.keys(deps).map(function(k){ return deps[k]; }).filter(function(d){ return d.phase === ph; }).map(function(d){
+        var st = statsFrom(deps, comps, ph, d.audience, ids);
+        return { audience: d.audience, start: d.start || '', end: d.end || '', window: d.window || '',
+          status: current ? effectiveStatus(d) : (d.notRun ? 'Not run' : 'Ended'),
+          assessments: (d.assessments || []).map(function(x){ return { name: x.name, version: x.version || 1, perTeacher: !!x.perTeacher }; }),
+          done: st.done, expected: st.expected, pct: st.pct };
+      });
+      var done = lanes.reduce(function(n, l){ return n + l.done; }, 0), exp = lanes.reduce(function(n, l){ return n + l.expected; }, 0);
+      var versions = {}; lanes.forEach(function(l){ l.assessments.forEach(function(x){ versions['v' + x.version] = 1; }); });
+      // Skill averages only once a phase has finished (current outcomes hold all three points up front).
+      var finished = lanes.length && lanes.every(function(l){ return l.status === 'Ended'; });
+      var vals = [];
+      if (finished) Object.keys(outs).forEach(function(sid){ (outs[sid] || []).forEach(function(sk){ var v = sk[PHASE_FIELD[ph]]; if (typeof v === 'number') vals.push(v); }); });
+      return { phase: ph, lanes: lanes, done: done, expected: exp, pct: exp ? Math.round(done * 100 / exp) : null,
+        avgSkill: vals.length ? Math.round(vals.reduce(function(n, v){ return n + v; }, 0) / vals.length) : null,
+        versions: Object.keys(versions).sort() };
+    });
+    // Classes as they were that year (renamed ones carry their base in brackets).
+    var secs = a ? a.sections || {} : (function(){ var o = {}; schoolSections(db, schoolId).forEach(function(x){ o[x.section_id] = x; }); return o; })();
+    var counts = {};
+    if (a) Object.keys(a.enrolments || {}).forEach(function(sid){ var e = a.enrolments[sid]; counts[e.section_id] = (counts[e.section_id] || 0) + 1; });
+    else studentsForSchool(schoolId).forEach(function(x){ counts[x.section_id] = (counts[x.section_id] || 0) + 1; });
+    var classes = Object.keys(secs).map(function(k){
+      var x = secs[k], shown = x.name || ((x.grade || '') + ' ' + (x.section || '')).trim();
+      var code = baseSectionCode(x.base_grade || inferBaseGrade(x.grade), x.base_section || x.section);
+      return { id: k, label: code && !sameName(code, shown) ? shown + ' (' + code + ')' : shown, base: x.base_grade || inferBaseGrade(x.grade), students: counts[k] || 0 };
+    }).filter(function(c){ return c.students; }).sort(function(p, q){ return BASE_GRADES.indexOf(p.base) - BASE_GRADES.indexOf(q.base) || p.label.localeCompare(q.label); });
+    return { year: Object.assign({}, y), current: current, students: ids.length, phases: phases, classes: classes };
+  }
+  // What's still open this year + who sits in which base grade (for the new-year wizard).
+  function yearReadiness(schoolId){
+    var db = getDB(), deps = db.deployments[schoolId] || {};
+    var lanes = Object.keys(deps).map(function(k){ return { phase: deps[k].phase, audience: deps[k].audience, status: effectiveStatus(deps[k]), start: deps[k].start, end: deps[k].end }; });
+    var grades = {};
+    studentsForSchool(schoolId).forEach(function(st){
+      var sec = db.sections[st.section_id] || {};
+      var b = sec.base_grade || baseGradeIn(db, schoolId, st.grade) || st.grade;
+      var g = grades[b] || (grades[b] = { base: b, names: {}, students: 0 });
+      g.names[st.grade] = 1; g.students++;
+    });
+    var list = Object.keys(grades).map(function(b){ var g = grades[b]; return { base: b, names: Object.keys(g.names), students: g.students, next: BASE_GRADES[BASE_GRADES.indexOf(b) + 1] || null }; })
+      .sort(function(p, q){ return BASE_GRADES.indexOf(p.base) - BASE_GRADES.indexOf(q.base); });
+    return { year: currentYear(schoolId), live: lanes.filter(function(l){ return l.status === 'Live'; }), scheduled: lanes.filter(function(l){ return l.status === 'Scheduled'; }),
+      ended: lanes.filter(function(l){ return l.status === 'Ended'; }), grades: list };
+  }
+  // Close the current year and open the next. opts: { label, start, end,
+  // gradeActions:{ 'Grade 1':'promote'|'retain'|'graduate' }, endOpen, actorEmail }.
+  function startNewYear(schoolId, opts){
+    var db = getDB(); opts = opts || {};
+    var cur = currentIn(db, schoolId); if (!cur) return { ok: false, reason: 'not_found' };
+    var start = opts.start, end = opts.end, label = norm(opts.label) || (start && end ? yearLabel(start, end) : '');
+    if (!start || !end || start > end) return { ok: false, reason: 'dates' };
+    if (start <= cur.start) return { ok: false, reason: 'before_current' };
+    if (yearsIn(db, schoolId).some(function(x){ return low(x.label) === low(label); })) return { ok: false, reason: 'label_taken' };
+    var deps = db.deployments[schoolId] || {}, now = Date.now();
+    var live = Object.keys(deps).filter(function(k){ return effectiveStatus(deps[k]) === 'Live'; });
+    if (live.length && !opts.endOpen) return { ok: false, reason: 'open_lanes', lanes: live };
+    live.forEach(function(k){ deps[k].status = 'Ended'; deps[k].endedAt = now; });
+    Object.keys(deps).forEach(function(k){ if (effectiveStatus(deps[k]) === 'Scheduled') deps[k].notRun = true; });
+
+    // 1) Snapshot the closing year (classes + who sat where, as they were).
+    var secs = schoolSections(db, schoolId), secSnap = {}, enrol = {};
+    secs.forEach(function(x){ lockBase(db, x); secSnap[x.section_id] = { grade: x.grade, section: x.section, name: x.name, base_grade: x.base_grade, base_section: x.base_section }; });
+    var studs = Object.keys(db.students).map(function(k){ return db.students[k]; }).filter(function(x){ return x.school_id === schoolId && x.status !== 'left' && x.status !== 'graduated'; });
+    studs.forEach(function(x){ enrol[x.student_id] = { grade: x.grade, section: x.section, section_id: x.section_id, status: x.status }; });
+    if (!db.archive) db.archive = {};
+    (db.archive[schoolId] = db.archive[schoolId] || {})[cur.id] = { deployments: clone(deps), completions: clone(db.completions[schoolId] || {}),
+      outcomes: clone((db.outcomes || {})[schoolId] || {}), selfReports: clone((db.selfReports || {})[schoolId] || {}),
+      sections: secSnap, enrolments: enrol, closedAt: now };
+    cur.status = 'closed'; cur.closedAt = now;
+
+    // 2) Fresh year: no lanes, completions or results yet.
+    db.deployments[schoolId] = {}; db.completions[schoolId] = {};
+    if (db.inProgress) db.inProgress[schoolId] = {};
+    if (db.outcomes) db.outcomes[schoolId] = {};
+    if (db.selfReports) db.selfReports[schoolId] = {};
+
+    // 3) Move children by base grade (Grade 1 A → Grade 2 A, whatever the school calls them).
+    var acts = opts.gradeActions || {}, moved = { promoted: 0, retained: 0, graduated: 0 };
+    studs.forEach(function(x){
+      var sec = db.sections[x.section_id] || {};
+      var b = sec.base_grade || baseGradeIn(db, schoolId, x.grade), nb = BASE_GRADES[BASE_GRADES.indexOf(b) + 1];
+      var act = acts[b] || (nb ? 'promote' : 'graduate');
+      if (act === 'retain' || !b){ moved.retained++; return; }
+      if (act === 'graduate' || !nb){ x.status = 'graduated'; moved.graduated++; return; }
+      var letter = sec.base_section || sec.section || 'A';
+      var target = secs.filter(function(t){ return t.base_grade === nb && low(t.base_section) === low(letter); })[0]
+        || secs.filter(function(t){ return t.base_grade === nb; })[0];
+      if (!target){
+        var id = 'sec_' + schoolId + '_' + slugify(nb + '_' + letter);
+        target = db.sections[id] = { section_id: id, school_id: schoolId, grade: nb, section: letter, name: nb + ' ' + letter, teacherId: null, base_grade: nb, base_section: letter };
+        secs.push(target);
+      }
+      x.section_id = target.section_id; x.grade = target.grade; x.section = target.section; moved.promoted++;
+    });
+
+    // 4) The new current year.
+    var y = { id: yearId(label), label: label, start: start, end: end, status: 'current', startedAt: now, startedBy: low(opts.actorEmail) };
+    db.years[schoolId].push(y);
+    logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], items: [], kind: 'assessment', action: 'year.start',
+      changes: [{ label: 'Academic year', from: cur.label, to: label }], actor: actorFor(db, opts.actorEmail, schoolId) });
+    write(db);
+    return { ok: true, year: Object.assign({}, y), closed: Object.assign({}, cur), moved: moved };
   }
 
   /* ======================================================================
@@ -2033,6 +2307,17 @@
     gradeLabel: gradeLabel,
     sectionLabel: sectionLabel,
     sectionBase: sectionBase,
+    // academic years (current year in the live store; past years archived, read-only)
+    yearsFor: yearsFor,
+    currentYear: currentYear,
+    setYearDates: setYearDates,
+    yearArchive: yearArchive,
+    deploymentsIn: deploymentsIn,
+    completionStatsIn: completionStatsIn,
+    outcomesIn: outcomesIn,
+    yearSummary: yearSummary,
+    yearReadiness: yearReadiness,
+    startNewYear: startNewYear,
     renameGrade: renameGrade,
     renameSection: renameSection,
     setSchoolBoards: setSchoolBoards,

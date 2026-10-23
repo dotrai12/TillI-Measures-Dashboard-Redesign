@@ -586,7 +586,10 @@
   }
 
   // ---- academic year (single year → header shows a static label, no selector) ----
-  var ACADEMIC_YEARS = ['2026–27'];
+  // The school's current year from the shared store (past years are read-only
+  // on the platform admin for now, so only the current label shows here).
+  var CUR_YEAR = window.TilliAPI && window.TilliAPI.currentYear && SCHOOL_ID ? window.TilliAPI.currentYear(SCHOOL_ID) : null;
+  var ACADEMIC_YEARS = [CUR_YEAR ? CUR_YEAR.label : '2026–27'];
 
   window.ADMIN_DATA = {
     school: TS.school, schoolId: SCHOOL_ID,

@@ -1,6 +1,6 @@
 # Demo logins — fully-populated schools
 
-Four portfolio schools have real data in the shared store, so the Tilli platform admin, school admin dashboard, teacher app and parent app all show the same thing. It is created automatically the first time any page loads in a browser (`seedHeroSchools` in `assets/tilli-api.js`). Dates are relative to that day.
+Five portfolio schools have real data in the shared store, so the Tilli platform admin, school admin dashboard, teacher app and parent app all show the same thing. It is created automatically the first time any page loads in a browser (`seedHeroSchools` in `assets/tilli-api.js`). Dates are relative to that day.
 
 **Password: anything works** (type any non-empty password). Sign in from `index.html` → *Get started*.
 - **Teachers & school admins:** choose the School card, then enter the email.
@@ -12,6 +12,7 @@ Four portfolio schools have real data in the shared store, so the Tilli platform
 | **Lotus Valley School** | Baseline ✓ ended, **Midline live now** (~50% done), Endline not deployed |
 | **Kandy Hill School** | **Baseline live now** (~40% done) only |
 | **Colombo Kids Academy** | Baseline, Midline and Endline all **Scheduled** (start in ~12 days, ~3 months, ~6 months) |
+| **Heritage Oaks School** | **3rd year with Tilli.** 2024–25 and 2025–26 closed (all phases ended, read-only); 2026–27: **Baseline live now** (~60% done), Midline scheduled |
 
 Each school has 4 classes × 14 children (56 students), one teacher per class, and one school admin. In every school the **last teacher in the list is behind** (a realistic follow-up case). Parent 1's child has done everything; Parent 2's child hasn't started the phase that's live now.
 
@@ -66,6 +67,22 @@ Each school has 4 classes × 14 children (56 students), one teacher per class, a
 | Teacher | `rohan.perera@colombokids.lk` | Grade 2 A |
 | Parent 1 | `parent1@colombokids.lk` | Navya Sharma (CK-1001, Kindergarten A) — sees "Opens on …" |
 | Parent 2 | `parent2@colombokids.lk` | Sehan Iyer (CK-1002, Kindergarten A) — sees "Opens on …" |
+
+---
+
+## Heritage Oaks School — a school in its 3rd year (no group)
+
+Years run **Jun → May**. Last year (2025–26) Grade 2 was called **"Tulips"**, and Midline used template **v2** (v1 the year before), so the *Year over year* card shows a version warning. Today's Grade 3 and 4 children have past results; today's Grade 1 joined this year.
+
+| Role | Email | Notes |
+|---|---|---|
+| School admin | `admin@heritageoaks.edu` | Nandini Rao |
+| Teacher | `deepa.verma@heritageoaks.edu` | Grade 1 A |
+| Teacher | `priya.menon@heritageoaks.edu` | Grade 2 A |
+| Teacher | `nalini.iyer@heritageoaks.edu` | Grade 3 A |
+| Teacher | `vikram.bandara@heritageoaks.edu` | Grade 4 A · **behind** |
+| Parent 1 | `parent1@heritageoaks.edu` | Kaveen Jayasuriya (HO-1001, Grade 1 A) — Baseline done |
+| Parent 2 | `parent2@heritageoaks.edu` | Zara Sharma (HO-1002, Grade 1 A) — Baseline not started |
 
 ---
 

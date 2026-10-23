@@ -20,6 +20,7 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 | Banyan Tree | BNYN-7712 | All three phases (two ended, Endline live) |
 | Lotus Valley | LOTS-3390 | Deploying a phase that isn't deployed yet (Endline) |
 | Colombo Kids | CLMB-6604 | Scheduled phases (nothing live yet) |
+| Heritage Oaks | HROK-4410 | A school in its 3rd year: past years, year over year, starting a new year |
 | Little Sprouts | LSPR-2210 | Student reports, editing and merging students |
 | Sunrise | — | Issue reports, crash reports, auto-removed sections |
 | Greenfield | — | Student assessment log and results CSV |
@@ -255,6 +256,28 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 
 - [ ] Narrow the window (or use phone size): the sidebar becomes a bottom bar — **Control · Schools · Issues · People**.
 - [ ] Profile is under the header avatar; Ask Tilli's chat list slides in.
+
+---
+
+## Mission 15 — A school in its third year (10 min)
+
+*Heritage Oaks joined in 2024–25. Two years are closed; 2026–27 is running. Years run Jun → May.*
+
+- [ ] **Heritage Oaks** → **Assessments**. The **Academic year** bar shows `2024–25 · 2025–26 · 2026–27 · current` and "year 3 with Tilli".
+- [ ] Below the planner, read **Year over year**: completion and skill score per phase, every year. Midline in 2025–26 has a **⚠ v1 → v2** chip (the template changed — compare with care).
+- [ ] Click **2025–26** → the read-only view: each phase's windows, assessments with versions, responses and completion, the average skill score, and **Classes in 2025–26** — note **Tulips A (Grade 2A)**.
+- [ ] Click **2024–25** → only two classes (today's Grade 3 and 4, back when they were in Grades 1 and 2).
+- [ ] Back to **2026–27 · current** → **Edit dates** → change the end date → **Save**.
+- [ ] **Deployments** → **All years** dropdown → pick **2025–26**: last year's lanes, all **Ended**.
+- [ ] **Change History** → filter to Heritage Oaks, **All time** → "started the 2025–26 academic year".
+- [ ] **Start a new year** (try it on **Banyan Tree**, not Heritage Oaks):
+  - [ ] **Assessments** → **Start new year**.
+  - [ ] **1 · Close 2026–27**: tick **End the live windows now**.
+  - [ ] **2 · New year**: keep the suggested dates (the name fills in).
+  - [ ] **3 · Students**: Grade 1 → *Move up to Grade 2*, Grade 3 → *Graduate*.
+  - [ ] **Start new year**.
+
+✅ The planner is empty for the new year, the toast says how many moved up / stayed / graduated, and the old year is now a read-only tab in the year bar.
 
 ---
 

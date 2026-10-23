@@ -216,7 +216,7 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 
 ## Known issues to share with Mayur (23 Oct 2026)
 
-Changes made on 23 Oct 2026: **Base grades** (every grade/section keeps a fixed base, shown as "Sunflowers (Grade 1)" / "Rose (Grade 1A)" when renamed, used by Ask Tilli; rename in Grades & sections; teacher sign-up lists the school's own grades), **Rollout stage removed** (no wizard step, no Stage column/chip/CSV column, not in Ask Tilli), **Country + City** required, **Add School wizard trimmed** (Grades step text cut, hover reason on a greyed-out Next), **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
+Changes made on 23 Oct 2026: **Academic years** (past years archived read-only, Start new year, Year over year, Heritage Oaks demo), **Base grades** (every grade/section keeps a fixed base, shown as "Sunflowers (Grade 1)" / "Rose (Grade 1A)" when renamed, used by Ask Tilli; rename in Grades & sections; teacher sign-up lists the school's own grades), **Rollout stage removed** (no wizard step, no Stage column/chip/CSV column, not in Ask Tilli), **Country + City** required, **Add School wizard trimmed** (Grades step text cut, hover reason on a greyed-out Next), **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
 
 Open issues that came out of those changes:
 
@@ -255,7 +255,13 @@ Open issues that came out of those changes:
 - **Long names can crowd the school admin's overview diagram.** Labels like "Sunflowers (Grade 1)" may overlap at the whole-school view.
 
 **Assessments across years**
-- **Deploying a phase overwrites that phase's previous deployment.** Each school keeps one Baseline / Midline / Endline per audience, so redeploying replaces the old record and its completions. Being fixed by the multi-year build (see `Multi-Year-Schools.md`).
+- ~~**Deploying a phase overwrites that phase's previous deployment.**~~ Fixed 23 Oct 2026: each year's lanes are archived when a new year starts (see `Multi-Year-Schools.md`). Within one year, redeploying a phase still replaces it (as intended).
+- **Teacher observations aren't tied to a year.** They're saved in each teacher's own browser data, keyed by Baseline / Midline / Endline only, so after a new year starts a teacher still sees last year's ratings. *Possible fix:* key them by year too, or clear them when the school's year changes.
+- **The global Results tab and the hub's Results CSV still read sample data only.** Real schools' results (including past years) don't appear there. *Possible fix:* build both from `TilliAPI.yearSummary`.
+- **Only the platform admin can see past years.** The leadership dashboard, teacher app and parent view only show the current year. Next on the multi-year list.
+- **Schools without any deployment get a default year of Jun → May.** Dates are free per school, so check **Edit dates** for schools that run Jan → Dec (Sri Lanka).
+- **Starting a new year can't be undone yet.** Use it on a demo school. *Possible fix:* allow undo while the new year has no deployments.
+- **Two sections can merge on promotion.** If Grade 1 has A and B but Grade 2 only has A, both move into Grade 2 A. *Possible fix:* create a matching Grade 2 B automatically, or ask in the wizard.
 
 **Demo access & codes card**
 - The parent claim codes list now reads the live roster. It used to read a copy saved when the school was created, which was always empty, so it never listed anyone. The Teacher join code now has a copy button.
