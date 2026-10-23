@@ -89,7 +89,6 @@
     var m = Math.floor(s / 60); return m <= 1 ? 'just now' : m + 'm ago';
   }
   function statusChip(status) { var m = ORG.status[status] || ORG.status.quiet; return '<span class="ui-chip ' + m.chip + '"><span class="dot"></span>' + m.label + '</span>'; }
-  function stageChip(key) { var m = ORG.stageMeta(key); var cls = key === 'mou' ? ' muted' : (key === 'renewed' ? ' ok' : ' info'); return '<span class="ui-chip' + cls + '">' + esc(m.short) + '</span>'; }
   function statusPill(txt, tone) { return '<span class="ui-chip ' + (tone || '') + '">' + esc(txt) + '</span>'; }
 
   // ---------- icons ----------
@@ -425,14 +424,6 @@
     var xs = list.filter(function (s) { return s[key] != null; });
     return xs.length ? Math.round(xs.reduce(function (a, s) { return a + s[key]; }, 0) / xs.length) : null;
   }
-  function stepper(stageKey) {
-    var cur = ORG.stageIndex(stageKey);
-    return '<div class="tl-steps">' + ORG.stages.map(function (s, i) {
-      var cls = i < cur ? 'done' : (i === cur ? 'cur' : '');
-      var mark = i < cur ? '✓' : (i + 1);
-      return '<div class="tl-step ' + cls + '"><div class="dot">' + mark + '</div><div class="slabel">' + esc(s.short) + '</div></div>';
-    }).join('') + '</div>';
-  }
   function screenHead(title, sub, actionsHtml) {
     return '<div class="tl-screen-head">' +
       '<div><h1 class="ui-screen-title">' + esc(title) + '</h1>' + (sub ? '<p class="ui-screen-sub">' + esc(sub) + '</p>' : '') + '</div>' +
@@ -554,9 +545,9 @@
           '<td>' + (x.low ? esc(x.low.name) + ' <small>' + x.low.completion + '%</small>' : '—') + '</td></tr>';
       }).join('') || '<tr><td colspan="5"><div class="ui-empty">No school groups yet.</div></td></tr>';
     } else {
-      rankHead = '<tr><th>School</th><th>Group</th><th>Region</th><th>Stage</th><th>Completion</th><th>Engagement</th></tr>';
+      rankHead = '<tr><th>School</th><th>Group</th><th>Region</th><th>Completion</th><th>Engagement</th></tr>';
       rankRows = ranked.map(function (s) {
-        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '</td><td>' + (s.groupId === 'g-none' ? '<span class="text-muted">—</span>' : esc(s.groupName)) + '</td><td>' + esc(s.region) + '</td><td>' + stageChip(s.stage) + '</td><td class="tl-num">' + (s.completion ? s.completion + '%' : '—') + '</td><td>' + statusChip(s.status) + '</td></tr>';
+        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '</td><td>' + (s.groupId === 'g-none' ? '<span class="text-muted">—</span>' : esc(s.groupName)) + '</td><td>' + esc(s.region) + '</td><td class="tl-num">' + (s.completion ? s.completion + '%' : '—') + '</td><td>' + statusChip(s.status) + '</td></tr>';
       }).join('');
     }
     var rankSeg = '<div class="ui-seg" role="group" aria-label="Rank by">' +
@@ -679,11 +670,11 @@
   function schoolListHtml(rows, view) {
     if (!rows.length) return '<div class="ui-empty">No schools here yet.</div>';
     if (view === 'grid') return '<div class="tl-school-grid">' + rows.map(schoolCard).join('') + '</div>';
-    return '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Location</th><th>Grades</th><th>Students</th><th>Staff</th><th>Stage</th><th></th></tr></thead><tbody>' +
+    return '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Location</th><th>Grades</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
       rows.map(function (s) {
         return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + ' ' + issueChip(s.id, ORG.server.openIssueCount(s.id)) + '<small>' + esc(s.type) + ' · ' + esc(s.code) + '</small></td>' +
           '<td>' + esc(s.groupName) + '</td><td>' + esc([s.city, s.country].filter(Boolean).join(', ') || '—') + '</td><td class="tl-num">' + s.gradeCount + '</td><td class="tl-num">' + s.students.toLocaleString() + '</td>' +
-          '<td class="tl-num">' + s.staff + '</td><td>' + stageChip(s.stage) + '</td><td class="r text-muted">›</td></tr>';
+          '<td class="tl-num">' + s.staff + '</td><td class="r text-muted">›</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
 
@@ -769,9 +760,9 @@
   // All Schools CSV — one row per school in the current view.
   function exportSchools(list, filename) {
     downloadCsv(filename,
-      ['School', 'Code', 'Group', 'City', 'Country', 'Type', 'Board', 'Stage', 'Students', 'Staff', 'Grades', 'Sections', 'Completion %', 'Engagement', 'Joined', 'Archived'],
+      ['School', 'Code', 'Group', 'City', 'Country', 'Type', 'Board', 'Students', 'Staff', 'Grades', 'Sections', 'Completion %', 'Engagement', 'Joined', 'Archived'],
       list.map(function (s) {
-        return [s.name, s.code, s.groupName, s.city, s.country, s.type, s.board, ORG.stageMeta(s.stage).label, s.students, s.staff,
+        return [s.name, s.code, s.groupName, s.city, s.country, s.type, s.board, s.students, s.staff,
           s.gradeCount, s.sectionCount, s.completion || 0, (ORG.status[s.status] || ORG.status.quiet).label, s.joined, s.archived ? 'Yes' : 'No'];
       }));
   }
@@ -973,7 +964,7 @@
     var nIss = ORG.server.openIssueCount(s.id);
     var warn = (flags.length || nIss) ? '<div class="sc-flags">' + issueChip(s.id, nIss) + flags.map(function (f) { return '<span class="ui-chip warn">' + esc(f.label) + '</span>'; }).join('') + '</div>' : '';
     return '<div class="tl-school-card" data-open="' + s.id + '">' +
-      '<div class="sc-top"><div class="sc-name">' + esc(s.name) + (s.live ? ' <span class="ui-chip active" style="padding:2px 7px"><span class="dot"></span>Live</span>' : '') + '</div>' + stageChip(s.stage) + '</div>' +
+      '<div class="sc-top"><div class="sc-name">' + esc(s.name) + (s.live ? ' <span class="ui-chip active" style="padding:2px 7px"><span class="dot"></span>Live</span>' : '') + '</div></div>' +
       '<div class="sc-meta">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + (s.country ? ' · ' + esc(s.country) : '') + '</div>' +
       '<div class="sc-stats"><div><b>' + s.gradeCount + '</b><span>grades</span></div><div><b>' + s.students.toLocaleString() + '</b><span>students</span></div><div><b>' + s.staff + '</b><span>staff</span></div></div>' +
       warn +
@@ -1087,7 +1078,7 @@
   };
   var ADD_GRADE_PRESETS = ['LKG', 'UKG', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6'];
   var WIZ_STEPS = [
-    { key: 'profile', label: 'Profile' }, { key: 'rollout', label: 'Rollout' },
+    { key: 'profile', label: 'Profile' },
     { key: 'structure', label: 'Grades' }, { key: 'admin', label: 'First admin', optional: true },
     { key: 'review', label: 'Review' },
   ];
@@ -1123,7 +1114,7 @@
   function openAddSchool() {
     var d = {
       name: '', boards: [], boardPick: { checked: [], other: '' }, city: '', country: 'India',
-      groupId: 'g-none', stage: 'onboarding', joined: todayISO(),
+      groupId: 'g-none', joined: todayISO(),
       grades: [], admin: { name: '', email: '' },
     };
     var step = 0;
@@ -1140,10 +1131,8 @@
         if (g('ws-country')) d.country = g('ws-country').value;
         if (g('ws-city')) d.city = g('ws-city').value;
         if (g('ws-group')) d.groupId = g('ws-group').value;
-      } else if (step === 1) {
-        if (g('ws-stage')) d.stage = g('ws-stage').value;
         if (g('ws-joined')) d.joined = g('ws-joined').value.trim() || d.joined;
-      } else if (step === 3) {
+      } else if (step === 2) {
         if (g('ws-admin-name')) d.admin.name = g('ws-admin-name').value.trim();
         if (g('ws-admin-email')) d.admin.email = g('ws-admin-email').value.trim();
       }
@@ -1168,27 +1157,19 @@
       var countryOpts = ADD_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.country ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
       var groupOpts = ORG.activeGroups().map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
         '<option value="__new">＋ New group…</option>';
-      return '<p class="tl-muted">The basics. Name and board are required — everything else can change later.</p>' +
+      return '<p class="tl-muted">The basics. Name, board, country and city are required — everything can change later.</p>' +
         '<div class="tl-stack">' +
           '<label class="field">School name *<input class="input" id="ws-name" placeholder="e.g. Harmony High" value="' + esc(d.name) + '"></label>' +
           boardPickerHtml('ws', d.boardPick) +
           '<div class="tl-fieldrow">' +
-            '<label class="field flex-1">Country<select class="select" id="ws-country">' + countryOpts + '</select></label>' +
-            '<label class="field flex-1">City<select class="select" id="ws-city">' + cityOptions() + '</select></label>' +
+            '<label class="field flex-1">Country *<select class="select" id="ws-country">' + countryOpts + '</select></label>' +
+            '<label class="field flex-1">City *<select class="select" id="ws-city">' + cityOptions() + '</select></label>' +
           '</div>' +
           '<label class="field">Group<select class="select" id="ws-group">' + groupOpts + '</select></label>' +
           '<div id="ws-newgroup-row" style="display:none;gap:8px">' +
             '<input class="input grow" id="ws-newgroup" placeholder="New group name">' +
             '<button class="btn btn-outline btn-sm" id="ws-newgroup-add" type="button">Create</button>' +
           '</div>' +
-        '</div>';
-    }
-
-    function bodyRollout() {
-      var stageOpts = ORG.stages.map(function (s) { return '<option value="' + s.key + '"' + (s.key === d.stage ? ' selected' : '') + '>' + esc(s.label) + '</option>'; }).join('');
-      return '<p class="tl-muted">Where this partnership sits today. New schools usually start at <b>Onboarding</b>.</p>' +
-        '<div class="tl-stack">' +
-          '<label class="field">Rollout stage<select class="select" id="ws-stage">' + stageOpts + '</select></label>' +
           '<label class="field">Joined <span class="tl-muted" style="font-weight:400">(defaults to today)</span><input class="input" type="date" id="ws-joined" value="' + esc(d.joined) + '" max="' + todayISO() + '"></label>' +
         '</div>';
     }
@@ -1211,14 +1192,15 @@
             '<button class="btn-link ws-add-sec" type="button" data-addsec="' + gi + '">＋ Section</button>' +
             '<button class="ws-grade-del" type="button" data-delgrade="' + gi + '" title="Remove grade">Remove</button>' +
           '</div></div>';
-      }).join('') : '<div class="ui-empty">No grades yet — add one below, or tap a preset.</div>';
-      return '<p class="tl-muted">Add grades, rename any inline, and set how many students sit in each section. Grades sort automatically (early years first). Totals update as you type. Any grade or section still without students ' + ORG.emptyStructureTtlDays + ' days after it’s added is removed automatically (it can be added back).</p>' +
+      }).join('') : '';
+      return '<p class="tl-muted">Add the grades this school teaches.</p>' +
         '<div class="ws-grades">' + list + '</div>' +
         '<div class="ws-addbar">' +
           (presetBtns ? '<div class="ws-addbar-lbl">Quick add</div><div class="ws-presets">' + presetBtns + '</div>' : '') +
           '<div class="ws-newgrade-row"><input class="input grow" id="ws-newgrade" placeholder="Custom grade (e.g. Grade 7)"><button class="btn btn-outline btn-sm" id="ws-addgrade" type="button">Add grade</button></div>' +
         '</div>' +
-        '<div class="ws-total">' + d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students</div>';
+        (d.grades.length ? '<div class="ws-total">' + d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students' +
+          ' <span class="tl-tip" tabindex="0" role="button" aria-label="About empty grades and sections" data-tip="Any grade or section still without students ' + ORG.emptyStructureTtlDays + ' days after it’s added is removed automatically. It can be added back.">i</span></div>' : '');
     }
 
     function bodyAdmin() {
@@ -1233,31 +1215,35 @@
 
     function bodyReview() {
       var grp = (ORG.groups.find(function (g) { return g.id === d.groupId; }) || ORG.groups[0]).name;
-      var stageLbl = (ORG.stages.find(function (s) { return s.key === d.stage; }) || ORG.stages[0]).label;
       function row(k, v) { return '<div class="ws-rev-row"><span>' + esc(k) + '</span><b>' + esc(v || '—') + '</b></div>'; }
       var admin = d.admin.email ? (d.admin.name || d.admin.email) + ' · ' + d.admin.email : 'None — add later';
       return '<p class="tl-muted">Confirm and create. You\'ll land on the new school\'s hub. <span class="ui-tag">gated</span></p>' +
         '<div class="ws-review">' +
           row('Name', d.name) + row('Board', d.boards.join(', ')) +
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
-          row('Group', grp) + row('Stage', stageLbl) + row('Joined', fmtJoined(d.joined)) +
+          row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
           row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
           row('First admin', admin) +
         '</div>';
     }
 
-    var BODIES = [bodyProfile, bodyRollout, bodyStructure, bodyAdmin, bodyReview];
+    var BODIES = [bodyProfile, bodyStructure, bodyAdmin, bodyReview];
 
-    // Whether the current step is missing required input. Gates the Next/Create
-    // button so you can't advance past step 1 without a name and a board.
-    function stepBlocked() {
-      if (step === 0) return !d.name || !!boardError(d.boardPick);   // name + at least one (named) board
-      if (step === 2) return !d.grades.length;     // at least one grade is mandatory
-      return false;
+    // What the current step is still missing ('' = nothing). Gates the Next/Create
+    // button and becomes its hover tooltip, so a greyed-out Next explains itself.
+    function blockReason() {
+      if (step === 0) {
+        if (!d.name) return 'Add the school name';
+        if (boardError(d.boardPick)) return boardError(d.boardPick);
+        if (!d.country || !d.city) return 'Pick a country and a city';
+      }
+      if (step === 1 && !d.grades.length) return 'Add at least one grade';
+      return '';
     }
-    // Refresh the footer button's enabled state without re-rendering the whole
-    // step (grades/name update the body in place).
-    function syncNext() { var nb = document.getElementById('ws-next'); if (nb) nb.disabled = stepBlocked(); }
+    function stepBlocked() { return !!blockReason(); }
+    // Refresh the footer button's enabled state + tooltip without re-rendering the
+    // whole step (grades/name update the body in place).
+    function syncNext() { var nb = document.getElementById('ws-next'); if (nb) { nb.disabled = stepBlocked(); nb.title = blockReason(); } }
 
     function render() {
       var last = step === WIZ_STEPS.length - 1;
@@ -1267,7 +1253,7 @@
         '<div id="ws-body">' + BODIES[step]() + '</div>' +
         '<div class="ui-modal-foot" style="justify-content:space-between">' +
           '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
-          '<button class="btn btn-primary btn-sm" id="ws-next" type="button"' + (stepBlocked() ? ' disabled' : '') + '>' + (last ? 'Create school' : 'Next') + '</button>' +
+          '<button class="btn btn-primary btn-sm" id="ws-next" type="button"' + (stepBlocked() ? ' disabled title="' + esc(blockReason()) + '"' : '') + '>' + (last ? 'Create school' : 'Next') + '</button>' +
         '</div></div></div>';
 
       var ov = document.getElementById('tl-ov');
@@ -1294,7 +1280,9 @@
         country.addEventListener('change', function () {
           d.country = country.value; d.city = '';
           cityEl.innerHTML = cityOptions();
+          syncNext();
         });
+        cityEl.addEventListener('change', function () { d.city = cityEl.value; syncNext(); });
         var sel = document.getElementById('ws-group');
         var row = document.getElementById('ws-newgroup-row');
         sel.addEventListener('change', function () {
@@ -1307,7 +1295,7 @@
           var g = ORG.server.createGroup(nm); ORG.server.logAudit(me.name, 'group.create', g.name, 'group');
           d.groupId = g.id; toast('Group “' + g.name + '” created.'); commit(); render();
         });
-      } else if (step === 2) {
+      } else if (step === 1) {
         var body = document.getElementById('ws-body');
         body.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { addGrade(b.dataset.preset); }); });
         var ag = document.getElementById('ws-addgrade');
@@ -1351,7 +1339,7 @@
             d.grades[gi].grade = nv; sortGrades(d.grades); rerenderStructure();
           });
         });
-      } else if (step === 3) {
+      } else if (step === 2) {
         var skip = document.getElementById('ws-skip-admin');
         if (skip) skip.addEventListener('click', function () { d.admin = { name: '', email: '' }; step++; render(); });
       }
@@ -1371,8 +1359,9 @@
       commit();
       if (step === 0 && !d.name) { toast('School name is required.'); return; }
       if (step === 0 && boardError(d.boardPick)) { toast(boardError(d.boardPick)); return; }
-      if (step === 2 && !d.grades.length) { toast('Add at least one grade.'); return; }
-      if (step === 3 && d.admin.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.admin.email)) { toast('Enter a valid admin email.'); return; }
+      if (step === 0 && (!d.country || !d.city)) { toast('Pick a country and a city.'); return; }
+      if (step === 1 && !d.grades.length) { toast('Add at least one grade.'); return; }
+      if (step === 2 && d.admin.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.admin.email)) { toast('Enter a valid admin email.'); return; }
       if (step < WIZ_STEPS.length - 1) { step++; render(); return; }
       // Final step → show a brief "creating" transition, then commit and land
       // on the new school's hub. The create itself is synchronous; the delay is
@@ -3915,7 +3904,7 @@
         ? '<span title="' + esc(HU.fullDate(last.at)) + '">' + esc(HU.timeAgo(last.at)) + '</span> <span class="text-muted">· ' + esc(last.actor.name) + '</span>'
         : '<span class="text-muted">—</span>';
       return '<tr class="clickable" data-gopen="' + esc(s.id) + '"><td class="name">' + esc(s.name) + '<small>' + esc(s.city + ', ' + s.country) + '</small></td>' +
-        '<td>' + stageChip(s.stage) + '</td><td>' + statusChip(s.status) + '</td>' +
+        '<td>' + statusChip(s.status) + '</td>' +
         '<td class="tl-num">' + s.students.toLocaleString() + '</td><td class="tl-num">' + (s.completion ? pct(s.completion) + '%' : '—') + '</td>' +
         '<td class="tl-lastcell">' + lastCell + '</td><td class="r text-muted">›</td></tr>';
     }).join('');
@@ -3923,7 +3912,7 @@
       '<div class="tl-kpis four">' + kpi(schools.length, 'Schools') + kpi(sum(schools, function (s) { return s.students; }).toLocaleString(), 'Students') +
         kpi(sum(schools, function (s) { return s.staff; }).toLocaleString(), 'Staff') + kpi(avg + '%', 'Avg. completion') + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Schools</h3><p class="ui-mod-note">Open a school to see its assessment progress and change history.</p></div></div>' +
-        (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Stage</th><th>Status</th><th>Students</th><th>Completion</th><th>Last updated</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Status</th><th>Students</th><th>Completion</th><th>Last updated</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
               : '<div class="ui-empty">No schools in this group yet.</div>') + '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent changes</h3><p class="ui-mod-note">Latest student-record and assessment changes across the group.</p></div>' +
         '<a class="btn-link" href="' + href('history', {}) + '">View all →</a></div>' +
@@ -4551,7 +4540,6 @@
     'Completion': '% of expected assessment responses received (responses ÷ expected) across deployed assessments.',
     'Avg completion': 'Average completion of the group’s schools that have results. Schools still at MoU aren’t counted.',
     'Engagement': 'Recent use of Tilli: Active = steady use, Slowing = dropping off, Quiet = little or no use lately.',
-    'Stage': 'Where the school is in the programme: MoU → Onboarding → Baseline → Midline → Endline → Renewed.',
     'Lowest school': 'The group’s school with the lowest completion — usually the first to follow up with.',
     'Responses': 'Responses received / responses expected.',
     'Chain': '⛓ = this assessment is chained after another and opens when the earlier one is done.',
@@ -4621,8 +4609,6 @@
       a: 'The average band score (0–100) from the latest results. They appear once a Midline or Endline is complete — before that the card says there are no results yet.' },
     { id: 'engagement', topic: 'Numbers & data', q: 'What do Active, Slowing and Quiet mean?', screens: ['analytics', 'schools'],
       a: 'How much the school has used Tilli recently. Active = steady use, Slowing = use is dropping, Quiet = little or no use lately. Quiet schools are good follow-up candidates.' },
-    { id: 'stages', topic: 'Numbers & data', q: 'What do the stages (MoU → Renewed) mean?', screens: ['schools', 'analytics', 'school'],
-      a: 'MoU signed → Onboarding (setting up) → Baseline → Midline → Endline (the three assessment rounds) → Renewed (signed up again). The stage is set when the school is added.' },
     { id: 'add-school', topic: 'Schools & groups', q: 'How do I add a new school?', screens: ['schools', 'controlroom'],
       a: 'All Schools → + Add School. The wizard asks for the profile, rollout, grades & sections and the school admin, then opens the new school’s page with its codes ready.' },
     { id: 'find-school', topic: 'Schools & groups', q: 'How do I find a school quickly?', screens: ['controlroom', 'schools'],
@@ -4820,8 +4806,8 @@
       return true;
     });
   }
-  // Schools with assessments running (MoU-stage schools haven't started).
-  function askRunning(list) { return list.filter(function (s) { return s.stage !== 'mou'; }); }
+  // Schools with assessments running (any completion yet).
+  function askRunning(list) { return list.filter(function (s) { return (s.completion || 0) > 0; }); }
   function askAvg(list) { var xs = askRunning(list); return xs.length ? Math.round(xs.reduce(function (a, s) { return a + (s.completion || 0); }, 0) / xs.length) : 0; }
   function askLinkBtn(screen, label, params) {
     return '<button class="btn-link" data-askgo="' + esc(screen) + '"' + (params ? ' data-askparams="' + esc(JSON.stringify(params)) + '"' : '') + '>' + esc(label) + ' →</button>';
@@ -4851,7 +4837,7 @@
         return [esc(d.phase + ' · ' + (d.assessments || []).filter(function (a) { return !a.perTeacher; }).map(function (a) { return a.name; }).join(', ')), esc(d.audience), c.done + ' / ' + c.expected, '<b>' + c.pct + '%</b>', esc(d.status)];
       });
     }
-    return '<p><b>' + esc(s.name) + '</b> is at <b>' + pct(s.completion || 0) + '%</b> completion overall (' + esc(ORG.stageMeta(s.stage).label) + ').</p>' +
+    return '<p><b>' + esc(s.name) + '</b> is at <b>' + pct(s.completion || 0) + '%</b> completion overall.</p>' +
       (rows.length ? askTable(['Assessment', 'Audience', 'Responses', 'Done', 'Status'], rows) : '<p>No assessments deployed here yet.</p>') +
       '<div class="tl-ask-acts">' + askLinkBtn('school', 'Open ' + s.name, { id: s.id, tab: 'assessments' }) + '</div>' + askSrc('From Deployments → Results · ' + res.length + ' deployment' + (res.length === 1 ? '' : 's'));
   }
@@ -4865,8 +4851,8 @@
     var notStarted = list.length - run.length;
     var link = t.kind === 'group' ? askLinkBtn('group', 'Open ' + t.label, { id: t.group.id }) : askLinkBtn('analytics', 'Open Analytics');
     return '<p><b>' + esc(t.label) + '</b>: average completion <b>' + askAvg(list) + '%</b> across ' + run.length + ' school' + (run.length === 1 ? '' : 's') + ' with assessments running' +
-      (notStarted ? ' (' + notStarted + ' still at MoU)' : '') + '.</p><p>' + bands.join(' · ') + '.</p>' +
-      (low.length ? '<p>Lowest first:</p>' + askTable(['School', 'Stage', 'Done'], low.map(function (s) { return ['<button class="btn-link" data-askgo="school" data-askparams="' + esc(JSON.stringify({ id: s.id })) + '">' + esc(s.name) + '</button>', esc(ORG.stageMeta(s.stage).short), '<b>' + pct(s.completion || 0) + '%</b>']; })) : '') +
+      (notStarted ? ' (' + notStarted + ' not started yet)' : '') + '.</p><p>' + bands.join(' · ') + '.</p>' +
+      (low.length ? '<p>Lowest first:</p>' + askTable(['School', 'Done'], low.map(function (s) { return ['<button class="btn-link" data-askgo="school" data-askparams="' + esc(JSON.stringify({ id: s.id })) + '">' + esc(s.name) + '</button>', '<b>' + pct(s.completion || 0) + '%</b>']; })) : '') +
       '<div class="tl-ask-acts">' + link + '</div>' + askSrc('From school completion · n=' + run.length);
   }
   function askAnsWho(s) {
@@ -4895,8 +4881,8 @@
       return { s: s, ns: ns, issues: ORG.server.openIssueCount(s.id) };
     });
     var csv = { name: 'follow-up-' + t.label.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-below-' + threshold + '.csv',
-      headers: ['School', 'Code', 'Group', 'Country', 'Stage', 'Completion %', 'Coordinator', 'Coordinator email', 'Teachers not started', 'Open issues'],
-      rows: rows.map(function (r) { var s = r.s; return [s.name, s.code, s.groupName, s.country, ORG.stageMeta(s.stage).label, s.completion || 0, s.coordinator ? s.coordinator.name : '', s.coordinator ? s.coordinator.email : '', r.ns, r.issues]; }) };
+      headers: ['School', 'Code', 'Group', 'Country', 'Completion %', 'Coordinator', 'Coordinator email', 'Teachers not started', 'Open issues'],
+      rows: rows.map(function (r) { var s = r.s; return [s.name, s.code, s.groupName, s.country, s.completion || 0, s.coordinator ? s.coordinator.name : '', s.coordinator ? s.coordinator.email : '', r.ns, r.issues]; }) };
     var text = 'Follow-up: ' + t.label + ' — schools below ' + threshold + '% completion\n' + rows.map(function (r) {
       var s = r.s; return '• ' + s.name + ' — ' + (s.completion || 0) + '% — ' + (s.coordinator ? s.coordinator.name + ' <' + s.coordinator.email + '>' : 'no coordinator') + (r.ns ? ' — ' + r.ns + ' teacher' + (r.ns === 1 ? '' : 's') + ' not started' : '');
     }).join('\n');
@@ -5116,14 +5102,15 @@
       '<label class="field">School name<input class="input" id="es-name" value="' + esc(s.name) + '"></label>' +
       boardPickerHtml('es', boardStateFrom(schoolBoardList(s))) +
       '<label class="field">Type<input class="input" id="es-type" value="' + esc(s.type) + '"></label>' +
-      '<div class="tl-fieldrow"><label class="field flex-1">City<input class="input" id="es-city" value="' + esc(s.city) + '"></label>' +
-      '<label class="field flex-1">Country<input class="input" id="es-country" value="' + esc(s.country) + '"></label></div>' +
+      '<div class="tl-fieldrow"><label class="field flex-1">City *<input class="input" id="es-city" value="' + esc(s.city) + '"></label>' +
+      '<label class="field flex-1">Country *<input class="input" id="es-country" value="' + esc(s.country) + '"></label></div>' +
       '<label class="field">Group<select class="select" id="es-group">' + groupOpts + '</select></label>' +
       '</div>', function (close) {
         var nm = (document.getElementById('es-name').value || '').trim(); if (!nm) { toast('School name is required.'); return false; }
         var bst = readBoardPicker('es'), bErr = boardError(bst); if (bErr) { toast(bErr); return false; }
-        var country = document.getElementById('es-country').value;
-        ORG.server.updateSchool(s.id, { name: nm, boards: boardNames(bst), type: document.getElementById('es-type').value, city: document.getElementById('es-city').value, country: country, region: country, groupId: document.getElementById('es-group').value });
+        var country = (document.getElementById('es-country').value || '').trim(), city = (document.getElementById('es-city').value || '').trim();
+        if (!country || !city) { toast('Country and city are required.'); return false; }
+        ORG.server.updateSchool(s.id, { name: nm, boards: boardNames(bst), type: document.getElementById('es-type').value, city: city, country: country, region: country, groupId: document.getElementById('es-group').value });
         ORG.server.logAudit(me.name, 'school.edit', nm, 'school', s.id);
         close(); toast('School updated.'); go('school', { id: s.id });
       }, 'Save changes');

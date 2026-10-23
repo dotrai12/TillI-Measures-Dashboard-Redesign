@@ -216,7 +216,7 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 
 ## Known issues to share with Mayur (23 Oct 2026)
 
-Changes made on 23 Oct 2026: **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
+Changes made on 23 Oct 2026: **Rollout stage removed** (no wizard step, no Stage column/chip/CSV column, not in Ask Tilli), **Country + City** required, **Add School wizard trimmed** (Grades step text cut, hover reason on a greyed-out Next), **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
 
 Open issues that came out of those changes:
 
@@ -234,6 +234,15 @@ Open issues that came out of those changes:
 - **Admin-only actions are no longer on the Control Room.** Template publishes, role changes, archives and the system's "auto-removed empty section" entries only appear in the Audit Trail. *Possible fix:* a small "Admin actions →" link next to View all.
 - **View all can show fewer changes than Recent activity.** Change History opens on *Past 7 days*, but Recent activity shows the 10 newest changes from any date, so on a quiet week some rows won't appear after clicking View all. *Possible fix:* let the link set the date range (e.g. `?range=all`).
 - **One busy school can fill all 10 rows.** For example, a teacher entering a whole class at once. *Possible fix:* group rows by school, or limit how many rows one school can take.
+
+**Rollout stage (removed)**
+- **The stage still exists in the data, just not on screen.** Sample schools still have a stage, and it's used to decide which phases get sample history. Real schools no longer get one. If the team wants contract status back (MoU signed / Renewed), it should be a separate setting on the school page, not a wizard step.
+- **Ask Tilli's "running" now means "has some completion".** It used to mean "not at MoU". A school with phases deployed but 0% done now counts as "not started yet".
+
+**Add School wizard**
+- **Edit school uses free-text Country and City, but the wizard uses fixed dropdown lists.** A typo or "india" in Edit school won't match "India", and that school drops out of Analytics → Outcomes by region and the country grouping. *Possible fix:* give Edit school the same Country → City dropdowns as the wizard.
+- **The hover reason on a greyed-out Next may not appear in Firefox or Safari.** It uses the browser's built-in tooltip, which those browsers don't always show on disabled buttons. *Possible fix:* show the reason as small text under Next while it's disabled.
+- **The 60-day auto-remove rule is only visible after a grade is added.** It moved into a ⓘ next to the totals line, which is hidden while there are no grades. *Possible fix:* mention it in the Profile step's intro if people get caught out.
 
 **Change History**
 - **A school's sample history disappears when it goes live.** Sample history is only generated for schools without a live data store. When a school switches to live, its sample rows disappear and only copied Audit Trail rows are left. *Possible fix:* pre-fill the live store with the sample history when the school switches.

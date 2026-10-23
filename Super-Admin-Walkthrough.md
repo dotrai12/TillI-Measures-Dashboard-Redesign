@@ -46,8 +46,7 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 
 **Create it**
 - [ ] Control Room → **+ Add School** (or All Schools → **+ Add School**).
-- [ ] **Profile**: name it (e.g. *Test Academy*), tick a board, pick **Sri Lanka** → a city, and choose a group — or **＋ New group…** to make one on the spot.
-- [ ] **Rollout**: stage *Onboarding*, today's date.
+- [ ] **Profile**: name it (e.g. *Test Academy*), tick a board (try **Other** → type a name), pick **Sri Lanka** → a city, choose a group — or **＋ New group…** to make one on the spot — and leave **Joined** as today. Name, board, country and city are required.
 - [ ] **Grades**: quick-add **Grade 1** and **Grade 2**, add a section to one, rename a grade by clicking its name, watch the total update.
 - [ ] **First admin**: enter a name + email (or **Skip this step →**).
 - [ ] **Review** → **Create school**.

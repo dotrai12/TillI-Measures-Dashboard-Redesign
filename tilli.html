@@ -405,6 +405,7 @@
   .ws-board-other[hidden] { display: none; }
   /* Grades step: editable section counts + rename */
   .ws-grades { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .ws-grades:empty { display: none; }
   .ws-grade-card { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 10px 8px 6px; border: 1px solid var(--line-200); border-radius: var(--radius-md); background: var(--white); }
   .ws-gradename { width: 118px; flex: 0 0 auto; font-family: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); border: 1px solid transparent; border-radius: var(--radius-sm); padding: 5px 8px; background: transparent; cursor: text; }
   .ws-gradename:hover { border-color: var(--line-200); background: var(--surface-100); }
