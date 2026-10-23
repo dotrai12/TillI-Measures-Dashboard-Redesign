@@ -86,7 +86,7 @@ Cards to compute:
 Keep the four tiles (School Groups, Active Schools, Total Students, Staff Members) but demote them below the queue and add context: each tile shows the current number **and** a delta vs. 30 days ago (`+3 schools`, `+412 students`) when history is available; if no history, show number only. Tiles are not clickable unless they map to a list (Schools → All Schools; Staff → Users filtered to staff roles).
 
 ### 3.3 Recent activity (tertiary)
-A single reverse-chronological feed merging: schools added, students merged, students deleted, roles changed, deployments created, templates published. Each row: timestamp, actor, action, entity (linked). This is the human-readable face of the Audit Trail (§8.4) and replaces the old "recently added schools" list. Cap at 20, "view all" → Audit Trail.
+The 10 newest **Change History** rows across active schools: school-side changes to student records and assessments, made by teachers, school admins, parents and the Tilli team. This is what the school success team should look at first. "View all" → Change History. *(Changed 23 Oct 2026: this used to show the newest 20 Audit Trail rows. The Audit Trail is still under Audit Trail in the nav.)*
 
 ### 3.4 Quick actions
 Persistent buttons: **Add School** `[GATED]`, **Invite User** `[GATED]`, **New Deployment** `[GATED]`, **New Template** `[GATED]`. These are shortcuts into the respective create flows with nothing pre-filled.

@@ -484,11 +484,9 @@
       return kpi(t.value.toLocaleString(), t.label, t.delta, t.deeplink);
     }).join('');
 
-    var recent = cr.recent.length ? cr.recent.map(function (e) {
-      var ent = e.schoolId ? '<button class="btn-link" data-open-school="' + e.schoolId + '">' + esc(e.entity) + '</button>' : esc(e.entity);
-      return '<div class="tl-feed-row"><span class="tl-feed-when">' + timeAgo(e.at) + '</span>' +
-        '<span class="tl-feed-body"><b>' + esc(e.actor) + '</b> ' + esc(e.actionLabel) + ' ' + ent + '</span></div>';
-    }).join('') : '<div class="ui-empty">No recent activity yet.</div>';
+    // School-side changes first: the 10 newest Change History rows across active schools.
+    var recent = histList(ORG.server.history(ORG.activeSchools().map(function (s) { return s.id; }), { limit: 10 }),
+      { summary: true, empty: 'No changes at any school yet.' });
 
     var anyQueue = cr.cards.some(function (c) { return c.key === 'health' ? c.state !== 'healthy' : c.count > 0; });
 
@@ -505,12 +503,12 @@
         '<div class="tl-queue-grid">' + cards + '</div></div>' +
       '<div class="ui-eyebrow tl-mini-head">Platform stats</div>' +
       '<div class="tl-kpis four">' + stats + '</div>' +
-      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent activity</h3><p class="ui-mod-note">The human-readable face of the audit trail.</p></div>' +
-        '<a class="btn-link" href="' + href('audit', {}) + '">View all →</a></div>' + recent + '</div>';
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent activity</h3><p class="ui-mod-note">The latest changes from schools — student records and assessments.</p></div>' +
+        '<a class="btn-link" href="' + href('history', {}) + '">View all →</a></div><div id="cr-recent">' + recent + '</div></div>';
 
     body.querySelectorAll('[data-qa]').forEach(function (b) { b.addEventListener('click', function () { quickAction(b.dataset.qa); }); });
     var crFind = body.querySelector('#cr-find'); if (crFind) schoolTypeahead(crFind, { onPick: function (sc) { go('school', { id: sc.id }); } });
-    body.querySelectorAll('[data-open-school]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: b.dataset.openSchool }); }); });
+    if (HU) HU.wireSummary(body.querySelector('#cr-recent'));   // one-line rows → click to expand
   };
 
   function quickAction(kind) {
@@ -2766,11 +2764,12 @@
     var list = ORG.users.filter(function (u) {
       if (roleF === 'none' && u.role !== 'none') return false;
       if (roleF && roleF !== 'none' && u.role !== roleF) return false;
-      if (kindF === 'staff' && (u.role === 'none' || u.role === 'Super Admin')) return false;
+      if (kindF === 'staff' && !ORG.isSchoolStaff(u)) return false;
       return peopleRowMatches(u, f);
     });
-    var filtered = !!(roleF || f.q.trim() || f.school || f.group);
-    var banner = roleF === 'none' ? '<div class="tl-filterbanner">Filtered to <b>users with no role</b> — dead accounts to clean up · <button class="btn-link" id="u-clear">clear</button></div>' : '';
+    var filtered = !!(roleF || kindF || f.q.trim() || f.school || f.group);
+    var banner = roleF === 'none' ? '<div class="tl-filterbanner">Filtered to <b>users with no role</b> — dead accounts to clean up · <button class="btn-link" id="u-clear">clear</button></div>'
+      : kindF === 'staff' ? '<div class="tl-filterbanner">Filtered to <b>school staff</b> — group admins, school admins and teachers at active schools (Tilli team and no-role accounts hidden) · <button class="btn-link" id="u-clear">clear</button></div>' : '';
     var pgKey = [roleF, kindF, f.q.trim().toLowerCase(), f.school, f.group].join('|');
     if (usersPager.key !== pgKey) { usersPager.key = pgKey; usersPager.page = 1; }
     var pages = Math.max(1, Math.ceil(list.length / usersPager.size));
@@ -4481,7 +4480,7 @@
     'Add Students': 'Add students by hand or paste a CSV. Rows are checked before anything is saved.',
     // cards
     'Needs attention': 'Queues that need action. Each card opens the filtered list behind its number.',
-    'Recent activity': 'The latest admin actions from the Audit Trail.',
+    'Recent activity': 'The 10 newest changes to student records and assessments across active schools. View all opens Change History.',
     'Outcomes by region': 'Average Social-Emotional and Cognitive band score (0–100) per country, across schools with results.',
     'Outcomes': 'Average Social-Emotional and Cognitive band score (0–100). Appears once a Midline or Endline is complete.',
     'Board mix': 'How many partner schools follow each curriculum board.',
@@ -4515,7 +4514,7 @@
     'School Groups': 'Partner organisations that run more than one school.',
     'Active Schools': 'Schools that aren’t archived.',
     'Total Students': 'Students across all active schools.',
-    'Staff Members': 'School admins and teachers across all active schools.',
+    'Staff Members': 'School group admins, school admins and teachers with an account, across active schools. Excludes the Tilli team and accounts with no role.',
     'School groups': 'Organisations running several schools. Open one to see its schools, links and CSVs.',
     'Independent schools': 'Schools that don’t belong to a school group.',
     'Archived groups': 'Groups archived as a whole — their schools are archived with them.',

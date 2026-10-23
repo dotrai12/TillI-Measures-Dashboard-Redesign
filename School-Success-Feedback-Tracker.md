@@ -185,7 +185,7 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 - Where it shows:
   - **School hub → Settings → Manage grades / sections:** an explanatory note, a "Nd left" tag on every empty section (amber within 14 days), and an **Auto-removed** list with an **Add back** button.
   - **Hub Overview + school cards:** a flag like "3 empty sections · auto-remove in 10 days" within 14 days of removal.
-  - **Audit Trail / Recent activity:** "System / Service Role · Auto-removed empty grade / section".
+  - **Audit Trail:** "System / Service Role · Auto-removed empty grade / section". (Since 23 Oct 2026 the Control Room's Recent activity shows Change History, not the Audit Trail, so these no longer appear there.)
   - **Add-School wizard (Structure step):** a one-line note about the rule.
 - Demo data: Asian Grammar (10 days left), Royal College Colombo (all grades removed, can be added back), Sunrise (one old empty section removed), Greenfield (a section added 12 days ago, 48 days left).
 - Knobs (`assets/tilli-org-data.js`): `EMPTY_STRUCTURE_TTL_DAYS = 60`, `EMPTY_STRUCTURE_WARN_DAYS = 14`.

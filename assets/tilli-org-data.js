@@ -345,6 +345,15 @@
   }
   var USERS = buildUsers();
 
+  // School staff = school-side accounts (not the Tilli team, not dead accounts).
+  // Staff tied to an archived school drop out, matching "Active Schools".
+  var STAFF_ROLES = ['School Group Admin', 'School Admin', 'Teacher'];
+  function isSchoolStaff(u) {
+    if (STAFF_ROLES.indexOf(u.role) < 0) return false;
+    var sc = u.schoolId ? byId(u.schoolId) : null;
+    return !sc || !sc.archived;
+  }
+
   // ---- Invitations (some expiring within 7 days, some already expired) ----
   function buildInvitations() {
     var inv = [];
@@ -846,10 +855,10 @@
       { key: 'groups', label: 'School Groups', value: GROUPS.filter(function (g) { return g.id !== 'g-none'; }).length, delta: 1 },
       { key: 'schools', label: 'Active Schools', value: act.length, delta: 3, deeplink: '#/schools' },
       { key: 'students', label: 'Total Students', value: sum(act, function (s) { return s.students; }), delta: 412 },
-      { key: 'staff', label: 'Staff Members', value: sum(act, function (s) { return s.staff; }), delta: 18, deeplink: '#/users?kind=staff' },
+      { key: 'staff', label: 'Staff Members', value: USERS.filter(isSchoolStaff).length, deeplink: '#/users?kind=staff' },
     ];
 
-    return { cards: cards, stats: stats, recent: recentActivity(20) };
+    return { cards: cards, stats: stats };
   }
 
   function actionLabel(a) {
@@ -1315,7 +1324,7 @@
     stages: STAGES, stageOrder: STAGE_ORDER, status: STATUS,
     schools: SCHOOLS, groups: GROUPS,
     stageIndex: stageIndex, stageMeta: stageMeta, byId: byId,
-    groupById: groupById, activeSchools: activeSchools, people: people,
+    groupById: groupById, activeSchools: activeSchools, people: people, isSchoolStaff: isSchoolStaff,
     activeGroups: activeGroups, groupByCode: groupByCode,
     // raw entities (list screens)
     users: USERS, invitations: INVITATIONS, issues: ISSUES, templates: TEMPLATES,
