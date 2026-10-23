@@ -528,7 +528,8 @@
       return '<div style="margin-bottom:6px;font-weight:700;font-size:var(--fs-sm);color:var(--ink-700)">' + rg + '</div>' +
         bar('Social-Emotional', regionAvg(rg, 'sel'), 'sel') + bar('Cognitive', regionAvg(rg, 'cog'), 'cog');
     }).join('<div style="height:10px"></div>');
-    var boards = {}; schools.forEach(function (s) { boards[s.board] = (boards[s.board] || 0) + 1; });
+    // A multi-board school counts once under each of its boards (so bars can sum past the school count).
+    var boards = {}; schools.forEach(function (s) { schoolBoardList(s).forEach(function (b) { boards[b] = (boards[b] || 0) + 1; }); });
     var boardMax = Math.max.apply(null, Object.keys(boards).map(function (k) { return boards[k]; })) || 1;
     var boardRows = Object.keys(boards).sort(function (a, b) { return boards[b] - boards[a]; }).map(function (k) {
       return '<div class="tl-bar-row"><div class="tl-bar-lbl">' + esc(k) + '</div><div class="ui-meter lg light"><div class="tl-bar-fill" style="width:' + (boards[k] / boardMax * 100) + '%"></div></div><div class="tl-bar-val">' + boards[k] + '</div></div>';
@@ -1028,6 +1029,56 @@
   //            grades/sections → land on the new hub). Multi-step so a
   //            Super Admin can set up the whole school in one flow. ----------
   var ADD_BOARDS = ['CBSE', 'ICSE', 'IB', 'Cambridge', 'National', 'State Board', 'Other'];
+  // Board picker shared by Add School and Edit school. Picker state is
+  // { checked: [...ADD_BOARDS], other: 'typed name' }. Ticking Other asks which
+  // board, and the typed name is what's saved — so Board mix never says "Other".
+  function boardStateFrom(names) {
+    var checked = [], other = [];
+    (names || []).forEach(function (b) {
+      if (b === 'Other') { if (checked.indexOf('Other') < 0) checked.push('Other'); }
+      else if (ADD_BOARDS.indexOf(b) >= 0) checked.push(b);
+      else other.push(b);
+    });
+    if (other.length && checked.indexOf('Other') < 0) checked.push('Other');
+    return { checked: checked, other: other.join(', ') };
+  }
+  function boardNames(st) {
+    var out = st.checked.filter(function (b) { return b !== 'Other'; });
+    if (st.checked.indexOf('Other') >= 0) st.other.split(',').forEach(function (x) { x = x.trim(); if (x && out.indexOf(x) < 0) out.push(x); });
+    return out;
+  }
+  function boardError(st) {
+    if (!st.checked.length) return 'Pick at least one board.';
+    if (st.checked.indexOf('Other') >= 0 && !st.other.trim()) return 'Type the name of the other board.';
+    return '';
+  }
+  function boardPickerHtml(pfx, st) {
+    var otherOn = st.checked.indexOf('Other') >= 0;
+    return '<div class="field" id="' + pfx + '-boards">Board * <span class="tl-muted" style="font-weight:400">(select all that apply)</span>' +
+      '<div class="ws-board-grid">' + ADD_BOARDS.map(function (b) {
+        return '<label class="ws-board-opt"><input class="ws-board" type="checkbox" value="' + esc(b) + '"' + (st.checked.indexOf(b) >= 0 ? ' checked' : '') + '> ' + esc(b) + '</label>';
+      }).join('') + '</div>' +
+      '<input class="input ws-board-other" placeholder="Which board? e.g. Montessori" value="' + esc(st.other) + '" aria-label="Name of the other board"' +
+        ' title="The board name that gets saved instead of “Other”. Separate several with commas."' + (otherOn ? '' : ' hidden') + '>' +
+    '</div>';
+  }
+  function readBoardPicker(pfx) {
+    var el = document.getElementById(pfx + '-boards');
+    if (!el) return { checked: [], other: '' };
+    return { checked: Array.prototype.map.call(el.querySelectorAll('.ws-board:checked'), function (b) { return b.value; }),
+      other: el.querySelector('.ws-board-other').value };
+  }
+  function wireBoardPicker(pfx, onChange) {
+    var el = document.getElementById(pfx + '-boards'); if (!el) return;
+    var otherIn = el.querySelector('.ws-board-other');
+    el.querySelectorAll('.ws-board').forEach(function (b) {
+      b.addEventListener('change', function () {
+        if (b.value === 'Other') { otherIn.hidden = !b.checked; if (b.checked) otherIn.focus(); }
+        if (onChange) onChange(readBoardPicker(pfx));
+      });
+    });
+    otherIn.addEventListener('input', function () { if (onChange) onChange(readBoardPicker(pfx)); });
+  }
   // Country → cities. City picker is filtered by the chosen country (country first).
   var ADD_COUNTRIES = ['India', 'Sri Lanka'];
   var ADD_CITIES = {
@@ -1071,7 +1122,7 @@
 
   function openAddSchool() {
     var d = {
-      name: '', boards: [], city: '', country: 'India',
+      name: '', boards: [], boardPick: { checked: [], other: '' }, city: '', country: 'India',
       groupId: 'g-none', stage: 'onboarding', joined: todayISO(),
       grades: [], admin: { name: '', email: '' },
     };
@@ -1085,8 +1136,7 @@
       var g = function (id) { return document.getElementById(id); };
       if (step === 0) {
         if (g('ws-name')) d.name = g('ws-name').value.trim();
-        var boxes = document.querySelectorAll('.ws-board:checked');
-        d.boards = Array.prototype.map.call(boxes, function (b) { return b.value; });
+        if (document.getElementById('ws-boards')) { d.boardPick = readBoardPicker('ws'); d.boards = boardNames(d.boardPick); }
         if (g('ws-country')) d.country = g('ws-country').value;
         if (g('ws-city')) d.city = g('ws-city').value;
         if (g('ws-group')) d.groupId = g('ws-group').value;
@@ -1115,19 +1165,13 @@
     }
 
     function bodyProfile() {
-      var boardBoxes = ADD_BOARDS.map(function (b) {
-        var on = d.boards.indexOf(b) !== -1;
-        return '<label class="ws-board-opt"><input class="ws-board" type="checkbox" value="' + esc(b) + '"' + (on ? ' checked' : '') + '> ' + esc(b) + '</label>';
-      }).join('');
       var countryOpts = ADD_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.country ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
       var groupOpts = ORG.activeGroups().map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
         '<option value="__new">＋ New group…</option>';
-      return '<p class="tl-muted">The basics. Only the name is required — everything else can change later.</p>' +
+      return '<p class="tl-muted">The basics. Name and board are required — everything else can change later.</p>' +
         '<div class="tl-stack">' +
           '<label class="field">School name *<input class="input" id="ws-name" placeholder="e.g. Harmony High" value="' + esc(d.name) + '"></label>' +
-          '<div class="field">Board <span class="tl-muted" style="font-weight:400">(select all that apply)</span>' +
-            '<div class="ws-board-grid">' + boardBoxes + '</div>' +
-          '</div>' +
+          boardPickerHtml('ws', d.boardPick) +
           '<div class="tl-fieldrow">' +
             '<label class="field flex-1">Country<select class="select" id="ws-country">' + countryOpts + '</select></label>' +
             '<label class="field flex-1">City<select class="select" id="ws-city">' + cityOptions() + '</select></label>' +
@@ -1204,11 +1248,10 @@
 
     var BODIES = [bodyProfile, bodyRollout, bodyStructure, bodyAdmin, bodyReview];
 
-    // Whether the current step is missing required input (school name is the
-    // only hard requirement in the wizard). Gates the Next/Create button so you
-    // can't advance past step 1 with an empty name.
+    // Whether the current step is missing required input. Gates the Next/Create
+    // button so you can't advance past step 1 without a name and a board.
     function stepBlocked() {
-      if (step === 0) return !d.name;              // school name is mandatory
+      if (step === 0) return !d.name || !!boardError(d.boardPick);   // name + at least one (named) board
       if (step === 2) return !d.grades.length;     // at least one grade is mandatory
       return false;
     }
@@ -1244,6 +1287,7 @@
           d.name = nameEl.value.trim();
           syncNext();
         });
+        wireBoardPicker('ws', function (st) { d.boardPick = st; d.boards = boardNames(st); syncNext(); });
         // Country drives the city list — reset city and repopulate on change.
         var country = document.getElementById('ws-country');
         var cityEl = document.getElementById('ws-city');
@@ -1326,6 +1370,7 @@
     function onNext() {
       commit();
       if (step === 0 && !d.name) { toast('School name is required.'); return; }
+      if (step === 0 && boardError(d.boardPick)) { toast(boardError(d.boardPick)); return; }
       if (step === 2 && !d.grades.length) { toast('Add at least one grade.'); return; }
       if (step === 3 && d.admin.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.admin.email)) { toast('Enter a valid admin email.'); return; }
       if (step < WIZ_STEPS.length - 1) { step++; render(); return; }
@@ -1334,7 +1379,7 @@
       // purely to give the action a beat of feedback before the screen swaps.
       renderCreating();
       setTimeout(function () {
-        d.board = d.boards.join(', ');
+        d.board = d.boards.join(', ');   // display string; d.boards rides along as the array
         var s = ORG.server.createSchool(Object.assign({}, d, { joined: fmtJoined(d.joined) }));
         ORG.server.logAudit(me.name, 'school.add', s.name, 'school', s.id);
         if (d.admin.email) ORG.server.logAudit(me.name, 'invitation.send', d.admin.email, 'invitation', s.id);
@@ -4483,7 +4528,7 @@
     'Recent activity': 'The 10 newest changes to student records and assessments across active schools. View all opens Change History.',
     'Outcomes by region': 'Average Social-Emotional and Cognitive band score (0–100) per country, across schools with results.',
     'Outcomes': 'Average Social-Emotional and Cognitive band score (0–100). Appears once a Midline or Endline is complete.',
-    'Board mix': 'How many partner schools follow each curriculum board.',
+    'Board mix': 'How many partner schools follow each curriculum board. A school with several boards counts under each one.',
     'Completion ranking': 'Schools — or school groups — ordered by assessment completion, highest first.',
     'Structure': 'Grades and sections with their student counts. Empty ones are removed automatically after ' + ORG.emptyStructureTtlDays + ' days.',
     'Onboarding': 'Setup checks worked out automatically from the school’s data: missing students or staff, no live assessment, empty sections close to removal.',
@@ -5069,17 +5114,25 @@
     var groupOpts = ORG.groups.filter(function (g) { return !g.archived || g.id === s.groupId; }).map(function (g) { return '<option value="' + g.id + '"' + (s.groupId === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('');
     openModal('Edit school', '<div class="tl-stack">' +
       '<label class="field">School name<input class="input" id="es-name" value="' + esc(s.name) + '"></label>' +
+      boardPickerHtml('es', boardStateFrom(schoolBoardList(s))) +
       '<label class="field">Type<input class="input" id="es-type" value="' + esc(s.type) + '"></label>' +
       '<div class="tl-fieldrow"><label class="field flex-1">City<input class="input" id="es-city" value="' + esc(s.city) + '"></label>' +
       '<label class="field flex-1">Country<input class="input" id="es-country" value="' + esc(s.country) + '"></label></div>' +
       '<label class="field">Group<select class="select" id="es-group">' + groupOpts + '</select></label>' +
       '</div>', function (close) {
         var nm = (document.getElementById('es-name').value || '').trim(); if (!nm) { toast('School name is required.'); return false; }
+        var bst = readBoardPicker('es'), bErr = boardError(bst); if (bErr) { toast(bErr); return false; }
         var country = document.getElementById('es-country').value;
-        ORG.server.updateSchool(s.id, { name: nm, type: document.getElementById('es-type').value, city: document.getElementById('es-city').value, country: country, region: country, groupId: document.getElementById('es-group').value });
+        ORG.server.updateSchool(s.id, { name: nm, boards: boardNames(bst), type: document.getElementById('es-type').value, city: document.getElementById('es-city').value, country: country, region: country, groupId: document.getElementById('es-group').value });
         ORG.server.logAudit(me.name, 'school.edit', nm, 'school', s.id);
         close(); toast('School updated.'); go('school', { id: s.id });
       }, 'Save changes');
+    wireBoardPicker('es');
+  }
+  // A school's boards as a list — the array when we have it, else split the display string.
+  function schoolBoardList(s) {
+    if (Array.isArray(s.boards)) return s.boards.slice();
+    return (s.board || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
   }
 
   function openRoleEditor(u, after) {

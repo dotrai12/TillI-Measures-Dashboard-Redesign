@@ -211,3 +211,29 @@ Also 22 Oct 2026: Users & Invitations merged into one menu item (see *Users* bel
 ### Users — no change requested
 *Feedback (1 Sep): invitations not used so far; role change used only once.*
 - 22 Oct 2026: Users and Invitations are now one menu item (**Users & Invitations**) with tabs, a shared filter bar (search · role · school · school group) and a paged Users table — one sidebar line instead of two.
+
+---
+
+## Known issues to share with Mayur (23 Oct 2026)
+
+Changes made on 23 Oct 2026: **Board** is required (Add School and Edit school), **Other** asks for the board name, Edit school can change boards, Board mix counts each board separately, **Staff Members** counts real staff accounts, and Control Room **Recent activity** shows Change History.
+
+Open issues that came out of those changes:
+
+**Board**
+- **Bars can add up to more than the school count.** A school with several boards counts once under each board in Analytics → Board mix, so the total won't match *Active Schools*. *Possible fix:* a line under the chart such as "N schools · M run more than one board".
+- **Board names typed under Other aren't matched to each other.** "Montessori" and "montessori", or a typo, each get their own bar. *Possible fix:* when saving, match the typed name to an existing one regardless of upper/lower case.
+- **Older schools saved as plain "Other" can't be saved until someone types the board name.** This is intended, but it may surprise whoever opens Edit school.
+- **Some school edits are lost on reload.** On schools created through the wizard, changes to name, type, city and country disappear after a reload. Only board and group are saved properly. *Possible fix:* one save call that covers every field.
+
+**Staff Members tile**
+- **Invited School Group Admins aren't counted.** They're stored as accounts but not added to the platform user list, so they're missing from the tile and from Users. *Possible fix:* add them to the list when they're invited, or merge accounts into the count.
+- **The "+N" badges on the other stat tiles are made up.** They should come from real history once it exists, or be removed.
+
+**Recent activity (Control Room)**
+- **Admin-only actions are no longer on the Control Room.** Template publishes, role changes, archives and the system's "auto-removed empty section" entries only appear in the Audit Trail. *Possible fix:* a small "Admin actions →" link next to View all.
+- **View all can show fewer changes than Recent activity.** Change History opens on *Past 7 days*, but Recent activity shows the 10 newest changes from any date, so on a quiet week some rows won't appear after clicking View all. *Possible fix:* let the link set the date range (e.g. `?range=all`).
+- **One busy school can fill all 10 rows.** For example, a teacher entering a whole class at once. *Possible fix:* group rows by school, or limit how many rows one school can take.
+
+**Change History**
+- **A school's sample history disappears when it goes live.** Sample history is only generated for schools without a live data store. When a school switches to live, its sample rows disappear and only copied Audit Trail rows are left. *Possible fix:* pre-fill the live store with the sample history when the school switches.

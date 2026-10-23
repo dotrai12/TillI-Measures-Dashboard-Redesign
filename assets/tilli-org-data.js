@@ -274,7 +274,7 @@
       id: api.school_id, live: true, created: true, code: api.code || api.school_id,
       name: api.name, type: 'Independent school',
       city: api.city || '', country: api.country || '', region: api.country || '',
-      board: api.board || 'Other', groupId: grp.id, groupName: grp.name,
+      board: api.board || 'Other', boards: api.boards || null, groupId: grp.id, groupName: grp.name,
       students: st.students, staff: st.staff, coordinator: coord,
       joinCode: api.joinCode || '',
       joined: 'Sep 2025', stage: 'baseline', status: 'active',
@@ -996,7 +996,7 @@
     // back to the old in-memory-only record if TilliAPI isn't present.
     if (window.TilliAPI && window.TilliAPI.createSchoolFull) {
       var res = window.TilliAPI.createSchoolFull({
-        name: input.name, board: input.board, city: input.city, country: input.country,
+        name: input.name, board: input.board, boards: input.boards, city: input.city, country: input.country,
         grades: input.grades, admin: input.admin,
         groupId: input.groupId && input.groupId !== 'g-none' ? input.groupId : null,
       });
@@ -1043,7 +1043,7 @@
       id: id, live: false, code: makeSchoolCode(name), name: name,
       type: input.type || 'Independent school',
       city: input.city || '', country: input.country || '', region: input.country || '',
-      board: input.board || 'Other', groupId: group.id, groupName: group.name,
+      board: input.board || 'Other', boards: input.boards || null, groupId: group.id, groupName: group.name,
       students: studentTotal, staff: admin ? 1 : 0,
       coordinator: admin ? { name: (admin.name || admin.email).trim(), email: admin.email.trim() }
                          : { name: '—', email: '' },
@@ -1195,6 +1195,10 @@
   function updateSchool(id, patch) {
     var s = byId(id); if (!s) return null;
     ['name', 'type', 'city', 'country', 'region'].forEach(function (k) { if (patch[k] != null) s[k] = patch[k]; });
+    if (Array.isArray(patch.boards) && patch.boards.length) {
+      s.boards = patch.boards.slice(); s.board = s.boards.join(', ');
+      if (s.created && window.TilliAPI && window.TilliAPI.setSchoolBoards) window.TilliAPI.setSchoolBoards(s.id, s.boards);
+    }
     if (patch.groupId != null) {
       s.groupId = patch.groupId; s.groupName = (GROUPS.find(function (g) { return g.id === patch.groupId; }) || GROUPS[0]).name;
       if (s.created && window.TilliAPI && window.TilliAPI.setSchoolGroup) window.TilliAPI.setSchoolGroup(s.id, patch.groupId);

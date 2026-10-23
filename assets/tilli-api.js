@@ -1047,6 +1047,7 @@
 
     db.schools[id] = {
       school_id:id, name:name, board:input.board||'CBSE',
+      boards: Array.isArray(input.boards) && input.boards.length ? input.boards.slice() : null,
       city:input.city||'', country:input.country||'',
       verified:true, status:'active', claimMethod:'code',
       joinCode:joinCode, code:code, source:'created', createdAt:Date.now(),
@@ -1130,6 +1131,13 @@
     var db = getDB(); var sc = db.schools[schoolId];
     if (!sc) return false;
     sc.group_id = (groupId && groupId !== 'g-none') ? groupId : null; write(db);
+    return true;
+  }
+  // Board(s) edited from the platform admin. `board` stays the display string.
+  function setSchoolBoards(schoolId, boards){
+    var db = getDB(); var sc = db.schools[schoolId];
+    if (!sc || !Array.isArray(boards) || !boards.length) return false;
+    sc.boards = boards.slice(); sc.board = boards.join(', '); write(db);
     return true;
   }
   function staffFor(schoolId){ var db=getDB(); return (db.staff[schoolId]||[]).slice(); }
@@ -1924,6 +1932,7 @@
     historyFor: historyFor,
     historyAcross: historyAcross,
     setSchoolGroup: setSchoolGroup,
+    setSchoolBoards: setSchoolBoards,
     // dev
     reset: reset,
     _dump: _dump,
