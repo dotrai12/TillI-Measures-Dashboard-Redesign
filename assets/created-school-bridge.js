@@ -53,6 +53,29 @@
   var apiSections = API.sectionsForSchool(id);
   var apiStaff    = API.staffFor(id);
 
+  // ?year=<id> of a CLOSED year → the whole dashboard reads that year's archive:
+  // its classes (names as they were), who sat where, its results, its windows.
+  // Read-only — admin.js hides every write action while viewing it.
+  var years = API.yearsFor ? API.yearsFor(id) : [];
+  var past = years.filter(function (y) { return y.id === qp.get('year') && y.status === 'closed'; })[0] || null;
+  var arch = past && API.yearArchive ? API.yearArchive(id, past.id) : null;
+  if (arch) {
+    outcomes = arch.outcomes || {};
+    pointStatus = {};
+    [['baseline', 'Baseline'], ['midline', 'Midline'], ['endline', 'Endline']].forEach(function (pr) {
+      var ran = Object.keys(arch.deployments || {}).some(function (k) { var d = arch.deployments[k]; return d.phase === pr[1] && !d.notRun; });
+      pointStatus[pr[0]] = ran ? 'complete' : 'upcoming';
+    });
+    var enrol = arch.enrolments || {};
+    apiStudents = API.studentsForSchool(id, { includeLeft: true }).filter(function (s) { return enrol[s.student_id]; }).map(function (s) {
+      var e = enrol[s.student_id]; return Object.assign({}, s, { grade: e.grade, section: e.section, section_id: e.section_id });
+    });
+    // Only the classes that had children that year (the snapshot keeps every section).
+    var used = {}; Object.keys(enrol).forEach(function (k) { used[enrol[k].section_id] = 1; });
+    apiSections = Object.keys(arch.sections || {}).filter(function (sid) { return used[sid]; })
+      .map(function (sid) { return Object.assign({ section_id: sid }, arch.sections[sid]); });
+  }
+
   // ---- teachers (staff → demo teacher shape). Email doubles as the id. ----
   var teachers = apiStaff.filter(function (u) { return u.role === 'teacher'; }).map(function (u, i) {
     var sec = apiSections.filter(function (s) { return s.section_id === u.section_id; })[0] || {};
@@ -117,5 +140,6 @@
   };
   // Signals the full dashboard to use the REAL lifecycle (deploy + completion),
   // not the demo lifecycle dropdown, and to blank the hardcoded demo concern queue.
-  window.TILLI_CREATED = { schoolId: id, pointStatus: pointStatus };
+  // year: the closed year being viewed (null = the current year); years: all of them.
+  window.TILLI_CREATED = { schoolId: id, pointStatus: pointStatus, year: arch ? past : null, years: years };
 })();

@@ -215,7 +215,7 @@
     db.schools[sc.id] = {
       school_id: sc.id, name: sc.name, board: sc.board || 'CBSE', boards: sc.boards || null,
       city: sc.city || '', country: sc.country || '',
-      joinCode: sc.joinCode || '',    // teacher self-sign-up verification code
+      code: sc.joinCode || '', joinCode: sc.joinCode || '',   // one school code: links + teacher self-sign-up
       verified: true,                 // Tilli verified this demo school (spec A1)
       status: 'active',
       claimMethod: 'code',            // spec §9.1 per-school setting: default to claim code
@@ -412,7 +412,7 @@
       var firstStart = Math.min.apply(null, HERO_PHASES.filter(function(ph){ return H.plan[ph]; }).map(function(ph){ return H.plan[ph][0]; }));
       var created = H.joined ? Date.parse(H.joined + 'T09:00:00') : now + (firstStart - 30) * DAY_MS;
       db.schools[id] = { school_id: id, name: H.name, board: H.board, city: H.city, country: H.country,
-        verified: true, status: 'active', claimMethod: 'code', joinCode: makeJoinCode(id), code: H.code,
+        verified: true, status: 'active', claimMethod: 'code', joinCode: H.code, code: H.code,
         source: 'created', seeded: true, createdAt: created, group_id: H.group_id };
       var admin = { name: H.admin[0], email: low(H.admin[1]), role: 'admin' };
       db.adminMemberships.push({ user_id: admin.email, school_id: id, role: 'admin', name: admin.name, status: 'active' });
@@ -582,6 +582,11 @@
     if (!db.selfReports){ db.selfReports = {}; write(db); }
     // The four fully-populated demo schools (after history, which re-seeds itself).
     if (db.heroSeedVer !== HERO_SEED_VER){ seedHeroSchools(db); db.heroSeedVer = HERO_SEED_VER; write(db); }
+    // One school code: the separate teacher join code is folded into it.
+    if (!db.oneCodeVer){
+      Object.keys(db.schools).forEach(function(id){ var sc = db.schools[id]; if (sc.code) sc.joinCode = sc.code; else if (sc.joinCode) sc.code = sc.joinCode; });
+      db.oneCodeVer = 1; write(db);
+    }
     // Expected class sizes arrived later: a class that predates them is taken
     // to be complete as it stands (its current headcount; none if empty).
     if (!db.expectedVer){
@@ -1210,11 +1215,6 @@
   // Deterministic per-school RNG so the same wizard input always yields the
   // same roster (names/adm numbers) — no surprises on reload.
   function schoolRng(seedStr){ var s = hashStr(seedStr) || 1; return function(){ s = (Math.imul(s,1664525) + 1013904223) >>> 0; return s/4294967296; }; }
-  function makeJoinCode(schoolId){
-    var abc='ABCDEFGHJKMNPQRSTUVWXYZ23456789', h=seeded(schoolId,'join'), out='';
-    for(var i=0;i<6;i++){ out+=abc[h%abc.length]; h=Math.floor(h/abc.length) ^ (h<<3); h>>>=0; }
-    return out;
-  }
 
   // input: { name, board, city, country, grades:[{grade, students, sections:[{name,students}]}],
   //          admin:{name,email} }  (shape produced by the wizard's draft object)
@@ -1230,7 +1230,7 @@
     var code = (up(name).replace(/[^A-Z]/g,'').slice(0,4) || 'SCHL');
     while (code.length < 4) code += 'X';
     code = code + '-' + (1000 + Math.floor(R()*9000));
-    var joinCode = makeJoinCode(id);
+    var joinCode = code;   // one school code does everything (links, teacher sign-up, student assessments)
 
     db.schools[id] = {
       school_id:id, name:name, board:input.board||'CBSE',
@@ -1254,7 +1254,10 @@
       var secs = (g.sections||[]).slice();
       if (!secs.length && (parseInt(g.students,10)||0) > 0) secs = [{ name:'A', students:parseInt(g.students,10)||0 }];
       return { grade:g.grade, base:g.base || inferBaseGrade(g.grade), sections:secs };
-    }).filter(function(g){ return g.grade && g.sections.length; });
+    }).filter(function(g){ return g.grade; });
+    // A grade added without sections is kept (it shows in Structure); students
+    // and teachers attach to sections, so it holds nobody until one is added.
+    db.schools[id].emptyGrades = grades.filter(function(g){ return !g.sections.length; }).map(function(g){ return { grade:g.grade, base:g.base }; });
 
     var teachers = [];
     grades.forEach(function(g){
@@ -1297,12 +1300,7 @@
   // Teacher self-join by the school join code (spec: teacher enters code, is
   // added as staff). Returns the school so the app can route to it. Section
   // scope is granted separately (ensureTeacherScope) when they pick a class.
-  function resolveJoinCode(codeStr){
-    var db = getDB(); var q = up(codeStr);
-    var ids = Object.keys(db.schools);
-    for (var i=0;i<ids.length;i++){ if (up(db.schools[ids[i]].joinCode||'')===q) return Object.assign({}, db.schools[ids[i]]); }
-    return null;
-  }
+  function resolveJoinCode(codeStr){ return resolveSchoolCode(codeStr); }
   // Teacher self-sign-up: the teacher picked a school, then proves it with that
   // school's code. Case / spaces / hyphens are ignored. Never reveals which
   // school a wrong code belongs to.
@@ -1310,8 +1308,8 @@
     var sc = resolveSchool(schoolNameOrId);
     if (!sc) return { ok:false, reason:'unknown_school' };
     var clean = function(x){ return up(x).replace(/[^A-Z0-9]/g,''); };
-    if (!sc.joinCode) return { ok:false, reason:'no_code' };
-    if (!clean(codeStr) || clean(codeStr)!==clean(sc.joinCode)) return { ok:false, reason:'mismatch' };
+    if (!sc.code) return { ok:false, reason:'no_code' };
+    if (!clean(codeStr) || clean(codeStr)!==clean(sc.code)) return { ok:false, reason:'mismatch' };
     return { ok:true, school:Object.assign({}, sc) };
   }
   function listSchools(){ var db=getDB(); return Object.keys(db.schools).map(function(k){ return Object.assign({}, db.schools[k]); }); }
@@ -1415,11 +1413,23 @@
     if (!sec.base_section) sec.base_section = sec.section || '';
   }
   function schoolSections(db, schoolId){ return Object.keys(db.sections).map(function(k){ return db.sections[k]; }).filter(function(s){ return s.school_id===schoolId; }); }
+  // Grades kept without any section (see createSchoolFull) — once a section
+  // exists for the grade, the section is the record and this entry is ignored.
+  function emptyGradesOf(db, schoolId){
+    var sc = db.schools[schoolId], secs = schoolSections(db, schoolId);
+    return ((sc && sc.emptyGrades) || []).filter(function(g){ return !secs.some(function(x){ return low(x.grade)===low(g.grade); }); });
+  }
   function renameGrade(schoolId, oldGrade, newGrade){
     var db = getDB(); newGrade = norm(newGrade);
     if (!newGrade) return { ok:false, reason:'empty' };
     var secs = schoolSections(db, schoolId);
     var hit = secs.filter(function(s){ return low(s.grade)===low(oldGrade); });
+    var bare = emptyGradesOf(db, schoolId).filter(function(g){ return low(g.grade)===low(oldGrade); })[0];
+    if (!hit.length && bare){
+      if (low(oldGrade)!==low(newGrade) && (secs.some(function(s){ return low(s.grade)===low(newGrade); }) || emptyGradesOf(db, schoolId).some(function(g){ return low(g.grade)===low(newGrade); })))
+        return { ok:false, reason:'exists' };
+      bare.grade = newGrade; write(db); return { ok:true };
+    }
     if (!hit.length) return { ok:false, reason:'not_found' };
     if (low(oldGrade)!==low(newGrade) && secs.some(function(s){ return low(s.grade)===low(newGrade); })) return { ok:false, reason:'exists' };
     hit.forEach(function(s){ lockBase(db, s); s.grade = newGrade; s.name = (newGrade + ' ' + (s.section||'')).trim(); });
@@ -1450,7 +1460,9 @@
         students: mine.length, expected: sec.expected > 0 ? sec.expected : null,
         pending: mine.filter(function(s){ return s.approval==='pending'; }).length });
     });
-    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, base:baseGradeOf(schoolId, g), sections:byGrade[g] }; });
+    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, base:baseGradeOf(schoolId, g), sections:byGrade[g] }; })
+      .concat(emptyGradesOf(getDB(), schoolId).map(function(g){ return { grade:g.grade, base:g.base, sections:[] }; }))
+      .sort(function(p, q){ var at = function(b){ var i = BASE_GRADES.indexOf(b); return i < 0 ? 999 : i; }; return at(p.base) - at(q.base); });
     var staff = staffFor(schoolId);
     return { students:studs.length, sections:secs.length, grades:grades,
       staff:staff.length, teachers:staff.filter(function(x){return x.role==='teacher';}).length,
@@ -1672,7 +1684,7 @@
     var db = getDB(), clean = function(x){ return up(x).replace(/[^A-Z0-9]/g,''); }, q = clean(codeStr);
     if (!q) return null;
     var ids = Object.keys(db.schools);
-    for (var i=0;i<ids.length;i++){ var sc = db.schools[ids[i]]; if ((sc.code && clean(sc.code)===q) || (sc.joinCode && clean(sc.joinCode)===q)) return Object.assign({}, sc); }
+    for (var i=0;i<ids.length;i++){ var sc = db.schools[ids[i]]; if (sc.code && clean(sc.code)===q) return Object.assign({}, sc); }
     return null;
   }
   // Schools where this email is an active teacher (the student link only lets teachers in).
@@ -1885,11 +1897,48 @@
     return { year: currentYear(schoolId), live: lanes.filter(function(l){ return l.status === 'Live'; }), scheduled: lanes.filter(function(l){ return l.status === 'Scheduled'; }),
       ended: lanes.filter(function(l){ return l.status === 'Ended'; }), grades: list };
   }
+  /* ---------- Year-end requests (school → Tilli) ----------
+     Only the Tilli team starts a new year. A school admin asks for it; the
+     request shows on Tilli's Control Room and closes when the year starts.
+     The school admin then sees a notice + "See grade migration". */
+  function requestNewYear(schoolId, actorEmail){
+    var db = getDB(), cur = currentIn(db, schoolId);
+    if (!cur) return { ok: false, reason: 'not_found' };
+    if (roleOf(db, actorEmail, schoolId) !== 'admin') return { ok: false, reason: 'not-authorized' };
+    db.yearRequests = db.yearRequests || {};
+    var open = db.yearRequests[schoolId];
+    if (open && open.status === 'open') return { ok: true, request: clone(open) };
+    var r = db.yearRequests[schoolId] = { school_id: schoolId, year: cur.label, by: low(actorEmail), byName: nameFor(db, actorEmail, schoolId), at: Date.now(), status: 'open' };
+    logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'year.request',
+      changes: [{ label: 'Academic year', from: cur.label, to: 'next year' }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok: true, request: clone(r) };
+  }
+  function yearRequest(schoolId){ var r = (getDB().yearRequests || {})[schoolId]; return r ? clone(r) : null; }
+  function openYearRequests(){
+    var db = getDB(), all = db.yearRequests || {};
+    return Object.keys(all).map(function(k){ return all[k]; }).filter(function(r){ return r.status === 'open'; })
+      .map(function(r){ var o = clone(r); o.school_name = (db.schools[r.school_id] || {}).name || r.school_id; return o; });
+  }
+  // The current year's rollover, while this admin hasn't dismissed its notice.
+  function yearNotice(schoolId, email){
+    var db = getDB(), cur = currentIn(db, schoolId);
+    if (!cur || !cur.rollover) return null;
+    if ((cur.noticeSeen || []).indexOf(low(email)) >= 0) return null;
+    return { year: cur.label, startedAt: cur.startedAt, rollover: clone(cur.rollover) };
+  }
+  function dismissYearNotice(schoolId, email){
+    var db = getDB(), cur = currentIn(db, schoolId); if (!cur) return;
+    cur.noticeSeen = (cur.noticeSeen || []).concat([low(email)]); write(db);
+  }
+
   // Close the current year and open the next. opts: { label, start, end,
   // gradeActions:{ 'Grade 1':'promote'|'retain'|'graduate' }, endOpen, actorEmail }.
   function startNewYear(schoolId, opts){
     var db = getDB(); opts = opts || {};
     var cur = currentIn(db, schoolId); if (!cur) return { ok: false, reason: 'not_found' };
+    // SERVER-SIDE: Tilli team only — school staff ask Tilli instead (requestNewYear).
+    if (roleOf(db, opts.actorEmail, schoolId)) return { ok: false, reason: 'not-authorized' };
     var start = opts.start, end = opts.end, label = norm(opts.label) || (start && end ? yearLabel(start, end) : '');
     if (!start || !end || start > end) return { ok: false, reason: 'dates' };
     if (start <= cur.start) return { ok: false, reason: 'before_current' };
@@ -1918,13 +1967,15 @@
     if (db.selfReports) db.selfReports[schoolId] = {};
 
     // 3) Move children by base grade (Grade 1 A → Grade 2 A, whatever the school calls them).
-    var acts = opts.gradeActions || {}, moved = { promoted: 0, retained: 0, graduated: 0 };
+    var acts = opts.gradeActions || {}, moved = { promoted: 0, retained: 0, graduated: 0 }, byGrade = {};
+    var tally = function(from, act, to){ var k = from + '|' + act; (byGrade[k] = byGrade[k] || { from: from, action: act, to: to || '', students: 0 }).students++; };
     studs.forEach(function(x){
       var sec = db.sections[x.section_id] || {};
       var b = sec.base_grade || baseGradeIn(db, schoolId, x.grade), nb = BASE_GRADES[BASE_GRADES.indexOf(b) + 1];
       var act = acts[b] || (nb ? 'promote' : 'graduate');
-      if (act === 'retain' || !b){ moved.retained++; return; }
-      if (act === 'graduate' || !nb){ x.status = 'graduated'; moved.graduated++; return; }
+      if (act === 'retain' || !b){ moved.retained++; tally(b || x.grade, 'retain', b || x.grade); return; }
+      if (act === 'graduate' || !nb){ x.status = 'graduated'; moved.graduated++; tally(b, 'graduate'); return; }
+      tally(b, 'promote', nb);
       var letter = sec.base_section || sec.section || 'A';
       var target = secs.filter(function(t){ return t.base_grade === nb && low(t.base_section) === low(letter); })[0]
         || secs.filter(function(t){ return t.base_grade === nb; })[0];
@@ -1943,8 +1994,14 @@
     secs.forEach(function(t){ if (intake[t.section_id]) t.expected = intake[t.section_id]; });
 
     // 4) The new current year.
-    var y = { id: yearId(label), label: label, start: start, end: end, status: 'current', startedAt: now, startedBy: low(opts.actorEmail) };
+    var y = { id: yearId(label), label: label, start: start, end: end, status: 'current', startedAt: now, startedBy: low(opts.actorEmail),
+      // What the rollover did — the school admin's "See grade migration" reads this.
+      rollover: { from: cur.label, moved: moved, grades: Object.keys(byGrade).map(function(k){ return byGrade[k]; })
+        .sort(function(p, q){ return BASE_GRADES.indexOf(p.from) - BASE_GRADES.indexOf(q.from); }) } };
     db.years[schoolId].push(y);
+    // A school's open "please start next year" request is now answered.
+    var req = (db.yearRequests || {})[schoolId];
+    if (req && req.status === 'open'){ req.status = 'done'; req.doneAt = now; req.doneYear = label; }
     logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], items: [], kind: 'assessment', action: 'year.start',
       changes: [{ label: 'Academic year', from: cur.label, to: label }], actor: actorFor(db, opts.actorEmail, schoolId) });
     write(db);
@@ -2440,6 +2497,11 @@
     yearSummary: yearSummary,
     yearReadiness: yearReadiness,
     startNewYear: startNewYear,
+    requestNewYear: requestNewYear,
+    yearRequest: yearRequest,
+    openYearRequests: openYearRequests,
+    yearNotice: yearNotice,
+    dismissYearNotice: dismissYearNotice,
     renameGrade: renameGrade,
     renameSection: renameSection,
     setSchoolBoards: setSchoolBoards,

@@ -6,7 +6,9 @@
 
 **Built:** academic years per school; past years archived read-only (deployments, completions, results, classes, who sat where); **Start new year** (close the year, end live windows, move children by base grade, empty planner); year bar + read-only past year + **Year over year** on the school's Assessments tab; **Year** column + filter on Deployments; the leadership dashboard shows the real current year; **Heritage Oaks** seeded in its 3rd year; Mission 15 in the walkthrough.
 
-**Next:** year switcher on the leadership dashboard, Trends (per child / base grade / cohort), teacher and parent past years, Ask Tilli year questions, year-scoped teacher observations.
+**Built 26 Oct 2026:** year switcher on the leadership dashboard (header picker; any closed year read-only across Overview, Outcomes, Reports, Roster); Start new year is Tilli-only, hidden until the year's windows have ended ("Close the year early…" otherwise) and confirmed by typing; school admins ask Tilli via Roster → Year-end, then see a notice + "See grade migration".
+
+**Next:** Trends (per child / base grade / cohort), teacher and parent past years, Ask Tilli year questions, year-scoped teacher observations.
 
 ## The scenario
 

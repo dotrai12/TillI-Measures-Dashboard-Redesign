@@ -66,7 +66,8 @@
     var API = window.TilliAPI;
     if (!API || !API.getDeployments || !SCHOOL_ID) return;
     var deps = [];
-    try { deps = API.getDeployments(SCHOOL_ID) || []; } catch (e) {}
+    var pastY = window.TILLI_CREATED && window.TILLI_CREATED.year;
+    try { deps = (pastY ? API.deploymentsIn(SCHOOL_ID, pastY.id) : API.getDeployments(SCHOOL_ID)) || []; } catch (e) {}
     POINTS.forEach(function (p) {
       var d = deps.find(function (x) { return String(x.phase || '').toLowerCase() === p.key && (x.start || x.end); });
       p.start = d ? d.start || '' : ''; p.end = d ? d.end || '' : '';
@@ -585,15 +586,19 @@
     return v;
   }
 
-  // ---- academic year (single year → header shows a static label, no selector) ----
-  // The school's current year from the shared store (past years are read-only
-  // on the platform admin for now, so only the current label shows here).
+  // ---- academic years ----
+  // Every year this school has had with Tilli (oldest first). viewYear is the one
+  // on screen: the current year, or a closed one picked in the header (read-only).
   var CUR_YEAR = window.TilliAPI && window.TilliAPI.currentYear && SCHOOL_ID ? window.TilliAPI.currentYear(SCHOOL_ID) : null;
-  var ACADEMIC_YEARS = [CUR_YEAR ? CUR_YEAR.label : '2026–27'];
+  var YEARS = (window.TILLI_CREATED && window.TILLI_CREATED.years) || (CUR_YEAR ? [CUR_YEAR] : []);
+  var VIEW_YEAR = (window.TILLI_CREATED && window.TILLI_CREATED.year) || CUR_YEAR;
+  var ACADEMIC_YEARS = [VIEW_YEAR ? VIEW_YEAR.label : '2026–27'];
 
   window.ADMIN_DATA = {
     school: TS.school, schoolId: SCHOOL_ID,
     academicYears: ACADEMIC_YEARS,
+    years: YEARS, currentYear: CUR_YEAR, viewYear: VIEW_YEAR,
+    pastYear: !!(window.TILLI_CREATED && window.TILLI_CREATED.year),   // viewing a closed year — read-only
     bands: BANDS, bandOf: bandOf, bandMeta: bandMeta,
     bandThresholds: { emergingMax: BAND_EMERGING_MAX, developingMax: BAND_DEVELOPING_MAX },
     points: POINTS, completedPoints: COMPLETED_POINTS, latestComplete: LATEST_COMPLETE,

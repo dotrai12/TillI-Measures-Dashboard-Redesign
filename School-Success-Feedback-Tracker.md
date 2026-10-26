@@ -263,6 +263,15 @@ Open issues that came out of those changes:
 - **Starting a new year can't be undone yet.** Use it on a demo school. *Possible fix:* allow undo while the new year has no deployments.
 - **Two sections can merge on promotion.** If Grade 1 has A and B but Grade 2 only has A, both move into Grade 2 A. *Possible fix:* create a matching Grade 2 B automatically, or ask in the wizard.
 
+**Rollout fix plan — Phase 1** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
+- **One school code is now also the teacher sign-up code.** Anyone holding a parent or student link (which contains the code) can sign up as a teacher. *Possible fix:* teachers who self-join wait for the school admin to confirm them.
+- **Existing teacher join codes stopped working.** Schools that had shared the old 6-letter join code must share the school code instead (e.g. HROK-4410).
+- **The year picker is hidden on phones** (the header year chip is desktop-only). On a phone, past years are reachable only from the Outcomes / Reports empty state. *Possible fix:* put the picker in the account menu on mobile.
+- **Past-year view reloads the page.** The dashboard is built once per year, so switching years is a full reload. Fine for now; a real backend would fetch per year.
+- **History isn't filtered by year** in the past-year view — it shows every change at the school.
+- **Grades & sections additions on wizard-created schools still don't persist** (existing issue) — a section added there to a section-less grade disappears on reload.
+- **Fixed in passing:** actions that refresh the screen you're on (Start new year, Approve / Turn down a new student) didn't redraw until you navigated away — they do now.
+
 **Expected class size + new-student approval** (added 23 Oct 2026)
 - **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.
 - **A new school's sections start with no size unless the wizard count is filled in.** With no size, every child a teacher adds needs approval, so a school onboarding teachers before sizes are set floods its admin with approvals. *Possible fix:* make the per-section count required in the wizard, or default it to a typical class size.

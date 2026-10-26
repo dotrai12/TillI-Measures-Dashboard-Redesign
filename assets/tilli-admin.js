@@ -61,7 +61,7 @@
   var ROLE_CAPS = {
     'Super Admin':        'Full access — sets up schools, assigns admins, and manages every user.',
     'School Group Admin': 'Manages every school in the group — assigns school admins, teachers and students.',
-    'School Admin':       'Adds teachers and students, and shares the school join code so teachers can self-add.',
+    'School Admin':       'Adds teachers and students, and shares the school code so teachers can self-add.',
     'Teacher':            'Joins with the school code and adds their own students. Cannot invite other staff.',
     'none':               'No access yet — assign a role before this person can sign in.'
   };
@@ -180,7 +180,9 @@
     if (GROUP ? !GROUP_SCREENS[screen] : (screen === 'groupoverview' || screen === 'gschool')) screen = HOME;
     return { screen: screen, params: params };
   }
-  function go(screen, params) { location.hash = buildHash(screen, params); }
+  // Same address → no hashchange fires, so redraw directly (e.g. after an action
+  // that should refresh the screen you're already on).
+  function go(screen, params) { var h = buildHash(screen, params); if (location.hash === h) render(); else location.hash = h; }
   function href(screen, params) { return buildHash(screen, params); }
 
   // ---------- chrome ----------
@@ -450,7 +452,7 @@
     'zero-students': { icon: '◎', tone: 'warn' }, 'no-role': { icon: '◌', tone: 'low' },
     invites: { icon: '✉', tone: 'warn' }, duplicates: { icon: '⧉', tone: 'warn' },
     drafts: { icon: '✎', tone: 'low' }, deployments: { icon: '⏻', tone: 'warn' },
-    'student-requests': { icon: '＋', tone: 'warn' }, 'short-classes': { icon: '▢', tone: 'low' },
+    'student-requests': { icon: '＋', tone: 'warn' }, 'short-classes': { icon: '▢', tone: 'low' }, 'year-requests': { icon: '↻', tone: 'warn' },
   };
   SCREEN.controlroom = function (params, body) {
     var cr = ORG.server.controlRoom();
@@ -590,13 +592,16 @@
 
     var q = schState.q.trim().toLowerCase();
     // Top level shows groups + independent schools; searching / archived / flags flatten to a plain list.
-    var grouped = !q && schState.flag !== 'zero-students';
+    var grouped = !q && !schState.flag;
+    var yearAsk = {};
+    if (schState.flag === 'year-request' && window.TilliAPI) window.TilliAPI.openYearRequests().forEach(function (r) { yearAsk[r.school_id] = 1; });
 
     // Every school in the current view (tab + country + flag + search) — the flat
     // list, and what the Schools CSV exports even when the screen shows groups.
     var rows = all.filter(function (s) {
       if (tabActive ? s.archived : !s.archived) return false;
       if (schState.flag === 'zero-students' && s.students !== 0) return false;
+      if (schState.flag === 'year-request' && !yearAsk[s.id]) return false;
       if (q && (s.name + ' ' + s.code).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -626,8 +631,9 @@
         : '<div class="ui-empty">' + (all.length ? 'No schools match.' : 'No schools yet — add your first school.') + '</div>';
     }
 
-    var flagBanner = schState.flag === 'zero-students'
-      ? '<div class="tl-filterbanner">Filtered to <b>schools with 0 students</b> · <button class="btn-link" id="sch-clearflag">clear</button></div>' : '';
+    var flagName = { 'zero-students': 'schools with 0 students', 'year-request': 'schools asking to start next year' }[schState.flag];
+    var flagBanner = flagName
+      ? '<div class="tl-filterbanner">Filtered to <b>' + flagName + '</b> · <button class="btn-link" id="sch-clearflag">clear</button></div>' : '';
 
     var countrySeg = countries.length > 1 ? '<div class="ui-seg tl-country-seg" role="group" aria-label="Filter by country">' +
       '<button class="' + (!schState.country ? 'on' : '') + '" data-country="" title="Schools in every country">All countries <b>' + inTab.length + '</b></button>' +
@@ -1238,13 +1244,13 @@
       var grp = (ORG.groups.find(function (g) { return g.id === d.groupId; }) || ORG.groups[0]).name;
       function row(k, v) { return '<div class="ws-rev-row"><span>' + esc(k) + '</span><b>' + esc(v || '—') + '</b></div>'; }
       var admin = d.admin.email ? (d.admin.name || d.admin.email) + ' · ' + d.admin.email : 'None — add later';
-      return '<p class="tl-muted">Confirm and create. You\'ll land on the new school\'s hub. <span class="ui-tag">gated</span></p>' +
+      return '<p class="tl-muted">Check the details, then create. You\'ll land on the new school\'s page.</p>' +
         '<div class="ws-review">' +
           row('Name', d.name) + row('Board', d.boards.join(', ')) +
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
           row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
           row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
-          row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base); }).join(', ')) +
+          row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base) + (!g.sections.length && !(parseInt(g.students, 10) || 0) ? ' (no sections yet)' : ''); }).join(', ')) +
           row('First admin', admin) +
         '</div>';
     }
@@ -1595,7 +1601,7 @@
       ? '<div class="tl-tree">' + d.structure.grades.map(function (g) {
           var body = g.sections.length
             ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + baseTag(sec.name, sec.base, 'sec') + roomChipHtml(roomFor(s.id, g.grade, sec.name), sec.students) + '</span>'; }).join('')
-            : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i></span>';
+            : '<span class="tl-tree-sec" title="Students and teachers are placed in sections — add a section to this grade before adding them.">No sections yet' + ((parseInt(g.students, 10) || 0) ? ' <i>' + parseInt(g.students, 10) + '</i>' : '') + '</span>';
           return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + baseTag(g.grade, g.base || inferBase(g.grade)) + body + '</div>';
         }).join('') + '</div>'
       : '<div class="ui-empty">No grades/sections yet.</div>';
@@ -1725,12 +1731,12 @@
           '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
     }).join('') : '<tr><td colspan="5"><div class="ui-empty">No invitations.</div></td></tr>';
 
-    // Teacher self-join: a teacher who enters this school code is auto-added
-    // as staff — no per-teacher invite needed. School Admins share it; the
-    // explicit invite above stays available for named onboarding.
-    var teacherJoin = (s.created && s.joinCode) ? s.joinCode : s.code;
-    var joinCode = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Teacher join code</h3>' +
-        '<p class="ui-mod-note">Share with teachers — anyone who enters this code is auto-added to ' + esc(s.name) + ' as a Teacher. No invite required.</p></div></div>' +
+    // One school code: teachers enter it to join (no per-teacher invite needed),
+    // and it's part of every link the school shares. The explicit invite below
+    // stays available for named onboarding.
+    var teacherJoin = s.code;
+    var joinCode = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">School code</h3>' +
+        '<p class="ui-mod-note">Teachers enter this to join ' + esc(s.name) + ' as a Teacher — no invite needed. It’s also part of every link this school shares, so share links only inside the school.</p></div></div>' +
       '<div class="tl-linkrow"><div><b>School code</b><span class="mono">' + esc(teacherJoin) + '</span></div>' +
         '<button class="btn btn-outline btn-sm" data-copy="' + esc(teacherJoin) + '">Copy code</button></div></div>';
 
@@ -1755,8 +1761,8 @@
           '<p class="ui-mod-note">Everything you need to log in as each role for this school (all mock / localStorage). Claim method: <b>code</b>.</p></div></div>' +
         '<div class="ws-review">' +
           '<div class="ws-rev-row"><span><b>Coordinator login</b> (School dashboard)</span><b class="mono">' + esc(s.coordinator ? s.coordinator.email : '—') + '</b></div>' +
-          '<div class="ws-rev-row"><span><b>Teacher join code</b></span><span class="tl-coderow"><b class="mono">' + esc(teacherJoin) + '</b>' +
-            '<button class="tl-rowact" data-copy="' + esc(teacherJoin) + '" title="Copy teacher join code" aria-label="Copy teacher join code">' + ICONS.copy + '</button></span></div>' +
+          '<div class="ws-rev-row"><span><b>School code</b> (teacher sign-up, student assessments)</span><span class="tl-coderow"><b class="mono">' + esc(teacherJoin) + '</b>' +
+            '<button class="tl-rowact" data-copy="' + esc(teacherJoin) + '" title="Copy school code" aria-label="Copy school code">' + ICONS.copy + '</button></span></div>' +
           tRows +
           '<div class="ws-rev-row" style="border-top:1px solid var(--line-200);margin-top:6px;padding-top:10px"><span><b>Parent claim codes</b> (school = this school, then the code)</span><b></b></div>' +
           (cRows || '<div class="ws-rev-row"><span class="tl-muted">Add students first — each child gets a claim code a parent uses to link to them.</span></div>') +
@@ -1769,7 +1775,7 @@
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Invitations</h3></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Recipient</th><th>Role</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody>' + invRows + '</tbody></table></div></div>';
     el.querySelector('[data-invite]').addEventListener('click', function () { openInvite(s.id); });
-    el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy, 'Teacher join code copied.'); }); });
+    el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy, 'School code copied.'); }); });
     el.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation', s.id); toast('Invitation resent to ' + b.dataset.resend + '.'); }); });
     el.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation', schoolId: s.id }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
     // Staff table — same pager as the Students tab (20 / 50 / 100 per page).
@@ -2481,11 +2487,20 @@
         esc(y.label) + (y.status === 'current' ? ' · current' : '') + '</button>';
     }).join('') + '</div>';
     var n = yrs.indexOf(cur) + 1;
+    // Start new year is offered once every window deployed this year has ended.
+    // Before that, the Tilli team only gets a quiet "close early" link.
+    var rd = viewingCur && !GROUP ? window.TilliAPI.yearReadiness(s.id) : null;
+    var ready = rd && rd.ended.length && !rd.live.length && !rd.scheduled.length;
+    var newYearBtn = !rd ? '' : ready
+      ? '<button class="btn btn-outline btn-sm" data-yearnew title="Close ' + esc(cur.label) + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>'
+      : '<button class="btn-link tl-yearearly" data-yearnew data-early="1" title="Start new year appears once every assessment window in ' + esc(cur.label) + ' has ended. Use this only if the school has asked to close the year early.">Close the year early…</button>';
+    var ask = rd && window.TilliAPI.yearRequest(s.id), askNote = ask && ask.status === 'open'
+      ? '<div class="ui-note warn mt-2"><span aria-hidden="true">↻</span><span><b>' + esc(ask.byName || ask.by) + '</b> asked on ' + esc(fmtJoined(localISO(new Date(ask.at)))) + ' to start the next academic year.</span></div>' : '';
     return '<div class="ui-card mb-gap tl-yearbar"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Academic year</h3>' +
-        '<p class="ui-mod-note">' + (cur ? esc(yearRange(cur)) + ' · year ' + n + ' with Tilli' : '') + '</p></div>' +
+        '<p class="ui-mod-note">' + (cur ? esc(yearRange(cur)) + ' · year ' + n + ' with Tilli' : '') + '</p>' + askNote + '</div>' +
         '<div class="tl-inline-actions">' +
           (viewingCur ? '<button class="btn btn-outline btn-sm" data-yearedit title="Change this year’s name or dates. Dates are set per school.">Edit dates</button>' : '') +
-          (GROUP ? '' : '<button class="btn btn-primary btn-sm" data-yearnew title="Close ' + esc(cur ? cur.label : 'this year') + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>') +
+          newYearBtn +
         '</div></div>' + seg + '</div>';
   }
   function laneChip(st) { return '<span class="ui-chip ' + (st === 'Ended' ? 'ok' : st === 'Live' ? 'active' : 'muted') + '">' + esc(st) + '</span>'; }
@@ -2542,8 +2557,8 @@
       }, 'Save');
   }
   // Start next year: close this one (read-only), move children up by base grade, empty planner.
-  function openNewYear(s) {
-    var API = window.TilliAPI, rd = API.yearReadiness(s.id), cur = rd.year;
+  function openNewYear(s, early) {
+    var API = window.TilliAPI, rd = API.yearReadiness(s.id), cur = rd.year, token = 'CLOSE ' + cur.label;
     var isoPlusDays = function (iso, n) { var t = new Date(iso + 'T00:00:00'); t.setDate(t.getDate() + n); return localISO(t); };
     var nStart = isoPlusDays(cur.end, 1), nEnd = isoPlusDays(nStart.replace(/^(\d{4})/, function (y) { return String(+y + 1); }), -1);
     var autoLabel = function (a, b) { return a.slice(0, 4) === b.slice(0, 4) ? a.slice(0, 4) : a.slice(0, 4) + '–' + b.slice(2, 4); };
@@ -2560,8 +2575,13 @@
           '<option value="retain">Stay in ' + esc(g.base) + '</option>' +
           '<option value="graduate"' + (def === 'graduate' ? ' selected' : '') + '>Graduate (leave the roster)</option></select></div>';
     }).join('') : '<p class="tl-muted m-0">No students on the roster yet.</p>';
+    var earlyNote = early ? '<div class="ui-note warn mb-3"><span aria-hidden="true">⚠️</span><span><b>' + esc(cur.label) + ' isn’t finished.</b> ' +
+        (rd.live.length ? rd.live.length + ' window' + (rd.live.length === 1 ? ' is' : 's are') + ' live' : '') + (rd.live.length && rd.scheduled.length ? ' and ' : '') +
+        (rd.scheduled.length ? rd.scheduled.length + ' ' + (rd.scheduled.length === 1 ? 'is' : 'are') + ' scheduled' : '') + (!rd.live.length && !rd.scheduled.length ? 'Nothing has been deployed this year' : '') +
+        '. Only close it early if the school has asked.</span></div>' : '';
     openModal('Start a new academic year · ' + s.name,
-      '<p class="tl-muted">' + esc(cur.label) + ' closes and becomes read-only — its deployments, completion and results stay viewable. The next year starts with an empty planner. <span class="ui-tag">gated</span></p>' +
+      earlyNote +
+      '<p class="tl-muted">' + esc(cur.label) + ' closes and becomes read-only — its deployments, completion and results stay viewable. Every child moves as chosen below. This can’t be undone.</p>' +
       '<div class="tl-stack">' +
         '<div class="ui-eyebrow">1 · Close ' + esc(cur.label) + '</div>' + open + sched +
         '<div class="ui-eyebrow mt-3">2 · New year</div>' +
@@ -2570,8 +2590,10 @@
         '<label class="field">Name<input class="input" id="ny-label" value="' + esc(autoLabel(nStart, nEnd)) + '"></label>' +
         '<div class="ui-eyebrow mt-3">3 · Students</div>' +
         '<p class="tl-muted m-0">By base grade — renamed classes move with their base (Grade 1 A → Grade 2 A).</p>' + grades +
+        '<label class="field mt-3">Type <b>' + esc(token) + '</b> to confirm<input class="input" id="ny-confirm" autocomplete="off" placeholder="' + esc(token) + '"></label>' +
       '</div>',
       function (close) {
+        if (document.getElementById('ny-confirm').value.trim().toUpperCase() !== token.toUpperCase()) { toast('Type ' + token + ' to confirm.'); return false; }
         var eo = document.getElementById('ny-endopen');
         if (eo && !eo.checked) { toast('End the live windows first (tick the box).'); return false; }
         var acts = {}; document.querySelectorAll('[data-nyg]').forEach(function (sel) { acts[sel.dataset.nyg] = sel.value; });
@@ -2587,6 +2609,9 @@
         toast(r.year.label + ' started · ' + r.moved.promoted + ' moved up, ' + r.moved.retained + ' stayed, ' + r.moved.graduated + ' graduated.');
         go('school', { id: s.id, tab: 'assessments' });
       }, 'Start new year');
+    var save = document.getElementById('tl-save'), cf = document.getElementById('ny-confirm');
+    save.classList.replace('btn-primary', 'btn-danger'); save.disabled = true;
+    cf.addEventListener('input', function () { save.disabled = cf.value.trim().toUpperCase() !== token.toUpperCase(); });
     var st = document.getElementById('ny-start'), en = document.getElementById('ny-end'), lb = document.getElementById('ny-label'), touched = false;
     lb.addEventListener('input', function () { touched = true; });
     [st, en].forEach(function (x) { x.addEventListener('change', function () { if (!touched && st.value && en.value) lb.value = autoLabel(st.value, en.value); }); });
@@ -2594,7 +2619,7 @@
   function wireYearBar(s, d, el) {
     el.querySelectorAll('[data-year]').forEach(function (b) { b.addEventListener('click', function () { HUB_YEAR[s.id] = b.dataset.year; HUB.assessments(d, el); }); });
     var ed = el.querySelector('[data-yearedit]'); if (ed) ed.addEventListener('click', function () { openYearEdit(s, window.TilliAPI.currentYear(s.id)); });
-    var ny = el.querySelector('[data-yearnew]'); if (ny) ny.addEventListener('click', function () { openNewYear(s); });
+    var ny = el.querySelector('[data-yearnew]'); if (ny) ny.addEventListener('click', function () { openNewYear(s, !!ny.dataset.early); });
   }
 
   HUB.assessments = function (d, el) {
@@ -4343,8 +4368,8 @@
           }).join('') + '</select>'
         : '<input class="input" id="m-grade" value="' + esc(addState.grade) + '" placeholder="Grade 1">';
       var sectionControl = grades.length
-        ? '<select class="select" id="m-sec">' +
-            '<option value="">— No section —</option>' +
+        ? '<select class="select" id="m-sec"' + (secs.length ? '' : ' disabled') + '>' +
+            (secs.length ? '' : '<option value="">No sections yet</option>') +
             secs.map(function (s) { return '<option value="' + esc(s.name) + '"' + (s.name === addState.section ? ' selected' : '') + '>' + esc(s.name + (s.base && !sameName(s.name, s.base) ? ' (' + s.base + ')' : '')) + '</option>'; }).join('') +
           '</select>'
         : '<input class="input" id="m-sec" value="' + esc(addState.section) + '" placeholder="A">';
@@ -4370,6 +4395,8 @@
         var name = (document.getElementById('m-name').value || '').trim();
         var adm = (document.getElementById('m-adm').value || '').trim();
         if (!name || !adm) { toast('Name and admission # are required.'); return; }
+        if (grades.length && !secs.length) { toast(addState.grade + ' has no sections yet — add one in Grades & sections first.'); return; }
+        if (!grades.length) { toast('This school has no grades yet — add them in Grades & sections first.'); return; }
         // Read grade/section straight off the sticky selection.
         addState.grade = (document.getElementById('m-grade').value || '').trim();
         addState.section = (document.getElementById('m-sec').value || '').trim();
@@ -4393,22 +4420,44 @@
               return '<tr class="' + (r.error ? 'tl-rowbad' : '') + '"><td class="tl-num">' + (i + 1) + '</td><td class="name">' + esc(r.name || '—') + '</td><td class="mono">' + esc(r.admission || '—') + '</td><td>' + esc((r.grade || '') + ' ' + (r.section || '')) + '</td><td>' + (r.error ? '<span class="tl-valid-err">' + esc(r.error) + '</span>' : '<span class="tl-valid-ok">OK</span>') + '</td></tr>';
             }).join('') + '</tbody></table></div></div>' : '');
       el.querySelector('#csv-sample').addEventListener('click', function () { document.getElementById('csv-in').value = sample; });
-      el.querySelector('#csv-validate').addEventListener('click', function () { addState.preview = parseCsv(document.getElementById('csv-in').value); renderAddPanel(sc, el); });
+      el.querySelector('#csv-validate').addEventListener('click', function () { addState.preview = parseCsv(document.getElementById('csv-in').value, currentAddSchool(sc)); renderAddPanel(sc, el); });
       var ci = el.querySelector('#csv-import'); if (ci) ci.addEventListener('click', function () { commitStudents(sc, addState.preview.valid.slice()); });
     }
   }
 
-  function parseCsv(text) {
+  // The school's real classes. An import row must name one of them — only upper /
+  // lower case and extra spaces are forgiven ("grade 1  a" = "Grade 1 A"). Returns
+  // the class's own spelling, or the reason the row can't go in.
+  function classMatcher(school) {
+    var squash = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+    var grades = school && tlUsesApi(school) && window.TilliAPI ? window.TilliAPI.schoolStats(school.id).grades
+      : ((school && school.structure && school.structure.grades) || []);
+    return function (grade, section) {
+      var g = grades.filter(function (x) { return squash(x.grade) === squash(grade); })[0];
+      if (!g) return { error: 'No ' + grade + ' at this school — add it in Grades & sections first' };
+      if (!g.sections.length) return { error: g.grade + ' has no sections yet — add one in Grades & sections first' };
+      if (!section) return g.sections.length === 1 ? { grade: g.grade, section: g.sections[0].name }
+        : { error: 'Which section? ' + g.grade + ' has ' + g.sections.map(function (x) { return x.name; }).join(', ') };
+      var sec = g.sections.filter(function (x) { return squash(x.name) === squash(section); })[0];
+      return sec ? { grade: g.grade, section: sec.name } : { error: 'No ' + g.grade + ' ' + section + ' at this school — add it in Grades & sections first' };
+    };
+  }
+  function parseCsv(text, school) {
     var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
     if (lines.length) { var h = lines[0].toLowerCase(); if (h.indexOf('name') >= 0 && h.indexOf('admission') >= 0) lines.shift(); }
-    var seen = {}, all = [];
+    var seen = {}, all = [], match = classMatcher(school);
     lines.forEach(function (line) {
       var c = line.split(',').map(function (x) { return x.trim(); });
-      var row = { name: c[0] || '', admission: c[1] || '', grade: c[2] || 'Grade 1', section: c[3] || 'A' };
+      var row = { name: c[0] || '', admission: c[1] || '', grade: c[2] || '', section: c[3] || '' };
       if (!row.name) row.error = 'Missing name';
       else if (!row.admission) row.error = 'Missing admission #';
+      else if (!row.grade) row.error = 'Missing grade';
       else if (seen[row.admission.toLowerCase()]) row.error = 'Duplicate in file';
-      else seen[row.admission.toLowerCase()] = true;
+      else {
+        var m = match(row.grade, row.section);
+        if (m.error) row.error = m.error;
+        else { row.grade = m.grade; row.section = m.section; seen[row.admission.toLowerCase()] = true; }
+      }
       all.push(row);
     });
     return { all: all, valid: all.filter(function (r) { return !r.error; }), invalid: all.filter(function (r) { return r.error; }) };
@@ -4683,7 +4732,7 @@
       steps: [
         { text: 'Go to All Schools → + Add School. Fill in the profile (name, board, country then city), the rollout, grades & sections, and the school admin.', link: ['schools', {}, 'All Schools'] },
         { text: 'Review and create. The new school’s hub opens with its codes ready.' },
-        { text: 'Staff & Access: share the Teacher join code — anyone who enters it joins as a Teacher, no invite needed. Invite the school admin if you skipped it in the wizard.' },
+        { text: 'Staff & Access: share the school code — anyone who enters it joins as a Teacher, no invite needed. It’s the same code that’s in the school’s links. Invite the school admin if you skipped it in the wizard.' },
         { text: 'Students: add students by hand or import a CSV (rows are checked before anything is saved).' },
         { text: 'Assessments: plan the Baseline and deploy it when the school is ready.' },
       ] },
@@ -4841,7 +4890,7 @@
     'Group links': 'One link per audience for the whole group — people pick their school first.',
     'School group links': 'One Parent and one Teacher link per group. People pick their school, then carry on as usual.',
     'Links to share': 'The links to send this school — parents, teachers and student assessments. Each opens straight into this school.',
-    'Teacher join code': 'Anyone who enters this code joins the school as a Teacher — no invite needed.',
+    'School code': 'One code per school: it’s in every share link, and anyone who enters it joins the school as a Teacher — no invite needed.',
     'Staff at this school': 'School admins and teachers with access to this school.',
     'Teacher assessment log': 'Per teacher: Completed when every student in their sections is rated, In progress when some are, Not started when none are.',
     'Student assessment log': 'Per student: status of every student-facing (parent / direct) assessment deployed to the school.',
@@ -4975,7 +5024,7 @@
     { id: 'issue-reply', topic: 'Issues & support', q: 'Can I reply to the person who reported an issue?', screens: ['issues'],
       a: 'Not from the dashboard yet. Change the status as you work (Open → Investigating → Resolved) and contact the reporter directly.' },
     { id: 'teacher-join', topic: 'People & access', q: 'How do teachers join a school?', screens: ['school', 'users', 'invitations'],
-      a: 'Share the school’s Teacher join code (School page → Staff & Access). Anyone who enters it joins as a Teacher. You can also send a named invitation.' },
+      a: 'Share the school code (School page → Staff & Access). Anyone who enters it joins as a Teacher. You can also send a named invitation.' },
     { id: 'group-admin', topic: 'People & access', q: 'What does a school group admin see?', screens: ['group', 'users'],
       a: 'A group overview, Change History and read-only school pages for their group only. Use “Group admin view →” on the group page to see exactly what they see.' },
     { id: 'history-range', topic: 'History & logs', q: 'How far back does Change History go?', screens: ['history'],
@@ -5500,7 +5549,7 @@
             return '<span class="tl-tree-sec"><input class="ws-secname" data-rs-grade="' + esc(g.grade) + '" data-rs="' + esc(sec.name) + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. The base stays the same.">' +
               baseTag(sec.name, sec.base, 'sec') + sizeHtml + emptyTag(g.grade + '|' + sec.name) + '</span>';
           }).join('')
-        : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i>' + emptyTag(g.grade + '|') + '</span>';
+        : '<span class="tl-tree-sec" title="Students and teachers are placed in sections — add a section to this grade before adding them.">No sections yet' + ((parseInt(g.students, 10) || 0) ? ' <i>' + parseInt(g.students, 10) + '</i>' : '') + emptyTag(g.grade + '|') + '</span>';
       return '<div class="tl-tree-grade"><div class="ws-gradeid"><input class="ws-gradename" data-rg="' + esc(g.grade) + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. The base stays ' + esc(g.base || inferBase(g.grade) || 'the same') + '.">' +
         baseTag(g.grade, g.base || inferBase(g.grade)) + '</div>' + body +
         '<button class="btn-link" data-addsec="' + esc(g.grade) + '">+ Section</button></div>';

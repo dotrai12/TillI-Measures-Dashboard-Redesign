@@ -497,6 +497,14 @@
   .ad-sizein { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
   .ad-sizein .input { width: 64px; text-align: center; }
   .ad-waiting { border-color: var(--info-line); }
+  /* One-time notice after Tilli starts a new year */
+  .ad-yearnotice { position: relative; padding-right: 44px; }
+  .ad-yearnotice .dialog-close { position: absolute; top: 8px; right: 8px; }
+  /* Year picker in the header + the read-only past-year banner */
+  .ad-yearpick { padding: 0; }
+  .ad-yearpick select { appearance: none; -webkit-appearance: none; border: 0; background: transparent; font: inherit; color: inherit; padding: 6px 12px; cursor: pointer; }
+  .ad-pastbanner { align-items: center; }
+  .ad-pastbanner .btn { margin-left: auto; flex: none; }
   /* Roster: quiet year-end row */
   .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
   .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }
@@ -550,11 +558,11 @@
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261023cs"></script>
-<script src="assets/tilli-history.js?v=20261023cs"></script>
-<script src="assets/created-school-bridge.js?v=20261016zx"></script>
-<script src="assets/admin-data.js?v=20261023my"></script>
+<script src="assets/tilli-api.js?v=20261026p1"></script>
+<script src="assets/tilli-history.js?v=20261026p1"></script>
+<script src="assets/created-school-bridge.js?v=20261026p1b"></script>
+<script src="assets/admin-data.js?v=20261026p1"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261023cs"></script>
+<script src="assets/admin.js?v=20261026p1b"></script>
 </body>
 </html>

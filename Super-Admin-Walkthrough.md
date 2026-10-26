@@ -52,12 +52,12 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 - [x] **First admin**: enter a name + email (or **Skip this step →**).
 - [x] **Review** → **Create school**.
 
-✅ The new school's page opens with a toast. Its **Staff & Access** tab shows a **Demo access & codes** card (coordinator login, teacher join code).
+✅ The new school's page opens with a toast. Its **Staff & Access** tab shows a **Demo access & codes** card (coordinator login, school code).
 
 **Fill it**
 - [x] **Students** tab → **+ Add Students** → **Manual**: add two children to a section → **Import 2 students**.
 - [x] **+ Add Students** again → **CSV import** → **Insert sample** → **Validate** (one row has an error) → **Import N valid rows**.
-- [x] **Staff & Access** → **Copy code** on the **Teacher join code** (teachers who enter it join as teachers).
+- [x] **Staff & Access** → **Copy code** on the **School code** (teachers who enter it join as teachers; it's also the code in the school's links).
 - [x] **+ Invite to this school** → invite a teacher → note the **Temporary password** in **Invitation created** → **Copy credentials**.
 
 ✅ Students show in the directory with a pager; the invitation shows under **Invitations**.
@@ -270,14 +270,16 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 - [ ] Back to **2026–27 · current** → **Edit dates** → change the end date → **Save**.
 - [ ] **Deployments** → **All years** dropdown → pick **2025–26**: last year's lanes, all **Ended**.
 - [ ] **Change History** → filter to Heritage Oaks, **All time** → "started the 2025–26 academic year".
-- [ ] **Start a new year** (try it on **Banyan Tree**, not Heritage Oaks):
-  - [ ] **Assessments** → **Start new year**.
-  - [ ] **1 · Close 2026–27**: tick **End the live windows now**.
+- [ ] **The school's view of past years**: Heritage Oaks → **Leadership dashboard →** → header year picker → **2025–26**. A read-only banner shows; Outcomes, Reports and Roster show that year (Roster lists **Tulips**). **Back to 2026–27** returns. In 2026–27, Outcomes says "Nothing from 2026–27 yet" with **See 2025–26 results →**.
+- [ ] **The school asks for the next year**: as `admin@heritageoaks.edu` → **Roster** → **Year-end** → **Ask Tilli to start next year** → the strip says *Requested*. On Tilli, the Control Room shows **Schools asking to start next year** and Heritage's Academic year card names who asked.
+- [ ] **Start a new year** (Tilli team only — try it on **Banyan Tree**, not Heritage Oaks):
+  - [ ] **Assessments** → the year still has live windows, so there's no Start new year button — only **Close the year early…** (it appears as **Start new year** once every window has ended).
+  - [ ] Read the warning. **1 · Close 2026–27**: tick **End the live windows now**.
   - [ ] **2 · New year**: keep the suggested dates (the name fills in).
   - [ ] **3 · Students**: Grade 1 → *Move up to Grade 2*, Grade 3 → *Graduate*.
-  - [ ] **Start new year**.
+  - [ ] Type **CLOSE 2026–27** → the red **Start new year** button unlocks → click it.
 
-✅ The planner is empty for the new year, the toast says how many moved up / stayed / graduated, and the old year is now a read-only tab in the year bar.
+✅ The planner is empty for the new year, the toast says how many moved up / stayed / graduated, and the old year is now a read-only tab in the year bar. Banyan Tree's school admin (`suresh.r@banyantree.edu`) sees a "2027–28 has started" notice on Overview with **See grade migration**.
 
 ---
 

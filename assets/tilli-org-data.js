@@ -847,6 +847,7 @@
     // Class sizes (shared roster store): new students a teacher asked to add over
     // the expected size, and classes still short of it or with no size set.
     var API = window.TilliAPI, pendingKids = [], shortClasses = [];
+    var yearReqs = API && API.openYearRequests ? API.openYearRequests() : [];
     if (API && API.pendingStudents) {
       pendingKids = API.pendingStudents();
       act.forEach(function (s) { API.schoolRooms(s.id).forEach(function (r) { if (r.expected == null || r.added < r.expected) shortClasses.push(r); }); });
@@ -854,6 +855,8 @@
 
     var cards = [
       { key: 'issues', label: 'Open issues', count: openIssues.length, severity: 3, deeplink: '#/issues?status=open' },
+      { key: 'year-requests', label: 'Schools asking to start next year', count: yearReqs.length, severity: 2,
+        deeplink: yearReqs.length === 1 ? '#/school?id=' + encodeURIComponent(yearReqs[0].school_id) + '&tab=assessments' : '#/schools?flag=year-request' },
       { key: 'student-requests', label: 'New students to approve', count: pendingKids.length, severity: 2, deeplink: '#/class-sizes' },
       { key: 'short-classes', label: 'Classes missing students', count: shortClasses.length, severity: 1, deeplink: '#/class-sizes?view=classes' },
       { key: 'zero-students', label: 'Schools with 0 students', count: zeroStudents.length, severity: 2, deeplink: '#/schools?flag=zero-students', items: zeroStudents.map(function (s) { return { id: s.id, label: s.name }; }) },

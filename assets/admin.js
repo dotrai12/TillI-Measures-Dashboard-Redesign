@@ -173,7 +173,7 @@
           '</div>' +
           '<h1 class="ui-screen-title" style="margin:18px 0 2px">' + esc(school.name) + '</h1>' +
           '<p class="ui-screen-sub" style="margin:0 0 16px">' + esc((school.city || '') + (school.city ? ', ' : '') + (school.country || '')) +
-            ' · <span class="mono">' + esc(school.code || id) + '</span> · Join code <span class="mono">' + esc(school.joinCode || '—') + '</span></p>' +
+            ' · School code <span class="mono">' + esc(school.code || id) + '</span></p>' +
           '<div class="ad-grid" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">' +
             statCard(stats.students, 'Students') + statCard(stats.sections, 'Sections') +
             statCard(stats.teachers, 'Teachers') + statCard(overallPct(id, ids), 'Overall complete') +
@@ -523,10 +523,13 @@
     // "Updated 2 h ago by …" — the newest change anywhere in the school; opens History.
     var lastChip = (isCoordinator && window.TilliHistory)
       ? '<button class="ad-updated desk-only" data-nav="history">' + TilliHistory.lastUpdatedHTML(schoolHistory({ limit: 1 })[0], { me: email, prefix: 'Updated' }) + '</button>' : '';
-    var yr = AD.academicYears;
-    var yearCtrl = yr.length > 1
-      ? '<span class="ad-year">' + esc(yr[yr.length - 1]) + ' ▾</span>'   // selector only when >1 year (spec §10.3)
-      : '<span class="ad-year">' + esc(yr[0]) + '</span>';
+    // Year picker once the school has more than one year with Tilli (spec §10.3).
+    var yrs = AD.years || [], vy = AD.viewYear;
+    var yearCtrl = yrs.length > 1
+      ? '<label class="ad-year ad-yearpick" title="Switch year — past years are read-only"><select data-yearpick aria-label="Academic year">' +
+          yrs.slice().reverse().map(function (y) { return '<option value="' + esc(y.id) + '"' + (vy && vy.id === y.id ? ' selected' : '') + '>' + esc(y.label) + (y.status === 'current' ? ' · current' : '') + '</option>'; }).join('') +
+        '</select></label>'
+      : '<span class="ad-year">' + esc(AD.academicYears[0]) + '</span>';
     var side = '<aside class="ui-side dash-side">' +
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
       '<nav class="ui-nav">' + navItems().filter(function (n) { return n.key !== 'asktilli'; }).map(function (n) {
@@ -657,9 +660,37 @@
     } else {
       try { SCREEN[r.screen](r.params, body); }
       catch (e) { console.error(e); body.innerHTML = stError('This screen could not be built.'); }
+      if (AD.pastYear) body.insertAdjacentHTML('afterbegin', pastYearBannerHTML());
     }
     wireChrome();
+    app.querySelectorAll('[data-yearpick]').forEach(function (sel) { sel.addEventListener('change', function () { switchYear(sel.value); }); });
+    app.querySelectorAll('[data-yeargo]').forEach(function (b) { b.addEventListener('click', function () { switchYear(b.dataset.yeargo); }); });
     syncFab();
+  }
+
+  // ---- Past years (read-only) ----
+  // The bridge builds the whole dashboard for ?year=<closed year id>, so a
+  // switch reloads with that param (or without it for the current year).
+  function switchYear(id) {
+    var u = new URL(location.href), cur = AD.currentYear;
+    if (!id || (cur && cur.id === id)) u.searchParams.delete('year'); else u.searchParams.set('year', id);
+    location.assign(u.toString());
+  }
+  function pastYearBannerHTML() {
+    var y = AD.viewYear, cur = AD.currentYear;
+    return '<div class="ui-note info mb-3 ad-pastbanner"><span aria-hidden="true">📖</span><span>You’re looking at <b>' + esc(y.label) + '</b> — a closed year, read-only. Classes show the names they had that year.</span>' +
+      (cur ? '<button class="btn btn-outline btn-sm" data-yeargo="' + esc(cur.id) + '">Back to ' + esc(cur.label) + '</button>' : '') + '</div>';
+  }
+  // The closed year just before the current one (for "see last year's results").
+  function lastClosedYear() { var c = (AD.years || []).filter(function (y) { return y.status === 'closed'; }); return c[c.length - 1] || null; }
+  // Empty state for Outcomes / Reports before this year's first point closes.
+  function firstResultsEmpty(what) {
+    var b0 = AD.pointRange(AD.points[0]), last = !AD.pastYear && lastClosedYear();
+    if (!last) return stEmpty(what === 'reports' ? 'Nothing to share just yet.' : 'Nothing measured yet.',
+      (what === 'reports' ? 'Your first reports are ready as soon as Baseline closes' : 'Your first results arrive once Baseline closes') + (b0 ? ' (' + b0 + ')' : '') + '.');
+    return '<div class="ui-empty"><span class="big">Nothing from ' + esc(AD.viewYear ? AD.viewYear.label : 'this year') + ' yet.</span>' +
+      'This year’s ' + (what === 'reports' ? 'reports are ready' : 'results arrive') + ' once Baseline closes' + esc(b0 ? ' (' + b0 + ')' : '') + '. ' +
+      '<button class="btn-link" data-yeargo="' + esc(last.id) + '">See ' + esc(last.label) + ' ' + (what === 'reports' ? 'reports' : 'results') + ' →</button></div>';
   }
 
   // small helpers for building modules
@@ -1843,8 +1874,11 @@
 
   // Overview = the living dandelion + its guided story, free-flowing on the page (no cards).
   SCREEN.overview = function (params, body) {
-    body.innerHTML = dandelionHTML(params);   // invite / setup warnings live in the 3 points (dlWarnings)
+    body.innerHTML = yearNoticeHTML() + dandelionHTML(params);   // invite / setup warnings live in the 3 points (dlWarnings)
     wireDandelion(body, params);
+    body.querySelectorAll('[data-yearsee]').forEach(function (b) { b.addEventListener('click', showYearMigration); });
+    var yd = body.querySelector('[data-yeardismiss]');
+    if (yd) yd.addEventListener('click', function () { TilliAPI.dismissYearNotice(currentSchoolId(), email); render(); });
   };
 
   var cmpTwo = { a: null, b: null };  // "Compare two sections" picker state (Outcomes) — any two sections, school-wide
@@ -1861,7 +1895,7 @@
     if (!AD.completedPoints.length) {
       var b0 = AD.pointRange(AD.points[0]);
       body.innerHTML = screenHead('Outcomes', 'How your children are growing — always as groups, never individual results.') +
-        card('Skill outcomes', null, stEmpty('Nothing measured yet.', 'Your first results arrive once Baseline closes' + (b0 ? ' (' + b0 + ')' : '') + '.'), 'span2');
+        card('Skill outcomes', null, firstResultsEmpty('outcomes'), 'span2');
       return;
     }
     // scope from filters (School → Grade → Section)
@@ -2083,7 +2117,7 @@
         var studs = AD.studentsInGrade(g);
         var secs = AD.sections.filter(function (s) { return s.grade === g; });
         var teacherLine = '<div class="nc-pcts">' + secs.map(function (s) {
-          var rm = apiRoom(s);
+          var rm = AD.pastYear ? null : apiRoom(s);
           return '<span>' + esc(secShort(s.grade, s.section)) + ' · ' + esc(AD.teacherFor(s)) + (rm ? ' · <span class="ad-room' + roomTone(rm) + '" title="Students added / expected">' + esc(roomText(rm)) + '</span>' : '') + '</span>';
         }).join('') + '</div>';
         // Each grade's own colour — the same one its hub has on the dandelion.
@@ -2160,12 +2194,12 @@
 
     // Two tabs — Students / Your team. The tab lives in the URL (?tab=team) so a
     // refresh or a shared link lands on the same one; switching replaces history.
-    var tab = params.tab === 'team' ? 'team' : 'students';
+    var tab = params.tab === 'team' && !AD.pastYear ? 'team' : 'students';
     var tabBtn = function (key, label, n) {
       return '<button class="ui-tab' + (tab === key ? ' on' : '') + '" role="tab" aria-selected="' + (tab === key) + '" data-rostertab="' + key + '">' + esc(label) + ' <span class="ad-tabn">' + n + '</span></button>';
     };
     // The tab already names the list and its count, so no card title / count line repeats it.
-    var waiting = waitingKids();
+    var waiting = AD.pastYear ? [] : waitingKids();
     var waitingBody = waiting.length ? '<div class="ui-card ad-waiting mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for your approval</h3>' +
         '<p class="ui-mod-note">A teacher added ' + plural(waiting.length, 'new student') + ' past the class size. They can already be assessed — approve to confirm, or turn down a duplicate.</p></div></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Student</th><th>Section</th><th>Added by</th><th>Class size</th><th></th></tr></thead><tbody>' +
@@ -2179,11 +2213,10 @@
       ? inviteAlertHTML(true) + userBody
       : waitingBody + listBody +
         // Year-end only — kept quiet so it isn't mistaken for an everyday action.
-        '<div class="ad-yearend mt-gap"><div><b>Year-end</b><span>Move students up a grade, retain, remove or add — reviewable, with a 24-hour undo.</span></div>' +
-          '<button class="btn btn-outline btn-sm" data-migrate="1">Start grade migration</button></div>';
+        (AD.pastYear ? '' : yearEndHTML());
     body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Names and sections — plus a temporary developmental-stage column (see the note in Students).' : 'Your children and teachers — names and sections only, never assessment results.') +
       '<div class="ui-tabs ad-rostertabs" role="tablist" aria-label="Roster">' + tabBtn('students', 'Students', AD.students.length) +
-        tabBtn('team', 'Your team', users.length).replace('</button>', (inviteAlerts().length ? '<i class="ad-tabalert" title="An invite is about to expire"></i>' : '') + '</button>') + '</div>' +
+        (AD.pastYear ? '' : tabBtn('team', 'Your team', users.length).replace('</button>', (inviteAlerts().length ? '<i class="ad-tabalert" title="An invite is about to expire"></i>' : '') + '</button>')) + '</div>' +
       panel;
     // NOTE: Duplicate review queue (spec §5.4.5) sits behind the near-match config
     // flag, which is OFF for this school — so the module is intentionally absent.
@@ -2195,7 +2228,8 @@
     body.querySelectorAll('[data-graderoster]').forEach(function (b) { b.addEventListener('click', function () { openGradeRoster(b.dataset.graderoster); }); });
     body.querySelectorAll('[data-kidok]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidok], true); }); });
     body.querySelectorAll('[data-kidno]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidno], false); }); });
-    body.querySelectorAll('[data-migrate]').forEach(function (b) { b.addEventListener('click', startMigration); });
+    body.querySelectorAll('[data-yearask]').forEach(function (b) { b.addEventListener('click', askNewYear); });
+    body.querySelectorAll('[data-yearsee]').forEach(function (b) { b.addEventListener('click', showYearMigration); });
     body.querySelectorAll('[data-invite]').forEach(function (b) { b.addEventListener('click', inviteUser); });
     function wireUserRows(root) {
       root.querySelectorAll('[data-rowmenu]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); openRowMenu(b, users[+b.dataset.rowmenu]); }); });
@@ -2438,13 +2472,13 @@
     var teacherBlock = '<div class="row wrap mb-4" style="gap:10px 16px">' +
       secs.map(function (s) {
         var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
-        var rm = apiRoom(s);
+        var rm = AD.pastYear ? null : apiRoom(s);
         // Expected size: teachers can add up to it; past it (or with none set) a new child waits for approval.
         var size = rm ? '<label class="ad-sizein" title="Expected students in ' + esc(secShort(s.grade, s.section)) + '. Teachers can add up to this many; more waits for your approval. Leave empty and every new child needs approval.">' +
             '<span>' + rm.added + ' of</span><input type="number" min="0" class="input sm" data-grsize="' + esc(s.id) + '" value="' + (rm.expected || '') + '" placeholder="—" aria-label="Expected students in ' + esc(secShort(s.grade, s.section)) + '"></label>' : '';
         return '<div class="row" style="gap:8px">' +
           '<span class="ui-metachip" style="padding:7px 13px"><b>' + esc(secShort(s.grade, s.section)) + '</b></span>' +
-          '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label>' + size + '</div>';
+          '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '"' + (AD.pastYear ? ' disabled' : '') + '>' + opts + '</select></label>' + size + '</div>';
       }).join('') + '</div>';
 
     var waitingIds = waitingKids().map(function (x) { return String(x.student_id).toUpperCase(); });
@@ -2746,7 +2780,7 @@
     // Nothing measured yet → nothing to report (No-data lifecycle state).
     if (!AD.completedPoints.length) {
       body.innerHTML = screenHead('Reports', 'Ready-to-share updates for your board and families — never individual children.') +
-        card('Reports', null, stEmpty('Nothing to share just yet.', 'Your first reports are ready as soon as Baseline closes.'), 'span2');
+        card('Reports', null, firstResultsEmpty('reports'), 'span2');
       return;
     }
     var scope = params.rscope || 'school';        // school | <grade>
@@ -3494,101 +3528,58 @@
     document.getElementById('inv-done').addEventListener('click', function () { closeModal(); render(); });
   }
 
-  // ---- Grade migration (spec §6.2) — full multi-step flow ----
-  var GRADE_LADDER = ['Pre-K', 'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5'];
-  var SECTION_LIMIT = 30;
-  var mig;
-  // The fixed base ladder (matches TilliAPI's BASE GRADES).
-  var BASE_LADDER = ['Nursery', 'LKG', 'UKG'].concat([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (n) { return 'Grade ' + n; }));
-  function nextGrade(g) {
-    var i = GRADE_LADDER.indexOf(g);
-    if (i >= 0) return i < GRADE_LADDER.length - 1 ? GRADE_LADDER[i + 1] : g;
-    // Not a ladder name (renamed "Sunflowers", or past Grade 5): step its base up one,
-    // then use the school's own name for that base when it has one ("Daisies" for Grade 2).
-    var bi = BASE_LADDER.indexOf(baseG(g));
-    if (bi < 0 || bi === BASE_LADDER.length - 1) return g;
-    var nb = BASE_LADDER[bi + 1];
-    return AD.grades.filter(function (x) { return baseG(x) === nb; })[0] || nb;
+  // ---- Year-end: only the Tilli team starts a new year ----
+  // Before Tilli has started this year: "Ask Tilli to start next year" (a request
+  // on Tilli's Control Room). Once Tilli has started it — and until this year's
+  // windows have all ended — the strip shows "See grade migration" instead.
+  function yearState() {
+    var A = window.TilliAPI, sid = currentSchoolId();
+    if (!A || !A.currentYear || !sid) return null;
+    var cur = A.currentYear(sid); if (!cur) return null;
+    var rd = A.yearReadiness(sid), finished = rd.ended.length && !rd.live.length && !rd.scheduled.length;
+    return { cur: cur, request: A.yearRequest(sid), finished: finished };
   }
-  function startMigration() {
-    mig = {
-      step: 'entry',
-      rows: AD.students.map(function (s) { return { adm: s.adm, name: s.name, grade: s.grade, section: s.section, action: 'promote', toSection: s.section }; }),
-      adds: [],
-    };
-    renderMigration();
+  function yearEndHTML() {
+    var ys = yearState(); if (!ys) return '';
+    var req = ys.request && ys.request.status === 'open' ? ys.request : null;
+    var strip = function (text, btn) { return '<div class="ad-yearend mt-gap"><div><b>Year-end</b><span>' + text + '</span></div>' + btn + '</div>'; };
+    if (req) return strip('You asked on ' + fmtInvDate(req.at) + ' to start the next year. The Tilli team will start it and move children up — you’ll get a notice here.',
+      '<button class="btn btn-outline btn-sm" disabled>Requested</button>');
+    if (ys.cur.rollover && !ys.finished) return strip('Tilli started ' + esc(ys.cur.label) + ' on ' + fmtInvDate(ys.cur.startedAt) + ' and moved children up from ' + esc(ys.cur.rollover.from) + '.',
+      '<button class="btn btn-outline btn-sm" data-yearsee="1">See grade migration</button>');
+    return strip('When ' + esc(ys.cur.label) + ' ends, ask the Tilli team to start the next year. They move children up a grade and keep this year’s results.',
+      (ys.cur.rollover ? '<button class="btn-link" data-yearsee="1">Last migration</button> ' : '') + '<button class="btn btn-outline btn-sm" data-yearask="1">Ask Tilli to start next year</button>');
   }
-  function renderMigration() {
-    var html = modalHead('Grade migration · ' + AD.academicYears[0]);
-    if (mig.step === 'entry') {
-      html += '<p class="ui-mod-note mb-4">This starts the year-end migration. Every enrolled student gets a proposed promotion you can adjust. Nothing is committed until the final step, and it can be undone for 24 hours.</p>' +
-        '<div class="ui-note mt-3"><span aria-hidden="true">🔒</span><span>Historical assessment data stays attached to each child and to their prior section-year. Migration never moves or orphans results.</span></div>' +
-        '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mclose="1">Not now</button><button class="btn btn-primary btn-sm" data-mig="review">Begin review →</button></div>';
-    } else if (mig.step === 'review') {
-      html += '<p class="ui-mod-note mb-3">Adjust any student. Bulk-set a whole grade with the header control.</p>';
-      AD.grades.forEach(function (g) {
-        var gr = mig.rows.filter(function (r) { return r.grade === g; });
-        html += '<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><b style="font-family:var(--font-heading);font-size:var(--fs-md)">' + esc(gLbl(g)) + ' → ' + esc(gLbl(nextGrade(g))) + '</b>' +
-          '<label class="select-wrap" style="max-width:190px"><select class="select" data-bulk="' + esc(g) + '"><option value="">Bulk action…</option><option value="promote">Promote all</option><option value="retain">Retain all</option><option value="graduate">Mark all graduating</option></select></label></div>' +
-          '<div class="ui-tablewrap"><table class="ui-table mw-520"><tbody>' +
-          gr.map(function (r) {
-            return '<tr><td class="name">' + esc(r.name) + '</td><td class="ad-num text-muted">' + esc(r.adm) + '</td><td><label class="select-wrap"><select class="select" data-act="' + r.adm + '">' +
-              [['promote', 'Promote → ' + gLbl(nextGrade(r.grade))], ['retain', 'Retain in ' + gLbl(r.grade)], ['graduate', 'Graduating'], ['remove', 'Remove (left school)']].map(function (o) { return '<option value="' + o[0] + '"' + (r.action === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
-              '</select></label></td></tr>';
-          }).join('') + '</tbody></table></div></div>';
-      });
-      html += '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="entry">Back</button><button class="btn btn-primary btn-sm" data-mig="add">Next: new intake →</button></div>';
-    } else if (mig.step === 'add') {
-      html += '<p class="ui-mod-note mb-3">Add new intake students. (CSV upload is desktop-only in the full product; add individually here.)</p>' +
-        '<div id="mig-adds">' + mig.adds.map(addRowHTML).join('') + '</div>' +
-        '<button class="btn btn-outline btn-sm" data-addrow="1" style="margin-top:6px">+ Add a student</button>' +
-        '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="review">Back</button><button class="btn btn-primary btn-sm" data-mig="preview">Preview →</button></div>';
-    } else if (mig.step === 'preview') {
-      var sum = migSummary();
-      html += '<p class="ui-mod-note mb-3">Review before committing.</p>' +
-        '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:18px">' +
-        [['Promoted', sum.promote], ['Retained', sum.retain], ['Graduating', sum.graduate], ['Removed', sum.remove], ['Added', sum.add]].map(function (p) { return '<div class="ui-kpi"><div class="num">' + p[1] + '</div><div class="lbl">' + p[0] + '</div></div>'; }).join('') + '</div>' +
-        '<div class="ui-eyebrow dark mb-2">Resulting section headcounts</div><div class="ui-tablewrap"><table class="ui-table mw-360"><tbody>' +
-        Object.keys(sum.headcounts).map(function (k) { var n = sum.headcounts[k]; return '<tr><td class="name">' + esc(sum.headLabels[k] || k) + '</td><td class="ad-num">' + countNoun(n, 'student', 'students') + (n > SECTION_LIMIT ? ' <span class="ui-chip slowing"><span class="dot"></span>over limit</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' +
-        '<div class="ui-modal-foot"><button class="btn btn-outline btn-sm" data-mig="add">Back</button><button class="btn btn-primary btn-sm" data-mig="commit">Commit migration</button></div>';
-    } else if (mig.step === 'commit') {
-      var s2 = migSummary();
-      html += '<div style="text-align:center;padding:14px 0"><div style="font-size:var(--fs-2xl);margin-bottom:8px">✓</div><h3 style="margin:0 0 6px">Migration committed</h3>' +
-        '<p class="ui-mod-note" style="max-width:44ch;margin:0 auto 14px">' + s2.promote + ' promoted, ' + s2.retain + ' retained, ' + s2.graduate + ' graduating, ' + s2.remove + ' removed, ' + s2.add + ' added. Historical assessment data remains attached to each child and their prior section.</p>' +
-        '<div class="ui-note" style="justify-content:center;max-width:420px;margin:0 auto"><span aria-hidden="true">↩</span><span>You can undo this entire migration as one transaction for the next 24 hours.</span></div>' +
-        '<div style="margin-top:18px"><button class="btn btn-outline btn-sm" data-mig="undo">Undo migration</button> <button class="btn btn-primary btn-sm" data-mclose="1">Done</button></div></div>';
-    }
-    var ov = openModal(html, { wide: mig.step === 'review' || mig.step === 'preview' });
-    // wiring
-    ov.querySelectorAll('[data-mig]').forEach(function (b) { b.addEventListener('click', function () { var to = b.dataset.mig; if (to === 'undo') { closeModal(); toast('Migration undone — roster restored.'); return; } if (mig.step === 'add') collectAdds(ov); mig.step = to; renderMigration(); }); });
-    ov.querySelectorAll('[data-act]').forEach(function (s) { s.addEventListener('change', function () { var r = mig.rows.find(function (x) { return x.adm === s.dataset.act; }); if (r) r.action = s.value; }); });
-    ov.querySelectorAll('[data-bulk]').forEach(function (s) { s.addEventListener('change', function () { if (!s.value) return; mig.rows.forEach(function (r) { if (r.grade === s.dataset.bulk) r.action = s.value; }); renderMigration(); }); });
-    var ar = ov.querySelector('[data-addrow]'); if (ar) ar.addEventListener('click', function () { collectAdds(ov); mig.adds.push({ name: '', grade: AD.grades[0], section: 'A' }); renderMigration(); });
-    ov.querySelectorAll('[data-addfield]').forEach(function (f) { f.addEventListener('input', function () {}); });
+  function askNewYear() {
+    var r = TilliAPI.requestNewYear(currentSchoolId(), email);
+    toast(r.ok ? 'Request sent — the Tilli team will start the next year.' : 'Only a school admin can ask for this.');
+    render();
   }
-  function addRowHTML(a, i) {
-    var gOpts = AD.grades.map(function (g) { return '<option value="' + esc(g) + '"' + (a.grade === g ? ' selected' : '') + '>' + esc(gLbl(g)) + '</option>'; }).join('');
-    return '<div style="display:grid;grid-template-columns:1fr 130px 90px;gap:8px;margin-bottom:8px" data-addidx="' + i + '">' +
-      '<input class="input" data-addfield="name" data-i="' + i + '" placeholder="Full name" value="' + esc(a.name) + '">' +
-      '<label class="select-wrap"><select class="select" data-addfield="grade" data-i="' + i + '">' + gOpts + '</select></label>' +
-      '<input class="input" data-addfield="section" data-i="' + i + '" placeholder="Sec" value="' + esc(a.section) + '"></div>';
+  // What the last rollover did, per base grade.
+  function migrationTableHTML(ro) {
+    var verb = { promote: 'Moved up to', retain: 'Stayed in', graduate: 'Graduated' };
+    return '<div class="ui-tablewrap"><table class="ui-table mw-520"><thead><tr><th>From</th><th>What happened</th><th class="text-right">Students</th></tr></thead><tbody>' +
+      ro.grades.map(function (g) {
+        return '<tr><td class="name">' + esc(g.from) + '</td><td>' + esc(verb[g.action] || g.action) + (g.action === 'graduate' ? '' : ' ' + esc(g.to)) + '</td><td class="text-right ad-num">' + g.students + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
   }
-  function collectAdds(ov) {
-    ov.querySelectorAll('[data-addfield]').forEach(function (f) { var i = +f.dataset.i; if (mig.adds[i]) mig.adds[i][f.dataset.addfield] = f.value; });
+  function showYearMigration() {
+    var ys = yearState(); if (!ys || !ys.cur.rollover) return;
+    var ro = ys.cur.rollover;
+    openModal(modalHead('Grade migration · ' + ro.from + ' → ' + ys.cur.label) +
+      '<p class="ui-mod-note mb-3">Started by the Tilli team on ' + fmtInvDate(ys.cur.startedAt) + ': ' + ro.moved.promoted + ' moved up, ' + ro.moved.retained + ' stayed, ' + ro.moved.graduated + ' graduated. ' +
+        esc(ro.from) + ' results stay attached to each child and their class that year.</p>' + migrationTableHTML(ro) +
+      '<p class="ui-mod-note mt-3">Something wrong — a child in the wrong class? Use <b>Need help?</b> to tell the Tilli team.</p>');
   }
-  function migSummary() {
-    var s = { promote: 0, retain: 0, graduate: 0, remove: 0, add: mig.adds.filter(function (a) { return (a.name || '').trim(); }).length };
-    mig.rows.forEach(function (r) { s[r.action]++; });
-    var hc = {}, hl = {};   // headcount per "grade section" key + its display label
-    mig.rows.forEach(function (r) {
-      if (r.action === 'remove' || r.action === 'graduate') return;
-      var g = r.action === 'promote' ? nextGrade(r.grade) : r.grade;
-      var key = g + ' ' + r.section; hc[key] = (hc[key] || 0) + 1; hl[key] = sLbl(g, r.section);
-    });
-    mig.adds.forEach(function (a) { if (!(a.name || '').trim()) return; var key = a.grade + ' ' + (a.section || 'A'); hc[key] = (hc[key] || 0) + 1; hl[key] = sLbl(a.grade, a.section || 'A'); });
-    return { promote: s.promote, retain: s.retain, graduate: s.graduate, remove: s.remove, add: s.add, headcounts: hc, headLabels: hl };
+  // Shown on Overview once, after Tilli starts a new year.
+  function yearNoticeHTML() {
+    if (AD.pastYear) return '';
+    var A = window.TilliAPI, n = A && A.yearNotice && currentSchoolId() ? A.yearNotice(currentSchoolId(), email) : null;
+    if (!n) return '';
+    return '<div class="ui-note info mb-3 ad-yearnotice"><span aria-hidden="true">🌱</span><span><b>' + esc(n.year) + ' has started.</b> The Tilli team moved children up from ' + esc(n.rollover.from) + ': ' +
+      n.rollover.moved.promoted + ' moved up, ' + n.rollover.moved.retained + ' stayed, ' + n.rollover.moved.graduated + ' graduated. ' +
+      '<button class="btn-link" data-yearsee="1">See grade migration</button></span><button class="dialog-close" data-yeardismiss aria-label="Dismiss">×</button></div>';
   }
-
   // ============================================================
   //  PREVIEW-STATE TOGGLE  (demo / dev tooling — NOT part of the
   //  shipped leadership UI). Lets you see the coordinator dashboard
