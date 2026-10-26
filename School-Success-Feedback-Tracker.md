@@ -311,6 +311,14 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Parent consent** (26 Oct 2026)
+- **The wording is a placeholder** (`DEFAULT_CONSENT` in `tilli-api.js`): a title, an intro, one required box (collect + use) and two optional ones (research with names removed; email / WhatsApp contact). Final text replaces it; bump `version` so every parent is asked again.
+- **Consent is per parent, not per child.** One agreement covers every child they link. *If needed later:* a short "I'm this child's parent or guardian" box on the "Is this your child?" screen.
+- **Only the Tilli team sees consent** (school → Students → Parent consent). It lists parents who have linked a child; a parent who agreed but hasn't added a child yet isn't listed.
+- **Not translated yet** — the text is English only; it should join the editable translations (Hindi / Sinhala / Tamil / Arabic).
+- **Declining doesn't stop the school.** Teachers still assess the child at school; only the parent app is blocked until the required box is ticked. Decide whether a "no" should also stop school-side data before release.
+- **No privacy-notice link yet** — `privacyUrl` is empty; set it and the link appears under the boxes.
+
 **Rollout fix plan — Phase 5E** (26 Oct 2026)
 - **Tap ⓘ tips are added automatically** to any explanation over 40 characters kept in a hover-only `title` (plain text, chips, labels, table heads). A new screen gets them for free — but a long title used only to show a truncated name would also get an ⓘ. *Fix if it happens:* shorten that title, or raise `TAP_TIP_MIN`.
 - **Buttons keep hover-only titles** unless marked `data-tipnext` (only the two Start new year buttons are). A button whose title explains why it's disabled still needs that mark.

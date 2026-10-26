@@ -2875,6 +2875,58 @@
     return out;
   }
 
+  /* ---------- PARENT CONSENT ----------
+     Shown once to a parent before they use the parent app (and again whenever
+     the wording's version changes). The required box must be ticked to go on;
+     the optional ones never block. Only the Tilli team sees who agreed — never
+     the school. A parent can revisit and change it from their profile; unticking
+     the required box stops the parent app again until they agree.
+       consents[email] = { version, items:{ id: bool }, at, history:[{ version, items, at }] }
+     PLACEHOLDER WORDING — swap DEFAULT_CONSENT for the final text (bump version). */
+  var DEFAULT_CONSENT = {
+    version: 'draft-1',
+    title: 'Before you start',
+    intro: 'Tilli Measures helps your child’s school understand how children are growing — their feelings, friendships and focus. Please read this and choose below. (Placeholder wording — the final text is coming.)',
+    items: [
+      { id: 'collect', required: true, text: 'I agree that my answers and my child’s check-in information can be collected and used by Tilli and my child’s school to support my child’s learning and wellbeing.' },
+      { id: 'research', required: false, text: 'Tilli may use my child’s information, with names removed, for research that improves the programme.' },
+      { id: 'contact', required: false, text: 'Tilli may contact me by email or WhatsApp about my child’s check-ins.' },
+    ],
+    privacyUrl: '',
+  };
+  function consentConfig(){ var c = (getDB().config || {}).consent; return clone(c || DEFAULT_CONSENT); }
+  function consentFor(email){ var r = (getDB().consents || {})[low(email)]; return r ? clone(r) : null; }
+  // True until this parent has agreed to every required item of the current version.
+  function needsConsent(email){
+    var cfg = consentConfig(), r = consentFor(email);
+    if (!r || r.version !== cfg.version) return true;
+    return cfg.items.some(function(it){ return it.required && !r.items[it.id]; });
+  }
+  function saveConsent(email, items){
+    var e = low(email); if (!e) return { ok:false, reason:'missing-email' };
+    var db = getDB(), cfg = consentConfig(), picked = {};
+    cfg.items.forEach(function(it){ picked[it.id] = !!(items && items[it.id]); });
+    var prev = (db.consents = db.consents || {})[e];
+    var hist = (prev && prev.history) || [];
+    hist.push({ version: cfg.version, items: clone(picked), at: Date.now() });
+    db.consents[e] = { version: cfg.version, items: picked, at: Date.now(), history: hist };
+    write(db);
+    return { ok:true, complete: !cfg.items.some(function(it){ return it.required && !picked[it.id]; }) };
+  }
+  // Tilli team: every parent linked to a school, with their consent (null = not yet).
+  function consentForSchool(schoolId){
+    var db = getDB(), cfg = consentConfig(), by = {};
+    db.parentLinks.filter(function(l){ return l.school_id === schoolId && l.status === 'active'; }).forEach(function(l){
+      var p = by[l.parent_user_id] = by[l.parent_user_id] || { email: l.parent_user_id, children: [] };
+      var st = db.students[keyOf(schoolId, l.student_id)]; if (st) p.children.push(st.name || st.student_id);
+    });
+    return Object.keys(by).sort().map(function(e){
+      var r = (db.consents || {})[e] || null;
+      return { email: e, children: by[e].children, consent: r ? clone(r) : null,
+        current: !!r && r.version === cfg.version && !cfg.items.some(function(it){ return it.required && !r.items[it.id]; }) };
+    });
+  }
+
   /* ---------- reflection question bank (Platform Admin editable) ---------- */
   function getReflectionConfig(){ return clone(getDB().config.reflection); }
   // Replaces the whole bank. Keeps the 5 fixed categories; drops questions with
@@ -3249,6 +3301,8 @@
     updateStudent: updateStudent,
     makeUid: makeUid,
     getReflectionConfig: getReflectionConfig,
+    consentConfig: consentConfig, consentFor: consentFor, needsConsent: needsConsent,
+    saveConsent: saveConsent, consentForSchool: consentForSchool,
     setReflectionConfig: setReflectionConfig,
     resetReflectionConfig: resetReflectionConfig,
     schoolSettings: schoolSettings,

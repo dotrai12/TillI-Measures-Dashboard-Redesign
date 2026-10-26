@@ -259,6 +259,11 @@
     color: var(--ink-600); margin: 0 0 24px;
   }
   .sheet-form { display: flex; flex-direction: column; gap: 16px; }
+  /* Parent consent */
+  .consent-row { display: flex; gap: 12px; align-items: flex-start; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-700); cursor: pointer; }
+  .consent-row input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--green-600); }
+  .consent-tag { display: inline-block; margin-left: 4px; font-size: var(--fs-xs); font-weight: 700; color: var(--pink-600); }
+  .consent-tag.opt { color: var(--ink-450); font-weight: 600; }
 
   /* Child picker */
   .child-card { padding: 20px 24px; min-width: 220px; text-align: left; }
@@ -359,9 +364,9 @@
 <div id="flow-root"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p5e"></script>
+<script src="assets/tilli-api.js?v=20261026pc"></script>
 <script src="assets/tilli-org-data.js?v=20261026p5d"></script>
 <script src="assets/flower-band.js?v=20261016zx"></script>
-<script src="assets/landing.js?v=20261026p5c"></script>
+<script src="assets/landing.js?v=20261026pc"></script>
 </body>
 </html>

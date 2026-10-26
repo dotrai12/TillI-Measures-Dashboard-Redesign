@@ -1776,7 +1776,32 @@
     var sq = el.querySelector('#stu-q');
     if (sq) sq.addEventListener('input', function () { stuPager.q = sq.value; stuPager.page = 1; drawPage(); });
     if (mount) drawPage();
+    // Parent consent — Tilli team only (the school never sees it).
+    if (tlUsesApi(s) && window.TilliAPI.consentForSchool) {
+      el.insertAdjacentHTML('beforeend', consentCardHtml(s));
+      var cc = el.querySelector('[data-consentcsv]');
+      if (cc) cc.addEventListener('click', function () {
+        var cfg = window.TilliAPI.consentConfig(), rows = window.TilliAPI.consentForSchool(s.id);
+        downloadCsv(s.code.toLowerCase() + '-parent-consent.csv', ['Parent email', 'Children', 'Consent', 'Version', 'Agreed on'].concat(cfg.items.map(function (it) { return it.id + (it.required ? ' (required)' : ''); })),
+          rows.map(function (r) { var c = r.consent; return [r.email, r.children.join('; '), r.current ? 'Given' : c ? 'Out of date / withdrawn' : 'Not yet', c ? c.version : '', c ? fmtMs(c.at) : ''].concat(cfg.items.map(function (it) { return c ? (c.items[it.id] ? 'Yes' : 'No') : ''; })); }));
+      });
+    }
   };
+  // Who has agreed to the parent consent (current version), per linked parent.
+  function consentCardHtml(s) {
+    var A = window.TilliAPI, cfg = A.consentConfig(), rows = A.consentForSchool(s.id);
+    var given = rows.filter(function (r) { return r.current; }).length;
+    var opt = cfg.items.filter(function (it) { return !it.required; });
+    var body = rows.length ? '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Parent</th><th>Consent</th>' + opt.map(function (it) { return '<th>' + esc(it.id.charAt(0).toUpperCase() + it.id.slice(1)) + '</th>'; }).join('') + '<th>Agreed on</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        var c = r.consent, st = r.current ? statusPill('Given', 'ok') : c ? statusPill(c.version !== cfg.version ? 'Old version' : 'Withdrawn', 'warn') : statusPill('Not yet', 'warn');
+        return '<tr><td class="name">' + esc(r.email) + '<small>' + esc(r.children.join(', ')) + '</small></td><td>' + st + '</td>' +
+          opt.map(function (it) { return '<td>' + (c ? (c.items[it.id] ? 'Yes' : 'No') : '—') + '</td>'; }).join('') + '<td>' + (c ? esc(fmtMs(c.at)) : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="ui-empty">No parents have linked to a child yet.</div>';
+    return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Parent consent</h3>' +
+        '<p class="ui-mod-note">' + (rows.length ? given + ' of ' + rows.length + ' linked parents have agreed to the current wording (' + esc(cfg.version) + '). ' : '') + 'Only the Tilli team sees this — not the school.</p></div>' +
+        (rows.length ? '<button class="btn btn-outline btn-sm" data-consentcsv>Download CSV</button>' : '') + '</div>' + body + '</div>';
+  }
 
   // ---------- pager (Students + Staff tabs; reusable for any long table) ----------
   var PAGE_SIZES = [20, 50, 100];   // rows-per-page options

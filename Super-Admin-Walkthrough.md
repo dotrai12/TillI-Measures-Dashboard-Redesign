@@ -393,6 +393,16 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 25 — Parent consent (5 min)
+
+- [ ] `index.html` → Parent → a school → a parent email (e.g. `parent1@banyantree.edu`) → password → **Before you start**: Continue stays greyed out until the **Required** box is ticked; the two optional boxes never block. **Not now** signs out — sign in again any time to agree.
+- [ ] After agreeing → the parent app as usual. Profile → **Consent & privacy** → **What you agreed to** → change the optional boxes → Save. Untick the required box → Save → the app stops until it's ticked again.
+- [ ] A parent session link (Sessions) asks for consent first too.
+- [ ] Tilli → that school → **Students** tab → **Parent consent**: who agreed, to which version, their optional choices, **Download CSV**. The school dashboard doesn't show any of this.
+- [ ] Wording is a placeholder: `DEFAULT_CONSENT` in `assets/tilli-api.js`. Changing its `version` asks every parent again.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

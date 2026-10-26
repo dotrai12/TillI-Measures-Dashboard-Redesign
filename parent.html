@@ -118,6 +118,13 @@
 
   /* resting card shown for the "In between" window (no assessments open) — .ui-card.md.tint-cyan */
   .win-rest { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+  .consent-card { display: flex; flex-direction: column; gap: 16px; }
+  .consent-row { display: flex; gap: 12px; align-items: flex-start; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-700); cursor: pointer; }
+  .consent-row input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--green-600); }
+  .consent-tag { font-size: var(--fs-xs); font-weight: 700; color: var(--pink-600); }
+  .consent-tag.opt { color: var(--ink-450); font-weight: 600; }
+  .consent-note { margin: 0; font-size: var(--fs-sm); }
+  .consent-card .btn { align-self: flex-start; }
   .p-yearnote { position: relative; margin: 0 0 14px; padding-right: 44px; }
   .p-yearnote .dialog-close { position: absolute; top: 8px; right: 8px; }
   .p-yeartabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
@@ -320,7 +327,7 @@
 <div id="app"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p5e"></script>
+<script src="assets/tilli-api.js?v=20261026pc"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
@@ -1400,8 +1407,55 @@
           <a href="index.html" class="btn-dashed lg focus">+ Add another child</a>
         </div>
 
+        ${consentCardHTML()}
+
         <div class="report-actions profile-actions">
           <button class="btn-ghost md logout focus" data-act="logout">Log out</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ============================================================
+  // CONSENT — the parent agrees before using the app (wording + version from
+  // TilliAPI.consentConfig). Gate: shown in place of every screen until the
+  // required box is ticked. From the profile: review / change any time.
+  // ============================================================
+  const hasConsentAPI = () => !!(API && API.needsConsent);
+  const consentMissing = () => hasConsentAPI() && API.needsConsent(PARENT_EMAIL);
+  function consentCardHTML() {
+    if (!hasConsentAPI()) return '';
+    const r = API.consentFor(PARENT_EMAIL);
+    const when = r ? new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return `<div class="sec-head"><h2>Consent &amp; privacy</h2><span class="muted">${r ? 'Agreed on ' + esc(when) : 'Not given yet'}</span></div>
+      <button class="ui-card sm link kid-card focus" data-act="open-consent">
+        <span class="kid-info"><b>What you agreed to</b><span>Read it again, or change the optional choices.</span></span>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>`;
+  }
+  function consentView(gate) {
+    const cfg = API.consentConfig();
+    if (!state.consentPick) { const r = API.consentFor(PARENT_EMAIL); state.consentPick = Object.assign({}, r && r.items); }
+    const pick = state.consentPick, ready = cfg.items.every((it) => !it.required || pick[it.id]);
+    const rows = cfg.items.map((it) => `<label class="consent-row">
+        <input type="checkbox" data-consent="${esc(it.id)}"${pick[it.id] ? ' checked' : ''}>
+        <span>${esc(it.text)} ${it.required ? '<b class="consent-tag">Required</b>' : '<span class="consent-tag opt">Optional</span>'}</span>
+      </label>`).join('');
+    const note = gate
+      ? (ready ? 'You can change this any time from your profile.' : 'Tick the required box to continue. You can come back and do it later.')
+      : (ready ? 'Changes save straight away.' : 'Without the required box, the parent app stops until you tick it again.');
+    return `<div class="p-wrap">
+      <div class="p-top">${lockup}
+        ${gate ? '<button class="btn-ghost ml-auto focus" data-act="logout">Not now — log out</button>' : '<button class="btn-ghost ml-auto focus" data-act="open-profile">&#8592; Back to profile</button>'}
+      </div>
+      <div class="p-main" data-rise>
+        <p class="p-eyebrow tight">${gate ? 'One thing first' : 'Your profile'}</p>
+        <h1 class="p-title">${esc(cfg.title)}</h1>
+        <p class="p-sub spaced">${esc(cfg.intro)}</p>
+        <div class="ui-card md consent-card">${rows}
+          ${cfg.privacyUrl ? `<a class="btn-link" href="${esc(cfg.privacyUrl)}" target="_blank" rel="noopener">Read the full privacy notice</a>` : ''}
+          <p class="muted consent-note">${note}</p>
+          <button class="btn btn-primary focus" data-act="consent-save"${gate && !ready ? ' disabled' : ''}>${gate ? 'Continue &#8594;' : 'Save'}</button>
         </div>
       </div>
     </div>`;
@@ -1418,9 +1472,12 @@
     const paint = () => {
       // Created-school children get the REAL deployment-driven screen in place
       // of the demo phases/home views; profile/report/snapshot are unchanged.
+      const gate = consentMissing() && state.view !== 'consent';
       const createdHome = createdSchoolFor(child()) && state.view !== 'profile'
-        && state.view !== 'report' && state.view !== 'snapshot';
-      app.innerHTML = createdHome ? createdView()
+        && state.view !== 'report' && state.view !== 'snapshot' && state.view !== 'consent';
+      app.innerHTML = gate ? consentView(true)
+        : state.view === 'consent' ? consentView(false)
+        : createdHome ? createdView()
         : state.view === 'report' ? reportView()
         : state.view === 'snapshot' ? snapshotView()
         : state.view === 'profile' ? profileView()
@@ -1496,6 +1553,17 @@
           break;
         }
         case 'open-profile': set({ view: 'profile', switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'open-consent': state.consentPick = null; set({ view: 'consent', switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'consent-save': {
+          const cfg = API.consentConfig(), pick = state.consentPick || {};
+          const gated = consentMissing();
+          if (gated && !cfg.items.every((it) => !it.required || pick[it.id])) return;
+          API.saveConsent(PARENT_EMAIL, pick);
+          state.consentPick = null;
+          set({ view: gated || state.view !== 'consent' ? 'phases' : 'profile', switcherOpen: false });
+          window.scrollTo(0, 0);
+          break;
+        }
         case 'back-phases': set({ view: 'phases', switcherOpen: false }); window.scrollTo(0, 0); break;
         case 'phase-open': set({ view: 'home', window: b.dataset.win, switcherOpen: false }); window.scrollTo(0, 0); break;
         case 'phase-report': set({ view: 'snapshot', window: b.dataset.win, switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
@@ -1513,6 +1581,11 @@
           break;
         }
       }
+    }));
+
+    root.querySelectorAll('[data-consent]').forEach((cb) => cb.addEventListener('change', () => {
+      state.consentPick = Object.assign({}, state.consentPick, { [cb.dataset.consent]: cb.checked });
+      render();
     }));
 
     // assessment cards cycle pending → progress → done → pending

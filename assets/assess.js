@@ -229,7 +229,8 @@
   var ss = A && A.getSession ? A.getSession(id) : null;
   var part = ss && ss.parts[qp.get('part')] ? qp.get('part') : (ss ? Object.keys(ss.parts)[0] : null);
   // Not signed in → the sign-in page, which brings them straight back.
-  if (ss && !email) { location.href = 'index.html?session=' + encodeURIComponent(id) + '&part=' + encodeURIComponent(part); return; }
+  // Parents also need their consent first (the sign-in page asks for it).
+  if (ss && (!email || (ss.audience === 'Parent' && A.needsConsent && A.needsConsent(email)))) { location.href = 'index.html?session=' + encodeURIComponent(id) + '&part=' + encodeURIComponent(part); return; }
   var acct = A && A.getAccount && email ? A.getAccount(email) : null;
   var V = { answers: {}, name: (acct && acct.name) || '', err: '', done: false, again: false };
   var label = ss ? (ss.prePost ? A.SESSION_PART_LABEL[part] + ' · ' : '') + ss.name : '';

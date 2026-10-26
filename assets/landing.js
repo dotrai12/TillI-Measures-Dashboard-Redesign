@@ -249,6 +249,14 @@
   function enterFound() { if (state.role === 'teacher' && state.found && state.found.kind === 'group') state.role = 'group'; }
 
   function go() {
+    // Parents agree to the consent (current version) before anything else —
+    // the parent app, adding a child, or a session. Not ticking the required box
+    // doesn't lock them out for good; they just can't go on until they do.
+    if (state.role === 'parent' && window.TilliAPI && window.TilliAPI.needsConsent && window.TilliAPI.needsConsent(state.email)) {
+      const prev = window.TilliAPI.consentFor(state.email);
+      set({ step: 'consent', consentPick: Object.assign({}, prev && prev.items), errs: {} });
+      return;
+    }
     // A session link (pre / post outside the phases) goes straight into that
     // session — never to a dashboard. Parents don't add a child for it.
     const SL = state.sessionLink;
@@ -355,7 +363,7 @@
   function render() {
     const s = state.step;
     const authOpen = s !== 'start' && s !== 'children' && s !== 'childForm'
-      && s !== 'childLoading' && s !== 'childVerify' && s !== 'childConfirm';
+      && s !== 'childLoading' && s !== 'childVerify' && s !== 'childConfirm' && s !== 'consent';
 
     // Flower controls live only on the "Add your child" screen.
     if (s !== 'childForm') removeFlowerGUI();
@@ -366,6 +374,7 @@
     if (s === 'childForm') { root.innerHTML = childFormView(); wire(); applyFlowers(); return; }
     if (s === 'childVerify') { root.innerHTML = childVerifyView(); wire(); return; }
     if (s === 'childConfirm') { root.innerHTML = childConfirmView(); wire(); return; }
+    if (s === 'consent') { root.innerHTML = consentView(); wire(); return; }
     if (authOpen) { renderAuth(); }
   }
 
@@ -694,6 +703,31 @@
     loadTimer = setTimeout(() => set({ step: 'childForm' }), LOADING_MS);
   }
 
+  // ===== Parent consent (before the parent app) =====
+  // Wording + version live in TilliAPI.consentConfig. The required box gates
+  // Continue; optional ones never do. Re-shown when the version changes.
+  function consentView() {
+    const cfg = window.TilliAPI.consentConfig(), pick = state.consentPick || {};
+    const ready = cfg.items.every((it) => !it.required || pick[it.id]);
+    const rows = cfg.items.map((it) => `<label class="consent-row${it.required ? ' req' : ''}">
+        <input type="checkbox" data-consent="${esc(it.id)}"${pick[it.id] ? ' checked' : ''}>
+        <span>${esc(it.text)}${it.required ? ' <b class="consent-tag">Required</b>' : ' <span class="consent-tag opt">Optional</span>'}</span>
+      </label>`).join('');
+    return `<div class="sheet">
+      <div class="sheet-wrap">
+        <div class="sheet-head">${brandMark}<button class="btn-ghost focus ml-auto" data-act="consent-later">Not now</button></div>
+        <h1 class="sheet-title">${esc(cfg.title)}</h1>
+        <p class="sheet-sub">${esc(cfg.intro)}</p>
+        <div class="ui-card roomy sheet-form">
+          ${rows}
+          ${cfg.privacyUrl ? `<a class="btn-link" href="${esc(cfg.privacyUrl)}" target="_blank" rel="noopener">Read the full privacy notice</a>` : ''}
+          <p class="dlg-hint">${ready ? 'You can change this any time from your profile.' : 'Tick the required box to continue. You can come back and do it later.'}</p>
+          <button class="btn btn-primary block focus" data-act="consent-ok"${ready ? '' : ' disabled'}>Continue &#8594;</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
   // ===== Enter the child's admission number =====
   // Parents need no code (decided 26 Oct 2026): a matching admission number goes
   // straight to "Is this your child?". The old code step (childVerifyView) is kept
@@ -821,6 +855,10 @@
       }));
 
     scope.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => handleAct(b.dataset.act, ev)));
+    scope.querySelectorAll('[data-consent]').forEach((cb) => cb.addEventListener('change', () => {
+      state.consentPick = Object.assign({}, state.consentPick, { [cb.dataset.consent]: cb.checked });
+      render();
+    }));
 
     // school input
     const si = scope.querySelector('#school-input');
@@ -1057,6 +1095,18 @@
         break;
       case 'forgot':
         set({ forgotSent: true });
+        break;
+      case 'consent-ok': {
+        const cfg = window.TilliAPI.consentConfig(), pick = state.consentPick || {};
+        if (!cfg.items.every((it) => !it.required || pick[it.id])) return;
+        window.TilliAPI.saveConsent(state.email, pick);
+        go();
+        break;
+      }
+      case 'consent-later':
+        // Not banned — they can sign in again and agree whenever they're ready.
+        try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+        set({ step: 'start', role: null, email: '', password: '', errs: {} });
         break;
       case 'confirm-school':
         set({ step: 'signup', school: (state.codeSchool || {}).name || '', password: '', errs: {} });
