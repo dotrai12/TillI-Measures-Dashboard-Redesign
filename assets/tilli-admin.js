@@ -1006,7 +1006,7 @@
 
   function openGroupMenu(gid) {
     var g = ORG.groupById(gid);
-    openModal('Group · ' + g.name, '<p class="tl-muted">Group-level actions are gated structure changes.' + (g.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '</p>' +
+    openModal('Group · ' + g.name, '<p class="tl-muted">Changes here affect every school in the group, and each one asks you to confirm.' + (g.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '</p>' +
       '<div class="tl-stack"><button class="btn btn-outline block" id="gm-rename">Rename group</button>' +
       '<button class="btn btn-outline block" id="gm-archive" title="' + (g.archived ? 'Restore the group and the schools that were archived with it.' : 'Archive the group and every school in it. Nothing is deleted.') + '">' + (g.archived ? 'Un-archive group' : 'Archive group') + '</button>' +
       '<button class="btn btn-danger block" id="gm-empty">Delete / empty group</button></div>', function (close) {
@@ -1654,8 +1654,10 @@
       }).join('') + '</tbody></table></div>';
   }
   function wirePendingTable(root, list, after) {
-    root.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { decideNewStudent(list[+b.dataset.approve], true, after); }); });
-    root.querySelectorAll('[data-turndown]').forEach(function (b) { b.addEventListener('click', function () { decideNewStudent(list[+b.dataset.turndown], false, after); }); });
+    // Approve / turn down changes the roster, so the school's header counts are re-read first.
+    var done = function (st) { return function () { ORG.refreshApiSchool(st.school_id); after(); }; };
+    root.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { var st = list[+b.dataset.approve]; decideNewStudent(st, true, done(st)); }); });
+    root.querySelectorAll('[data-turndown]').forEach(function (b) { b.addEventListener('click', function () { var st = list[+b.dataset.turndown]; decideNewStudent(st, false, done(st)); }); });
   }
 
   // ---- Hub tabs ----
@@ -3262,7 +3264,7 @@
   }
   function openMergeReview(d) {
     var sc = ORG.byId(d.schoolId);
-    var body = '<p class="tl-muted">Master (kept) on the left, duplicate (deleted) on the right. Confirm they are the same child. <span class="ui-tag">gated</span></p>' +
+    var body = '<p class="tl-muted">Master (kept) on the left, duplicate (deleted) on the right. Confirm they are the same child. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
       '<div class="ui-tablewrap"><table class="ui-table compact tl-difftable"><thead><tr><th></th><th>Master · kept</th><th>Duplicate · deleted</th></tr></thead><tbody>' +
         diffRow('Name', d.master.name, d.duplicate.name) +
         diffRow('Admission #', d.master.admission, d.duplicate.admission) +
@@ -3468,7 +3470,7 @@
     var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '">' + esc(r) + '</option>'; }).join('');
     var groupOpts = '<option value="">— Select group —</option>' + ORG.activeGroups().filter(function (g) { return g.id !== 'g-none'; })
       .map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('');
-    openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
+    openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
       '<label class="field">Recipient email<input class="input" id="iv-email" type="email" placeholder="name@school.edu"></label>' +
       '<label class="field">Role<select class="select" id="iv-role">' + roleOpts + '</select>' +
         '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(invRoles[0])) + '</span></label>' +
@@ -4617,7 +4619,7 @@
       var s = e.schoolId ? ORG.byId(e.schoolId) : null;
       return '<tr><td>' + timeAgo(e.at) + '</td><td class="name">' + esc(e.actor) + '</td><td>' + esc(actionLabelG(e.action)) + '</td><td>' + esc(e.entity) + (s ? ' <small>' + esc(s.name) + '</small>' : '') + '</td></tr>';
     }).join('');
-    body.innerHTML = screenHead('Audit Trail', 'Append-only log of every gated action. Deletion Logs and Merge History are filtered views of this.',
+    body.innerHTML = screenHead('Audit Trail', 'A permanent record of every admin action (it can’t be edited). Deletion Logs and Merge History are filtered views of it.',
         '<button class="btn btn-outline btn-sm" data-nav="deletion">Deletion Logs →</button>') +
       '<div class="ui-card"><div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     body.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.nav, {}); }); });
@@ -4827,6 +4829,7 @@
       onConfirm: function () {
         var res = persistStudents(school, rows);
         addState.batch = []; addState.preview = null;
+        if (res.persisted) ORG.refreshApiSchool(school.id);   // header counts without a reload
         if (res.persisted) {
           var msg = res.added + ' student(s) added to ' + school.name + '.';
           if (res.skipped) msg += ' ' + res.skipped + ' skipped (duplicate / conflict).';
@@ -5247,7 +5250,7 @@
     'Users': 'Everyone with a login and their role. Change a role or remove access here.',
     'Invitations': 'Invites sent to school admins and teachers — pending, accepted or expired.',
     'Issue Reports': 'Problems reported from the apps, plus grouped auto-crash reports. Filter by status or school.',
-    'Audit Trail': 'Append-only log of admin actions (archive, delete, publish…) by the Tilli team and the system.',
+    'Audit Trail': 'A permanent record of admin actions (archive, delete, publish…) by the Tilli team and the system — it can’t be edited.',
     'Deletion Logs': 'Read-only record of every deleted student — who deleted them and when.',
     'Merge Students': 'Combine duplicate student profiles. Suggestions never merge on their own — you always confirm.',
     'Knowledge Base': 'Manuals and FAQs for the Tilli team.',
@@ -5781,7 +5784,7 @@
   // ============================================================
   function openNewTemplate() {
     var audOpts = ['Teacher', 'Parent', 'Direct Assessment'].map(function (a) { return '<option>' + a + '</option>'; }).join('');
-    openModal('New template', '<p class="tl-muted">Create an assessment template. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
+    openModal('New template', '<p class="tl-muted">Create an assessment template. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
       '<label class="field">Title<input class="input" id="nt-title" placeholder="e.g. Endline · Parent Report"></label>' +
       '<label class="field">Audience<select class="select" id="nt-aud">' + audOpts + '</select></label>' +
 
@@ -6060,7 +6063,7 @@
         return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(ph) + '">' + esc(t.title) + ' — v' + tplLive(t, ph).v + '</option>';
       }).join('') + '</optgroup>';
     }).join('');
-    openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a school. Status is derived from the window + publish state. <span class="ui-tag">gated</span></p><div class="tl-stack">' +
+    openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a school. Status is derived from the window + publish state. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
       '<label class="field">School<select class="select" id="nd-school">' + schoolOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="nd-assess">' + tplOpts + '</select></label>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="nd-aud"><option>Teacher</option><option>Parent</option><option>Direct Assessment</option></select></label>' +
@@ -6102,7 +6105,7 @@
   }
 
   function openNewGroup() {
-    openModal('New school group', '<p class="tl-muted">Groups let you manage related schools together. <span class="ui-tag">gated</span></p>' +
+    openModal('New school group', '<p class="tl-muted">Groups let you manage related schools together. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
       '<label class="field">Group name<input class="input" id="ng-name" placeholder="e.g. Coastal Schools Trust"></label>', function (close) {
         var nm = (document.getElementById('ng-name').value || '').trim();
         if (!nm) { toast('Group name is required.'); return false; }

@@ -20,7 +20,9 @@
   :root { --tl-side-w: var(--side-w); --tl-header-h: 66px; --tl-maxw: 1200px; }
   body { background: var(--white); }   /* pure white, same as the teacher dashboard — cards keep their 1px border */
 
-  .tl-app { min-height: 100dvh; display: grid; grid-template-columns: var(--tl-side-w) 1fr; }
+  /* minmax(0, 1fr): a wide table scrolls inside its card instead of widening the page (was sideways scroll at ~1024px). */
+  .tl-app { min-height: 100dvh; display: grid; grid-template-columns: var(--tl-side-w) minmax(0, 1fr); }
+  .tl-app > * { min-width: 0; }
   /* Mono text sits slightly smaller than the surrounding copy on this page */
   .tl-app .mono, #tl-modal-root .mono { font-size: .92em; }
 
@@ -140,6 +142,7 @@
   .tl-schedrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; font-size: var(--fs-sm); }
   .tl-schedrow > span:first-child { min-width: 150px; }
   .tl-schedrow .input { width: 72px; text-align: center; }
+  .tl-auditnote { display: inline-block; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
   .tl-growth.up { color: var(--green-700); }
   .tl-growth.down { color: var(--warn-700); }
   .dep-phase-when.st-completed { color: var(--green-700); font-weight: 700; }
@@ -859,8 +862,8 @@
 <script src="assets/tilli-api.js?v=20261026p3b"></script>
 <script src="assets/tilli-history.js?v=20261026p3"></script>
 <script src="assets/calendar-form.js?v=20261026p3b"></script>
-<script src="assets/tilli-org-data.js?v=20261026p3"></script>
+<script src="assets/tilli-org-data.js?v=20261026p4"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261026p3"></script>
+<script src="assets/tilli-admin.js?v=20261026p4c"></script>
 </body>
 </html>

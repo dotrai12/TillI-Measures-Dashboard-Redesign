@@ -311,6 +311,15 @@
     });
   }
   var SEEDED_IDS = {};
+  // After a roster change (import, approve / turn down a new child) the hub's
+  // header counts are re-read from the store — no reload needed.
+  function refreshApiSchool(id) {
+    var rec0 = byId(id), api = window.TilliAPI && window.TilliAPI.resolveSchool(id);
+    if (!rec0 || !api || api.source !== 'created') return;
+    var rec = buildOrgRecordFromApi(api);
+    ['students', 'staff', 'structure', 'gradeCount', 'sectionCount'].forEach(function (k) { rec0[k] = rec[k]; });
+    rec0.completion = apiCompletion(id);
+  }
   // Overall completion: children fully done, pooled over the phases that have opened.
   function apiCompletion(id) {
     var API = window.TilliAPI, done = 0, total = 0, opened = {};
@@ -1404,7 +1413,7 @@
     observation: OBSERVATION, selfGuided: SELF_GUIDED, results: RESULTS,
     roles: ROLES,
     // helpers the client needs but must not re-derive
-    daysFromNow: daysFromNow, inviteDaysLeft: inviteDaysLeft, iso: iso, normName: normName, masterLinkUrl: masterLinkUrl,
+    daysFromNow: daysFromNow, inviteDaysLeft: inviteDaysLeft, refreshApiSchool: refreshApiSchool, iso: iso, normName: normName, masterLinkUrl: masterLinkUrl,
     groupLinkUrl: groupLinkUrl, groupLinkPreview: groupLinkPreview,
     emptyStructureTtlDays: EMPTY_STRUCTURE_TTL_DAYS, emptyStructureWarnDays: EMPTY_STRUCTURE_WARN_DAYS,
     // server-computed views

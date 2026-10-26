@@ -71,13 +71,13 @@ Source: Farah's walkthrough of `tilli.html` (create a school → deploy → Heri
 
 ---
 
-## Phase 4 — Polish (P2)
+## Phase 4 — Polish (P2) · ✅ done 26 Oct 2026
 
 | # | Item | Status |
 |---|---|---|
-| 4.1 | Past-year tables scroll sideways at 1024px (Status column, Start new year cut off) → wrap / tighten columns | ⬜ |
-| 4.2 | School header counts (Students / Grades / Sections) update right after a CSV import, without a reload | ⬜ |
-| 4.3 | Any leftover unexplained chips/jargon from the review (sweep) | ⬜ |
+| 4.1 | Past-year tables scroll sideways at 1024px (Status column, Start new year cut off) → wrap / tighten columns | ✅ |
+| 4.2 | School header counts (Students / Grades / Sections) update right after a CSV import, without a reload | ✅ |
+| 4.3 | Any leftover unexplained chips/jargon from the review (sweep) | ✅ |
 
 ---
 
