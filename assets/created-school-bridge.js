@@ -99,7 +99,13 @@
     var a = API.getAccount ? API.getAccount(u.email) : null;
     return !(a && a.board) || boards.indexOf(a.board) >= 0;
   };
-  var teachers = apiStaff.filter(function (u) { return u.role === 'teacher' && inScopeTeacher(u); }).map(function (u, i) {
+  // A teacher with two classes has a staff row per class — list them once.
+  var seenT = {};
+  var teachers = apiStaff.filter(function (u) {
+    var k = String(u.email || '').toLowerCase();
+    if (u.role !== 'teacher' || !inScopeTeacher(u) || (k && seenT[k])) return false;
+    seenT[k] = 1; return true;
+  }).map(function (u, i) {
     var sec = apiSections.filter(function (s) { return s.section_id === u.section_id; })[0] || {};
     return { id: u.email || ('t-' + i), name: u.name, email: u.email || '',
       grade: sec.grade || '', section: sec.section || '', role: 'Class Teacher' };

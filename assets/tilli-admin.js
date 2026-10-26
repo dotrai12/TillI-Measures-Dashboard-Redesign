@@ -4873,6 +4873,7 @@
     };
   }
   function parseCsv(text, school) {
+    if (school && tlUsesApi(school) && window.TilliAPI.resolveSchool(school.id)) return window.TilliAPI.parseStudentCsv(text, school.id, null);
     var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
     if (lines.length) { var h = lines[0].toLowerCase(); if (h.indexOf('name') >= 0 && h.indexOf('admission') >= 0) lines.shift(); }
     var seen = {}, all = [], match = classMatcher(school);
@@ -4923,6 +4924,7 @@
   function persistStudents(school, rows) {
     if (!(school.created && window.TilliAPI && school.coordinator && school.coordinator.email))
       return { persisted: false };
+    if (window.TilliAPI.importStudents) { var res = window.TilliAPI.importStudents(me.email, school.id, rows); res.persisted = true; return res; }
     var actor = school.coordinator.email, added = 0, skipped = 0, before = {};
     rows.forEach(function (r) {
       var parts = String(r.name || '').trim().split(/\s+/);
@@ -6007,6 +6009,15 @@
     }
     var liveBoard = {};   // grade → board, read live (the org record's structure doesn't carry it)
     if (tlUsesApi(s)) window.TilliAPI.schoolStats(s.id).grades.forEach(function (x) { liveBoard[x.grade] = x.board; });
+    // Each class's teacher (API schools) — how a teacher waiting for a class gets placed.
+    var tAll = tlUsesApi(s) ? window.TilliAPI.teachersFor(s.id) : [], secTeacher = {};
+    if (tlUsesApi(s)) window.TilliAPI.sectionsForSchool(s.id).forEach(function (x) { secTeacher[x.section_id] = x.teacherId ? String(x.teacherId).toLowerCase() : ''; });
+    function teacherSel(room, label) {
+      if (!room || !tAll.length) return '';
+      var cur = secTeacher[room.section_id] || '';
+      return '<select class="select sm ws-secteacher" data-sectch="' + esc(room.section_id) + '" aria-label="Teacher for ' + esc(label) + '" title="The class teacher. Teachers waiting for a class are placed here.">' +
+        '<option value="">No teacher</option>' + tAll.map(function (t) { return '<option value="' + esc(t.email) + '"' + (t.email === cur ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select>';
+    }
     var tree = s.structure.grades.length ? s.structure.grades.map(function (g) {
       var body = g.sections.length
         ? g.sections.map(function (sec) {
@@ -6019,7 +6030,7 @@
                   (room.pending ? '<em class="tl-room-tag pend">+' + room.pending + ' pending</em>' : '')
               : ' <i>' + sec.students + '</i>';
             return '<span class="tl-tree-sec"><input class="ws-secname" data-rs-grade="' + esc(g.grade) + '" data-rs="' + esc(sec.name) + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. The base stays the same.">' +
-              baseTag(sec.name, sec.base, 'sec') + sizeHtml + emptyTag(g.grade + '|' + sec.name) + '</span>';
+              baseTag(sec.name, sec.base, 'sec') + sizeHtml + teacherSel(room, g.grade + ' ' + sec.name) + emptyTag(g.grade + '|' + sec.name) + '</span>';
           }).join('')
         : '<span class="tl-tree-sec" title="Students and teachers are placed in sections — add a section to this grade before adding them.">No sections yet' + ((parseInt(g.students, 10) || 0) ? ' <i>' + parseInt(g.students, 10) + '</i>' : '') + emptyTag(g.grade + '|') + '</span>';
       var bl = schoolBoardList(s), gBoardSel = tlUsesApi(s) && bl.length > 1
@@ -6061,9 +6072,20 @@
       // Board per grade (multi-board schools) — saved on change.
       document.querySelectorAll('[data-sgboard]').forEach(function (sel) {
         sel.addEventListener('change', function () {
-          window.TilliAPI.setGradeBoard(s.id, sel.dataset.sgboard, sel.value);
+          var r = window.TilliAPI.setGradeBoard(s.id, sel.dataset.sgboard, sel.value);
+          if (!r || !r.ok) { toast('Couldn’t set the board for ' + sel.dataset.sgboard + '.'); openStructureEditor(s); return; }
           ORG.server.logAudit(me.name, 'school.structure', sel.dataset.sgboard + ' board → ' + (sel.value || 'not set'), 'school', s.id);
           toast(sel.dataset.sgboard + (sel.value ? ' follows ' + sel.value + '.' : ' has no board now.'));
+        });
+      });
+      // Class teacher — saved on change.
+      document.querySelectorAll('[data-sectch]').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          var r = window.TilliAPI.setSectionTeacher(me.email, s.id, sel.dataset.sectch, sel.value);
+          if (!r.ok) { toast('Couldn’t change the teacher.'); return; }
+          ORG.refreshApiSchool(s.id);
+          ORG.server.logAudit(me.name, 'school.structure', 'class teacher changed', 'school', s.id);
+          toast(sel.value ? 'Teacher saved.' : 'Teacher removed from this class.');
         });
       });
       // "confirm" on a size the system set — saves it as checked.
@@ -6109,13 +6131,17 @@
       });
       document.querySelectorAll('.tl-tree .ws-secname').forEach(function (inp) { inp.addEventListener('input', function () { inp.size = Math.max(1, inp.value.length); }); });
       document.querySelectorAll('[data-addsec]').forEach(function (b) { b.addEventListener('click', function () {
-        ORG.server.addSection(s.id, b.dataset.addsec); ORG.server.logAudit(me.name, 'school.structure', 'section added to ' + b.dataset.addsec, 'school', s.id); openStructureEditor(s);
+        var r = ORG.server.addSection(s.id, b.dataset.addsec, null, me.email);
+        if (r && r.ok === false) { toast('Couldn’t add a section to ' + b.dataset.addsec + '.'); return; }
+        ORG.server.logAudit(me.name, 'school.structure', 'section added to ' + b.dataset.addsec, 'school', s.id); openStructureEditor(s);
       }); });
       var ag = document.getElementById('sg-addgrade'); if (ag) ag.addEventListener('click', function () {
         var base = document.getElementById('sg-newbase').value; if (!base) { toast('Pick the base grade it maps to.'); return; }
         var nm = (document.getElementById('sg-newgrade').value || '').trim() || base;
         if (s.structure.grades.some(function (g) { return g.grade.toLowerCase() === nm.toLowerCase(); })) { toast('A grade called “' + nm + '” already exists.'); return; }
-        ORG.server.addGrade(s.id, nm, null, base); ORG.server.logAudit(me.name, 'school.structure', 'grade ' + gradeLbl(nm, base) + ' added', 'school', s.id); openStructureEditor(s);
+        var r = ORG.server.addGrade(s.id, nm, null, base, me.email);
+        if (r && r.ok === false) { toast(r.reason === 'exists' ? 'A grade called “' + nm + '” already exists.' : 'Couldn’t add that grade.'); return; }
+        ORG.server.logAudit(me.name, 'school.structure', 'grade ' + gradeLbl(nm, base) + ' added', 'school', s.id); openStructureEditor(s);
       });
     }, 0);
   }

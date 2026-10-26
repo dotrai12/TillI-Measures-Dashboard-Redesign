@@ -97,13 +97,13 @@ Decisions by Ishani, 26 Oct 2026: leadership can see each student for now · par
 | 5.6 | **Board scope, three leaks** | Scoped admins see only their boards' teachers (no false "no section" warning); invites pick a real in-scope class; Tilli / group drill-ins open as an all-boards viewer. | ✅ |
 | 5.7 | **Board access stays maintainable** | Rollover sections keep their grade's board; Edit board access on Staff & Access; untagged-grades nudge. | ✅ |
 
-## Phase 5B — School admin self-serves classes and students · ⬜
+## Phase 5B — School admin self-serves classes and students · ✅ done 26 Oct 2026
 
 | # | Item | Status |
 |---|---|---|
-| 5.8 | One add-grade / add-section save in TilliAPI, used by Tilli too (fixes the CSV-loop known issue) | ⬜ |
-| 5.9 | School dashboard: Grades & sections (in-scope boards only) | ⬜ |
-| 5.10 | School dashboard: Add students (paste, .csv, template), in-scope classes only | ⬜ |
+| 5.8 | One add-grade / add-section save in TilliAPI, used by Tilli too (fixes the CSV-loop known issue) | ✅ |
+| 5.9 | School dashboard: Grades & sections (in-scope boards only) | ✅ |
+| 5.10 | School dashboard: Add students (paste, .csv, template), in-scope classes only | ✅ |
 
 ## Phase 5C — Teacher and parent across the year · ⬜
 
@@ -135,14 +135,18 @@ Decisions by Ishani, 26 Oct 2026: leadership can see each student for now · par
 | 5.24 | Waiting badge on the phone bottom nav (shipped with 5A) | ✅ |
 | 5.25 | Key hover-only explanations become tap ⓘ tips | ⬜ |
 
-## Phase 5F — Individual assessments per school · ⬜
+## Phase 5F — Sessions (pre / post outside the phases) · ⬜ — built right after 5B
+
+For a separate parent or teacher session (e.g. a workshop): a pre and a post survey for that session only. Never part of Baseline / Midline / Endline, completion numbers or the school dashboard; schools can't see it. Decided by Ishani, 26 Oct 2026.
 
 | # | Item | Status |
 |---|---|---|
-| 5.26 | Data + API (create, list, end, complete, link) | ⬜ |
-| 5.27 | Tilli school → Assessments: Individual assessments card (template, Parent/Teacher, dates, link, who's done it) | ⬜ |
-| 5.28 | Link opens sign-in/up with the role preselected and goes straight to the assessment, never a dashboard | ⬜ |
-| 5.29 | Light runner in `assess.html?ia=` with a closed message | ⬜ |
+| 5.26 | **Data + API.** A session per school: name, who takes it (Parent / Teacher), template + version, single or **pre and post**, open/close dates per part. Answers saved per person and part; pre and post matched by email. | ⬜ |
+| 5.27 | **Tilli school → Assessments → Sessions.** + New session; each part gets its own link (Copy) and dates; End. | ⬜ |
+| 5.28 | **Link** opens sign-in / sign-up with the role preselected and goes straight into that part — never a dashboard. Parents skip adding a child; teachers sign up as full teachers (school code). | ⬜ |
+| 5.29 | **Runner** shows the template's real questions and saves the answers (self-guided games record a simulated score). Closed → a plain message. | ⬜ |
+| 5.30 | **Session page (Tilli only).** Collected: "18 of 24 did the pre · 15 did the post · 13 did both". Results by question type: rating scales and choices as bars (pre vs post side by side, plus moved up / same / down for people who did both), open text as a list, games as a score spread. | ⬜ |
+| 5.31 | **Download CSV** — one row per person (pre + post answers side by side), plus pre-only and post-only files. | ⬜ |
 
 ---
 

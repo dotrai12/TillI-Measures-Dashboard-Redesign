@@ -339,6 +339,17 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 20 — Schools manage their own classes (Phase 5B, 10 min)
+
+- [ ] Leadership dashboard (any demo school, e.g. `admin@heritageoaks.edu`) → **Roster** → **Classes**: each grade lists its sections with children **of** the class size and a **Teacher** picker.
+- [ ] **+ Section** on a grade → a new section at size 30 (**Confirm** or type the real size). **Add a grade**: pick the standard grade, optionally your own name, a board (multi-board schools) and how many sections.
+- [ ] Pick a teacher for a class → a teacher who asked "My class isn't here" is placed and their request closes (Overview warning and Roster badge go away).
+- [ ] **+ Add students** → paste or **Upload .csv** (**Download template** lists your real classes) → **Check rows** → rows for classes you don't have (or outside your boards) are flagged → **Add N students** → if the import set a size, **Is that the whole class?**
+- [ ] A CBSE-only school admin sees only CBSE grades here and can't add, staff or import into IB classes.
+- [ ] Tilli → school → **Settings → Grades & sections**: **+ Section** / **Add grade** now save for real (they survive a reload), and the CSV import accepts the new class straight away. Each section has a **teacher** picker too.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

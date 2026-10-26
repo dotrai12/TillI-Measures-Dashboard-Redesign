@@ -795,8 +795,8 @@
     var role     = roleOf(db, actor, schoolId);
     var sectionId= input.section_id;
 
-    // GUARD: only a teacher (own sections) or admin may create a student (spec §7).
-    if (role!=='teacher' && role!=='admin')
+    // GUARD: only a teacher (own sections), an admin or the Tilli team may create a student (spec §7).
+    if (role!=='teacher' && role!=='admin' && !isTilliActor(db, actor))
       return { ok:false, result:'denied', reason:'not-authorized' };
     if (role==='teacher' && teacherScope(db, actor, schoolId).indexOf(sectionId) < 0)
       return { ok:false, result:'denied', reason:'section-out-of-scope' };  // spec A4 scope
@@ -1655,6 +1655,156 @@
       write(db);
     }
     return secId;
+  }
+
+  /* ---------- CLASSES: add grade / section, give a class its teacher ----------
+     One save for Tilli and the school admin (a school admin only inside their
+     boards). New classes start at 30 children, "not confirmed" until an admin
+     saves a size. */
+  var NEW_CLASS_SIZE = 30;
+  function canEditClasses(db, actorEmail, schoolId, board){
+    if (isTilliActor(db, actorEmail)) return true;
+    if (roleOf(db, actorEmail, schoolId) !== 'admin') return false;
+    var bs = adminBoards(schoolId, actorEmail);
+    return !bs || !board || bs.indexOf(board) >= 0;
+  }
+  function gradeInfo(db, schoolId, grade){
+    var sib = schoolSections(db, schoolId).filter(function(x){ return low(x.grade)===low(grade); });
+    var empty = emptyGradesOf(db, schoolId).filter(function(g){ return low(g.grade)===low(grade); })[0];
+    if (!sib.length && !empty) return null;
+    return { grade: sib.length ? sib[0].grade : empty.grade, base: (sib[0] && sib[0].base_grade) || (empty && empty.base) || baseGradeIn(db, schoolId, grade),
+      board: (sib[0] && boardOfSec(db, sib[0])) || (empty && empty.board) || (schoolBoardsIn(db, schoolId).length === 1 ? schoolBoardsIn(db, schoolId)[0] : null), sections: sib };
+  }
+  function nextLetter(sections){
+    for (var c = 0; c < 26; c++){ var n = String.fromCharCode(65 + c); if (!sections.some(function(x){ return up(x.section)===n || up(x.base_section)===n; })) return n; }
+    return String(sections.length + 1);
+  }
+  function makeSection(db, schoolId, g, letter, actorEmail){
+    var secId = 'sec_' + schoolId + '_' + slugify(g.grade + '_' + letter), k = 1;
+    while (db.sections[secId]) secId = 'sec_' + schoolId + '_' + slugify(g.grade + '_' + letter) + '-' + (++k);
+    var sec = db.sections[secId] = { section_id:secId, school_id:schoolId, grade:g.grade, section:letter, name:(g.grade + ' ' + letter).trim(),
+      teacherId:null, base_grade:g.base || '', base_section:letter, board:g.board || null, expected:NEW_CLASS_SIZE, expectedConfirmed:false, addedAt:Date.now() };
+    logHistory(db, { school_id:schoolId, section_id:secId, section_name:sec.name, students:[], kind:'student', action:'section.add',
+      changes:[{ label:'Class added', from:'', to:sec.name }], actor: actorFor(db, actorEmail, schoolId) });
+    return sec;
+  }
+  // sections: section names to create now ([] keeps the grade with no class yet).
+  function addGrade(actorEmail, schoolId, name, base, board, sections){
+    var db = getDB(), sc = db.schools[schoolId]; name = norm(name);
+    if (!sc) return { ok:false, reason:'not_found' };
+    if (!name) return { ok:false, reason:'empty' };
+    if (gradeInfo(db, schoolId, name)) return { ok:false, reason:'exists' };
+    if (!board && schoolBoardsIn(db, schoolId).length === 1) board = schoolBoardsIn(db, schoolId)[0];
+    if (!canEditClasses(db, actorEmail, schoolId, board)) return { ok:false, reason:'not-authorized' };
+    var g = { grade:name, base: base || inferBaseGrade(name), board: board || null };
+    var names = (sections || []).map(norm).filter(Boolean);
+    if (!names.length){ (sc.emptyGrades = sc.emptyGrades || []).push({ grade:g.grade, base:g.base, board:g.board }); }
+    var made = names.map(function(n){ return makeSection(db, schoolId, g, n, actorEmail); });
+    if (!names.length) logHistory(db, { school_id:schoolId, section_id:null, section_name:'', students:[], kind:'student', action:'section.add',
+      changes:[{ label:'Grade added', from:'', to:g.grade }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true, grade:g.grade, sections: made.map(clone) };
+  }
+  // A new section in an existing grade (next free letter unless a name is given).
+  function addSection(actorEmail, schoolId, grade, sectionName){
+    var db = getDB(), g = gradeInfo(db, schoolId, grade);
+    if (!g) return { ok:false, reason:'no_grade' };
+    if (!canEditClasses(db, actorEmail, schoolId, g.board)) return { ok:false, reason:'not-authorized' };
+    var nm = norm(sectionName);
+    if (nm && g.sections.some(function(x){ return low(x.section)===low(nm); })) return { ok:false, reason:'exists' };
+    var sec = makeSection(db, schoolId, g, nm || nextLetter(g.sections), actorEmail);
+    write(db);
+    return { ok:true, section: clone(sec) };
+  }
+  // Give a class its teacher (the previous teacher keeps their other classes).
+  function setSectionTeacher(actorEmail, schoolId, sectionId, teacherEmail){
+    var db = getDB(), sec = db.sections[sectionId];
+    if (!sec || sec.school_id !== schoolId) return { ok:false, reason:'not_found' };
+    if (!canEditClasses(db, actorEmail, schoolId, boardOfSec(db, sec))) return { ok:false, reason:'not-authorized' };
+    var e = low(teacherEmail), was = sec.teacherId ? low(sec.teacherId) : null;
+    if (was === e) return { ok:true };
+    db.teacherMemberships.forEach(function(m){
+      if (m.school_id === schoolId && m.user_id !== e){ var i = m.section_ids.indexOf(sectionId); if (i >= 0) m.section_ids.splice(i, 1); }
+    });
+    var staff = db.staff[schoolId] = (db.staff[schoolId] || []).filter(function(u){ return !(u.role === 'teacher' && u.section_id === sectionId); });
+    sec.teacherId = e || null;
+    if (e){
+      var m = teacherMembershipFor(db, e, schoolId, 'invite');
+      m.status = 'active';
+      if (m.section_ids.indexOf(sectionId) < 0) m.section_ids.push(sectionId);
+      var spare = staff.filter(function(u){ return low(u.email) === e && !u.section_id; })[0];
+      if (spare) spare.section_id = sectionId;
+      else staff.push({ name: nameFor(db, e, schoolId) || e, email: e, role: 'teacher', section_id: sectionId });
+    }
+    logHistory(db, { school_id:schoolId, section_id:sectionId, section_name:sec.name, students:[], kind:'student', action:'teacher.reassign',
+      changes:[{ label:'Teacher', from: was ? (nameFor(db, was, schoolId) || was) : 'None', to: e ? (nameFor(db, e, schoolId) || e) : 'None' }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true };
+  }
+
+  /* ---------- STUDENT IMPORT (CSV / paste) — shared by Tilli and the school admin ----------
+     Columns: name, admission, grade, section (a header row is skipped). A row must
+     name a real class — only upper/lower case and extra spaces are forgiven.
+     scope: section ids the importer may use (null = every class). */
+  function splitCsvLine(line){
+    var out = [], cur = '', q = false;
+    for (var i = 0; i < line.length; i++){
+      var ch = line[i];
+      if (q){ if (ch === '"' && line[i+1] === '"'){ cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+      else if (ch === '"') q = true; else if (ch === ',' || ch === '\t'){ out.push(cur.trim()); cur = ''; } else cur += ch;
+    }
+    out.push(cur.trim()); return out;
+  }
+  function matchClass(schoolId, grade, section, scope){
+    var db = getDB(), sq = function(x){ return low(x).replace(/\s+/g, ' ').trim(); };
+    var secs = schoolSections(db, schoolId).filter(function(x){ return !scope || scope.indexOf(x.section_id) >= 0; });
+    var inG = secs.filter(function(x){ return sq(x.grade) === sq(grade); });
+    var outside = function(sec){ return scope && schoolSections(db, schoolId).some(function(x){ return sq(x.grade) === sq(grade) && (sec == null || sq(x.section) === sq(sec)); }); };
+    if (!inG.length){
+      if (outside(null)) return { error: norm(grade) + ' isn’t in your boards' };
+      var empty = emptyGradesOf(db, schoolId).some(function(g){ return sq(g.grade) === sq(grade); });
+      return { error: empty ? norm(grade) + ' has no sections yet — add one first' : 'No ' + norm(grade) + ' at this school — add the grade first' };
+    }
+    if (!norm(section)) return inG.length === 1 ? { section: clone(inG[0]) } : { error: 'Which section? ' + inG[0].grade + ' has ' + inG.map(function(x){ return x.section; }).join(', ') };
+    var hit = inG.filter(function(x){ return sq(x.section) === sq(section); })[0];
+    if (!hit && outside(section)) return { error: inG[0].grade + ' ' + norm(section) + ' isn’t in your boards' };
+    return hit ? { section: clone(hit) } : { error: 'No ' + inG[0].grade + ' ' + norm(section) + ' at this school — add the section first' };
+  }
+  function parseStudentCsv(text, schoolId, scope){
+    var lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    if (lines.length){ var h = low(lines[0]); if (h.indexOf('name') >= 0 && h.indexOf('admission') >= 0) lines.shift(); }
+    var seen = {}, all = [];
+    lines.forEach(function(line){
+      var c = splitCsvLine(line);
+      var row = { name: c[0] || '', admission: c[1] || '', grade: c[2] || '', section: c[3] || '' };
+      if (!row.name) row.error = 'Missing name';
+      else if (!row.admission) row.error = 'Missing admission #';
+      else if (!row.grade) row.error = 'Missing grade';
+      else if (seen[low(row.admission)]) row.error = 'Duplicate in file';
+      else {
+        var m = matchClass(schoolId, row.grade, row.section, scope);
+        if (m.error) row.error = m.error;
+        else { row.grade = m.section.grade; row.section = m.section.section; row.section_id = m.section.section_id; seen[low(row.admission)] = true; }
+      }
+      all.push(row);
+    });
+    return { all: all, valid: all.filter(function(r){ return !r.error; }), invalid: all.filter(function(r){ return r.error; }) };
+  }
+  // Rows from parseStudentCsv. Returns counts + the classes whose size the import
+  // just set (an admin is asked "is that the whole class?").
+  function importStudents(actorEmail, schoolId, rows){
+    var added = 0, skipped = 0, before = {};
+    rows.forEach(function(r){
+      var parts = norm(r.name).split(/\s+/), first = parts.shift() || '', last = parts.join(' ');
+      var secId = r.section_id || (findSection(getDB(), schoolId, r.grade, r.section) || {}).section_id;
+      if (!secId){ skipped++; return; }
+      if (!before[secId]) before[secId] = sectionRoom(schoolId, secId);
+      var out = addStudent({ actorEmail: actorEmail, school_id: schoolId, section_id: secId,
+        student_id: r.admission, first: first, last: last, grade: r.grade, section: r.section, source: 'admin' });
+      if (out && (out.result === 'created' || out.result === 'merged')) added++; else skipped++;
+    });
+    var sized = Object.keys(before).map(function(id){ var a = sectionRoom(schoolId, id), b = before[id]; return a && b && a.expected !== b.expected && !a.confirmed ? a : null; }).filter(Boolean);
+    return { ok:true, added: added, skipped: skipped, sized: sized };
   }
 
   /* ======================================================================
@@ -2824,6 +2974,13 @@
     setGradeBoard: setGradeBoard,
     adminBoards: adminBoards,
     setAdminBoards: setAdminBoards,
+    addGrade: addGrade,
+    addSection: addSection,
+    setSectionTeacher: setSectionTeacher,
+    matchClass: matchClass,
+    parseStudentCsv: parseStudentCsv,
+    importStudents: importStudents,
+    NEW_CLASS_SIZE: NEW_CLASS_SIZE,
     untaggedGrades: untaggedGrades,
     sectionsInScope: sectionsInScope,
     // Completion = children fully done (one rule for every app)

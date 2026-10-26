@@ -2277,7 +2277,7 @@
 
     // Two tabs — Students / Your team. The tab lives in the URL (?tab=team) so a
     // refresh or a shared link lands on the same one; switching replaces history.
-    var tab = params.tab === 'team' && !AD.pastYear ? 'team' : 'students';
+    var tab = params.tab === 'team' && !AD.pastYear ? 'team' : params.tab === 'classes' && canManageClasses() ? 'classes' : 'students';
     var tabBtn = function (key, label, n) {
       return '<button class="ui-tab' + (tab === key ? ' on' : '') + '" role="tab" aria-selected="' + (tab === key) + '" data-rostertab="' + key + '">' + esc(label) + ' <span class="ad-tabn">' + n + '</span></button>';
     };
@@ -2300,13 +2300,15 @@
           return '<tr><td class="name">' + esc(r.name) + '<br><small class="text-muted">' + esc(r.email) + '</small></td><td>' + esc((r.grade + ' ' + r.section).trim() || '—') + '</td><td>' + esc(r.note || '—') + '</td>' +
             '<td class="text-right nowrap"><button class="btn-link" data-askdone="' + esc(r.id) + '">Mark done</button></td></tr>';
         }).join('') + '</tbody></table></div></div>' : '';
-    var panel = tab === 'team'
+    var panel = tab === 'classes' ? classesPanelHTML()
+      : tab === 'team'
       ? asksBody + codeJoinersHTML() + inviteAlertHTML(true) + userBody
       : waitingBody + listBody +
         // Year-end only — kept quiet so it isn't mistaken for an everyday action.
         (AD.pastYear ? '' : yearEndHTML());
     body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Names and sections — plus a temporary developmental-stage column (see the note in Students).' : 'Your children and teachers — names and sections only, never assessment results.') +
       '<div class="ui-tabs ad-rostertabs" role="tablist" aria-label="Roster">' + tabBtn('students', 'Students', AD.students.length) +
+        (canManageClasses() ? tabBtn('classes', 'Classes', AD.sections.length) : '') +
         (AD.pastYear ? '' : tabBtn('team', 'Your team', users.length).replace('</button>', (inviteAlerts().length || asks.length ? '<i class="ad-tabalert" title="' + (asks.length ? 'A teacher is waiting for a class' : 'An invite is about to expire') + '"></i>' : '') + '</button>')) + '</div>' +
       panel;
     // NOTE: Duplicate review queue (spec §5.4.5) sits behind the near-match config
@@ -2314,8 +2316,9 @@
 
     // wiring
     body.querySelectorAll('[data-rostertab]').forEach(function (b) {
-      b.addEventListener('click', function () { setParams(b.dataset.rostertab === 'team' ? { tab: 'team' } : {}); });
+      b.addEventListener('click', function () { setParams(b.dataset.rostertab === 'students' ? {} : { tab: b.dataset.rostertab }); });
     });
+    if (tab === 'classes') wireClasses(body);
     body.querySelectorAll('[data-graderoster]').forEach(function (b) { b.addEventListener('click', function () { openGradeRoster(b.dataset.graderoster); }); });
     body.querySelectorAll('[data-kidok]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidok], true); }); });
     body.querySelectorAll('[data-unjoin]').forEach(function (b) { b.addEventListener('click', function () {
@@ -2567,6 +2570,157 @@
     var list = window.TilliAPI && TilliAPI.pendingStudents && currentSchoolId() ? TilliAPI.pendingStudents(currentSchoolId()) : [], sc = boardScope();
     return sc ? list.filter(function (k) { return sc.indexOf(k.section_id) >= 0; }) : list;
   }
+  // ---- Classes: the school admin adds grades, sections and students, sizes each
+  // class and gives it a teacher. Same TilliAPI save the Tilli team uses; a
+  // board-limited admin only sees and adds inside their boards. Changes reload
+  // the page so every screen (built once from the roster) picks them up. ----
+  function canManageClasses() { return !!(window.TILLI_CREATED && !AD.pastYear && window.TilliAPI && TilliAPI.addSection && currentSchoolId()); }
+  function myBoards() { return (window.TILLI_CREATED && window.TILLI_CREATED.boards) || null; }
+  function classGrades() {
+    var bs = myBoards();
+    return TilliAPI.schoolStats(currentSchoolId()).grades.filter(function (g) { return !bs || (g.board && bs.indexOf(g.board) >= 0); });
+  }
+  function classTeachers() {
+    var sc = boardScope();
+    return TilliAPI.teachersFor(currentSchoolId()).filter(function (t) {
+      return !sc || !t.section_ids.length || t.section_ids.some(function (id) { return sc.indexOf(id) >= 0; });
+    });
+  }
+  function reloadClasses(msg) { try { sessionStorage.setItem('ad.toast', msg); } catch (e) { /* toast is a nicety */ } location.reload(); }
+  function classesPanelHTML() {
+    var A = TilliAPI, sid = currentSchoolId(), grades = classGrades(), bs = myBoards(), boards = bs || schoolBoards();
+    var teachers = classTeachers(), owner = {};
+    A.sectionsForSchool(sid).forEach(function (x) { owner[x.section_id] = x.teacherId ? String(x.teacherId).toLowerCase() : ''; });
+    var hidden = bs ? A.schoolStats(sid).grades.filter(function (g) { return !g.board; }).length : 0;
+    var tSel = function (secId, label) {
+      var cur = owner[secId] || '';
+      return '<label class="select-wrap"><select class="select sm" data-clsteacher="' + esc(secId) + '" aria-label="Teacher for ' + esc(label) + '">' +
+        '<option value="">No teacher</option>' + teachers.map(function (t) { return '<option value="' + esc(t.email) + '"' + (t.email === cur ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></label>';
+    };
+    var cards = grades.length ? grades.map(function (g) {
+      var rows = g.sections.map(function (x) {
+        var rm = A.sectionRoom(sid, x.id), label = gLbl(g.grade) + ' · ' + x.name;
+        return '<tr><td class="name">' + esc(x.name) + '</td>' +
+          '<td class="nowrap">' + (rm ? rm.added : x.students) + ' of <input type="number" min="0" class="input sm ad-numin" data-clssize="' + esc(x.id) + '" value="' + (rm && rm.expected != null ? rm.expected : '') + '" placeholder="—" aria-label="Class size for ' + esc(label) + '">' +
+            (rm && rm.expected != null && !rm.confirmed ? ' <button class="btn-link" data-clsok="' + esc(x.id) + '" data-clsn="' + rm.expected + '">Confirm</button>' : '') + '</td>' +
+          '<td>' + tSel(x.id, label) + '</td></tr>';
+      }).join('');
+      return '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">' + esc(gLbl(g.grade)) + '</h3>' +
+          (boards.length > 1 || bs ? '<p class="ui-mod-note">' + esc(g.board || 'No board yet') + '</p>' : '') + '</div>' +
+          '<button class="btn btn-outline btn-sm" data-clsaddsec="' + esc(g.grade) + '">+ Section</button></div>' +
+        (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-520"><thead><tr><th>Section</th><th>Children · class size</th><th>Teacher</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+          : '<p class="text-muted">No sections yet — add one before children or teachers can be placed here.</p>') + '</div>';
+    }).join('') : stEmpty('No classes yet.', 'Add a grade below, then its sections.');
+    var used = A.schoolStats(sid).grades.map(function (g) { return g.base; });
+    var free = (A.BASE_GRADES || []).filter(function (b) { return used.indexOf(b) < 0; });
+    var addGrade = free.length ? '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Add a grade</h3>' +
+        '<p class="ui-mod-note">Pick the standard grade it matches — Tilli uses it even if your school calls it something else.</p></div></div>' +
+      '<div class="row wrap ad-addgrade">' +
+        '<label class="select-wrap"><select class="select sm" id="cls-base" aria-label="Standard grade"><option value="">Standard grade…</option>' + free.map(function (b) { return '<option>' + esc(b) + '</option>'; }).join('') + '</select></label>' +
+        '<input class="input sm" id="cls-name" placeholder="Your school’s name for it (optional)" aria-label="Your school’s name for this grade">' +
+        (boards.length > 1 ? '<label class="select-wrap"><select class="select sm" id="cls-board" aria-label="Board"><option value="">Board…</option>' + boards.map(function (b) { return '<option>' + esc(b) + '</option>'; }).join('') + '</select></label>' : '') +
+        '<label class="ad-inline">Sections <input type="number" min="0" max="12" value="1" class="input sm ad-numin" id="cls-nsec" aria-label="How many sections"></label>' +
+        '<button class="btn btn-cyan btn-sm" id="cls-addgrade">Add grade</button></div></div>' : '';
+    return '<div class="row mb-3 ad-teamtop"><p class="ui-mod-note" style="margin:0">Each class shows children added <b>of</b> its size. Teachers add children up to the size; past it, a new child waits for your approval. New sections start at ' + A.NEW_CLASS_SIZE + ' — change it if that’s wrong.</p>' +
+        '<button class="btn btn-cyan btn-sm" data-clsstudents>+ Add students</button></div>' +
+      (hidden ? '<div class="ui-note mb-3"><span aria-hidden="true">🏷️</span><span>' + countNoun(hidden, 'grade has', 'grades have') + ' no board yet, so ' + (hidden === 1 ? 'it isn’t' : 'they aren’t') + ' shown here. Ask the Tilli team to set ' + (hidden === 1 ? 'its board' : 'their boards') + '.</span></div>' : '') +
+      cards + addGrade;
+  }
+  function wireClasses(body) {
+    var A = TilliAPI, sid = currentSchoolId();
+    body.querySelectorAll('[data-clsaddsec]').forEach(function (b) { b.addEventListener('click', function () {
+      var r = A.addSection(email, sid, b.dataset.clsaddsec);
+      if (!r.ok) { toast(r.reason === 'not-authorized' ? 'That grade is outside your boards.' : 'Couldn’t add a section.'); return; }
+      reloadClasses(r.section.name + ' added — ' + A.NEW_CLASS_SIZE + ' children expected until you change it.');
+    }); });
+    var ag = body.querySelector('#cls-addgrade');
+    if (ag) ag.addEventListener('click', function () {
+      var base = body.querySelector('#cls-base').value, nm = body.querySelector('#cls-name').value.trim() || base;
+      var bEl = body.querySelector('#cls-board'), board = bEl ? bEl.value : ((myBoards() || schoolBoards())[0] || null);
+      var n = Math.max(0, Math.min(12, parseInt(body.querySelector('#cls-nsec').value, 10) || 0));
+      if (!base) { toast('Pick the standard grade it matches.'); return; }
+      if (bEl && !board) { toast('Pick the board this grade follows.'); return; }
+      var names = []; for (var i = 0; i < n; i++) names.push(String.fromCharCode(65 + i));
+      var r = A.addGrade(email, sid, nm, base, board, names);
+      if (!r.ok) { toast(r.reason === 'exists' ? 'A grade called “' + nm + '” already exists.' : r.reason === 'not-authorized' ? 'That board is outside your access.' : 'Couldn’t add that grade.'); return; }
+      reloadClasses(nm + ' added' + (n ? ' with ' + countNoun(n, 'section', 'sections') : '') + '.');
+    });
+    body.querySelectorAll('[data-clssize]').forEach(function (inp) {
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+      inp.addEventListener('change', function () {
+        var r = A.setSectionExpected(sid, inp.dataset.clssize, inp.value, email);
+        toast(r.ok ? (r.room.expected ? r.room.name + ' expects ' + r.room.expected + '.' : 'Size cleared — every new child in ' + r.room.name + ' now needs approval.') : 'Couldn’t save that size.');
+      });
+    });
+    body.querySelectorAll('[data-clsok]').forEach(function (b) { b.addEventListener('click', function () {
+      var r = A.setSectionExpected(sid, b.dataset.clsok, b.dataset.clsn, email);
+      if (r.ok) { toast(r.room.name + ': ' + r.room.expected + ' confirmed.'); render(); }
+    }); });
+    body.querySelectorAll('[data-clsteacher]').forEach(function (sel) { sel.addEventListener('change', function () {
+      var r = A.setSectionTeacher(email, sid, sel.dataset.clsteacher, sel.value);
+      if (!r.ok) { toast('Couldn’t change the teacher.'); return; }
+      reloadClasses(sel.value ? 'Teacher saved.' : 'Teacher removed from that class.');
+    }); });
+    var st = body.querySelector('[data-clsstudents]'); if (st) st.addEventListener('click', openAddStudents);
+  }
+  // Add students: paste or upload a CSV, check every row against your classes, import.
+  function openAddStudents() {
+    var A = TilliAPI, sid = currentSchoolId(), preview = null, text = '';
+    function draw() {
+      var ov = openModal(modalHead('Add students') +
+        '<p class="ui-mod-note mb-3">Columns: <b>name, admission, grade, section</b> — one child per line, first row is the header. Each row must name one of your classes.</p>' +
+        '<div class="row wrap mb-2"><label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">Upload .csv<input type="file" id="as-file" accept=".csv,text/csv,text/plain" hidden></label>' +
+          '<button class="btn-link" id="as-template">Download template</button></div>' +
+        '<textarea class="input sm mono" id="as-in" rows="6" placeholder="name,admission,grade,section&#10;Aarav Sharma,ADM-2001,Grade 1,A">' + esc(text) + '</textarea>' +
+        '<div class="row mt-2"><button class="btn btn-outline btn-sm" id="as-check">Check rows</button></div>' +
+        (preview ? '<p class="ui-mod-note mt-3"><b>' + preview.valid.length + ' ready</b>' + (preview.invalid.length ? ' · ' + preview.invalid.length + ' need fixing' : '') + '</p>' +
+          '<div class="ui-tablewrap"><table class="ui-table compact mw-520"><thead><tr><th>Name</th><th>Admission #</th><th>Class</th><th>Status</th></tr></thead><tbody>' +
+          preview.all.map(function (r) { return '<tr><td>' + esc(r.name || '—') + '</td><td class="ad-num">' + esc(r.admission || '—') + '</td><td>' + esc((r.grade + ' ' + r.section).trim()) + '</td><td>' + (r.error ? '<span class="text-danger">' + esc(r.error) + '</span>' : 'OK') + '</td></tr>'; }).join('') +
+          '</tbody></table></div>' : '') +
+        '<div class="ui-modal-foot row"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button>' +
+          (preview && preview.valid.length ? '<button class="btn btn-primary btn-sm" id="as-import">Add ' + countNoun(preview.valid.length, 'student', 'students') + '</button>' : '') + '</div>', { wide: true });
+      var ta = ov.querySelector('#as-in');
+      ta.addEventListener('input', function () { text = ta.value; });
+      ov.querySelector('#as-check').addEventListener('click', function () { text = ta.value; preview = A.parseStudentCsv(text, sid, boardScope()); draw(); });
+      ov.querySelector('#as-file').addEventListener('change', function (e) {
+        var f = e.target.files && e.target.files[0]; if (!f) return;
+        var rd = new FileReader(); rd.onload = function () { text = String(rd.result || ''); preview = A.parseStudentCsv(text, sid, boardScope()); draw(); }; rd.readAsText(f);
+      });
+      ov.querySelector('#as-template').addEventListener('click', function () {
+        var rows = [['name', 'admission', 'grade', 'section']];
+        classGrades().forEach(function (g) { g.sections.slice(0, 2).forEach(function (x) { rows.push(['Example Child ' + rows.length, 'ADM-' + (1000 + rows.length), g.grade, x.name]); }); });
+        var url = URL.createObjectURL(new Blob(['﻿' + rows.map(function (r) { return r.join(','); }).join('\n')], { type: 'text/csv;charset=utf-8' }));
+        var a = document.createElement('a'); a.href = url; a.download = 'students-template.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+      var im = ov.querySelector('#as-import');
+      if (im) im.addEventListener('click', function () {
+        var res = A.importStudents(email, sid, preview.valid);
+        var msg = res.added + ' student' + (res.added === 1 ? '' : 's') + ' added.' + (res.skipped ? ' ' + res.skipped + ' skipped (same admission number or name — check them on the Students tab).' : '');
+        if (res.sized.length) askSizes(res.sized, msg); else reloadClasses(msg);
+      });
+    }
+    // "Grade 2 A now has 15 — is that the whole class?" after an import sets a size.
+    function askSizes(rooms, msg) {
+      var ov = openModal(modalHead('Is that the whole class?') +
+        '<p class="ui-mod-note mb-3">The import set these class sizes from the number of children in the file. Teachers add up to the size; past it, each new child waits for your approval.</p>' +
+        rooms.map(function (r, i) {
+          return '<div class="mb-3"><b>' + esc(r.name) + '</b> now has <b>' + r.added + '</b>.<br>' +
+            '<label><input type="radio" name="as-sz-' + i + '" value="yes" checked> Yes, that’s the whole class</label><br>' +
+            '<label><input type="radio" name="as-sz-' + i + '" value="no"> No, it should be <input type="number" min="1" class="input sm ad-numin" data-asn="' + i + '" value="' + r.added + '" aria-label="Real size of ' + esc(r.name) + '"></label></div>';
+        }).join('') +
+        '<div class="ui-modal-foot row"><button class="btn btn-primary btn-sm" id="as-sizes">Save sizes</button></div>');
+      ov.querySelectorAll('[data-asn]').forEach(function (inp) { inp.addEventListener('input', function () { ov.querySelector('input[name="as-sz-' + inp.dataset.asn + '"][value="no"]').checked = true; }); });
+      ov.querySelector('#as-sizes').addEventListener('click', function () {
+        rooms.forEach(function (r, i) {
+          var no = ov.querySelector('input[name="as-sz-' + i + '"][value="no"]').checked;
+          A.setSectionExpected(sid, r.section_id, no ? ov.querySelector('[data-asn="' + i + '"]').value : r.added, email);
+        });
+        reloadClasses(msg + ' Class sizes saved.');
+      });
+    }
+    draw();
+  }
+
   // Teachers who signed up but couldn't find their class ("My class isn't here").
   function waitingTeachers() { return !AD.pastYear && window.TilliAPI && TilliAPI.classRequests && currentSchoolId() ? TilliAPI.classRequests(currentSchoolId()) : []; }
   function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.confirmed ? '' : ' · not confirmed') + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
@@ -3855,4 +4009,6 @@
   buildStatePanel();
   buildFab();
   if (!location.hash) go('overview', {}, { replace: true }); else render();
+  // A change that reloaded the page (Classes tab) says what happened.
+  try { var lastToast = sessionStorage.getItem('ad.toast'); if (lastToast) { sessionStorage.removeItem('ad.toast'); toast(lastToast); } } catch (e) { /* no storage → no toast */ }
 })();

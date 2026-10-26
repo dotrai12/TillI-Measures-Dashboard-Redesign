@@ -1251,17 +1251,33 @@
     s.structure.sections = s.structure.grades.reduce(function (a, g) { return a + g.sections.length; }, 0);
     s.gradeCount = s.structure.grades.length; s.sectionCount = s.structure.sections;
   }
-  // New grades/sections start their own empty-structure clock today.
-  function addSection(schoolId, gradeName, sectionName) {
+  // New grades/sections start their own empty-structure clock today. Schools with
+  // a real store (created / live) save through TilliAPI first — the same save the
+  // school admin uses — so imports and every app see the new class at once.
+  function apiSchool(s) { return s && (s.created || s.live) && window.TilliAPI && window.TilliAPI.resolveSchool(s.id) ? window.TilliAPI : null; }
+  function addSection(schoolId, gradeName, sectionName, actorEmail) {
     var s = byId(schoolId); if (!s) return null;
-    var g = s.structure.grades.find(function (x) { return x.grade === gradeName; }); if (!g) return null;
+    var A = apiSchool(s);
+    if (A) {
+      var r = A.addSection(actorEmail, schoolId, gradeName, sectionName);
+      if (!r.ok) return r;
+      if (s.created) { refreshCreatedStructure(s); return { ok: true, section: r.section }; }
+      sectionName = r.section.section;
+    }
+    var g = s.structure.grades.find(function (x) { return x.grade === gradeName; }); if (!g) return A ? { ok: true } : null;
     var nm = sectionName && !g.sections.some(function (x) { return x.name === sectionName; }) ? sectionName : nextSectionName(g);
     g.sections.push({ name: nm, base: nm, students: 0, addedAt: iso(TODAY) });
     recomputeStructure(s); return s;
   }
   // base = fixed grade (TilliAPI.BASE_GRADES) the school's name maps to.
-  function addGrade(schoolId, name, sectionNames, base) {
+  function addGrade(schoolId, name, sectionNames, base, actorEmail, board) {
     var s = byId(schoolId); if (!s) return null;
+    var A = apiSchool(s);
+    if (A) {
+      var r = A.addGrade(actorEmail, schoolId, name, base, board || null, sectionNames && sectionNames.length ? sectionNames : ['A']);
+      if (!r.ok) return r;
+      if (s.created) { refreshCreatedStructure(s); return { ok: true }; }
+    }
     if (!s.structure.grades.some(function (g) { return g.grade === name; })) {
       s.structure.grades.push({ grade: name, base: base || '', addedAt: iso(TODAY),
         sections: (sectionNames && sectionNames.length ? sectionNames : ['A']).map(function (n) { return { name: n, base: n, students: 0, addedAt: iso(TODAY) }; }) });
