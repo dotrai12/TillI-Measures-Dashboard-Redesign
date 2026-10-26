@@ -232,8 +232,15 @@ function buildFreshStudent(section, r) {
 // Build the dashboard from the students a teacher entered during onboarding.
 // Groups them into sections by grade + section. Returns { fresh:true } so the
 // dashboard knows this is a first-time class (defaults the landing to Baseline).
-function buildFromRoster(rosterStudents) {
+// classes: the teacher's classes as the school has them, so a class with no
+// children yet still shows (and can take students).
+function buildFromRoster(rosterStudents, classes) {
   const groups = {};
+  (classes || []).forEach((c) => {
+    const grade = (c.grade || "").trim() || "My class", section = (c.section || "").trim();
+    const gk = grade + "||" + section;
+    if (!groups[gk]) groups[gk] = { grade, section, list: [] };
+  });
   rosterStudents.forEach((s) => {
     const grade = (s.grade || "").trim() || "My class";
     const section = (s.section || "").trim();
@@ -263,7 +270,7 @@ function buildAllData(opts) {
   // students, as a fresh class with no data yet. An empty roster → empty dashboard.
   if (opts && opts.roster) {
     const rs = (opts.roster.students || []).filter((s) => s && (s.first || "").trim());
-    return buildFromRoster(rs);
+    return buildFromRoster(rs, opts.sections);
   }
   // Fallback (no roster supplied): the demo dataset used by the standalone preview.
   // Prefer the shared dummy-school roster (school-data.js) when it's loaded,

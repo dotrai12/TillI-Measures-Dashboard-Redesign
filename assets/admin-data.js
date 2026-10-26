@@ -507,16 +507,19 @@
   // ---------------------------------------------------------------
   var CLAIMED_ADM = (TS.parents || []).reduce(function (acc, p) { return acc.concat(p.children || []); }, []);
   function rosterRows() {
+    // Real schools: whether a parent has linked to the child (admission number only).
+    var CR = window.TILLI_CREATED, API = window.TilliAPI;
+    var linked = CR && API && API.parentLinkedIds ? API.parentLinkedIds(CR.schoolId) : null;
     return STUDENTS.map(function (s, i) {
-      var claimed = CLAIMED_ADM.indexOf(s.adm) >= 0;
-      // Deterministic invite state for the unclaimed ones.
-      var invited = !claimed && (hashStr(s.adm) % 3 !== 0);
+      var claimed = linked ? linked.indexOf(String(s.adm).toUpperCase()) >= 0 : CLAIMED_ADM.indexOf(s.adm) >= 0;
+      // Deterministic invite state for the unclaimed ones (demo school only).
+      var invited = !linked && !claimed && (hashStr(s.adm) % 3 !== 0);
       return {
         adm: s.adm, name: s.name, first: s.first, last: s.last,
         grade: s.grade, section: s.section,
         parentEmail: s.parentEmail || '—',
         enrolment: 'Enrolled',
-        claim: claimed ? 'Claimed' : invited ? 'Invited' : 'Not invited',
+        claim: linked ? (claimed ? 'Linked' : 'Not linked') : claimed ? 'Claimed' : invited ? 'Invited' : 'Not invited',
         // Individual stage — gated in the UI (spec §2). See studentStage().
         // null before any point is complete (the "No data" lifecycle state).
         stage: LATEST_COMPLETE ? studentStage(s, LATEST_COMPLETE.key) : null,

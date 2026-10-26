@@ -1044,6 +1044,28 @@
     return { ok:true, claimToken: token, child: { name:stu.name, first:stu.first, grade:stu.grade, section:stu.section, school:school.name, student_id:stu.student_id } };
   }
 
+  // Admission number only (decided 26 Oct 2026: parents need no code). Finds the
+  // child at the chosen school and issues the same one-shot claim token as B2.
+  // Repeated misses from one parent are still rate-limited.
+  function claimByAdmission(schoolNameOrId, studentId, parentEmail){
+    var db = getDB(), school = resolveSchool(schoolNameOrId), sid = up(studentId);
+    var ak = _attemptKey((school && school.school_id) || '?', 'parent:' + low(parentEmail));
+    var at = db.attempts[ak] || { count:0, lockedUntil:0 };
+    if (at.lockedUntil && Date.now() < at.lockedUntil) return { ok:false, error:'locked', retryAt: at.lockedUntil };
+    var stu = school ? db.students[keyOf(school.school_id, sid)] : null;
+    if (!stu || stu.status === 'left'){
+      at.count += 1;
+      if (at.count >= MAX_ATTEMPTS){ at.lockedUntil = Date.now() + LOCK_MS; at.count = 0; }
+      db.attempts[ak] = at; write(db);
+      return { ok:false, error:'not_found' };
+    }
+    db.attempts[ak] = { count:0, lockedUntil:0 };
+    var token = newId('claim');
+    db.claimTokens[token] = { school_id: school.school_id, student_id: stu.student_id, created: Date.now() };
+    write(db);
+    return { ok:true, claimToken: token, child: { name:stu.name, first:stu.first, grade:stu.grade, section:stu.section, school:school.name, student_id:stu.student_id } };
+  }
+
   // B3 — parent confirms it's the right child -> create the ParentLink.
   // SERVER-SIDE: a claim LINKS, it never creates a student (spec B3 / acceptance #10).
   function _confirmClaim(claimToken, parentEmail){
@@ -1061,6 +1083,11 @@
     delete db.claimTokens[claimToken];
     write(db);
     return { ok:true, linked:{ student_id:stu.student_id, name:stu.name, grade:stu.grade, section:stu.section } };
+  }
+
+  // Student ids at a school with at least one linked parent (roster export).
+  function parentLinkedIds(schoolId){
+    return getDB().parentLinks.filter(function(l){ return l.school_id===schoolId && l.status==='active'; }).map(function(l){ return up(l.student_id); });
   }
 
   // Children a parent is linked to (active links only). Replaces the old
@@ -2184,6 +2211,12 @@
   // A teacher/parent/student finishes one assessment item for one student.
   function markComplete(schoolId, phase, audience, studentId, assessId, byEmail){
     var db = getDB();
+    // A teacher records the Teacher assessment only for children in their own
+    // classes (a stale roster after a promotion must not write into another class).
+    if (audience === 'Teacher' && roleOf(db, byEmail, schoolId) === 'teacher'){
+      var kid = db.students[keyOf(schoolId, studentId)];
+      if (kid && teacherScope(db, byEmail, schoolId).indexOf(kid.section_id) < 0) return { error: 'not_your_class' };
+    }
     // Only inside the open window, and only in chain order. (No deployment =
     // nothing to check — the teacher demo records against a default item.)
     var lane = db.deployments[schoolId] && db.deployments[schoolId][depKey(phase, audience)];
@@ -3155,6 +3188,8 @@
     decideStudent: decideStudent,
     // Flow B — parent claim (verify before reveal)
     beginClaim: function(schoolNameOrId, studentId){ return _beginClaim(schoolNameOrId, studentId); },
+    claimByAdmission: claimByAdmission,
+    parentLinkedIds: parentLinkedIds,
     verifyClaim: function(challengeId, secondFactor){ return _verifyClaim(challengeId, secondFactor); },
     confirmClaim: function(claimToken, parentEmail){ return _confirmClaim(claimToken, parentEmail); },
     childrenForParent: childrenForParent,

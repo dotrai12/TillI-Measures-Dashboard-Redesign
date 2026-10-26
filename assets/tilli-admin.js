@@ -1841,22 +1841,20 @@
       }).join('');
       // Always read the live roster — the samples stashed at creation are empty
       // (new schools start with no students), so they'd hide every later child.
-      var claims = window.TilliAPI.studentsForSchool(s.id).slice(0, 6).map(function (st) {
-        return { adm: st.student_id, name: st.name, grade: st.grade, section: st.section, claimCode: st.claimCode };
-      });
-      var cRows = claims.map(function (c) {
-        return '<div class="ws-rev-row"><span>' + esc(c.name) + ' · ' + esc(secLbl(s.id, c.grade, c.section)) + ' · adm ' + esc(c.adm) + '</span><b class="mono">' + esc(c.claimCode) + '</b></div>';
+      // Parents add a child with the admission number alone (no code).
+      var cRows = window.TilliAPI.studentsForSchool(s.id).slice(0, 6).map(function (st) {
+        return '<div class="ws-rev-row"><span>' + esc(st.name) + ' · ' + esc(secLbl(s.id, st.grade, st.section)) + '</span><b class="mono">' + esc(st.student_id) + '</b></div>';
       }).join('');
       codesCard = '<div class="ui-card mb-gap"><div class="ui-mod-h"><div>' +
           '<h3 class="ui-mod-title">Demo access & codes</h3>' +
-          '<p class="ui-mod-note">Everything you need to log in as each role for this school (all mock / localStorage). Claim method: <b>code</b>.</p></div></div>' +
+          '<p class="ui-mod-note">Everything you need to log in as each role for this school (all mock / localStorage).</p></div></div>' +
         '<div class="ws-review">' +
           '<div class="ws-rev-row"><span><b>Coordinator login</b> (School dashboard)</span><b class="mono">' + esc(s.coordinator ? s.coordinator.email : '—') + '</b></div>' +
           '<div class="ws-rev-row"><span><b>School code</b> (teacher sign-up, student assessments)</span><span class="tl-coderow"><b class="mono">' + esc(teacherJoin) + '</b>' +
             '<button class="tl-rowact" data-copy="' + esc(teacherJoin) + '" title="Copy school code" aria-label="Copy school code">' + ICONS.copy + '</button></span></div>' +
           tRows +
-          '<div class="ws-rev-row" style="border-top:1px solid var(--line-200);margin-top:6px;padding-top:10px"><span><b>Parent claim codes</b> (school = this school, then the code)</span><b></b></div>' +
-          (cRows || '<div class="ws-rev-row"><span class="tl-muted">Add students first — each child gets a claim code a parent uses to link to them.</span></div>') +
+          '<div class="ws-rev-row" style="border-top:1px solid var(--line-200);margin-top:6px;padding-top:10px"><span><b>Admission numbers</b> (a parent picks this school, then types one — no code)</span><b></b></div>' +
+          (cRows || '<div class="ws-rev-row"><span class="tl-muted">Add students first — a parent links to a child with their admission number.</span></div>') +
         '</div></div>';
     }
 

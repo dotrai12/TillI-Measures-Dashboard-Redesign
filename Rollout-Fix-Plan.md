@@ -105,13 +105,13 @@ Decisions by Ishani, 26 Oct 2026: leadership can see each student for now · par
 | 5.9 | School dashboard: Grades & sections (in-scope boards only) | ✅ |
 | 5.10 | School dashboard: Add students (paste, .csv, template), in-scope classes only | ✅ |
 
-## Phase 5C — Teacher and parent across the year · ⬜
+## Phase 5C — Teacher and parent across the year · ✅ done 26 Oct 2026
 
 | # | Item | Status |
 |---|---|---|
-| 5.11 | Teacher dashboard reads the school's roster; observations kept per year; completions only for the teacher's own children | ⬜ |
-| 5.12 | Parent after rollover: "New school year" notice, read-only last year, graduated children labelled | ⬜ |
-| 5.13 | Parents add a child by admission number only (no code) | ⬜ |
+| 5.11 | Teacher dashboard reads the school's roster; observations kept per year; completions only for the teacher's own children | ✅ |
+| 5.12 | Parent after rollover: "New school year" notice, read-only last year, graduated children labelled | ✅ |
+| 5.13 | Parents add a child by admission number only (no code) | ✅ |
 
 ## Phase 5D — Tilli team: windows and calendars · ⬜
 

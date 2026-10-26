@@ -694,9 +694,10 @@
     loadTimer = setTimeout(() => set({ step: 'childForm' }), LOADING_MS);
   }
 
-  // ===== B1 — enter the child's admission number. REVEAL NOTHING =====
-  // We never tell the parent whether the id exists (spec §5 B1 / acceptance #6);
-  // any id simply advances to the second-factor step.
+  // ===== Enter the child's admission number =====
+  // Parents need no code (decided 26 Oct 2026): a matching admission number goes
+  // straight to "Is this your child?". The old code step (childVerifyView) is kept
+  // but no longer reached.
   function childFormView() {
     const c = state.child, e = state.errs;
     return `<div class="sheet">
@@ -706,11 +707,13 @@
           <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; Back</button>
         </div>
         <h1 class="sheet-title">Add your child</h1>
-        <p class="sheet-sub">Enter your child&#39;s admission number. We&#39;ll ask for a verification code next to keep their information private.</p>
+        <p class="sheet-sub">Enter your child&#39;s admission number at ${esc(state.school || 'their school')}. You&#39;ll check it&#39;s the right child next.</p>
         <form id="child-form" class="ui-card roomy sheet-form ${state.shake ? 'tm-shake' : ''}">
           <label class="field">Admission number *
-            <input id="cf-adm" class="input focus ${e.adm ? 'err' : ''}" value="${esc(c.adm)}" placeholder="Enter admission number of your child" autofocus>
+            <input id="cf-adm" class="input focus ${e.adm || e.notfound || e.locked ? 'err' : ''}" value="${esc(c.adm)}" placeholder="Enter admission number of your child" autofocus>
           </label>
+          ${e.notfound ? `<p class="err-text">We can&#39;t find that admission number at ${esc(state.school)}. Check it on a school letter or ask the school office.</p>` : ''}
+          ${e.locked ? `<p class="err-text">Too many tries — please wait a few minutes, then try again.</p>` : ''}
           <button type="submit" class="btn btn-primary block focus mt-1">Continue &#8594;</button>
         </form>
         <div id="cf-flowers" style="width:min(264px,70%);margin:clamp(28px,5vh,52px) auto 0"></div>
@@ -781,7 +784,7 @@
         <p class="sheet-sub">Please confirm this is the right student.</p>
         <div class="ui-card outline roomy confirm-card">
           <span class="ic-circle" style="margin:0 0 14px"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true"></span>
-          <p class="pill-info" style="display:inline-block;margin:0 0 14px">Admission code &middot; ${esc(m.student_id || m.adm)}</p>
+          <p class="pill-info" style="display:inline-block;margin:0 0 14px">Admission number &middot; ${esc(m.student_id || m.adm)}</p>
           <p style="font-weight:700;font-size:var(--fs-xl);color:var(--ink-900);margin:0 0 4px">${esc(full)}</p>
           <p class="dlg-sub" style="margin:0">${esc(gradeSection)}</p>
           <p class="dlg-hint" style="color:var(--green-700);margin-top:16px;line-height:1.5">Understand <b>${esc(full)}</b> with Tilli Measures.</p>
@@ -973,13 +976,18 @@
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
           return;
         }
-        // beginClaim returns the same shape whether or not the child exists.
-        const res = (window.TilliAPI && window.TilliAPI.beginClaim)
-          ? window.TilliAPI.beginClaim(state.school, typed)
-          : { ok: true, challengeId: null, factor: 'code' };
+        const res = (window.TilliAPI && window.TilliAPI.claimByAdmission)
+          ? window.TilliAPI.claimByAdmission(state.school, typed, state.email)
+          : { ok: false, error: 'not_found' };
+        if (!res.ok) {
+          set({ errs: res.error === 'locked' ? { locked: true } : { notfound: true }, shake: true });
+          clearTimeout(shakeTimer);
+          shakeTimer = setTimeout(() => set({ shake: false }), 450);
+          return;
+        }
         set({
-          step: 'childVerify',
-          claim: { challengeId: res.challengeId, factor: res.factor || 'code', code: '', reveal: null, token: null, retryAt: 0 },
+          step: 'childConfirm',
+          claim: { challengeId: null, factor: null, code: '', reveal: res.child, token: res.claimToken, retryAt: 0 },
           errs: {},
         });
       });
@@ -1065,7 +1073,7 @@
         break;
       case 'child-back':
         // confirm → back to the code step; verify → back to the id; form → child list.
-        if (state.step === 'childConfirm') set({ step: 'childVerify', errs: {} });
+        if (state.step === 'childConfirm') set({ step: 'childForm', errs: {} });
         else if (state.step === 'childVerify') set({ step: 'childForm', errs: {} });
         else set({ step: 'children', errs: {} });
         break;

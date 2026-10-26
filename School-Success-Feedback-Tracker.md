@@ -311,6 +311,13 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Rollout fix plan — Phase 5C** (26 Oct 2026)
+- **Parents need no code — anyone who knows an admission number can link to that child** and see what the parent sees. Admission numbers are often on ID cards and report sheets. *Possible fix:* the school admin approves each new parent link, or the parent also types the child's date of birth. Wrong numbers are still rate-limited (5 tries, then a pause).
+- **Parent claim codes still exist in the data** (`claimCode` on each child) but nothing asks for them now. The old code step (`childVerifyView`, `beginClaim` / `verifyClaim`) is kept but unreachable.
+- **Teacher dashboards refresh on reload, not live.** Changes an admin makes show the next time the teacher opens or reloads the app.
+- **The teacher app has no "new school year" notice** yet — after a rollover the teacher just sees their new classes and an empty Baseline.
+- **Teacher ratings saved before this change were moved into the current year.** A teacher whose ratings were really last year's (school already rolled over) sees them as this year's until the next rollover. Only affects demo browsers that rolled over before 26 Oct.
+
 **Rollout fix plan — Phase 5F: Sessions** (26 Oct 2026)
 - **Self-guided games aren't playable in the prototype.** A game session's **Finish** records a random score (40–95). A developer wires the real game result into `TilliAPI.submitSession(…, score)`.
 - **Pre and post are matched by email.** Someone who uses a different email after the session counts as two people (one pre, one post) and isn't in "did both".

@@ -4,7 +4,7 @@ Five portfolio schools have real data in the shared store, so the Tilli platform
 
 **Password: anything works** (type any non-empty password). Sign in from `index.html` → *Get started*.
 - **Teachers & school admins:** choose the School card, then enter the email. A **new** teacher email asks for the **school code** next, then shows **Is this your school?** (name · city · board) before the password — no school search.
-- **Parents:** choose the Parent card, pick the school, then enter the email.
+- **Parents:** choose the Parent card, pick the school, then enter the email. To add a child, type their **admission number** (e.g. `BT-1003`) — no code — and confirm it's the right child.
 
 | School | What's deployed |
 |---|---|

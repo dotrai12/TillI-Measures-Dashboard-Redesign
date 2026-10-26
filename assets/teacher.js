@@ -272,6 +272,34 @@
     } catch (e) { return {}; }
   }
 
+  // ---------- the school's own records (API schools) ----------
+  // Observations are kept per school year, so a new year starts clean and last
+  // year's ratings aren't shown as this year's Baseline.
+  const YEAR_ID = (function () {
+    try {
+      const A = window.TilliAPI;
+      if (!SCHOOL_ID || !A || !A.yearsFor) return 'default';
+      const cur = (A.yearsFor(SCHOOL_ID) || []).find((y) => y.status === 'current');
+      return cur ? cur.id : 'default';
+    } catch (e) { return 'default'; }
+  })();
+  // This teacher's classes and children as the school has them now — so admin
+  // changes (placements, new children, children who left, promotions) reach the
+  // dashboard. Null when the teacher isn't a member of an API school (standalone
+  // demo), which keeps their own saved roster.
+  function schoolClasses() {
+    const A = window.TilliAPI;
+    if (!SCHOOL_ID || !A || !A.roleOf || A.roleOf(ctx.email, SCHOOL_ID) !== 'teacher') return null;
+    const secs = A.sectionsForTeacher(ctx.email, SCHOOL_ID) || [];
+    const ids = secs.map((x) => x.section_id);
+    const students = (A.studentsForSchool(SCHOOL_ID) || []).filter((x) => ids.indexOf(x.section_id) >= 0).map((x) => {
+      const parts = String(x.name || '').trim().split(' ');
+      return { first: x.first || parts[0] || '', last: x.last || parts.slice(1).join(' ') || '', adm: x.student_id || x.adm || '',
+        grade: x.grade || '', section: x.section || '', uid: x.uid || null };
+    });
+    return { sections: secs.map((x) => ({ grade: x.grade, section: x.section })), students };
+  }
+
   // ---------- boot: resume or start ----------
   // Older saves stored the sheet as flat rows with a per-row `gs`; regroup them.
   function rowsToGroups(rows) {
@@ -308,9 +336,14 @@
     // without a saved setup) runs it once, pre-filled from the platform.
     consumeNewFlag();
     if (saved && saved.onboarded) {
+      // Saves from before per-year storage hold one flat set — it belongs to this year.
+      const byYear = saved.obsByYear || {};
+      if (!saved.obsByYear && (saved.observations || saved.obsDrafts)) byYear[YEAR_ID] = { observations: saved.observations || {}, obsDrafts: saved.obsDrafts || {} };
+      state.obsByYear = byYear;
+      const mine = byYear[YEAR_ID] || {};
       Object.assign(state, { phase: 'complete', onboarded: true,
-        joinedAt: saved.joinedAt || saved.completedAt || null, observations: saved.observations || {},
-        obsDrafts: saved.obsDrafts || {} });
+        joinedAt: saved.joinedAt || saved.completedAt || null, observations: mine.observations || {},
+        obsDrafts: mine.obsDrafts || {} });
       if (saved.demo) state.demo = Object.assign(blankDemo(), saved.demo);
       state.selfAnswers = migrateAnswers(saved.selfAnswers);
       // Saves from before the timeline hold one answer set — that's the first mirror.
@@ -328,11 +361,13 @@
   })();
 
   function persist(extra) {
+    const obsByYear = Object.assign({}, state.obsByYear || {}, { [YEAR_ID]: { observations: state.observations, obsDrafts: state.obsDrafts } });
+    state.obsByYear = obsByYear;
     const payload = Object.assign({
       email: ctx.email, school: ctx.school,
       demo: state.demo, selfAnswers: state.selfAnswers, roster: state.roster,
-      onboarded: state.onboarded, joinedAt: state.joinedAt, observations: state.observations,
-      obsDrafts: state.obsDrafts, reflections: state.reflections,
+      onboarded: state.onboarded, joinedAt: state.joinedAt, obsByYear,
+      reflections: state.reflections,
     }, extra || {});
     TeacherStore.save(ctx.email, payload);
   }
@@ -365,7 +400,14 @@
     if (!dashRoot) return;
     // render() calls this on every 'complete' render; only (re)mount when the
     // roster actually changed — otherwise it's a no-op so typing/nav stays smooth.
-    const sig = rosterSig();
+    // API school: the school's records win over the copy saved at onboarding.
+    const live = schoolClasses();
+    if (live) {
+      const before = rosterSig();
+      state.roster = Object.assign({}, state.roster, { students: live.students });
+      if (rosterSig() !== before) persist();
+    }
+    const sig = rosterSig() + '#' + (live ? live.sections.map((x) => x.grade + ' ' + x.section).join(',') : '');
     if (dashboardMounted && sig === dashboardRosterSig) return;
     dashboardMounted = true;
     dashboardRosterSig = sig;
@@ -382,7 +424,7 @@
     // Pass this teacher's own roster so the dashboard shows THEIR students.
     try {
       if (window.TilliDashboard && window.buildAllData) {
-        window.TilliDashboard.mount(dashRoot, { data: window.buildAllData({ roster: state.roster }), teacher });
+        window.TilliDashboard.mount(dashRoot, { data: window.buildAllData({ roster: state.roster, sections: live ? live.sections : null }), teacher });
       } else {
         throw new Error('dashboard scripts not loaded (TilliDashboard/buildAllData missing)');
       }

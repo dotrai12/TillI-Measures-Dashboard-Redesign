@@ -361,6 +361,16 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 22 — Teachers and parents across the year (Phase 5C, 10 min)
+
+- [ ] As a school admin → Roster → **Classes** → give a teacher another class (or add children to theirs) → open that teacher's dashboard: the new class and children are there without redoing onboarding. A class with no children yet still shows.
+- [ ] Children who left or were turned down disappear from the teacher's garden; a teacher can't record the teacher assessment for a child outside their classes.
+- [ ] Start new year on a demo school (Tilli → Assessments → Academic year) → the teacher's Baseline starts empty again (last year's ratings are kept for that year, not shown as this year's).
+- [ ] Parent sign-in → **+ Add child** → type an admission number (e.g. `BT-1003`) → **Is this your child?** → confirm. A wrong number says it can't be found; too many wrong tries locks for a few minutes.
+- [ ] After a new year starts, a parent sees **"2027–28 has started"** (dismissable) and **This year / Last year** tabs; Last year is read-only. A child who graduated is labelled **Graduated** and only shows last year.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

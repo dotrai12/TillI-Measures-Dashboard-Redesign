@@ -118,6 +118,9 @@
 
   /* resting card shown for the "In between" window (no assessments open) — .ui-card.md.tint-cyan */
   .win-rest { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+  .p-yearnote { position: relative; margin: 0 0 14px; padding-right: 44px; }
+  .p-yearnote .dialog-close { position: absolute; top: 8px; right: 8px; }
+  .p-yeartabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
   .win-rest .ico { width: 48px; height: 48px; border-radius: 50%; background: var(--white); flex: none;
     display: flex; align-items: center; justify-content: center; font-size: var(--fs-xl); box-shadow: var(--shadow-card); }
   .win-rest .rt b { display: block; font-weight: 700; font-size: var(--fs-md); color: var(--ink-900); }
@@ -317,7 +320,7 @@
 <div id="app"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p5"></script>
+<script src="assets/tilli-api.js?v=20261026p5c"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
@@ -504,7 +507,7 @@
         name: lk.first || lk.name || 'Your child', grade: lk.grade, section: lk.section, adm: lk.student_id,
         // Carry the backbone ids so a created-school child can key its REAL
         // deployments/completions (findByAdm misses these students — full===null).
-        student_id: lk.student_id, school_id: lk.school_id, section_id: lk.section_id,
+        student_id: lk.student_id, school_id: lk.school_id, section_id: lk.section_id, status: lk.status || 'active',
         pronoun: (full && full.pronoun) || (lk.gender === 'm' ? 'he' : 'she'),
         teacher: (full && full.teacherName) || 'your teacher', unlocked: i === 0,
       };
@@ -894,13 +897,74 @@
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
     return m ? (+m[3]) + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + m[1] : (v || '');
   }
+  // ---- School years: after the Tilli team starts a new year the parent gets a
+  // one-time notice, and last year's check-ins stay readable under "Last year".
+  const YEAR_SEEN = 'tilliMeasures.parentYearSeen.';
+  function lastYearOf(schoolId) {
+    const ys = (API.yearsFor ? API.yearsFor(schoolId) : []).filter((y) => y.status === 'closed');
+    return ys.length ? ys[ys.length - 1] : null;
+  }
+  function yearNoticeHTML(c, schoolId) {
+    const cur = API.currentYear ? API.currentYear(schoolId) : null;
+    if (!cur || !cur.rollover) return '';
+    try { if (localStorage.getItem(YEAR_SEEN + PARENT_EMAIL + '.' + schoolId + '.' + cur.id)) return ''; } catch (e) { /* no storage → show it */ }
+    const now = c.status === 'graduated' ? `${esc(c.name)} has graduated — well done!` : `${esc(c.name)} is now in ${esc(classMeta(c))}.`;
+    return `<div class="ui-card md tint-cyan win-rest p-yearnote" data-rise>
+        <span class="ico">🌱</span>
+        <div class="rt"><b>${esc(cur.label)} has started</b><span>${now} Last year's check-ins are under <b>Last year</b>.</span></div>
+        <button class="dialog-close focus" data-act="year-seen" data-year="${esc(cur.id)}" aria-label="Dismiss">×</button>
+      </div>`;
+  }
+  // Read-only: what was done in each phase last year, from the year's archive.
+  function lastYearSections(c, schoolId, yr) {
+    const arch = API.yearArchive ? API.yearArchive(schoolId, yr.id) : null;
+    if (!arch) return '<p class="footnote">Last year’s check-ins aren’t available.</p>';
+    const deps = Object.keys(arch.deployments || {}).map((k) => arch.deployments[k]);
+    const comps = arch.completions || {}, sid = String(c.student_id || '').toUpperCase();
+    const enrol = (arch.enrolments || {})[c.student_id] || (arch.enrolments || {})[sid];
+    const was = enrol ? ` · ${esc(enrol.grade)} ${esc(enrol.section || '')}` : '';
+    return `<p class="p-sub" style="margin:0 0 6px">${esc(yr.label)}${was} · read-only</p>` + PARENT_PHASES.map((phase) => {
+      const lanes = deps.filter((d) => d.phase === phase && (d.audience === 'Parent' || (d.audience === 'Direct Assessment' && (d.assessments || []).some((a) => a.mode === 'home'))));
+      const items = [];
+      lanes.forEach((d) => (d.assessments || []).filter((a) => d.audience === 'Parent' || a.mode === 'home').forEach((a) => items.push({ a, aud: d.audience, notRun: d.notRun })));
+      if (!items.length) return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Didn’t run</span></div>`;
+      const done = items.filter((x) => comps[phase + '|' + x.aud + '|' + sid + '|' + x.a.id]).length;
+      const rows = items.map((x) => {
+        const ok = !!comps[phase + '|' + x.aud + '|' + sid + '|' + x.a.id];
+        return `<div class="t-row"><span class="t-dot ${ok ? 'done' : 'pending'}"></span>
+          <span class="t-body"><b>${esc(x.a.name)}</b><span>${x.aud === 'Parent' ? 'Parent check-in' : 'Activity with your child'}</span></span>
+          <span class="ui-chip lg ${ok ? 'ok' : 'muted'}">${ok ? 'Completed' : x.notRun ? 'Didn’t run' : 'Not done'}</span></div>`;
+      }).join('');
+      return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due"><b>${done}</b> of <b>${items.length}</b> done</span></div><div class="timeline">${rows}</div>`;
+    }).join('');
+  }
+  function yearTabsHTML(cur, last) {
+    const on = state.yearView === 'last';
+    return `<div class="p-yeartabs" role="tablist" aria-label="School year">
+        <button class="ui-filterchip focus${on ? '' : ' on'}" role="tab" aria-selected="${!on}" data-act="year-view" data-yv="this">This year${cur ? ' · ' + esc(cur.label) : ''}</button>
+        <button class="ui-filterchip focus${on ? ' on' : ''}" role="tab" aria-selected="${on}" data-act="year-view" data-yv="last">Last year · ${esc(last.label)}</button>
+      </div>`;
+  }
+
   function createdMainInner() {
     const c = child();
     const sc = createdSchoolFor(c);
     const schoolId = sc.school_id;
     const faceColor = smileColor(state.selected);
 
-    const chips = heroChips(c, sc.name);
+    const chips = heroChips(c, sc.name) + (c.status === 'graduated' ? '<span class="ui-chip lg muted">Graduated</span>' : '');
+    const curYear = API.currentYear ? API.currentYear(schoolId) : null, lastYear = lastYearOf(schoolId);
+    const showLast = !!lastYear && (state.yearView === 'last' || c.status === 'graduated');
+    const yearBits = yearNoticeHTML(c, schoolId) + (lastYear && c.status !== 'graduated' ? yearTabsHTML(curYear, lastYear) : '');
+    if (showLast || c.status === 'graduated') {
+      return `<div class="p-hero" data-rise>
+          <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a"><img src="${SMILEY}" alt=""></div>
+          <div><p class="p-eyebrow">Parent home · ${esc(sc.name)}</p>
+            <h1 class="p-title">${c.status === 'graduated' ? `<span>${esc(c.name)}</span> has graduated` : `<span>${esc(c.name)}</span>’s last year`}</h1>
+            <p class="p-sub">${c.status === 'graduated' ? `There are no new check-ins for ${esc(c.name)} here. Their past check-ins stay below.` : 'What you and ' + esc(c.name) + ' completed last year. Nothing here can be changed.'}</p>
+            <div class="chips">${chips}</div></div>
+        </div>` + yearBits + (lastYear ? lastYearSections(c, schoolId, lastYear) : '<p class="footnote">No past check-ins yet.</p>');
+    }
 
     // Deployed Parent lanes, plus student direct assessments set to run at home
     // (a parent does those with the child), indexed by phase.
@@ -1003,7 +1067,7 @@
         <div class="timeline">${rows}</div>`;
     }).join('');
 
-    return heroTop + sections + `<p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+    return heroTop + yearBits + sections + `<p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
   }
 
   // Targeted patch after a completion — rebuild just .p-main (no re-animate).
@@ -1409,6 +1473,12 @@
       ev.stopPropagation();
       switch (b.dataset.act) {
         case 'toggle-switch': state.switcherOpen = !state.switcherOpen; patchSwitcher(); break;
+        case 'year-view': state.yearView = b.dataset.yv === 'last' ? 'last' : 'this'; patchCreated(); break;
+        case 'year-seen': {
+          const sc = createdSchoolFor(child());
+          try { localStorage.setItem(YEAR_SEEN + PARENT_EMAIL + '.' + (sc && sc.school_id) + '.' + b.dataset.year, '1'); } catch (e) { /* stays until reload */ }
+          patchCreated(); break;
+        }
         case 'mark-done': {
           // Created-school completion → persists in TilliAPI (localStorage),
           // survives reload; re-read on patch so state is never cached stale.

@@ -157,7 +157,7 @@
 
       var rosterRows = students.length ? students.map(function (s) {
         return '<tr><td class="name">' + esc(s.name) + '</td><td class="mono">' + esc(s.student_id) + '</td>' +
-          '<td>' + esc(API.sectionLabel ? API.sectionLabel(id, s.grade, s.section) : s.grade + ' ' + s.section) + '</td><td class="mono">' + esc(s.claimCode) + '</td></tr>';
+          '<td>' + esc(API.sectionLabel ? API.sectionLabel(id, s.grade, s.section) : s.grade + ' ' + s.section) + '</td></tr>';
       }).join('') : '<tr><td colspan="4"><div class="ui-empty">No students yet.</div></td></tr>';
 
       var staffRows = staff.map(function (u) {
@@ -186,7 +186,7 @@
             '<div class="ui-tablewrap"><table class="ui-table mw-640 cc-table"><thead><tr><th>Phase</th><th>Teacher</th><th>Parent</th><th>Student</th><th>Overall</th></tr></thead><tbody>' +
             PHASES.map(phaseRow).join('') + '</tbody></table></div>') +
           card('Roster', stats.students + ' students · claim codes are what parents enter to link their child.',
-            '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Claim code</th></tr></thead><tbody>' + rosterRows + '</tbody></table></div>') +
+            '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th></tr></thead><tbody>' + rosterRows + '</tbody></table></div>') +
           card('Staff', staff.length + ' members', '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Role</th><th>Section</th><th>Email</th></tr></thead><tbody>' + staffRows + '</tbody></table></div>') +
         '</div>';
       var rb = document.getElementById('cc-refresh');
@@ -3190,7 +3190,7 @@
     var header = '# Tilli Measures export · ' + (scope === 'school' ? AD.school.name : gLbl(scope)) + ' · Assessment point: ' + pt.label + ' · Generated ' + genStamp();
     if (kind === 'roster') {
       name = 'roster';
-      lines.push(header); lines.push('Student ID,Name,Grade,Base grade,Section,Base section,Enrolment,Parent claim');
+      lines.push(header); lines.push('Student ID,Name,Grade,Base grade,Section,Base section,Enrolment,Parent linked');
       AD.rosterRows().forEach(function (r) { if (scope !== 'school' && r.grade !== scope) return; lines.push([r.adm, r.name, r.grade, baseG(r.grade), r.section, baseS(r.grade, r.section), r.enrolment, r.claim].map(csvCell).join(',')); });
     } else {
       name = 'aggregate-outcomes';
