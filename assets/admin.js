@@ -1934,7 +1934,10 @@
     var status = !cal ? 'Not sent yet.'
       : cal.status === 'submitted' ? 'Sent to the Tilli team on ' + when(cal.submittedAt) + ' — they’ll set your assessment dates from it.'
       : cal.status === 'applied' ? 'The Tilli team set your assessment dates from this calendar on ' + when(cal.appliedAt) + '.'
+      : cal.status === 'reviewed' ? 'The Tilli team has looked at this calendar (' + when(cal.updatedAt) + ').'
       : 'Saved as a draft on ' + when(cal.updatedAt) + ' — not sent yet.';
+    // Edited and saved as a draft after sending: the Tilli team hasn't been told yet.
+    if (cal && cal.unsentChanges) status += ' You have unsent changes — press Send changes to Tilli when they’re ready.';
     var PH = ['Baseline', 'Midline', 'Endline'], applied = cal && cal.applied ? PH.filter(function (p) { return cal.applied[p]; }) : [];
     var appliedCard = applied.length ? card('Assessment dates from your calendar', 'Set by the Tilli team. They can still change before each window opens.',
       '<div class="ui-tablewrap"><table class="ui-table mw-360"><tbody>' + applied.map(function (p) {

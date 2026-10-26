@@ -96,6 +96,11 @@
       case 'calendar.save':      return 'saved the school calendar';
       case 'calendar.submit':    return 'sent the school calendar to Tilli';
       case 'calendar.apply':     return 'set assessment dates from the school calendar';
+      case 'phase.clear':        return 'cleared everything collected in <b>' + esc(e.phase || 'a phase') + '</b> and moved its window';
+      case 'class.request':      return 'asked for a class to be added';
+      case 'teacher.remove':     return 'removed a teacher’s access';
+      case 'admin.boards':       return 'changed a school admin’s board access';
+      case 'section.add':        return 'added <b>' + esc(secName(e) || (e.changes && e.changes[0] && e.changes[0].to) || 'a class') + '</b>';
       case 'school.code':        return 'replaced the school code — old links and the old code stopped working';
     }
     return esc(e.action || 'made a change');

@@ -2465,11 +2465,23 @@
      sends it; the Tilli team reviews the suggested windows and applies them
      as DRAFT phase dates — nothing is ever deployed or moved automatically.
        db.calendars[school][yearId] = { terms[], exams[], holidays[], status:
-         'draft'|'submitted'|'applied', source, fileName, applied:{phase:{start,end}}, … }
+         'draft'|'submitted'|'reviewed'|'applied', enteredBy:'tilli'|'school', unsentChanges,
+         source, fileName, applied:{phase:{start,end}}, … }
+     Only 'submitted' waits in Tilli's queue: any Tilli save marks it 'reviewed'.
+     A school's draft after sending keeps the sent status and flags unsentChanges.
      Windows are school-wide, so they avoid every exam block (a board-tagged
      one is named in the reason).
      ====================================================================== */
   var DEFAULT_SCHED_RULES = { baselineWeeksIn: 2, windowWeeks: 3, midlineWeeksIn: 2, midlineGapWeeks: 10, endlineBufferWeeks: 2 };
+  // Cities typed under "Other…" in Add School / Edit school join the picker for
+  // that country from then on.
+  function addCity(country, city){
+    country = norm(country); city = norm(city); if (!country || !city) return;
+    var db = getDB(); db.config = db.config || {}; var m = db.config.cities = db.config.cities || {};
+    var list = m[country] = m[country] || [];
+    if (!list.some(function(c){ return low(c) === low(city); })){ list.push(city); write(db); }
+  }
+  function extraCities(country){ var m = ((getDB().config || {}).cities || {}); return (m[norm(country)] || []).slice(); }
   function schedulingRules(){ var db = getDB(); return Object.assign({}, DEFAULT_SCHED_RULES, (db.config || {}).schedRules || {}); }
   function setSchedulingRules(patch){
     var db = getDB(), cur = schedulingRules();
@@ -2495,9 +2507,14 @@
     var role = roleOf(db, actorEmail, schoolId);
     if (role === 'teacher' || role === 'parent') return { ok:false, reason:'not-authorized' };
     db.calendars = db.calendars || {}; var byS = db.calendars[schoolId] = db.calendars[schoolId] || {}, prev = byS[y] || {};
+    var tilli = isTilliActor(db, actorEmail), sent = prev.status && prev.status !== 'draft';
+    var status = opts.status && opts.status !== 'draft' ? opts.status
+      : tilli ? (prev.status === 'applied' ? 'applied' : 'reviewed')
+      : sent ? prev.status : 'draft';
     var rec = { terms: cleanBlocks(cal.terms), exams: cleanBlocks(cal.exams), holidays: cleanBlocks(cal.holidays),
       source: opts.source || prev.source || 'typed', fileName: opts.fileName || prev.fileName || null,
-      status: opts.status || (prev.status === 'applied' ? 'applied' : prev.status) || 'draft',
+      status: status, enteredBy: tilli ? 'tilli' : 'school',
+      unsentChanges: !tilli && sent && opts.status !== 'submitted',
       updatedAt: Date.now(), updatedBy: low(actorEmail),
       submittedAt: prev.submittedAt || null, submittedBy: prev.submittedBy || null, submittedByName: prev.submittedByName || null,
       applied: prev.applied || null, appliedAt: prev.appliedAt || null };
@@ -2513,7 +2530,7 @@
   function applyCalendarDates(schoolId, dates, actorEmail, yearId){
     var db = getDB(), y = calYearId(db, schoolId, yearId), rec = ((db.calendars || {})[schoolId] || {})[y];
     if (!rec) return { ok:false, reason:'no_calendar' };
-    rec.applied = Object.assign({}, rec.applied || {}, dates || {}); rec.status = 'applied'; rec.appliedAt = Date.now(); rec.appliedBy = low(actorEmail);
+    rec.applied = Object.assign({}, rec.applied || {}, dates || {}); rec.status = 'applied'; rec.appliedAt = Date.now(); rec.appliedBy = low(actorEmail); rec.unsentChanges = false;
     logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'calendar.apply',
       changes: Object.keys(dates || {}).map(function(ph){ return { label: ph, from: '', to: dates[ph].start + ' → ' + dates[ph].end }; }), actor: actorFor(db, actorEmail, schoolId) });
     write(db);
@@ -2589,6 +2606,11 @@
     var e = placeBackward(cal, closed, isoAddDays(anchor, -(R.endlineBufferWeeks * 7) - 1), len, n3);
     if (e) out.Endline = { start: e.start, end: e.end, reason: n3.join(' · ') };
     if (m && e && e.start <= m.end) out.problems.push('Midline and Endline overlap — the year is too short for these rules. Adjust the dates by hand.');
+    // Never suggest a window that's already over (a school that joins mid-year).
+    var tomorrow = isoAddDays(todayLocalISO(), 1);
+    ['Baseline', 'Midline', 'Endline'].forEach(function(ph){
+      if (out[ph] && out[ph].end < tomorrow){ delete out[ph]; out.problems.push(ph + ' window has passed — it would have run before today. Set its dates by hand, or leave it out this year.'); }
+    });
     if (b && m && m.start <= b.end) out.problems.push('Baseline and Midline overlap.');
     return out;
   }
@@ -2616,6 +2638,19 @@
     }
     var from = d.start > tomorrow ? d.start : tomorrow;
     return placeForward(cal, closed, from, len, notes);
+  }
+  // Clears everything collected in one phase at a school (completions + started
+  // items) — used when Tilli moves a live window and chooses to start it again.
+  function clearPhaseData(actorEmail, schoolId, phase){
+    var db = getDB();
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };
+    var n = 0, pre = phase + '|';
+    [db.completions[schoolId] || {}, (db.inProgress || {})[schoolId] || {}].forEach(function(m){
+      Object.keys(m).forEach(function(k){ if (k.indexOf(pre) === 0){ delete m[k]; n++; } });
+    });
+    logHistory(db, phaseEvent(db, schoolId, 'phase.clear', phase, null, [{ label: 'Collected answers', from: String(n), to: 'cleared' }]));
+    write(db);
+    return { ok:true, cleared: n };
   }
   // Control Room: calendars waiting for Tilli, and schools whose windows now clash.
   function calendarQueue(){
@@ -2823,13 +2858,13 @@
     var AUD = ['Teacher','Parent','Direct Assessment'];
     var out = {};
     PH.forEach(function(pr){
-      // Scheduled lanes haven't opened yet — they don't count until their start date.
-      var lanes = AUD.map(function(a){ return deps[pr[1]+'|'+a]; }).filter(function(d){ return d && effectiveStatus(d) !== 'Scheduled'; });
-      if (!lanes.length){ out[pr[0]] = 'upcoming'; return; }
-      // 'complete' (bands appear) as soon as ANY deployed lane is ended or 100%
-      // complete — so one audience finishing (e.g. a teacher bulk-marking their
-      // class) publishes that point, rather than needing every lane to finish.
-      var done = lanes.some(function(d){
+      // Nothing open yet (every lane still Scheduled, or none deployed) → upcoming.
+      var lanes = AUD.map(function(a){ return deps[pr[1]+'|'+a]; }).filter(Boolean);
+      if (!lanes.some(function(d){ return effectiveStatus(d) !== 'Scheduled'; })){ out[pr[0]] = 'upcoming'; return; }
+      // 'complete' (results appear) only once EVERY deployed audience has ended
+      // or is at 100% — results never show while parents or children are still
+      // being assessed.
+      var done = lanes.every(function(d){
         if (effectiveStatus(d)==='Ended') return true;
         var c = completionStats(schoolId, pr[1], d.audience, ids);
         return c.expected>0 && c.done>=c.expected;
@@ -3277,6 +3312,8 @@
     currentYear: currentYear,
     setYearDates: setYearDates,
     yearArchive: yearArchive,
+    clearPhaseData: clearPhaseData,
+    addCity: addCity, extraCities: extraCities,
     deploymentsIn: deploymentsIn,
     completionStatsIn: completionStatsIn,
     outcomesIn: outcomesIn,

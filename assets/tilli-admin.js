@@ -375,7 +375,7 @@
       // moment it matches (or the field is emptied) so it never nags a blank box.
       function sync() {
         var val = inp.value.trim();
-        var match = val.toUpperCase() === token.toUpperCase();
+        var match = dashFold(val) === dashFold(token);
         ok.disabled = !match;
         var showErr = val.length > 0 && !match;
         err.style.display = showErr ? 'block' : 'none';
@@ -1093,6 +1093,13 @@
     'Sri Lanka': ['Colombo', 'Kandy', 'Galle', 'Jaffna', 'Negombo'],
     'Jordan': ['Amman', 'Irbid', 'Zarqa', 'Aqaba', 'Madaba', 'Salt'],
   };
+  // The picker's cities for a country: the built-in list plus any added with "Other…".
+  var CITY_OTHER = '__other';
+  function citiesFor(country) {
+    var list = (ADD_CITIES[country] || []).slice(), A = window.TilliAPI;
+    (A && A.extraCities ? A.extraCities(country) : []).forEach(function (c) { if (!list.some(function (x) { return x.toLowerCase() === c.toLowerCase(); })) list.push(c); });
+    return list;
+  }
   // Usual academic year per country, as [start month, start day, end month, end day]
   // (months 1–12). Only a suggestion — Add School asks for this year's real dates.
   var YEAR_SHAPE = { 'India': [6, 1, 5, 31], 'Sri Lanka': [1, 1, 12, 31], 'Jordan': [9, 1, 6, 30] };
@@ -1175,7 +1182,7 @@
         if (g('ws-name')) d.name = g('ws-name').value.trim();
         if (document.getElementById('ws-boards')) { d.boardPick = readBoardPicker('ws'); d.boards = boardNames(d.boardPick); }
         if (g('ws-country')) d.country = g('ws-country').value;
-        if (g('ws-city')) d.city = g('ws-city').value;
+        if (g('ws-city')) d.city = g('ws-city').value === CITY_OTHER ? (g('ws-cityother').value || '').trim() : g('ws-city').value;
         if (g('ws-group')) d.groupId = g('ws-group').value;
         if (g('ws-joined')) d.joined = g('ws-joined').value.trim() || d.joined;
         if (g('ws-ystart')) d.yearStart = g('ws-ystart').value;
@@ -1199,9 +1206,10 @@
 
     // City options for the currently selected country (country must be chosen first).
     function cityOptions() {
-      var list = ADD_CITIES[d.country] || [];
+      var list = citiesFor(d.country), other = !!d.country && !!d.city && list.indexOf(d.city) < 0;
       return '<option value="">Select a city…</option>' +
-        list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.city ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+        list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.city ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') +
+        (d.country ? '<option value="' + CITY_OTHER + '"' + (other ? ' selected' : '') + '>Other…</option>' : '');
     }
 
     // "Suggested for Sri Lanka (Jan – Dec)" until the dates are changed by hand.
@@ -1219,7 +1227,8 @@
           boardPickerHtml('ws', d.boardPick) +
           '<div class="tl-fieldrow">' +
             '<label class="field flex-1">Country *<select class="select" id="ws-country">' + countryOpts + '</select></label>' +
-            '<label class="field flex-1">City *<select class="select" id="ws-city">' + cityOptions() + '</select></label>' +
+            '<label class="field flex-1">City *<select class="select" id="ws-city">' + cityOptions() + '</select>' +
+              '<input class="input mt-2" id="ws-cityother" placeholder="Type the city" value="' + esc(d.city && citiesFor(d.country).indexOf(d.city) < 0 ? d.city : '') + '"' + (d.city && citiesFor(d.country).indexOf(d.city) < 0 ? '' : ' hidden') + ' aria-label="City not in the list"></label>' +
           '</div>' +
           '<label class="field">Group<select class="select" id="ws-group">' + groupOpts + '</select></label>' +
           '<div id="ws-newgroup-row" style="display:none;gap:8px">' +
@@ -1364,14 +1373,22 @@
         var ys = document.getElementById('ws-ystart'), ye = document.getElementById('ws-yend'), yh = document.getElementById('ws-yearhint');
         country.addEventListener('change', function () {
           d.country = country.value; d.city = '';
-          cityEl.innerHTML = cityOptions();
+          cityEl.innerHTML = cityOptions(); cityOther.hidden = true; cityOther.value = '';
           // Re-suggest the year for the new country unless it was typed in by hand.
           if (!d.yearTouched) { var sy = suggestYear(d.country, d.joined); d.yearStart = ys.value = sy.start; d.yearEnd = ye.value = sy.end; }
           yh.textContent = yearHint();
           syncNext();
         });
         [ys, ye].forEach(function (x) { x.addEventListener('change', function () { d.yearStart = ys.value; d.yearEnd = ye.value; d.yearTouched = true; yh.textContent = yearHint(); syncNext(); }); });
-        cityEl.addEventListener('change', function () { d.city = cityEl.value; syncNext(); });
+        // "Other…" opens a text box; the typed city joins the list once the school is saved.
+        var cityOther = document.getElementById('ws-cityother');
+        cityEl.addEventListener('change', function () {
+          var other = cityEl.value === CITY_OTHER;
+          cityOther.hidden = !other; d.city = other ? cityOther.value.trim() : cityEl.value;
+          if (other) cityOther.focus();
+          syncNext();
+        });
+        cityOther.addEventListener('input', function () { d.city = cityOther.value.trim(); syncNext(); });
         document.getElementById('ws-calfile').addEventListener('change', function (e) {
           var f = e.target.files && e.target.files[0]; if (!f) return;
           d.calFileName = f.name; document.getElementById('ws-calname').textContent = f.name + ' — we’ll read the dates after the school is created';
@@ -2122,6 +2139,10 @@
   function tlUsesApi(s) { return !!((s.created || s.live) && window.TilliAPI); }
   // Live / created schools run on today's date; mock schools on the demo's fixed date.
   function tlToday(s) { return tlUsesApi(s) ? localISO(new Date()) : TODAY_ISO; }
+  // Typed confirmations: any dash (‐ - – — −) and extra spaces count the same, so
+  // "CLOSE 2026-27" matches "CLOSE 2026–27".
+  function dashFold(x) { return String(x || '').trim().toUpperCase().replace(/[\u2010-\u2015\u2212-]/g, '-').replace(/\s+/g, ' '); }
+  function isoDayBefore(iso) { var d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() - 1); return localISO(d); }
 
   function tlPlan(s, phase) {
     var byS = TL_PLAN[s.id] || (TL_PLAN[s.id] = {});
@@ -2565,6 +2586,8 @@
       b.addEventListener('click', function () {
         var phase = b.dataset.deploy, p = tlPlan(s, phase), n = tlRunningCount(p);
         var future = p.start > tlToday(s);
+        // A window that's already over can't be deployed — it would end the moment it opens.
+        if (p.end && p.end < tlToday(s)) { toast(phase + ' ends on ' + fmtJoined(p.end) + ', which has passed. Pick dates from today on, then deploy.'); return; }
         var orderLine = TL_PLACES.filter(function (pl) { return p.ord[pl.mode].length || p.any[pl.mode].length; }).map(function (pl) {
           var o = p.ord[pl.mode].length, f = p.any[pl.mode].length;
           return pl.label + ': ' + [o ? o + ' in order' : '', f ? f + ' any time' : ''].filter(Boolean).join(', ');
@@ -2798,18 +2821,29 @@
   // ---- One calendar for a whole school group ----
   // Saves it to every active live school in the group and applies the suggested
   // dates to each school's phases that aren't deployed yet (drafts only).
+  // One calendar for a group: only schools with no calendar, or one the Tilli team
+  // entered. A calendar a school sent itself is never overwritten.
   function openGroupCalendar(g, schools) {
     var live = schools.filter(tlUsesApi), A = window.TilliAPI, form;
     if (!live.length) { toast('None of this group’s schools are live yet.'); return; }
-    var boards = []; live.forEach(function (x) { schoolBoardList(x).forEach(function (b) { if (boards.indexOf(b) < 0) boards.push(b); }); });
+    var ownCal = function (x) { var c = A.calendarFor(x.id); return c && (c.enteredBy === 'school' || (!c.enteredBy && c.submittedBy)); };
+    var take = live.filter(function (x) { return !ownCal(x); }), kept = live.filter(ownCal);
+    if (!take.length) { toast('Every live school in ' + g.name + ' has sent its own calendar — open each school to review it.'); return; }
+    var boards = []; take.forEach(function (x) { schoolBoardList(x).forEach(function (b) { if (boards.indexOf(b) < 0) boards.push(b); }); });
+    var yearOf = function (x) { return (A.currentYear && A.currentYear(x.id)) || null; };
     openModal('One calendar for ' + g.name,
-      '<p class="tl-muted">For groups whose schools share a calendar. It’s saved to <b>' + live.length + ' school' + (live.length === 1 ? '' : 's') + '</b> (' + esc(live.map(function (x) { return x.name; }).join(', ')) + '), and each one’s Baseline / Midline / Endline dates are set as drafts where nothing is deployed yet. Each school’s own year must cover these dates.</p>' +
+      '<p class="tl-muted">For groups whose schools share a calendar. It’s saved to <b>' + take.length + ' school' + (take.length === 1 ? '' : 's') + '</b> (' + esc(take.map(function (x) { return x.name; }).join(', ')) + '), and each one’s Baseline / Midline / Endline dates are set as drafts where nothing is deployed yet.</p>' +
+      (kept.length ? '<p class="tl-muted"><b>Kept — school sent its own:</b> ' + esc(kept.map(function (x) { return x.name; }).join(', ')) + '.</p>' : '') +
       '<div id="gc-form"></div>',
       function (close) {
         if (form.hasErrors()) { toast('Fix the dates that end before they start.'); return false; }
         var c = form.read(); if (!c.terms.length) { toast('Add at least one term.'); return false; }
+        // Each school's own year must cover the terms (e.g. a Jan–Dec school in a Jun–May group).
+        var first = c.terms[0].start, last = c.terms[c.terms.length - 1].end;
+        var outside = take.filter(function (x) { var y = yearOf(x); return y && y.start && y.end && (first < y.start || last > y.end); });
+        if (outside.length) { toast('These terms fall outside the school year at ' + outside.map(function (x) { return x.name; }).join(', ') + ' — give those schools their own calendar.'); return false; }
         var n = 0;
-        live.forEach(function (x) {
+        take.forEach(function (x) {
           if (!A.saveCalendar(x.id, c, me.email, form.meta()).ok) return;
           var sug = A.suggestWindows(x.id, c), dates = {};
           TL_PHASES.forEach(function (ph) { if (sug && sug[ph] && !tlPlan(x, ph).deployed) dates[ph] = { start: sug[ph].start, end: sug[ph].end }; });
@@ -2817,10 +2851,10 @@
           n++;
         });
         ORG.server.logAudit(me.name, 'phase.dates', g.name + ': one calendar for ' + n + ' schools', 'group');
-        close(); toast('Calendar saved to ' + n + ' school' + (n === 1 ? '' : 's') + ' — draft dates set where nothing is deployed.');
-      }, 'Save to all schools');
+        close(); toast('Calendar saved to ' + n + ' school' + (n === 1 ? '' : 's') + ' — draft dates set where nothing is deployed.' + (kept.length ? ' ' + kept.length + ' kept their own.' : ''));
+      }, 'Save to ' + take.length + ' school' + (take.length === 1 ? '' : 's'));
     form = window.TilliCalendarForm.mount(document.getElementById('gc-form'), null, { boards: boards,
-      onUpload: function (f) { return A.readCalendarFile(live[0].id, f.name); } });
+      onUpload: function (f) { return A.readCalendarFile(take[0].id, f.name); } });
   }
 
   // ---- Plan from calendar ----
@@ -2921,7 +2955,7 @@
         '<label class="field mt-3">Type <b>' + esc(token) + '</b> to confirm<input class="input" id="ny-confirm" autocomplete="off" placeholder="' + esc(token) + '"></label>' +
       '</div>',
       function (close) {
-        if (document.getElementById('ny-confirm').value.trim().toUpperCase() !== token.toUpperCase()) { toast('Type ' + token + ' to confirm.'); return false; }
+        if (dashFold(document.getElementById('ny-confirm').value) !== dashFold(token)) { toast('Type ' + token + ' to confirm.'); return false; }
         var eo = document.getElementById('ny-endopen');
         if (eo && !eo.checked) { toast('End the live windows first (tick the box).'); return false; }
         var acts = {}; document.querySelectorAll('[data-nyg]').forEach(function (sel) { acts[sel.dataset.nyg] = sel.value; });
@@ -2942,7 +2976,7 @@
     document.getElementById('ny-calfile').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; if (f) document.getElementById('ny-calname').textContent = f.name + ' — read into ' + 'the new year for you to check.'; });
     var save = document.getElementById('tl-save'), cf = document.getElementById('ny-confirm');
     save.classList.replace('btn-primary', 'btn-danger'); save.disabled = true;
-    cf.addEventListener('input', function () { save.disabled = cf.value.trim().toUpperCase() !== token.toUpperCase(); });
+    cf.addEventListener('input', function () { save.disabled = dashFold(cf.value) !== dashFold(token); });
     var st = document.getElementById('ny-start'), en = document.getElementById('ny-end'), lb = document.getElementById('ny-label'), touched = false;
     lb.addEventListener('input', function () { touched = true; });
     [st, en].forEach(function (x) { x.addEventListener('change', function () { if (!touched && st.value && en.value) lb.value = autoLabel(st.value, en.value); }); });
@@ -2956,11 +2990,37 @@
     el.querySelectorAll('[data-calshift]').forEach(function (b) { b.addEventListener('click', function () {
       var c = window.TilliAPI.calendarConflicts(s.id).filter(function (x) { return x.phase === b.dataset.calshift; })[0];
       if (!c || !c.suggestion) return;
-      var p = tlPlan(s, c.phase); p.start = c.suggestion.start; p.end = c.suggestion.end;
-      tlPersistDeploy(s, c.phase);
-      ORG.server.logAudit(me.name, 'phase.dates', c.phase + ': ' + p.start + ' → ' + p.end + ' (calendar)', 'phase', s.id);
-      toast(c.phase + ' moved to ' + fmtJoined(p.start) + ' → ' + fmtJoined(p.end) + '.');
-      go('school', { id: s.id, tab: 'assessments' });
+      var p = tlPlan(s, c.phase);
+      var move = function (start, end, clear) {
+        p.start = start; p.end = end;
+        if (clear) window.TilliAPI.clearPhaseData(me.email, s.id, c.phase);
+        tlPersistDeploy(s, c.phase);
+        ORG.server.logAudit(me.name, 'phase.dates', c.phase + ': ' + start + ' → ' + end + ' (calendar' + (clear ? ', collected answers cleared' : '') + ')', 'phase', s.id);
+        toast(c.phase + ' now runs ' + fmtJoined(start) + ' → ' + fmtJoined(end) + '.' + (clear ? ' Answers collected so far were cleared.' : ''));
+        go('school', { id: s.id, tab: 'assessments' });
+      };
+      if (c.status !== 'Live') { move(c.suggestion.start, c.suggestion.end, false); return; }
+      // Live: moving the start would close it for teachers and parents mid-way.
+      var today = tlToday(s), endBefore = isoDayBefore(c.exam.start), endOk = endBefore >= today;
+      var close = openModal('Shift a live window · ' + c.phase,
+        '<div class="ui-note warn mb-gap"><span aria-hidden="true">⚠️</span><span><b>' + esc(c.phase) + ' is live now.</b> Teachers, parents and children may be part-way through it. Moving its start closes it until the new date — and what they’ve done so far wouldn’t match the new window.</span></div>' +
+        '<label class="tl-check"><input type="radio" name="sh-how" value="end" checked> <span><b>Only change the end date</b> — stays live, everything collected is kept. New end: <input type="date" class="input sm" id="sh-end" value="' + esc(endOk ? endBefore : c.end) + '" min="' + esc(today) + '"></span></label>' +
+        (endOk ? '<p class="tl-muted" style="margin:4px 0 12px 24px">The day before ' + esc(c.exam.name) + ' starts.</p>' : '<p class="tl-muted" style="margin:4px 0 12px 24px">' + esc(c.exam.name) + ' has already started, so the window still overlaps it whatever the end date.</p>') +
+        '<label class="tl-check"><input type="radio" name="sh-how" value="move"> <span><b>Move the whole window</b> to ' + esc(fmtJoined(c.suggestion.start)) + ' → ' + esc(fmtJoined(c.suggestion.end)) + ' — <b class="tl-valid-err">everything collected in ' + esc(c.phase) + ' at ' + esc(s.name) + ' so far is cleared</b>, and it starts again on the new date.</span></label>',
+        function () {
+          var how = document.querySelector('input[name="sh-how"]:checked').value;
+          if (how === 'end') {
+            var ne = document.getElementById('sh-end').value;
+            if (!ne || ne < today) { toast('Pick an end date from today on.'); return false; }
+            if (ne < c.start) { toast('The end can’t be before the window starts.'); return false; }
+            close(); move(c.start, ne, false); return;
+          }
+          close();
+          gated({ title: 'Clear ' + c.phase + ' and move it', danger: true, typed: 'CLEAR', confirmLabel: 'Clear and move',
+            body: '<p>Everything collected in <b>' + esc(c.phase) + '</b> at <b>' + esc(s.name) + '</b> is deleted, and the window moves to ' + esc(fmtJoined(c.suggestion.start)) + ' → ' + esc(fmtJoined(c.suggestion.end)) + '. This can’t be undone.</p>',
+            audit: { action: 'phase.clear', entity: c.phase, entityType: 'phase', schoolId: s.id },
+            onConfirm: function () { move(c.suggestion.start, c.suggestion.end, true); } });
+        }, 'Save');
     }); });
   }
 
@@ -6112,12 +6172,14 @@
       boardPickerHtml('es', boardStateFrom(schoolBoardList(s))) +
       '<label class="field">Type<input class="input" id="es-type" value="' + esc(s.type) + '"></label>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Country *<select class="select" id="es-country">' + editCountryOpts(s.country) + '</select></label>' +
-      '<label class="field flex-1">City *<select class="select" id="es-city">' + editCityOpts(s.country, s.city) + '</select></label></div>' +
+      '<label class="field flex-1">City *<select class="select" id="es-city">' + editCityOpts(s.country, s.city) + '</select>' +
+        '<input class="input mt-2" id="es-cityother" placeholder="Type the city" hidden aria-label="City not in the list"></label></div>' +
       '<label class="field">Group<select class="select" id="es-group">' + groupOpts + '</select></label>' +
       '</div>', function (close) {
         var nm = (document.getElementById('es-name').value || '').trim(); if (!nm) { toast('School name is required.'); return false; }
         var bst = readBoardPicker('es'), bErr = boardError(bst); if (bErr) { toast(bErr); return false; }
         var country = (document.getElementById('es-country').value || '').trim(), city = (document.getElementById('es-city').value || '').trim();
+        if (city === CITY_OTHER) city = (document.getElementById('es-cityother').value || '').trim();
         if (!country || !city) { toast('Country and city are required.'); return false; }
         ORG.server.updateSchool(s.id, { name: nm, boards: boardNames(bst), type: document.getElementById('es-type').value, city: city, country: country, region: country, groupId: document.getElementById('es-group').value });
         ORG.server.logAudit(me.name, 'school.edit', nm, 'school', s.id);
@@ -6125,7 +6187,9 @@
       }, 'Save changes');
     wireBoardPicker('es');
     var esC = document.getElementById('es-country'), esCity = document.getElementById('es-city');
-    esC.addEventListener('change', function () { esCity.innerHTML = editCityOpts(esC.value, ''); });
+    var esOther = document.getElementById('es-cityother');
+    esC.addEventListener('change', function () { esCity.innerHTML = editCityOpts(esC.value, ''); esOther.hidden = true; esOther.value = ''; });
+    esCity.addEventListener('change', function () { esOther.hidden = esCity.value !== CITY_OTHER; if (!esOther.hidden) esOther.focus(); });
   }
   // Edit school uses the same Country → City lists as Add School; a value saved
   // before the lists existed stays selectable so nothing is lost on save.
@@ -6134,8 +6198,9 @@
     return list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
   }
   function editCityOpts(country, cur) {
-    var list = (ADD_CITIES[country] || []).slice(); if (cur && list.indexOf(cur) < 0) list.push(cur);
-    return '<option value="">Select a city…</option>' + list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+    var list = citiesFor(country); if (cur && list.indexOf(cur) < 0) list.push(cur);
+    return '<option value="">Select a city…</option>' + list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') +
+      (country ? '<option value="' + CITY_OTHER + '">Other…</option>' : '');
   }
   // A school's boards as a list — the array when we have it, else split the display string.
   function schoolBoardList(s) {
@@ -6332,8 +6397,13 @@
     }, 0);
   }
 
+  // Sample (mock) schools only. Live schools are planned on their own Assessments
+  // tab, where deploy checks, dates and chains apply and teachers / parents see it.
   function openNewDeployment(schoolId, afterHub) {
-    var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
+    var pre = schoolId ? ORG.byId(schoolId) : null;
+    if (pre && tlUsesApi(pre)) { toast(pre.name + ' is live — plan its phases on its Assessments tab.'); go('school', { id: pre.id, tab: 'assessments' }); return; }
+    var mock = ORG.activeSchools().filter(function (s) { return !tlUsesApi(s); }), liveN = ORG.activeSchools().length - mock.length;
+    var schoolOpts = '<option value="">— Select school —</option>' + mock.map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
     // Non-archived templates, grouped per phase · audience — only phases with a
     // live version, which is the version the deployment starts on.
     var slots = {};
@@ -6349,7 +6419,8 @@
         return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(ph) + '">' + esc(t.title) + ' — v' + tplLive(t, ph).v + '</option>';
       }).join('') + '</optgroup>';
     }).join('');
-    openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a school. Status is derived from the window + publish state. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
+    openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a sample school. Status is derived from the window + publish state. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
+      (liveN ? '<p class="tl-muted"><b>Live schools aren’t listed</b> (' + liveN + ') — open the school → Assessments to plan and deploy its phases.</p>' : '') + '<div class="tl-stack">' +
       '<label class="field">School<select class="select" id="nd-school">' + schoolOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="nd-assess">' + tplOpts + '</select></label>' +
       '<div class="tl-fieldrow"><label class="field flex-1">Audience<select class="select" id="nd-aud"><option>Teacher</option><option>Parent</option><option>Direct Assessment</option></select></label>' +
@@ -6362,6 +6433,8 @@
       '</div>', function (close) {
         var sid = document.getElementById('nd-school').value;
         if (!sid) { toast('Select a school.'); return false; }
+        var ndS = document.getElementById('nd-start').value, ndE = document.getElementById('nd-end').value;
+        if (ndS && ndE && ndE < ndS) { toast('The end date is before the start date.'); return false; }
         var assess = document.getElementById('nd-assess');
         var ndAud = document.getElementById('nd-aud').value, ndMode = document.getElementById('nd-mode').value;
         if ((WHERE_BY_AUD[ndAud] || []).indexOf(ndMode) < 0) ndMode = WHERE_BY_AUD[ndAud][0];

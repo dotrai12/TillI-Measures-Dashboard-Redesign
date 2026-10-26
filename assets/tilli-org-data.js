@@ -1036,6 +1036,7 @@
     // store, so the teacher/parent/coordinator apps can all consume it. Falls
     // back to the old in-memory-only record if TilliAPI isn't present.
     if (window.TilliAPI && window.TilliAPI.createSchoolFull) {
+      if (input.city && window.TilliAPI.addCity) window.TilliAPI.addCity(input.country, input.city);
       var res = window.TilliAPI.createSchoolFull({
         name: input.name, board: input.board, boards: input.boards, city: input.city, country: input.country,
         grades: input.grades, admin: input.admin, yearStart: input.yearStart, yearEnd: input.yearEnd,
@@ -1235,6 +1236,7 @@
   }
   function updateSchool(id, patch) {
     var s = byId(id); if (!s) return null;
+    if (patch.city && window.TilliAPI && window.TilliAPI.addCity) window.TilliAPI.addCity(patch.country || s.country, patch.city);
     ['name', 'type', 'city', 'country', 'region'].forEach(function (k) { if (patch[k] != null) s[k] = patch[k]; });
     if (Array.isArray(patch.boards) && patch.boards.length) {
       s.boards = patch.boards.slice(); s.board = s.boards.join(', ');

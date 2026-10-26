@@ -311,6 +311,13 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Rollout fix plan — Phase 5D** (26 Oct 2026)
+- **Results show later now.** A school's Overview waits until every deployed part of a window (teacher, parent, student) has ended or reached 100% — schools used to see results as soon as the teacher part finished. Expect "where are our results?" while parent check-ins are still open.
+- **"Move the whole window" on a live phase deletes what was collected** in that phase at that school (it asks for CLEAR first). There's no undo.
+- **A school's unsent draft is visible to Tilli.** After a school sends its calendar and then saves a draft, Tilli sees the newer (unsent) terms with the sent status kept.
+- **Calendars from before this change have no "entered by"**; one with a sender name counts as the school's own (kept by One calendar for all), the rest as Tilli's.
+- **Cities typed under Other… are never removed** from the list, typos included. *Possible fix:* a small list editor in Settings.
+
 **Rollout fix plan — Phase 5C** (26 Oct 2026)
 - **Parents need no code — anyone who knows an admission number can link to that child** and see what the parent sees. Admission numbers are often on ID cards and report sheets. *Possible fix:* the school admin approves each new parent link, or the parent also types the child's date of birth. Wrong numbers are still rate-limited (5 tries, then a pause).
 - **Parent claim codes still exist in the data** (`claimCode` on each child) but nothing asks for them now. The old code step (`childVerifyView`, `beginClaim` / `verifyClaim`) is kept but unreachable.

@@ -113,18 +113,18 @@ Decisions by Ishani, 26 Oct 2026: leadership can see each student for now · par
 | 5.12 | Parent after rollover: "New school year" notice, read-only last year, graduated children labelled | ✅ |
 | 5.13 | Parents add a child by admission number only (no code) | ✅ |
 
-## Phase 5D — Tilli team: windows and calendars · ⬜
+## Phase 5D — Tilli team: windows and calendars · ✅ done 26 Oct 2026
 
 | # | Item | Status |
 |---|---|---|
-| 5.14 | Results show only once every part of the window has ended | ⬜ |
-| 5.15 | Plan from calendar never suggests a past window; Deploy blocks an end date before today | ⬜ |
-| 5.16 | Calendar queue clears on any Tilli save; a school's draft after sending shows "unsent changes" | ⬜ |
-| 5.17 | Shift on a Live window: disclaimer, then "only move the end date" or "move it and lose collected data" | ⬜ |
-| 5.18 | One calendar for a group only touches schools with no calendar or a Tilli-entered one | ⬜ |
-| 5.19 | Start new year confirm accepts any dash | ⬜ |
-| 5.20 | + New deployment hidden for real schools (use the school's planner) | ⬜ |
-| 5.21 | City "Other…" with free text; the new city joins the list | ⬜ |
+| 5.14 | Results show only once every part of the window has ended | ✅ |
+| 5.15 | Plan from calendar never suggests a past window; Deploy blocks an end date before today | ✅ |
+| 5.16 | Calendar queue clears on any Tilli save; a school's draft after sending shows "unsent changes" | ✅ |
+| 5.17 | Shift on a Live window: disclaimer, then "only move the end date" or "move it and lose collected data" | ✅ |
+| 5.18 | One calendar for a group only touches schools with no calendar or a Tilli-entered one | ✅ |
+| 5.19 | Start new year confirm accepts any dash | ✅ |
+| 5.20 | + New deployment hidden for real schools (use the school's planner) | ✅ |
+| 5.21 | City "Other…" with free text; the new city joins the list | ✅ |
 
 ## Phase 5E — School dashboard polish · ⬜
 

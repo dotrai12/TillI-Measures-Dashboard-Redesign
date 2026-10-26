@@ -371,6 +371,19 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 23 — Windows and calendars (Phase 5D, 10 min)
+
+- [ ] Leadership dashboard on a school with Baseline live → Overview keeps showing "X of N children assessed" until **every** part of Baseline (teacher, parent, student) has ended or is at 100% — only then results.
+- [ ] Plan from calendar with terms that started months ago → past windows aren't suggested ("Baseline window has passed…"). In the planner, an end date before today can't be deployed.
+- [ ] School admin sends a calendar → Control Room **School calendars to review** → open it and save or apply anything → it leaves the queue (status *reviewed*). If the school then edits and presses **Save draft**, they see "You have unsent changes" and Tilli's copy keeps its status.
+- [ ] Add an exam over a **live** window → **Shift it** → a warning, then **Only change the end date** (stays live, nothing lost) or **Move the whole window** (type CLEAR — everything collected in that phase at that school is deleted).
+- [ ] A group → **One calendar for all** → schools that sent their own calendar are listed as *Kept* and aren't touched; terms outside a school's own year are refused.
+- [ ] **Start new year** → type `close 2026-27` with an ordinary hyphen → the button unlocks.
+- [ ] **Deployments → + New deployment** lists sample schools only; live schools are planned on their Assessments tab.
+- [ ] **+ Add School** → Country India → City **Other…** → type "Mysuru" → after Create, Mysuru is in the India city list (also in **Edit school**).
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.
