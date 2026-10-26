@@ -2083,7 +2083,8 @@
         var studs = AD.studentsInGrade(g);
         var secs = AD.sections.filter(function (s) { return s.grade === g; });
         var teacherLine = '<div class="nc-pcts">' + secs.map(function (s) {
-          return '<span>' + esc(secShort(s.grade, s.section)) + ' · ' + esc(AD.teacherFor(s)) + '</span>';
+          var rm = apiRoom(s);
+          return '<span>' + esc(secShort(s.grade, s.section)) + ' · ' + esc(AD.teacherFor(s)) + (rm ? ' · <span class="ad-room' + roomTone(rm) + '" title="Students added / expected">' + esc(roomText(rm)) + '</span>' : '') + '</span>';
         }).join('') + '</div>';
         // Each grade's own colour — the same one its hub has on the dandelion.
         return '<button class="ui-card tight link ad-navcard ad-gradecard" style="--grade-c:' + gradeColor(g) + '" data-graderoster="' + esc(g) + '">' +
@@ -2164,9 +2165,19 @@
       return '<button class="ui-tab' + (tab === key ? ' on' : '') + '" role="tab" aria-selected="' + (tab === key) + '" data-rostertab="' + key + '">' + esc(label) + ' <span class="ad-tabn">' + n + '</span></button>';
     };
     // The tab already names the list and its count, so no card title / count line repeats it.
+    var waiting = waitingKids();
+    var waitingBody = waiting.length ? '<div class="ui-card ad-waiting mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for your approval</h3>' +
+        '<p class="ui-mod-note">A teacher added ' + plural(waiting.length, 'new student') + ' past the class size. They can already be assessed — approve to confirm, or turn down a duplicate.</p></div></div>' +
+        '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Student</th><th>Section</th><th>Added by</th><th>Class size</th><th></th></tr></thead><tbody>' +
+        waiting.map(function (st, i) {
+          var rm = st.room;
+          return '<tr><td class="name">' + esc(st.name) + ' <span class="ad-num text-muted">' + esc(st.student_id) + '</span></td><td>' + esc(gLbl(st.grade)) + ' · ' + esc(secShort(st.grade, st.section)) + '</td>' +
+            '<td>' + esc(st.requestedByName) + '</td><td>' + (rm ? esc(roomText(rm)) : '—') + '</td>' +
+            '<td class="text-right nowrap"><button class="btn btn-cyan btn-sm" data-kidok="' + i + '">Approve</button> <button class="btn-link" data-kidno="' + i + '">Turn down</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>' : '';
     var panel = tab === 'team'
       ? inviteAlertHTML(true) + userBody
-      : listBody +
+      : waitingBody + listBody +
         // Year-end only — kept quiet so it isn't mistaken for an everyday action.
         '<div class="ad-yearend mt-gap"><div><b>Year-end</b><span>Move students up a grade, retain, remove or add — reviewable, with a 24-hour undo.</span></div>' +
           '<button class="btn btn-outline btn-sm" data-migrate="1">Start grade migration</button></div>';
@@ -2182,6 +2193,8 @@
       b.addEventListener('click', function () { setParams(b.dataset.rostertab === 'team' ? { tab: 'team' } : {}); });
     });
     body.querySelectorAll('[data-graderoster]').forEach(function (b) { b.addEventListener('click', function () { openGradeRoster(b.dataset.graderoster); }); });
+    body.querySelectorAll('[data-kidok]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidok], true); }); });
+    body.querySelectorAll('[data-kidno]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidno], false); }); });
     body.querySelectorAll('[data-migrate]').forEach(function (b) { b.addEventListener('click', startMigration); });
     body.querySelectorAll('[data-invite]').forEach(function (b) { b.addEventListener('click', inviteUser); });
     function wireUserRows(root) {
@@ -2392,6 +2405,29 @@
     var rv = document.querySelector('[data-udrevoke]');
     if (rv) rv.addEventListener('click', function () { closeModal(); toast('Access removed — they can no longer sign in.'); });
   }
+  // ---- Expected class size — teachers add up to it; past it, the child waits for an admin ----
+  function apiRoom(sec) { return window.TilliAPI && TilliAPI.sectionRoom && currentSchoolId() ? TilliAPI.sectionRoom(currentSchoolId(), sec.id) : null; }
+  function waitingKids() { return window.TilliAPI && TilliAPI.pendingStudents && currentSchoolId() ? TilliAPI.pendingStudents(currentSchoolId()) : []; }
+  function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
+  function roomTone(rm) { return rm.expected == null ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
+  function decideKid(st, approve) {
+    var nm = st.name || st.student_id;
+    if (approve) {
+      var r = TilliAPI.decideStudent(st.school_id, st.student_id, true, email);
+      toast(r.ok ? nm + ' approved' + (r.room && r.room.expected ? ' — ' + secShort(st.grade, st.section) + ' now expects ' + r.room.expected + '.' : '.') : 'That request was already handled.');
+      render(); return;
+    }
+    var ov = openModal(modalHead('Turn down ' + nm + '?') +
+      '<p class="mb-4">' + esc(nm) + ' (' + esc(st.student_id) + ') will be removed from ' + esc(gLbl(st.grade)) + ' · ' + esc(secShort(st.grade, st.section)) + '. Do this when the child is a duplicate or isn’t at your school. Anything already recorded for them is removed too.</p>' +
+      '<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-danger btn-sm" data-kidgo>Turn down</button></div>');
+    ov.querySelector('[data-kidgo]').addEventListener('click', function () {
+      TilliAPI.decideStudent(st.school_id, st.student_id, false, email);
+      var i = AD.students.findIndex(function (x) { return String(x.adm).toUpperCase() === String(st.student_id).toUpperCase(); });
+      if (i >= 0) AD.students.splice(i, 1);
+      closeModal(); toast(nm + ' turned down and removed.'); render();
+    });
+  }
+
   // ---- Grade roster popup (grade-select-first) — students + teacher per section ----
   function openGradeRoster(grade) {
     var secs = AD.sections.filter(function (s) { return s.grade === grade; });
@@ -2402,15 +2438,20 @@
     var teacherBlock = '<div class="row wrap mb-4" style="gap:10px 16px">' +
       secs.map(function (s) {
         var opts = AD.teachers.map(function (t) { return '<option value="' + t.id + '"' + (t.id === s.teacherId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
+        var rm = apiRoom(s);
+        // Expected size: teachers can add up to it; past it (or with none set) a new child waits for approval.
+        var size = rm ? '<label class="ad-sizein" title="Expected students in ' + esc(secShort(s.grade, s.section)) + '. Teachers can add up to this many; more waits for your approval. Leave empty and every new child needs approval.">' +
+            '<span>' + rm.added + ' of</span><input type="number" min="0" class="input sm" data-grsize="' + esc(s.id) + '" value="' + (rm.expected || '') + '" placeholder="—" aria-label="Expected students in ' + esc(secShort(s.grade, s.section)) + '"></label>' : '';
         return '<div class="row" style="gap:8px">' +
           '<span class="ui-metachip" style="padding:7px 13px"><b>' + esc(secShort(s.grade, s.section)) + '</b></span>' +
-          '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label></div>';
+          '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '">' + opts + '</select></label>' + size + '</div>';
       }).join('') + '</div>';
 
+    var waitingIds = waitingKids().map(function (x) { return String(x.student_id).toUpperCase(); });
     var tableHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Student ID</th><th>Section</th><th>Parent email</th>' + (SHOW_STUDENT_STAGE ? '<th>Developmental stage</th>' : '') + '</tr></thead><tbody id="gr-tbody">' +
       rows.map(function (r) {
         var stageCell = SHOW_STUDENT_STAGE ? '<td>' + (r.stage ? '<span class="ui-badge lvl-' + r.stage.lvl + '"><span class="d"></span>' + esc(r.stage.label) + '</span>' : '<span class="text-muted">not yet measured</span>') + '</td>' : '';
-        return '<tr class="clickable" data-stuhist="' + esc(r.adm) + '" title="See ' + esc(r.first || r.name) + '\'s status and class history" data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(secShort(r.grade, r.section)) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
+        return '<tr class="clickable" data-stuhist="' + esc(r.adm) + '" title="See ' + esc(r.first || r.name) + '\'s status and class history" data-nm="' + esc((r.name + ' ' + r.adm).toLowerCase()) + '" data-sec="' + esc(r.section) + '"><td class="name">' + esc(r.name) + (waitingIds.indexOf(String(r.adm).toUpperCase()) >= 0 ? ' <span class="ad-room short" title="Added past the class size — waiting for approval on the Roster page">Waiting</span>' : '') + '</td><td class="ad-num">' + esc(r.adm) + '</td><td>' + esc(secShort(r.grade, r.section)) + '</td><td>' + esc(r.parentEmail) + '</td>' + stageCell + '</tr>';
       }).join('') + '</tbody></table></div>';
 
     openModal(modalHead(gLbl(grade) + ' · roster') +
@@ -2447,6 +2488,15 @@
       });
     });
 
+    modalRoot.querySelectorAll('[data-grsize]').forEach(function (inp) {
+      inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+      inp.addEventListener('change', function () {
+        var r = TilliAPI.setSectionExpected(currentSchoolId(), inp.dataset.grsize, inp.value, email);
+        if (!r.ok) { toast('Couldn’t save that size.'); return; }
+        toast(r.room.expected ? r.room.name + ' expects ' + r.room.expected + ' students.' : 'Size cleared — new children in ' + r.room.name + ' now need your approval.');
+        render(); openGradeRoster(grade);
+      });
+    });
     modalRoot.querySelectorAll('[data-grteacher]').forEach(function (sel) {
       sel.addEventListener('change', function () {
         var sec = AD.sections.find(function (x) { return x.id === sel.dataset.grteacher; });

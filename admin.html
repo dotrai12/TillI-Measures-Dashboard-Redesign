@@ -490,6 +490,13 @@
   .ad-rostertabs { margin: 4px 0 20px; }
   .ad-rostertabs .ui-tab { font-size: var(--fs-md); padding: 10px 16px; }
   .ad-tabn { margin-left: 4px; font-weight: 600; font-size: var(--fs-xs); color: var(--text-meta); }
+  /* Expected class size: "12 of 14" on grade cards, the size input, waiting tags */
+  .ad-room { white-space: nowrap; }
+  .ad-room.short { color: var(--info-ink); background: var(--info-wash); border-radius: var(--radius-pill); padding: 1px 7px; }
+  .ad-room.warn { color: var(--warn-700); background: var(--warn-wash); border-radius: var(--radius-pill); padding: 1px 7px; }
+  .ad-sizein { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-450); }
+  .ad-sizein .input { width: 64px; text-align: center; }
+  .ad-waiting { border-color: var(--info-line); }
   /* Roster: quiet year-end row */
   .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
   .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }
@@ -543,11 +550,11 @@
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261023my"></script>
-<script src="assets/tilli-history.js?v=20261023my"></script>
+<script src="assets/tilli-api.js?v=20261023cs"></script>
+<script src="assets/tilli-history.js?v=20261023cs"></script>
 <script src="assets/created-school-bridge.js?v=20261016zx"></script>
 <script src="assets/admin-data.js?v=20261023my"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261023bg"></script>
+<script src="assets/admin.js?v=20261023cs"></script>
 </body>
 </html>

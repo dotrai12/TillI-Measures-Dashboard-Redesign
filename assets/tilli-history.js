@@ -79,6 +79,10 @@
       case 'student.add':        return hide ? 'added this student' + sec : 'added ' + subj + sec;
       case 'student.edit':       return hide ? 'edited the details' : 'edited ' + subj + '’s details';
       case 'student.offboard':   return hide ? 'marked as left the school' : 'marked ' + subj + ' as left the school';
+      case 'student.request':    return (hide ? 'asked to add this student' : 'asked to add ' + subj) + sec + ' — over the expected class size';
+      case 'student.approve':    return hide ? 'approved this new student' : 'approved ' + subj + ' as a new student';
+      case 'student.reject':     return hide ? 'turned down this new student' : 'turned down ' + subj + ' as a new student';
+      case 'section.expected':   return 'set the expected class size for <b>' + esc(secName(e) || 'a section') + '</b>';
       case 'parent.link':        return hide ? 'linked a parent' : 'linked a parent to ' + subj;
       case 'parent.unlink':      return hide ? 'removed a parent link' : 'removed a parent link from ' + subj;
       case 'teacher.reassign':   return 'changed the teacher for <b>' + esc(secName(e) || 'a section') + '</b>';
@@ -118,7 +122,7 @@
     var meta = ['<time datetime="' + new Date(e.at).toISOString() + '" title="' + esc(fullDate(e.at)) + '">' + esc(timeAgo(e.at)) + '</time>'];
     var rl = roleLabel(e.actor && e.actor.role); if (rl) meta.push(esc(rl));
     if (opts.showSchool && opts.schoolName) { var sn = opts.schoolName(e.school_id); if (sn) meta.push(esc(sn)); }
-    if (opts.showSection !== false && e.section_name && e.action !== 'student.add' && e.action !== 'teacher.reassign') meta.push(esc(secName(e)));
+    if (opts.showSection !== false && e.section_name && e.action !== 'student.add' && e.action !== 'student.request' && e.action !== 'section.expected' && e.action !== 'teacher.reassign') meta.push(esc(secName(e)));
     var items = (e.action === 'assessment.complete' && (e.items || []).length > 1) ? '<div class="hist-names">' + esc(e.items.join(' · ')) + '</div>' : '';
     return '<div class="hist-item k-' + (e.kind === 'assessment' ? 'asm' : 'stu') + '">' +
       '<span class="hist-dot" aria-hidden="true"></span>' +
@@ -188,7 +192,7 @@
     var meta = ['<time datetime="' + new Date(e.at).toISOString() + '">' + esc(fullDate(e.at)) + '</time>'];
     var rl = roleLabel(e.actor && e.actor.role); if (rl) meta.push(esc(rl));
     if (opts.schoolName) { var sn = opts.schoolName(e.school_id); if (sn) meta.push(esc(sn)); }
-    if (e.section_name && e.action !== 'student.add' && e.action !== 'teacher.reassign') meta.push(esc(secName(e)));
+    if (e.section_name && e.action !== 'student.add' && e.action !== 'student.request' && e.action !== 'section.expected' && e.action !== 'teacher.reassign') meta.push(esc(secName(e)));
     return '<div class="hist-meta">' + meta.join('<span class="hist-sep">·</span>') + '</div>';
   }
   var sumSeq = 0;

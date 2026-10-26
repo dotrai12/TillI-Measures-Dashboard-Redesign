@@ -185,7 +185,7 @@
 
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
-  var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', search: 'controlroom',
+  var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', 'class-sizes': 'schools', search: 'controlroom',
     observation: 'templates', template: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'schools', gschool: 'groupoverview' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
@@ -450,6 +450,7 @@
     'zero-students': { icon: '◎', tone: 'warn' }, 'no-role': { icon: '◌', tone: 'low' },
     invites: { icon: '✉', tone: 'warn' }, duplicates: { icon: '⧉', tone: 'warn' },
     drafts: { icon: '✎', tone: 'low' }, deployments: { icon: '⏻', tone: 'warn' },
+    'student-requests': { icon: '＋', tone: 'warn' }, 'short-classes': { icon: '▢', tone: 'low' },
   };
   SCREEN.controlroom = function (params, body) {
     var cr = ORG.server.controlRoom();
@@ -1198,7 +1199,7 @@
         var secs = g.sections.length ? g.sections.map(function (sec, si) {
           return '<span class="ws-sec"><input class="ws-secname" data-gi="' + gi + '" data-si="' + si + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. Base stays ' + esc(baseCode(g.base, sec.base)) + '.">' +
             baseTag(sec.name, sec.base, 'sec') +
-            '<input class="ws-secnum" type="number" min="0" data-gi="' + gi + '" data-si="' + si + '" value="' + (parseInt(sec.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade + ' ' + sec.name) + '">' +
+            '<input class="ws-secnum" type="number" min="0" data-gi="' + gi + '" data-si="' + si + '" value="' + (parseInt(sec.students, 10) || 0) + '" aria-label="Expected students in ' + esc(g.grade + ' ' + sec.name) + '" title="Expected students in ' + esc(g.grade + ' ' + sec.name) + '. Teachers can add up to this many; more needs an admin’s approval. Leave at 0 and teachers can’t add anyone without approval.">' +
             '<button class="ws-secx" type="button" data-gi="' + gi + '" data-si="' + si + '" title="Remove section" aria-label="Remove section">×</button></span>';
         }).join('') : '<span class="ws-nosec">No sections</span>' +
           '<label class="ws-gradenum-wrap">Students' +
@@ -1529,6 +1530,56 @@
     }).join('') + '</div>';
   }
 
+  // ---- Expected class size (shared TilliAPI roster) ----
+  // A section's room — added / expected / pending — or null for a portfolio
+  // school that only carries headline numbers.
+  function roomFor(schoolId, grade, section) {
+    var A = window.TilliAPI;
+    return A && A.sectionRoom ? A.sectionRoom(schoolId, grade, section || '') : null;
+  }
+  // The count on a section chip: "12/14" plus a short tag for what's missing.
+  function roomChipHtml(room, fallback) {
+    if (!room) return ' <i>' + fallback + '</i>';
+    var html = ' <i>' + room.added + (room.expected != null ? '/' + room.expected : '') + '</i>';
+    if (room.expected == null) html += '<em class="tl-room-tag warn" title="No expected class size set — teachers can’t add students here without an admin’s approval.">no size set</em>';
+    else if (room.left) html += '<em class="tl-room-tag" title="' + room.left + ' still to add before this class is complete.">' + room.left + ' to add</em>';
+    if (room.pending) html += '<em class="tl-room-tag pend" title="New students a teacher added past the expected size — waiting for approval.">+' + room.pending + ' pending</em>';
+    return html;
+  }
+  // Approve / turn down a child a teacher added past the class size.
+  function decideNewStudent(st, approve, after) {
+    var nm = st.name || st.student_id;
+    if (approve) {
+      var r = window.TilliAPI.decideStudent(st.school_id, st.student_id, true, me.email);
+      if (!r.ok) { toast('That request was already handled.'); after(); return; }
+      ORG.server.logAudit(me.name, 'student.approve', nm, 'student', st.school_id);
+      toast(nm + ' approved' + (r.room && r.room.expected ? ' — ' + r.room.name + ' now expects ' + r.room.expected + '.' : '.'));
+      after(); return;
+    }
+    gated({ title: 'Turn down new student', danger: true,
+      body: '<p>Remove <b>' + esc(nm) + '</b> (' + esc(st.student_id) + ') from <b>' + esc(st.section_name) + '</b>? Do this when the child is a duplicate or isn’t at this school. Anything already recorded for them is removed too.</p>',
+      confirmLabel: 'Turn down', audit: { action: 'student.reject', entity: nm, entityType: 'student', schoolId: st.school_id },
+      onConfirm: function () { window.TilliAPI.decideStudent(st.school_id, st.student_id, false, me.email); toast(nm + ' turned down and removed.'); after(); } });
+  }
+  // Table of waiting children with Approve / Turn down. showSchool for the cross-school page.
+  function pendingTableHtml(list, showSchool) {
+    return '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Student</th>' + (showSchool ? '<th>School</th>' : '') +
+      '<th>Class</th><th>Added by</th><th>Class size</th><th></th></tr></thead><tbody>' +
+      list.map(function (st, i) {
+        var rm = st.room;
+        return '<tr><td class="name">' + esc(st.name) + ' <span class="mono tl-muted">' + esc(st.student_id) + '</span></td>' +
+          (showSchool ? '<td><a class="btn-link" href="' + href('school', { id: st.school_id, tab: 'students' }) + '">' + esc(st.school_name) + '</a></td>' : '') +
+          '<td>' + esc(secLbl(st.school_id, st.grade, st.section)) + '</td>' +
+          '<td>' + esc(st.requestedByName) + ' <span class="tl-muted">· ' + esc(timeAgo(st.requestedAt)) + '</span></td>' +
+          '<td title="Students added / expected size">' + (rm ? (rm.expected == null ? 'Not set' : rm.added + ' of ' + rm.expected) : '—') + '</td>' +
+          '<td class="r nowrap"><button class="btn btn-primary btn-sm" data-approve="' + i + '">Approve</button> <button class="btn-link danger" data-turndown="' + i + '">Turn down</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function wirePendingTable(root, list, after) {
+    root.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { decideNewStudent(list[+b.dataset.approve], true, after); }); });
+    root.querySelectorAll('[data-turndown]').forEach(function (b) { b.addEventListener('click', function () { decideNewStudent(list[+b.dataset.turndown], false, after); }); });
+  }
+
   // ---- Hub tabs ----
   var HUB = {};
   HUB.history = function (d, el) {
@@ -1543,7 +1594,7 @@
     var structure = d.structure.grades.length
       ? '<div class="tl-tree">' + d.structure.grades.map(function (g) {
           var body = g.sections.length
-            ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + baseTag(sec.name, sec.base, 'sec') + ' <i>' + sec.students + '</i></span>'; }).join('')
+            ? g.sections.map(function (sec) { return '<span class="tl-tree-sec">' + esc(sec.name) + baseTag(sec.name, sec.base, 'sec') + roomChipHtml(roomFor(s.id, g.grade, sec.name), sec.students) + '</span>'; }).join('')
             : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i></span>';
           return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + baseTag(g.grade, g.base || inferBase(g.grade)) + body + '</div>';
         }).join('') + '</div>'
@@ -1572,13 +1623,18 @@
     var roster = s.id === 'little-sprouts' && TS ? TS.students.map(function (st) {
       return { name: st.first + ' ' + st.last, admission: st.adm, gradeSection: st.grade + ' ' + st.section, status: 'Active' };
     }) : (s.created && window.TilliAPI) ? window.TilliAPI.studentsForSchool(s.id).map(function (st) {
-      return { name: st.name, admission: st.student_id, gradeSection: secLbl(s.id, st.grade, st.section), status: 'Active' };
+      return { name: st.name, admission: st.student_id, gradeSection: secLbl(s.id, st.grade, st.section), status: st.approval === 'pending' ? 'Pending' : 'Active' };
     }) : [];
-    el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
+    var waiting = window.TilliAPI && window.TilliAPI.pendingStudents ? window.TilliAPI.pendingStudents(s.id) : [];
+    el.innerHTML = (waiting.length ? '<div class="ui-card tl-pendcard"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for approval</h3>' +
+        '<p class="ui-mod-note">' + waiting.length + ' new student' + (waiting.length === 1 ? '' : 's') + ' added past the class size. They can already be assessed.</p></div></div>' +
+        '<div id="stu-pending">' + pendingTableHtml(waiting, false) + '</div></div>' : '') +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
         '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button><button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
           '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div></div>' +
       (roster.length ? '<div class="tl-filters"><input class="input grow tl-filter-q" id="stu-q" type="search" placeholder="Search by name, admission # or grade/section…" aria-label="Search students" value="' + esc(stuPager.schoolId === s.id ? stuPager.q : '') + '"></div><div id="stu-page"></div>'
         : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
+    if (waiting.length) wirePendingTable(el.querySelector('#stu-pending'), waiting, function () { go('school', { id: s.id, tab: 'students' }); });
     el.querySelector('[data-add-st]').addEventListener('click', function () { go('add-students', { school: s.id }); });
     el.querySelector('[data-merge-here]').addEventListener('click', function () { go('merge', { school: s.id }); });
     // [data-hubtab] Deletion logs button is wired in place by SCREEN.school.
@@ -1593,7 +1649,7 @@
       stuPager.page = Math.min(Math.max(1, stuPager.page), pages);
       var start = (stuPager.page - 1) * stuPager.size;
       var rows = list.slice(start, start + stuPager.size).map(function (r) {
-        return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, 'ok') + '</td>' +
+        return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, r.status === 'Pending' ? 'warn' : 'ok') + '</td>' +
           '<td class="r"><button class="btn-link" data-edit-st="' + esc(r.admission) + '">Edit</button> <button class="btn-link danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '">Delete</button></td></tr>';
       }).join('');
       if (!list.length) { mount.innerHTML = '<div class="ui-empty">No students match “' + esc(stuPager.q.trim()) + '”.</div>'; return; }
@@ -2821,6 +2877,48 @@
   //  MERGE STUDENTS  (spec §4.3)
   // ============================================================
   var mergeSel = { master: null, dup: null };
+  // ============================================================
+  //  CLASS SIZES — new students waiting for approval + classes still
+  //  short of their expected size, across every active school.
+  // ============================================================
+  SCREEN['class-sizes'] = function (params, body) {
+    var A = window.TilliAPI;
+    var waiting = A && A.pendingStudents ? A.pendingStudents() : [];
+    var short = [];
+    ORG.activeSchools().forEach(function (s) {
+      (A && A.schoolRooms ? A.schoolRooms(s.id) : []).forEach(function (r) {
+        if (r.expected == null || r.added < r.expected) short.push({ s: s, r: r });
+      });
+    });
+    var view = params.view === 'classes' ? 'classes' : 'waiting';
+    var tab = function (key, label, n) { return '<button class="ui-tab' + (view === key ? ' on' : '') + '" data-csview="' + key + '">' + label + ' <b>' + n + '</b></button>'; };
+    var panel;
+    if (view === 'waiting') {
+      panel = waiting.length
+        ? '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for approval</h3><p class="ui-mod-note">Oldest first. The school admin can approve these too.</p></div></div><div id="cs-pending">' + pendingTableHtml(waiting, true) + '</div></div>'
+        : '<div class="tl-allclear">No new students waiting for approval. 🌱</div>';
+    } else {
+      panel = short.length
+        ? '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Classes missing students</h3><p class="ui-mod-note">Fewest students added first. Set a size from the school’s Grades &amp; sections.</p></div></div>' +
+          '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>School</th><th>Class</th><th>Added</th><th>Expected</th><th></th><th></th></tr></thead><tbody>' +
+          short.sort(function (a, b) { return (a.r.expected == null) - (b.r.expected == null) || (a.r.added / (a.r.expected || 1)) - (b.r.added / (b.r.expected || 1)); }).map(function (x, i) {
+            var r = x.r;
+            return '<tr><td><a class="btn-link" href="' + href('school', { id: x.s.id }) + '">' + esc(x.s.name) + '</a></td><td>' + esc(A.sectionLabel ? A.sectionLabel(x.s.id, r.section_id) : r.name) + '</td>' +
+              '<td>' + r.added + (r.pending ? ' <span class="tl-room-tag pend">+' + r.pending + ' pending</span>' : '') + '</td>' +
+              '<td>' + (r.expected == null ? '<span class="tl-room-tag warn">Not set</span>' : r.expected) + '</td>' +
+              '<td>' + (r.expected == null ? 'Teachers can’t add without approval' : (r.expected - r.added) + ' still to add') + '</td>' +
+              '<td class="r"><button class="btn-link" data-cssize="' + i + '">Set size</button></td></tr>';
+          }).join('') + '</tbody></table></div></div>'
+        : '<div class="tl-allclear">Every class has all its expected students. 🌱</div>';
+    }
+    body.innerHTML = screenHead('Class sizes', 'New students added past a class’s expected size, and classes still missing students.') +
+      '<div class="ui-tabs mb-3">' + tab('waiting', 'Waiting for approval', waiting.length) + tab('classes', 'Classes missing students', short.length) + '</div>' + panel;
+    body.querySelectorAll('[data-csview]').forEach(function (b) { b.addEventListener('click', function () { go('class-sizes', b.dataset.csview === 'classes' ? { view: 'classes' } : {}); }); });
+    var pend = body.querySelector('#cs-pending');
+    if (pend) wirePendingTable(pend, waiting, function () { go('class-sizes', {}); });
+    body.querySelectorAll('[data-cssize]').forEach(function (b) { b.addEventListener('click', function () { openStructureEditor(short[+b.dataset.cssize].s); }); });
+  };
+
   SCREEN.merge = function (params, body) {
     var suggested = ORG.duplicates.slice();
     var scopeId = params.school || '';
@@ -4169,6 +4267,7 @@
   function actionLabelG(a) {
     return ({ 'year.start': 'Started academic year', 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template', 'template.archive': 'Archived template', 'template.unarchive': 'Restored template',
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
+      'student.approve': 'Approved new student', 'student.reject': 'Turned down new student', 'school.size': 'Set expected class size',
       'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',
       'observation.publish': 'Published observation phase', 'reflection.edit': 'Edited teacher reflection questions', 'reflection.reset': 'Reset teacher reflection questions', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
@@ -4732,7 +4831,10 @@
     'Outcomes': 'Average Social-Emotional and Cognitive band score (0–100). Appears once a Midline or Endline is complete.',
     'Board mix': 'How many partner schools follow each curriculum board. A school with several boards counts under each one.',
     'Completion ranking': 'Schools — or school groups — ordered by assessment completion, highest first.',
-    'Structure': 'Grades and sections with their student counts. Empty ones are removed automatically after ' + ORG.emptyStructureTtlDays + ' days.',
+    'Structure': 'Grades and sections with students added / expected. Teachers can add up to the expected size; more needs approval. Empty ones are removed automatically after ' + ORG.emptyStructureTtlDays + ' days.',
+    'Class sizes': 'Expected class sizes across schools: new students a teacher asked to add over the size, and classes still missing students.',
+    'Waiting for approval': 'A teacher added these children past their class’s expected size. They can already be assessed. Approve to confirm them (the class size goes up), or turn down a duplicate or a child who isn’t at the school.',
+    'Classes missing students': 'Classes with fewer students added than expected, or with no expected size set. With no size set, teachers can’t add anyone without approval.',
     'Onboarding': 'Setup checks worked out automatically from the school’s data: missing students or staff, no live assessment, empty sections close to removal.',
     'Assessment progress': 'Each phase (Baseline, Midline, Endline): whether it’s deployed, its window and completion so far.',
     'Open issues': 'Unresolved problem reports from this school.',
@@ -4905,7 +5007,7 @@
   }
   var SCREEN_TITLES = { controlroom: 'Control Room', analytics: 'Analytics', schools: 'All Schools', group: 'School group', school: 'School page', history: 'Change History',
     templates: 'Templates', template: 'Template', deployments: 'Deployments', reflection: 'Teacher Reflection Questions', users: 'Users', invitations: 'Invitations', issues: 'Issue Reports',
-    audit: 'Audit Trail', deletion: 'Deletion Logs', merge: 'Merge Students', 'add-students': 'Add Students', knowledge: 'Knowledge Base', student: 'Student report', observation: 'Observation Form' };
+    audit: 'Audit Trail', deletion: 'Deletion Logs', merge: 'Merge Students', 'add-students': 'Add Students', 'class-sizes': 'Class sizes', knowledge: 'Knowledge Base', student: 'Student report', observation: 'Observation Form' };
 
   // ---- Help panel (? Help on every page) ----
   function helpBtnHtml() { return GROUP ? '' : '<button class="btn btn-ghost btn-sm tl-help-btn" data-help title="Help and FAQs for this page" aria-label="Help for this page">?<span> Help</span></button>'; }
@@ -5388,8 +5490,15 @@
     var tree = s.structure.grades.length ? s.structure.grades.map(function (g) {
       var body = g.sections.length
         ? g.sections.map(function (sec) {
+            // Expected size: teachers add up to it; past it, an admin approves.
+            var room = roomFor(s.id, g.grade, sec.name);
+            var sizeHtml = room
+              ? ' <i>' + room.added + '</i><label class="tl-sizein" title="Expected students in ' + esc(g.grade + ' ' + sec.name) + '. Teachers can add up to this many; more needs an admin’s approval. Leave empty and teachers can’t add anyone without approval.">of' +
+                  '<input type="number" min="0" class="ws-secnum" data-size-sec="' + esc(room.section_id) + '" value="' + (room.expected || '') + '" placeholder="—" aria-label="Expected students in ' + esc(g.grade + ' ' + sec.name) + '"></label>' +
+                  (room.pending ? '<em class="tl-room-tag pend">+' + room.pending + ' pending</em>' : '')
+              : ' <i>' + sec.students + '</i>';
             return '<span class="tl-tree-sec"><input class="ws-secname" data-rs-grade="' + esc(g.grade) + '" data-rs="' + esc(sec.name) + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. The base stays the same.">' +
-              baseTag(sec.name, sec.base, 'sec') + ' <i>' + sec.students + '</i>' + emptyTag(g.grade + '|' + sec.name) + '</span>';
+              baseTag(sec.name, sec.base, 'sec') + sizeHtml + emptyTag(g.grade + '|' + sec.name) + '</span>';
           }).join('')
         : '<span class="tl-tree-sec">No sections <i>' + (parseInt(g.students, 10) || 0) + '</i>' + emptyTag(g.grade + '|') + '</span>';
       return '<div class="tl-tree-grade"><div class="ws-gradeid"><input class="ws-gradename" data-rg="' + esc(g.grade) + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. The base stays ' + esc(g.base || inferBase(g.grade) || 'the same') + '.">' +
@@ -5406,6 +5515,7 @@
       }).join('') + '</div>' : '';
     openModal('Grades & sections · ' + s.name,
       '<p class="tl-muted">Click a grade or section name to rename it — its base (in brackets) never changes. Empty grades and sections are removed automatically ' + ttl + ' days after they’re added; add them back below if needed.</p>' +
+      '<p class="tl-muted">Each section shows students added <b>of</b> the expected size. Teachers can add up to that size; past it — or with no size set — a new child needs an admin’s approval.</p>' +
       '<div class="tl-tree mb-4">' + tree + '</div>' +
       (function () {
         var used = s.structure.grades.map(function (g) { return g.base || inferBase(g.grade); });
@@ -5424,6 +5534,17 @@
         ORG.server.logAudit(me.name, 'school.structure', label + ' added back', 'school', s.id);
         toast(label + ' added back.'); openStructureEditor(s);
       }); });
+      // Expected class size — saved on change (blur / Enter).
+      document.querySelectorAll('[data-size-sec]').forEach(function (inp) {
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+        inp.addEventListener('change', function () {
+          var r = window.TilliAPI.setSectionExpected(s.id, inp.dataset.sizeSec, inp.value, me.email);
+          if (!r.ok) { toast('Couldn’t save that size.'); return; }
+          ORG.server.logAudit(me.name, 'school.size', r.room.name + ' → ' + (r.room.expected || 'not set'), 'school', s.id);
+          toast(r.room.expected ? r.room.name + ' expects ' + r.room.expected + ' students.' : 'Size cleared — teachers in ' + r.room.name + ' now need approval to add.');
+          openStructureEditor(s);
+        });
+      });
       // Inline rename (grade + section). Commit on blur / Enter; the base never changes.
       var RENAME_ERR = { exists: 'That name is already used in this school.', empty: 'The name can’t be empty.' };
       function wireRename(sel, run) {

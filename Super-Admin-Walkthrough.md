@@ -281,6 +281,24 @@ Tick the boxes as you go. Logins and school codes are in [Demo-Logins.md](Demo-L
 
 ---
 
+## Mission 16 — Class sizes and new-student approval (10 min)
+
+Each section has an **expected size**. Teachers add up to it; past it (or with no size set) a new child goes in as **Pending**, can be assessed straight away, and waits for the school admin or Tilli to approve.
+
+- [ ] **Kandy Hill** → **Overview** → **Structure**: each section reads `14/14`.
+- [ ] Sign in as `chamari.menon@kandyhill.lk` (Grade 1 A, already full) → **+ Add students** → **Type them in** → add one child → **Plant**.
+
+✅ The row says the class is full, with **Send for approval**. Click it, then **Plant** — the done screen says the child went to the school admin.
+
+- [ ] Back on `tilli.html` → **Control Room** → **New students to approve** → **Class sizes** page → **Approve** (or **Turn down**).
+- [ ] Or as `nuwan.b@kandyhill.lk` (school admin) → **Roster** → **Waiting for your approval**.
+- [ ] Change a size: Tilli → school **Settings** → **Manage grades / sections** → the number after **of**; or school admin → **Roster** → open a grade → the number next to the teacher.
+- [ ] **Control Room** → **Classes missing students** lists sections short of their size or with none set (a new school's sections start with the wizard's count — 0 means none set).
+
+✅ Approving raises the size by one; turning down removes the child. Both show in **Change History**.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

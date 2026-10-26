@@ -2771,6 +2771,25 @@
   }
   function addSectionOK() { const a = S.add; return a.sectionId !== 'new' || !!(a.newGrade || '').trim(); }
   function addSheetValid() { return addSectionOK() && S.add.rows.some(addRowComplete); }
+  // Expected class size for the batch's section: the school admin or Tilli set
+  // it; teachers add up to it, and past it a child waits for their approval.
+  function addRoom() {
+    const a = S.add, A = window.TilliAPI;
+    if (a.sectionId === 'new' || !(A && A.sectionRoom)) return null;
+    const sec = S.baseData.sections.find((x) => x.id === a.sectionId);
+    return sec ? A.sectionRoom(schoolId(), sec.grade, sec.section || '') : null;
+  }
+  function roomLine(rm) {
+    if (!rm) return S.add.sectionId === 'new' ? 'A new section has no class size yet — every child you add here goes to your school admin for approval.' : '';
+    if (rm.expected == null) return 'Your school hasn’t set a class size for this section yet — every child you add goes to your school admin for approval.';
+    if (rm.left) return `${rm.added} of ${rm.expected} students added · ${rm.left} ${rm.left === 1 ? 'place' : 'places'} left${rm.pending ? ` · ${rm.pending} waiting for approval` : ''}.`;
+    return `All ${rm.expected} students are added${rm.pending ? ` (+${rm.pending} waiting for approval)` : ''}. Anyone new goes to your school admin for approval.`;
+  }
+  function overLimitText(rm) {
+    return rm && rm.expected != null
+      ? `Your class is full (${rm.expected} of ${rm.expected}). Send this child to your school admin for approval — you can still assess them meanwhile.`
+      : 'No class size is set for this section yet. Send this child to your school admin for approval — you can still assess them meanwhile.';
+  }
   // Persist one sheet row through the dedupe guard (spec A4). Returns the guard's
   // result; created / merged children are planted in the section right away.
   function plantRow(row) {
@@ -2785,15 +2804,16 @@
       const scope = window.TilliAPI.ensureTeacherScope(S.teacher.email, S.teacher.school, sec.grade, sec.section);
       res = window.TilliAPI.addStudent({
         actorEmail: S.teacher.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
-        student_id: adm, first, last, grade: sec.grade, section: sec.section, source: 'manual', force: row.force || null,
+        student_id: adm, first, last, grade: sec.grade, section: sec.section, source: 'manual', force: row.force || null, request: !!row.request,
       });
     }
     const result = (res && res.ok) ? res.result : (res && res.result) || 'created';
-    if (result === 'name_dup' || result === 'id_conflict') return { result, res };
+    if (result === 'name_dup' || result === 'id_conflict' || result === 'over_limit') return { result, res };
     const rec = (res && res.student) || {};
     const uid = rec.uid || null;
     a.results.push({ name, result, uid });
-    if (result !== 'created' && result !== 'merged') return { result, res };   // 'review' → flagged for the admin, not planted
+    // 'requested' = past the class size: planted (and assessable) while an admin approves.
+    if (result !== 'created' && result !== 'merged' && result !== 'requested') return { result, res };   // 'review' → flagged for the admin, not planted
     const id = rec.student_id || adm;
     if (S.baseData.sections.some((x) => x.students.some((st) => st.id === id))) return { result, res };
     const D = window.TilliDashData;
@@ -2828,6 +2848,9 @@
       } else if (out.result === 'id_conflict') {
         keep.push(row);
         issues[keep.length - 1] = { kind: 'id_conflict', text: `#${row.adm.trim()} already belongs to ${out.res.existing.name}. Two children can’t share an admission number — use a different one.` };
+      } else if (out.result === 'over_limit') {
+        keep.push(row);
+        issues[keep.length - 1] = { kind: 'over_limit', text: overLimitText(out.res.room) };
       }
     });
     rebuildData();
@@ -2929,7 +2952,8 @@
       const rowsHTML = a.rows.map((row, i) => {
         const iss = issues[i];
         const note = iss ? `<div class="roster-issue">${esc(iss.text)}${iss.kind === 'name_dup'
-          ? ` <button class="roster-issue-btn focus" data-add-rowforce="${i}">Different child — add anyway</button>` : ''}</div>` : '';
+          ? ` <button class="roster-issue-btn focus" data-add-rowforce="${i}">Different child — add anyway</button>`
+          : iss.kind === 'over_limit' ? ` <button class="roster-issue-btn focus" data-add-rowreq="${i}">Send for approval</button>` : ''}</div>` : '';
         return `<div class="roster-sheet-row${iss ? ' has-issue' : ''}">
           <input class="input focus" data-add-rowk="first" data-add-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
           <input class="input focus" data-add-rowk="last" data-add-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
@@ -2942,6 +2966,7 @@
         ${Object.keys(issues).length ? '<div class="ui-note warn mb-3">A few students need a quick check before we can plant them — see the highlighted rows.</div>' : ''}
         <section class="ui-card sm roster-group">
           <div class="roster-group-head"><span class="add-group-name">${esc(addGradeName())}</span><span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span></div>
+          ${roomLine(addRoom()) ? `<p class="add-room">${esc(roomLine(addRoom()))}</p>` : ''}
           <div class="roster-sheet"><div class="roster-head"><span>First name</span><span>Last name</span><span>Admission #</span><span></span></div>${rowsHTML}</div>
           <button class="btn-dashed mt-2 focus" data-add-rowadd>+ Add student</button>
         </section>
@@ -2951,6 +2976,7 @@
       const created = results.filter((r) => r.result === 'created');
       const merged = results.filter((r) => r.result === 'merged');
       const review = results.filter((r) => r.result === 'review');
+      const requested = results.filter((r) => r.result === 'requested');
       // Dedupe outcome — surfaced so the teacher sees duplicates were prevented.
       const dedupeNote = (merged.length || review.length) ? `
         <div class="ui-note info add-note">
@@ -2958,7 +2984,9 @@
           ${review.length ? ` ${review.length} entr${review.length === 1 ? 'y looks' : 'ies look'} like an existing student — flagged for your admin to review.` : ''}
         </div>` : '';
       // Student UIDs for the newly planted children.
-      const codes = created.concat(merged).filter((r) => r.uid).map((r) =>
+      const waitNote = requested.length ? `
+        <div class="ui-note info add-note">${requested.length} ${requested.length === 1 ? 'child was' : 'children were'} sent to your school admin for approval — past your class size. You can assess them now.</div>` : '';
+      const codes = created.concat(merged, requested).filter((r) => r.uid).map((r) =>
         `<div class="add-uid-row">
           <span>${esc(r.name)}</span>
           <span class="uid-chip">${esc(r.uid)}</span></div>`).join('');
@@ -2969,9 +2997,10 @@
         </div>` : '';
       step = `<div class="add-center" style="padding:14px 0 4px">
         <div style="display:flex;justify-content:center;margin:6px 0 14px">${flowerArt('growing', 96, 0)}</div>
-        <div class="add-done-title">${created.length + merged.length} ${created.length + merged.length === 1 ? 'seed' : 'seeds'} planted 🌱</div>
+        <div class="add-done-title">${created.length + merged.length + requested.length} ${created.length + merged.length + requested.length === 1 ? 'seed' : 'seeds'} planted 🌱</div>
         <p class="add-done-sub">Your ${esc(addGradeName())} bed is ready. Time to help them grow.</p>
         ${dedupeNote}
+        ${waitNote}
         ${codeCard}
         <button class="btn btn-primary focus" data-add-finish>${a.from === 'students' ? 'Back to students →' : 'Go to my garden →'}</button>
       </div>`;
@@ -3018,7 +3047,7 @@
     root.querySelectorAll('[data-add-rowk]').forEach((el) => el.addEventListener('input', (e) => {
       const row = S.add.rows[+el.dataset.addRowi]; if (!row) return;
       row[el.dataset.addRowk] = e.target.value;
-      delete row.force;                             // edited → re-check on commit
+      delete row.force; delete row.request;         // edited → re-check on commit
       syncCommit();
     }));
     const rowAdd = root.querySelector('[data-add-rowadd]');
@@ -3032,6 +3061,12 @@
       S.add.rows.splice(i, 1);
       if (!S.add.rows.length) S.add.rows.push(addBlankRow());
       S.add.issues = {};
+      render();
+    }));
+    root.querySelectorAll('[data-add-rowreq]').forEach((b) => b.addEventListener('click', () => {
+      const i = +b.dataset.addRowreq, row = S.add.rows[i];
+      if (row) row.request = true;
+      delete S.add.issues[i];
       render();
     }));
     root.querySelectorAll('[data-add-rowforce]').forEach((b) => b.addEventListener('click', () => {

@@ -844,8 +844,18 @@
       return false;
     });
 
+    // Class sizes (shared roster store): new students a teacher asked to add over
+    // the expected size, and classes still short of it or with no size set.
+    var API = window.TilliAPI, pendingKids = [], shortClasses = [];
+    if (API && API.pendingStudents) {
+      pendingKids = API.pendingStudents();
+      act.forEach(function (s) { API.schoolRooms(s.id).forEach(function (r) { if (r.expected == null || r.added < r.expected) shortClasses.push(r); }); });
+    }
+
     var cards = [
       { key: 'issues', label: 'Open issues', count: openIssues.length, severity: 3, deeplink: '#/issues?status=open' },
+      { key: 'student-requests', label: 'New students to approve', count: pendingKids.length, severity: 2, deeplink: '#/class-sizes' },
+      { key: 'short-classes', label: 'Classes missing students', count: shortClasses.length, severity: 1, deeplink: '#/class-sizes?view=classes' },
       { key: 'zero-students', label: 'Schools with 0 students', count: zeroStudents.length, severity: 2, deeplink: '#/schools?flag=zero-students', items: zeroStudents.map(function (s) { return { id: s.id, label: s.name }; }) },
       { key: 'no-role', label: 'Users with no role', count: noRole.length, severity: 1, deeplink: '#/users?role=none' },
       { key: 'invites', label: 'Expiring / expired invitations', count: expiringInv.length, severity: 2, deeplink: '#/invitations?filter=attention' },
@@ -872,6 +882,7 @@
       'template.duplicate': 'duplicated template', 'template.delete': 'deleted template', 'template.edit': 'edited template',
       'template.archive': 'archived template', 'template.unarchive': 'restored template',
       'student.merge': 'merged students', 'student.delete': 'deleted students', 'student.add': 'imported students', 'student.edit': 'edited student',
+      'student.approve': 'approved new student', 'student.reject': 'turned down new student', 'school.size': 'set expected class size',
       'school.add': 'added school', 'year.start': 'started academic year', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
       'role.change': 'changed role', 'deployment.create': 'created deployment', 'deployment.end': 'ended deployment',
       'observation.publish': 'published observation phase', 'observation.access': 'changed form access',

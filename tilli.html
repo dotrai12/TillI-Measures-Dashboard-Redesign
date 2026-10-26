@@ -373,6 +373,12 @@
   /* Empty-structure countdown + auto-removed list (structure editor) */
   .tl-tree-ttl { font-style: normal; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); margin-left: 6px; }
   .tl-tree-ttl.soon { color: var(--warn-700); background: var(--warn-wash); border-radius: var(--radius-pill); padding: 1px 7px; }
+  /* Expected class size: "12/14" + what's missing, the size input, pending tags */
+  .tl-room-tag { font-style: normal; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); margin-left: 6px; white-space: nowrap; }
+  .tl-room-tag.warn { color: var(--warn-700); background: var(--warn-wash); border-radius: var(--radius-pill); padding: 1px 7px; }
+  .tl-room-tag.pend { color: var(--info-ink); background: var(--info-wash); border-radius: var(--radius-pill); padding: 1px 7px; }
+  .tl-sizein { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-size: var(--fs-xs); color: var(--ink-450); margin-left: 4px; }
+  .tl-pendcard { border-color: var(--info-line); }
   .tl-tree-removed { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line-200); display: flex; flex-direction: column; gap: 6px; }
   .tl-tree-removed-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 600; font-size: var(--fs-sm); color: var(--ink-600); }
   .tl-tree-removed-row small { color: var(--ink-450); font-weight: 600; }
@@ -838,10 +844,10 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261023my"></script>
-<script src="assets/tilli-history.js?v=20261023my"></script>
-<script src="assets/tilli-org-data.js?v=20261023my"></script>
+<script src="assets/tilli-api.js?v=20261023cs"></script>
+<script src="assets/tilli-history.js?v=20261023cs"></script>
+<script src="assets/tilli-org-data.js?v=20261023cs"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261023my"></script>
+<script src="assets/tilli-admin.js?v=20261023cs"></script>
 </body>
 </html>

@@ -263,6 +263,17 @@ Open issues that came out of those changes:
 - **Starting a new year can't be undone yet.** Use it on a demo school. *Possible fix:* allow undo while the new year has no deployments.
 - **Two sections can merge on promotion.** If Grade 1 has A and B but Grade 2 only has A, both move into Grade 2 A. *Possible fix:* create a matching Grade 2 B automatically, or ask in the wizard.
 
+**Expected class size + new-student approval** (added 23 Oct 2026)
+- **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.
+- **A new school's sections start with no size unless the wizard count is filled in.** With no size, every child a teacher adds needs approval, so a school onboarding teachers before sizes are set floods its admin with approvals. *Possible fix:* make the per-section count required in the wizard, or default it to a typical class size.
+- **School group admins can't approve yet.** The group view is read-only; only the school admin and Tilli can.
+- **No one is told when a request comes in.** Admins only see it on the Roster / Control Room. *Possible fix:* a badge on the Roster menu item and a daily email or WhatsApp digest.
+- **An admin's CSV import sets the size to the number imported.** Importing half a class leaves the size at half. *Possible fix:* set sizes before importing, or ask on import.
+- **A section a teacher creates with "+ New" has no size**, so every child in it waits for approval. *Possible fix:* stop teachers creating sections, or let the admin size it on approval.
+- **Turning a child down leaves their completions in the store.** They no longer count anywhere, since counts read the roster, but they aren't deleted.
+- **Fixed in passing:** teacher adds used to create a second, duplicate "Grade 1 A" section at the demo and wizard-created schools; they now land in the school's own section. Browsers that already have the duplicates keep them until local storage is cleared.
+- **Portfolio sample schools don't have sizes.** Only live schools (the five demo schools, Little Sprouts and wizard-created ones) count toward the two Control Room cards.
+
 **Demo access & codes card**
 - The parent claim codes list now reads the live roster. It used to read a copy saved when the school was created, which was always empty, so it never listed anyone. The Teacher join code now has a copy button.
 

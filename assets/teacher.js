@@ -777,7 +777,8 @@
       const rowsHTML = g.rows.map((row, i) => {
         const iss = issues[gi + '-' + i];
         const note = iss ? `<div class="roster-issue">${esc(iss.text)}${iss.kind === 'name_dup'
-          ? ` <button class="roster-issue-btn focus" data-rowforce="${gi}-${i}">Different child — add anyway</button>` : ''}</div>` : '';
+          ? ` <button class="roster-issue-btn focus" data-rowforce="${gi}-${i}">Different child — add anyway</button>`
+          : iss.kind === 'over_limit' ? ` <button class="roster-issue-btn focus" data-rowreq="${gi}-${i}">Send for approval</button>` : ''}</div>` : '';
         return `<div class="roster-sheet-row${iss ? ' has-issue' : ''}">
           <input class="input focus" data-rowk="first" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.first)}" placeholder="First name" aria-label="First name, student ${i + 1}">
           <input class="input focus" data-rowk="last" data-rowg="${gi}" data-rowi="${i}" value="${esc(row.last)}" placeholder="Last name" aria-label="Last name, student ${i + 1}">
@@ -791,6 +792,7 @@
           <span class="roster-group-n">${n} ${n === 1 ? 'student' : 'students'}</span>
           ${r.groups.length > 1 ? `<button class="onb-quiet del focus" data-groupdel="${gi}" title="Remove this section and its students">Remove</button>` : ''}
         </div>
+        ${g.gs ? `<p class="add-room">${esc(roomLineFor(g.gs))}</p>` : ''}
         <div class="roster-sheet">${header}${rowsHTML}</div>
         <button class="btn-dashed mt-2 focus" data-rowadd="${gi}">+ Add student</button>
       </section>`;
@@ -825,10 +827,14 @@
             scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
             res = window.TilliAPI.addStudent({
               actorEmail: ctx.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
-              student_id: adm, first, last, grade, section, source: 'manual', force: row.force || null,
+              student_id: adm, first, last, grade, section, source: 'manual', force: row.force || null, request: !!row.request,
             });
           }
         } catch (e) {}
+        if (res && res.result === 'over_limit') {
+          issues[gi + '-' + i] = { kind: 'over_limit', text: overLimitText(res.room) };
+          return;
+        }
         if (res && res.result === 'name_dup') {
           issues[gi + '-' + i] = { kind: 'name_dup', text: `“${first} ${last}” has the same name as a student already on file (#${res.matched.student_id}).` };
           return;
@@ -849,12 +855,27 @@
     finishOnboard();
   }
 
+  // Expected class size for a "Grade · Section" pick — set by the school admin or
+  // Tilli. Teachers add up to it; past it, a child waits for an admin's approval.
+  function roomLineFor(gsLabel) {
+    const gs = splitGS(gsLabel), A = window.TilliAPI;
+    const rm = A && A.sectionRoom ? A.sectionRoom(ctx.school, gs[0], gs[1]) : null;
+    if (!rm || rm.expected == null) return 'Your school hasn’t set a class size here yet — new children go to your school admin for approval.';
+    if (rm.left) return `${rm.added} of ${rm.expected} students on file · ${rm.left} ${rm.left === 1 ? 'place' : 'places'} left.`;
+    return `All ${rm.expected} students are on file. Anyone new goes to your school admin for approval.`;
+  }
+  function overLimitText(rm) {
+    return rm && rm.expected != null
+      ? `Your class is full (${rm.expected} of ${rm.expected}). Send this child to your school admin for approval — you can still assess them meanwhile.`
+      : 'No class size is set here yet. Send this child to your school admin for approval — you can still assess them meanwhile.';
+  }
+
   // Renders the feedback note under the add-student button. For the two
   // conflict kinds it also renders the resolution buttons (data-act handled in
   // handleAct). Colours: green = added, blue = updated, amber = needs a decision.
   function rosterNoteHTML(n) {
     if (!n) return '';
-    const tone = { created: 'ok', merged: 'info', name_dup: 'info', id_conflict: 'warn', info: '' };
+    const tone = { created: 'ok', merged: 'info', name_dup: 'info', id_conflict: 'warn', over_limit: 'warn', requested: 'info', info: '' };
     const mod = tone[n.kind] != null ? tone[n.kind] : '';
     const wrap = (inner) => `<div class="onb-note-acts">${inner}</div>`;
     const choiceBtn = (act, label) => `<button class="btn-line focus" data-act="${act}">${label}</button>`;
@@ -862,6 +883,11 @@
     if (n.kind === 'name_dup') {
       actions = wrap(
         choiceBtn('roster-ignore-add', '<b>Add anyway</b>') +
+        choiceBtn('roster-dismiss-note', 'Cancel')
+      );
+    } else if (n.kind === 'over_limit') {
+      actions = wrap(
+        choiceBtn('roster-request-add', '<b>Send for approval</b>') +
         choiceBtn('roster-dismiss-note', 'Cancel')
       );
     } else if (n.kind === 'id_conflict') {
@@ -889,7 +915,7 @@
   // and same NUMBER different child (id_conflict). `force` carries the teacher's
   // choice back to the API: 'name' = add anyway, 'replace' = give the number to
   // the new child.
-  function addRosterStudent(r, force) {
+  function addRosterStudent(r, force, request) {
     const label = r.grade || '';
     const parts = label.split(' · Section ');
     const grade = (parts[0] || '').trim();
@@ -904,8 +930,14 @@
       res = window.TilliAPI.addStudent({
         actorEmail: ctx.email, school_id: scope && scope.school_id,
         section_id: scope && scope.section_id,
-        student_id: adm, first, last, grade, section, source: 'manual', force: force || null,
+        student_id: adm, first, last, grade, section, source: 'manual', force: force || null, request: !!request,
       });
+    }
+
+    // Past the class size (or none set) → ask before sending the child for approval.
+    if (res && res.result === 'over_limit') {
+      setRoster({ note: { kind: 'over_limit', force: force || null, text: overLimitText(res.room) } });
+      return;
     }
 
     // Same name, different admission number → ask before adding a possible duplicate.
@@ -939,7 +971,10 @@
     }
     // Created (or API unavailable → local add) → one new record.
     const rec = { first, last, adm, grade, section, claimCode: res && res.student && res.student.claimCode };
-    setRoster({ students: r.students.concat([rec]), first: '', last: '', adm: '', note: { kind: 'created', text: `${first} planted 🌱` } });
+    const sent = res && res.result === 'requested';
+    setRoster({ students: r.students.concat([rec]), first: '', last: '', adm: '', note: sent
+      ? { kind: 'requested', text: `${first} planted 🌱 — sent to your school admin for approval. You can assess them meanwhile.` }
+      : { kind: 'created', text: `${first} planted 🌱` } });
   }
   const normAdm = (s) => String(s == null ? '' : s).trim().toUpperCase();
 
@@ -1046,7 +1081,7 @@
         const g = groups[+el.dataset.rowg], i = +el.dataset.rowi, k = el.dataset.rowk;
         if (g && g.rows[i]) {
           g.rows[i][k] = e.target.value;
-          delete g.rows[i].force;                       // edited → re-check on commit
+          delete g.rows[i].force; delete g.rows[i].request;   // edited → re-check on commit
           if (state.roster.issues) delete state.roster.issues[el.dataset.rowg + '-' + i];
         }
         syncFinish();
@@ -1091,6 +1126,13 @@
       const [gi, i] = pair(b.dataset.rowforce), g = groups[gi];
       if (g && g.rows[i]) g.rows[i].force = 'name';
       delete state.roster.issues[b.dataset.rowforce];
+      render();
+    }));
+    // "Send for approval" on a row past the class size → add it as Pending
+    root.querySelectorAll('[data-rowreq]').forEach((b) => b.addEventListener('click', () => {
+      const [gi, i] = pair(b.dataset.rowreq), g = groups[gi];
+      if (g && g.rows[i]) g.rows[i].request = true;
+      delete state.roster.issues[b.dataset.rowreq];
       render();
     }));
 
@@ -1169,6 +1211,7 @@
       }
       // Conflict resolution (buttons live inside the note — see rosterNoteHTML):
       case 'roster-ignore-add': addRosterStudent(state.roster, 'name'); break;       // two kids, same name → add anyway
+      case 'roster-request-add': addRosterStudent(state.roster, (state.roster.note || {}).force, true); break;   // past the class size → Pending
       case 'roster-conflict-replace': addRosterStudent(state.roster, 'replace'); break; // give the number to the new child
       case 'roster-conflict-keep': {                                                 // existing child keeps the number
         const n = state.roster.note || {}; const inc = n.incoming || {};

@@ -164,7 +164,8 @@
     return {
       seedVer: SEED_VER,
       schools: {},            // school_id -> { school_id, name, board, verified, status, claimMethod }
-      sections: {},           // section_id -> { section_id, school_id, grade, section, name, teacherId }
+      sections: {},           // section_id -> { section_id, school_id, grade, section, name, teacherId, expected }
+                              //   expected = how many children the admins say the class has (null = not set)
       teacherMemberships: [], // { user_id(email), school_id, section_ids[], status }
       adminMemberships: [],   // { user_id(email), school_id, role:'admin', status }
       students: {},           // keyOf() -> record (see seedFromSchool)
@@ -425,7 +426,7 @@
         var tn; do { tn = HERO_TEACHERS[Math.floor(R() * HERO_TEACHERS.length)] + ' ' + HERO_LAST[Math.floor(R() * HERO_LAST.length)]; } while (usedT[tn]);
         usedT[tn] = 1;
         var teacher = { name: tn, email: tn.toLowerCase().replace(/\s+/g, '.') + '@' + H.domain, role: 'teacher' };
-        db.sections[secId] = { section_id: secId, school_id: id, grade: c[0], section: c[1], name: c[0] + ' ' + c[1], teacherId: teacher.email };
+        db.sections[secId] = { section_id: secId, school_id: id, grade: c[0], section: c[1], name: c[0] + ' ' + c[1], teacherId: teacher.email, expected: HERO_SECTION_SIZE };
         db.teacherMemberships.push({ user_id: teacher.email, school_id: id, section_ids: [secId], status: 'active' });
         db.staff[id].push({ name: tn, email: teacher.email, role: 'teacher', section_id: secId });
         var kids = [];
@@ -581,6 +582,14 @@
     if (!db.selfReports){ db.selfReports = {}; write(db); }
     // The four fully-populated demo schools (after history, which re-seeds itself).
     if (db.heroSeedVer !== HERO_SEED_VER){ seedHeroSchools(db); db.heroSeedVer = HERO_SEED_VER; write(db); }
+    // Expected class sizes arrived later: a class that predates them is taken
+    // to be complete as it stands (its current headcount; none if empty).
+    if (!db.expectedVer){
+      var heads = {};
+      Object.keys(db.students).forEach(function(k){ var s = db.students[k]; if (s.section_id && s.status!=='left' && s.status!=='graduated') heads[s.section_id] = (heads[s.section_id] || 0) + 1; });
+      Object.keys(db.sections).forEach(function(id){ var sec = db.sections[id]; if (sec.expected === undefined) sec.expected = heads[id] || null; });
+      db.expectedVer = 1; write(db);
+    }
     // Older deployments don't say where each assessment runs: teachers at
     // school, parents at home, student direct alternating school / home
     // (the same default the platform-admin planner shows).
@@ -641,8 +650,10 @@
     var school = resolveSchool(schoolNameOrId);
     if (!school){ return null; }
     var sid = school.school_id;
-    // find (or create) a section for this grade+section label
-    var secId = 'sec_' + low((grade||'')+'_'+(section||'')).replace(/[^a-z0-9]+/g,'_');
+    // find (or create) a section for this grade+section label — the school's own
+    // section first, so a teacher's adds land in the class the admins sized.
+    var found = findSection(db, sid, grade, section);
+    var secId = found ? found.section_id : 'sec_' + low((grade||'')+'_'+(section||'')).replace(/[^a-z0-9]+/g,'_');
     if (!db.sections[secId]){
       db.sections[secId] = { section_id:secId, school_id:sid, grade:grade||'', section:section||'', name:((grade||'')+' '+(section||'')).trim(), teacherId:null };
     }
@@ -745,7 +756,20 @@
       }
     }
 
-    // 3) Genuinely new -> create ONE canonical record.
+    // 3) Genuinely new. A teacher fills their class up to the size the admins
+    //    set; past it (or with no size set) the child only goes in as Pending
+    //    when the teacher asks (input.request) — a school admin or Tilli then
+    //    approves or turns it down. Pending children can be assessed meanwhile.
+    var sec = db.sections[sectionId], pending = false;
+    if (role==='teacher' && sec){
+      var room = roomIn(db, sec);
+      if (room.full){
+        if (!input.request)
+          return { ok:true, result:'over_limit', room:room,
+                   incoming:{ first:norm(input.first), last:norm(input.last), student_id:sid } };
+        pending = true;
+      }
+    }
     var rec = {
       student_id: sid, school_id: schoolId, section_id: sectionId,
       first: norm(input.first), last: norm(input.last), name: (norm(input.first)+' '+norm(input.last)).trim(),
@@ -757,10 +781,13 @@
       parentName: norm(input.parentName), parentEmail: low(input.parentEmail),
       status:'active', source: input.source||'manual', createdAt: Date.now(),
     };
+    if (pending){ rec.approval = 'pending'; rec.requestedBy = actor; rec.requestedAt = rec.createdAt; }
     db.students[k] = rec;
-    logHistory(db, studentEvent(db, rec, 'student.add', actor, { source: rec.source }));
+    logHistory(db, studentEvent(db, rec, pending ? 'student.request' : 'student.add', actor, { source: rec.source }));
+    // An admin's add is the class list itself: the expected size never sits below it.
+    if (role==='admin' && sec){ var have = roomIn(db, sec).added; if (!(sec.expected >= have)) sec.expected = have; }
     write(db);
-    return { ok:true, result:'created', student:Object.assign({}, rec) };
+    return { ok:true, result: pending ? 'requested' : 'created', student:Object.assign({}, rec) };
   }
 
   // Bulk add (CSV / photo OCR rows) — same dedupe guard per row, returns a summary
@@ -771,10 +798,91 @@
       var res = addStudent(Object.assign({ actorEmail:actorEmail, school_id:schoolId, section_id:sectionId, source:source||'csv' }, r));
       if (res.result==='created') summary.created.push(res.student);
       else if (res.result==='merged') summary.merged.push(res.student);
-      else if (res.result==='name_dup' || res.result==='id_conflict') summary.conflicts.push(res);
+      else if (res.result==='requested') (summary.requested = summary.requested || []).push(res.student);
+      else if (res.result==='name_dup' || res.result==='id_conflict' || res.result==='over_limit') summary.conflicts.push(res);
       else summary.denied.push({ row:r, reason:res.reason });
     });
     return { ok:true, summary:summary };
+  }
+
+  /* ---------- EXPECTED CLASS SIZE (roster completeness) ----------
+     Tilli, group and school admins set how many children each section has.
+     Teachers add freely up to that; past it, a new child is a Pending request
+     any admin can approve (the size goes up) or turn down (the record goes).
+     Rooms count every child still at school, Pending ones included. */
+  function findSection(db, schoolId, grade, section){
+    return schoolSections(db, schoolId).filter(function(s){ return low(s.grade)===low(grade) && low(s.section||'')===low(section||''); })[0] || null;
+  }
+  function kidsIn(db, sectionId){
+    return Object.keys(db.students).map(function(k){ return db.students[k]; })
+      .filter(function(s){ return s.section_id===sectionId && s.status!=='left' && s.status!=='graduated'; });
+  }
+  function roomIn(db, sec){
+    var kids = kidsIn(db, sec.section_id), pending = kids.filter(function(s){ return s.approval==='pending'; }).length;
+    var exp = sec.expected > 0 ? sec.expected : null;
+    return { section_id: sec.section_id, name: sec.name, expected: exp, added: kids.length - pending, pending: pending,
+      total: kids.length, left: exp == null ? 0 : Math.max(0, exp - kids.length),
+      full: exp == null || kids.length >= exp };   // full = a teacher can't add without approval
+  }
+  // sectionRoom(schoolId, sectionId) or sectionRoom(schoolId, grade, section).
+  // The school may be passed by id or name (the teacher apps carry the name).
+  function sectionRoom(schoolId, sectionOrGrade, section){
+    var sc = resolveSchool(schoolId); if (!sc) return null;
+    var db = getDB(), sid = sc.school_id, sec = section === undefined ? db.sections[sectionOrGrade] : findSection(db, sid, sectionOrGrade, section);
+    return sec && sec.school_id===sid ? roomIn(db, sec) : null;
+  }
+  function schoolRooms(schoolId){ var db = getDB(); return schoolSections(db, schoolId).map(function(s){ return roomIn(db, s); }); }
+  // SERVER-SIDE: Tilli / group / school admins only — never a teacher or parent.
+  function setSectionExpected(schoolId, sectionId, n, actorEmail){
+    var db = getDB(), sec = db.sections[sectionId];
+    if (!sec || sec.school_id!==schoolId) return { ok:false, reason:'not_found' };
+    var role = roleOf(db, actorEmail, schoolId);
+    if (role==='teacher' || role==='parent') return { ok:false, reason:'not-authorized' };
+    var v = parseInt(n, 10); v = v > 0 ? v : null;
+    var was = sec.expected > 0 ? sec.expected : null;
+    if (v !== was){
+      sec.expected = v;
+      logHistory(db, { school_id:schoolId, section_id:sec.section_id, section_name:sec.name, students:[], kind:'student', action:'section.expected',
+        changes:[{ label:'Expected students', from: was == null ? 'Not set' : String(was), to: v == null ? 'Not set' : String(v) }],
+        actor: actorFor(db, actorEmail, schoolId) });
+      write(db);
+    }
+    return { ok:true, room: roomIn(db, sec) };
+  }
+  // Pending children — one school, or every school (the Tilli Control Room).
+  function pendingStudents(schoolId){
+    var db = getDB();
+    return Object.keys(db.students).map(function(k){ return db.students[k]; })
+      .filter(function(s){ return s.approval==='pending' && s.status!=='left' && (!schoolId || s.school_id===schoolId); })
+      .sort(function(a, b){ return (a.requestedAt || 0) - (b.requestedAt || 0); })
+      .map(function(s){
+        var o = pubStudent(s), sec = db.sections[s.section_id], sc = db.schools[s.school_id];
+        o.section_name = sec ? sec.name : norm((s.grade||'')+' '+(s.section||''));
+        o.school_name = sc ? sc.name : s.school_id;
+        o.requestedByName = nameFor(db, s.requestedBy, s.school_id) || s.requestedBy || '';
+        o.room = sec ? roomIn(db, sec) : null;
+        return o;
+      });
+  }
+  // SERVER-SIDE: any admin (school, group or Tilli). Approve → the child is
+  // confirmed and the class size grows to fit; turn down → the record is removed.
+  function decideStudent(schoolId, studentId, approve, actorEmail){
+    var db = getDB(), k = keyOf(schoolId, studentId), rec = db.students[k];
+    if (!rec || rec.approval!=='pending') return { ok:false, reason:'not_found' };
+    var role = roleOf(db, actorEmail, schoolId);
+    if (role==='teacher' || role==='parent') return { ok:false, reason:'not-authorized' };
+    var sec = db.sections[rec.section_id];
+    if (approve){
+      delete rec.approval; rec.approvedBy = low(actorEmail); rec.approvedAt = Date.now();
+      if (sec){ var have = roomIn(db, sec).added; if (!(sec.expected >= have)) sec.expected = have; }
+      logHistory(db, studentEvent(db, rec, 'student.approve', actorEmail));
+    } else {
+      logHistory(db, studentEvent(db, rec, 'student.reject', actorEmail));
+      delete db.students[k];
+      db.parentLinks = db.parentLinks.filter(function(l){ return !(l.school_id===schoolId && l.student_id===up(studentId)); });
+    }
+    write(db);
+    return { ok:true, room: sec ? roomIn(db, sec) : null };
   }
 
   /* ======================================================================
@@ -1158,12 +1266,13 @@
         // "one teacher per section" auto-seed was removed per product rule.
         db.sections[secId] = { section_id:secId, school_id:id, grade:g.grade, section:sec.name,
           name:(g.grade+' '+sec.name).trim(), teacherId:null,
-          base_grade: g.base || '', base_section: sec.base || sec.name };
+          base_grade: g.base || '', base_section: sec.base || sec.name,
+          expected: (parseInt(sec.students,10) || 0) > 0 ? parseInt(sec.students,10) : null };
 
         // Students are NOT seeded here either — the section is created empty so
         // the coordinator can add students via the roster / CSV flow and
-        // experience the real onboarding. The wizard's per-section count only
-        // sizes the section for planning; it doesn't fabricate placeholder rows.
+        // experience the real onboarding. The wizard's per-section count is
+        // kept as the class's expected size: teachers can add up to it.
       });
     });
 
@@ -1336,8 +1445,10 @@
     var studs = studentsForSchool(schoolId);
     var byGrade = {};
     secs.forEach(function(sec){
+      var mine = studs.filter(function(s){ return s.section_id===sec.section_id; });
       (byGrade[sec.grade] = byGrade[sec.grade] || []).push({ name:sec.section, id:sec.section_id, base:sec.base_section || sec.section,
-        students: studs.filter(function(s){ return s.section_id===sec.section_id; }).length });
+        students: mine.length, expected: sec.expected > 0 ? sec.expected : null,
+        pending: mine.filter(function(s){ return s.approval==='pending'; }).length });
     });
     var grades = Object.keys(byGrade).map(function(g){ return { grade:g, base:baseGradeOf(schoolId, g), sections:byGrade[g] }; });
     var staff = staffFor(schoolId);
@@ -1351,8 +1462,7 @@
   // section even for grade/section combos the wizard didn't pre-create.
   function ensureSection(schoolId, grade, section){
     var db = getDB(); grade = norm(grade); section = norm(section);
-    var found = Object.keys(db.sections).map(function(k){ return db.sections[k]; })
-      .filter(function(s){ return s.school_id===schoolId && low(s.grade)===low(grade) && low(s.section||'')===low(section); })[0];
+    var found = findSection(db, schoolId, grade, section);
     if (found) return found.section_id;
     var secId = 'sec_' + schoolId + '_' + slugify(grade + '_' + (section||'na'));
     if (!db.sections[secId]){
@@ -1825,6 +1935,12 @@
       }
       x.section_id = target.section_id; x.grade = target.grade; x.section = target.section; moved.promoted++;
     });
+    // Expected sizes follow the children: a class that received a moved-up class
+    // expects that many; one left empty (e.g. the new intake grade) keeps last
+    // year's size as its starting guess until an admin changes it.
+    var intake = {};
+    studs.forEach(function(x){ if (x.status !== 'graduated') intake[x.section_id] = (intake[x.section_id] || 0) + 1; });
+    secs.forEach(function(t){ if (intake[t.section_id]) t.expected = intake[t.section_id]; });
 
     // 4) The new current year.
     var y = { id: yearId(label), label: label, start: start, end: end, status: 'current', startedAt: now, startedBy: low(opts.actorEmail) };
@@ -2224,6 +2340,12 @@
     addStudent: addStudent,
     addStudentsBulk: addStudentsBulk,
     reviewQueue: reviewQueue,
+    // Expected class size — teachers add up to it; past it, admins approve
+    sectionRoom: sectionRoom,
+    schoolRooms: schoolRooms,
+    setSectionExpected: setSectionExpected,
+    pendingStudents: pendingStudents,
+    decideStudent: decideStudent,
     // Flow B — parent claim (verify before reveal)
     beginClaim: function(schoolNameOrId, studentId){ return _beginClaim(schoolNameOrId, studentId); },
     verifyClaim: function(challengeId, secondFactor){ return _verifyClaim(challengeId, secondFactor); },
