@@ -32,6 +32,10 @@
   // Three school roles only: Teacher (teacher.html), School admin and School group admin.
   // Everyone who reaches this dashboard has full school-admin access.
   var isCoordinator = true;
+  // A Tilli / group admin who drilled in from their platform. The link carries the
+  // coordinator's email, so this viewer must not act in the coordinator's name
+  // (dismiss their notices, ask Tilli for a new year).
+  var platformViewer = qp.get('from') === 'tilli' || (qp.get('from') === 'group' && !!qp.get('group'));
   // Changes made here are logged under whoever is signed in. A Tilli / group
   // admin who drilled in keeps their own name, not the coordinator's.
   if (window.TilliAPI && window.TilliAPI.setHistoryActor) {
@@ -543,8 +547,8 @@
         if (n.key === 'overview') return '<button class="ui-nav-item' + (r.screen === 'overview' ? ' on' : r.screen === 'outcomes' ? ' open' : '') + '" data-nav="overview"><span class="ic">' + ICONS.overview + '</span>Overview</button>' +
           '<button class="ui-nav-item ad-nav-sub' + (r.screen === 'outcomes' ? ' on' : '') + '" data-nav="outcomes"' + (r.screen === 'outcomes' ? ' aria-current="page"' : '') + '><span class="ic">' + ICONS.outcomes + '</span>Outcomes</button>';
         // Roster: how many new children are waiting for this admin's approval.
-        var nb = n.key === 'roster' && !AD.pastYear ? waitingKids().length : 0;
-        return '<button class="ui-nav-item' + (navOn(n.key, r.screen) ? ' on' : '') + '" data-nav="' + n.key + '"' + (nb ? ' title="' + nb + ' new ' + (nb === 1 ? 'child' : 'children') + ' waiting for your approval"' : '') + '><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) +
+        var nb = n.key === 'roster' ? rosterBadge() : 0;
+        return '<button class="ui-nav-item' + (navOn(n.key, r.screen) ? ' on' : '') + '" data-nav="' + n.key + '"' + (nb ? ' title="' + esc(rosterBadgeTip()) + '"' : '') + '><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) +
           (nb ? '<span class="ad-nav-badge" aria-label="' + nb + ' waiting">' + nb + '</span>' : '') + '</button>';
       }).join('') +
       // Ask Tilli is mostly asked from the Overview now, so its full screen gets a quieter link under the nav.
@@ -565,11 +569,22 @@
       '<button class="ui-avatar ad-acct-m" id="ad-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
     var bottom = '<nav class="ui-bottomnav dash-bottomnav">' + navItems().filter(function (n) { return !n.disabled && n.key !== 'asktilli'; }).map(function (n) {
-      return '<button class="' + (navOn(n.key, r.screen) ? 'on' : '') + '" data-nav="' + n.key + '">' + ICONS[n.key] + '<span>' + esc(n.label) + '</span></button>';
+      var nb = n.key === 'roster' ? rosterBadge() : 0;
+      return '<button class="' + (navOn(n.key, r.screen) ? 'on' : '') + '" data-nav="' + n.key + '"' + (nb ? ' aria-label="' + esc(n.label + ' — ' + rosterBadgeTip()) + '"' : '') + '>' + ICONS[n.key] + '<span>' + esc(n.label) + '</span>' +
+        (nb ? '<span class="ad-nav-badge ad-bottombadge" aria-hidden="true">' + nb + '</span>' : '') + '</button>';
     }).join('') + '</nav>';
 
     return side + '<div class="ad-col"><div style="position:relative">' + header + '</div>' +
       '<main class="ad-main"><div class="ad-wrap"><div id="ad-main-body"></div></div></main></div>' + bottom;
+  }
+
+  // Roster badge: new children waiting for approval + teachers waiting for a class.
+  function rosterBadge() { return AD.pastYear ? 0 : waitingKids().length + waitingTeachers().length; }
+  function rosterBadgeTip() {
+    var k = AD.pastYear ? 0 : waitingKids().length, t = waitingTeachers().length, parts = [];
+    if (k) parts.push(k + ' new ' + (k === 1 ? 'child' : 'children') + ' waiting for your approval');
+    if (t) parts.push(t + ' ' + (t === 1 ? 'teacher' : 'teachers') + ' waiting for a class');
+    return parts.join(' · ');
   }
 
   function wireChrome() {
@@ -609,7 +624,7 @@
     placeAcctMenu(m, anchor);
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     if (fromGroup) m.querySelector('[data-am="group"]').addEventListener('click', function () { location.href = 'tilli.html?group=' + encodeURIComponent(qp.get('group')); });
-    m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
+    m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); localStorage.removeItem('tilliMeasures.assessSession'); } catch (e) {} location.href = 'index.html'; });
     m.querySelectorAll('[data-amyear]').forEach(function (b) { b.addEventListener('click', function () { closeAcctMenu(); if (!(vy && vy.id === b.dataset.amyear)) switchYear(b.dataset.amyear); }); });
     setTimeout(function () { document.addEventListener('click', closeAcctMenu, { once: true }); }, 0);
   }
@@ -1402,6 +1417,11 @@
           hl: dlSecKeys(sdOf(back)).concat(dlSecKeys(sdOf(cs.lead))), sep: true });
       }
     }
+    var asks = waitingTeachers();
+    if (asks.length) out.push({ kind: 'warn', eyebrow: 'Waiting for a class',
+      head: asks.length === 1 ? dlHl(asks[0].name, warn) + ' signed up but can' + '’' + 't find their class.' : dlHl(countNoun(asks.length, 'teacher is', 'teachers are') + ' waiting for a class', warn) + '.',
+      body: (asks.length === 1 ? 'They teach ' + esc((asks[0].grade + ' ' + asks[0].section).trim() || 'a class not on the list') + '. ' : asks.slice(0, 3).map(function (r) { return esc(r.name) + ' (' + esc((r.grade + ' ' + r.section).trim() || '?') + ')'; }).join(', ') + '. ') +
+        'Add the class and give it to them so they can start.' + ' <button type="button" class="btn-link dl-ptlink" data-goroster>Open Your team →</button>' });
     var inv = inviteAlerts();
     if (inv.length) out.push({ kind: 'warn', eyebrow: 'Invites',
       head: inv.length === 1 ? dlHl(inv[0].u.name, warn) + '’' + 's invite ' + inviteLeftText(inv[0].inf) + '.' : dlHl(inviteWhoText(inv), warn) + ' haven' + '’' + 't accepted their invites.',
@@ -1411,6 +1431,7 @@
     // Only teachers who have joined count: someone still at "Invited" hasn't accepted yet
     // (their own warning is the invite expiry), and invites already carry a section.
     var invited = {}; seedUsers().forEach(function (u) { if (u.status === 'Invited') invited[String(u.email || '').toLowerCase()] = 1; });
+    asks.forEach(function (r) { invited[r.email] = 1; });   // already warned about above
     var noSection = AD.teachers.filter(function (t) { return !invited[String(t.email || '').toLowerCase()] && !AD.sections.some(function (sd) { return sd.teacherId === t.id; }); });
     var newConcerns = AD.concernCounts().New, gaps = [];
     if (noTeacher.length) gaps.push(noTeacher.length === 1 ? esc(sLbl(noTeacher[0])) + ' has no teacher' : countNoun(noTeacher.length, 'section has', 'sections have') + ' no teacher');
@@ -1896,8 +1917,9 @@
     var rd = body.querySelector('[data-ruledismiss]');
     if (rd) rd.addEventListener('click', function () { try { localStorage.setItem(RULE_KEY + '.' + currentSchoolId() + '.' + email, '1'); } catch (e) {} render(); });
     body.querySelectorAll('[data-relink]').forEach(function (b) { b.addEventListener('click', function () { try { navigator.clipboard.writeText(b.dataset.relink); } catch (e) {} toast('Link copied.'); }); });
+    body.querySelectorAll('.ui-note [data-goroster]').forEach(function (b) { b.addEventListener('click', function () { go('roster', { tab: 'team' }); }); });
     var yd = body.querySelector('[data-yeardismiss]');
-    if (yd) yd.addEventListener('click', function () { TilliAPI.dismissYearNotice(currentSchoolId(), email); render(); });
+    if (yd) yd.addEventListener('click', function () { if (!platformViewer) TilliAPI.dismissYearNotice(currentSchoolId(), email); render(); });
   };
 
   // ========================================================
@@ -2270,14 +2292,22 @@
             '<td>' + esc(st.requestedByName) + '</td><td>' + (rm ? esc(roomText(rm)) : '—') + '</td>' +
             '<td class="text-right nowrap"><button class="btn btn-cyan btn-sm" data-kidok="' + i + '">Approve</button> <button class="btn-link" data-kidno="' + i + '">Turn down</button></td></tr>';
         }).join('') + '</tbody></table></div></div>' : '';
+    var asks = waitingTeachers();
+    var asksBody = asks.length ? '<div class="ui-card ad-waiting mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for a class</h3>' +
+        '<p class="ui-mod-note">These teachers signed up but their class isn’t on the platform yet. Add the class and give it to them — the request closes on its own — or mark it done.</p></div></div>' +
+        '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Teacher</th><th>Class they teach</th><th>Note</th><th></th></tr></thead><tbody>' +
+        asks.map(function (r) {
+          return '<tr><td class="name">' + esc(r.name) + '<br><small class="text-muted">' + esc(r.email) + '</small></td><td>' + esc((r.grade + ' ' + r.section).trim() || '—') + '</td><td>' + esc(r.note || '—') + '</td>' +
+            '<td class="text-right nowrap"><button class="btn-link" data-askdone="' + esc(r.id) + '">Mark done</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>' : '';
     var panel = tab === 'team'
-      ? inviteAlertHTML(true) + userBody
+      ? asksBody + codeJoinersHTML() + inviteAlertHTML(true) + userBody
       : waitingBody + listBody +
         // Year-end only — kept quiet so it isn't mistaken for an everyday action.
         (AD.pastYear ? '' : yearEndHTML());
     body.innerHTML = screenHead('Roster', SHOW_STUDENT_STAGE ? 'Names and sections — plus a temporary developmental-stage column (see the note in Students).' : 'Your children and teachers — names and sections only, never assessment results.') +
       '<div class="ui-tabs ad-rostertabs" role="tablist" aria-label="Roster">' + tabBtn('students', 'Students', AD.students.length) +
-        (AD.pastYear ? '' : tabBtn('team', 'Your team', users.length).replace('</button>', (inviteAlerts().length ? '<i class="ad-tabalert" title="An invite is about to expire"></i>' : '') + '</button>')) + '</div>' +
+        (AD.pastYear ? '' : tabBtn('team', 'Your team', users.length).replace('</button>', (inviteAlerts().length || asks.length ? '<i class="ad-tabalert" title="' + (asks.length ? 'A teacher is waiting for a class' : 'An invite is about to expire') + '"></i>' : '') + '</button>')) + '</div>' +
       panel;
     // NOTE: Duplicate review queue (spec §5.4.5) sits behind the near-match config
     // flag, which is OFF for this school — so the module is intentionally absent.
@@ -2288,6 +2318,20 @@
     });
     body.querySelectorAll('[data-graderoster]').forEach(function (b) { b.addEventListener('click', function () { openGradeRoster(b.dataset.graderoster); }); });
     body.querySelectorAll('[data-kidok]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidok], true); }); });
+    body.querySelectorAll('[data-unjoin]').forEach(function (b) { b.addEventListener('click', function () {
+      var nm = b.dataset.unjoinName;
+      var ov = openModal(modalHead('Remove ' + nm + '?') +
+        '<p class="mb-4">They lose access to your school’s classes and children straight away. If they do belong, they can join again with the new code.</p>' +
+        '<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-danger btn-sm" data-unjoinok>Remove</button></div>');
+      ov.querySelector('[data-unjoinok]').addEventListener('click', function () {
+        var r = TilliAPI.removeTeacherAccess(currentSchoolId(), b.dataset.unjoin, email);
+        closeModal(); toast(r.ok ? nm + ' removed.' : 'Couldn’t remove them.'); render();
+      });
+    }); });
+    body.querySelectorAll('[data-askdone]').forEach(function (b) { b.addEventListener('click', function () {
+      var r = TilliAPI.resolveClassRequest(b.dataset.askdone, email);
+      toast(r.ok ? 'Marked done.' : 'Couldn’t update that request.'); render();
+    }); });
     body.querySelectorAll('[data-kidno]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidno], false); }); });
     body.querySelectorAll('[data-yearask]').forEach(function (b) { b.addEventListener('click', askNewYear); });
     body.querySelectorAll('[data-codecopy]').forEach(function (b) { b.addEventListener('click', function () { try { navigator.clipboard.writeText(b.dataset.codecopy); } catch (e) {} toast('School code copied.'); }); });
@@ -2523,6 +2567,8 @@
     var list = window.TilliAPI && TilliAPI.pendingStudents && currentSchoolId() ? TilliAPI.pendingStudents(currentSchoolId()) : [], sc = boardScope();
     return sc ? list.filter(function (k) { return sc.indexOf(k.section_id) >= 0; }) : list;
   }
+  // Teachers who signed up but couldn't find their class ("My class isn't here").
+  function waitingTeachers() { return !AD.pastYear && window.TilliAPI && TilliAPI.classRequests && currentSchoolId() ? TilliAPI.classRequests(currentSchoolId()) : []; }
   function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.confirmed ? '' : ' · not confirmed') + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
   function roomTone(rm) { return rm.expected == null || !rm.confirmed ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
   function decideKid(st, approve) {
@@ -2759,6 +2805,9 @@
     accts.forEach(function (a) {
       if (!a.email) return;
       if (sid && a.school_id && a.school_id !== sid) return;   // other schools' invites
+      // Board-scoped admin: skip teacher invites for other boards' classes.
+      var bs = window.TILLI_CREATED && window.TILLI_CREATED.boards;
+      if (bs && /teacher/i.test(a.role || 'Teacher') && a.board && bs.indexOf(a.board) < 0) return;
       var e = a.email.toLowerCase();
       var status = a.mustReset ? 'Invited' : 'Active';
       var meta = { status: status, grade: a.grade || '', section: a.section || '',
@@ -3564,6 +3613,19 @@
       return !r.name || !EMAIL_RE.test(r.email) || !r.grade || !r.section || (boards.length > 1 && !r.board);
     });
     if (bad.length) { toast(bad.length + (bad.length === 1 ? ' row is' : ' rows are') + ' incomplete — check name, email, grade, section' + (boards.length > 1 ? ', board' : '') + '.'); return; }
+    // Every row must name a real class this admin can see (their boards only).
+    // Upper/lower case and extra spaces are forgiven; the class's own board wins.
+    var api = window.TilliAPI && currentSchoolId() ? TilliAPI.sectionsForSchool(currentSchoolId()) : [];
+    var sq = function (x) { return String(x || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+    var noClass = null;
+    filled.forEach(function (r) {
+      var sd = (AD.sections || []).find(function (x) { return sq(x.grade) === sq(r.grade) && sq(x.section) === sq(r.section); });
+      if (!sd) { noClass = noClass || r; return; }
+      r.grade = sd.grade; r.section = sd.section;
+      var rec = api.find(function (x) { return x.section_id === sd.id; });
+      if (rec && rec.board) r.board = rec.board;
+    });
+    if (noClass) { toast('No ' + noClass.grade + ' ' + noClass.section + (boardScope() ? ' in your boards' : ' at this school') + ' — pick a class from the list, or add it in Grades & sections first.'); return; }
     // duplicate emails within the batch
     var seen = {}, dupe = null;
     filled.forEach(function (r) { var e = r.email.toLowerCase(); if (seen[e]) dupe = r.email; seen[e] = 1; });
@@ -3636,6 +3698,7 @@
       '<button class="btn btn-outline btn-sm" disabled>Requested</button>');
     if (ys.cur.rollover && !ys.finished) return strip('Tilli started ' + esc(ys.cur.label) + ' on ' + fmtInvDate(ys.cur.startedAt) + ' and moved children up from ' + esc(ys.cur.rollover.from) + '.',
       '<button class="btn btn-outline btn-sm" data-yearsee="1">See grade migration</button>');
+    if (platformViewer) return strip('The school admin asks for the next year here. You start it from the school’s Assessments tab on the Tilli platform.', '');
     return strip('When ' + esc(ys.cur.label) + ' ends, ask the Tilli team to start the next year. They move children up a grade and keep this year’s results.',
       (ys.cur.rollover ? '<button class="btn-link" data-yearsee="1">Last migration</button> ' : '') + '<button class="btn btn-outline btn-sm" data-yearask="1">Ask Tilli to start next year</button>');
   }
@@ -3649,6 +3712,7 @@
     });
   }
   function askNewYear() {
+    if (platformViewer) return;
     var r = TilliAPI.requestNewYear(currentSchoolId(), email);
     toast(r.ok ? 'Request sent — the Tilli team will start the next year.' : 'Only a school admin can ask for this.');
     render();
@@ -3691,6 +3755,21 @@
       esc(AD.openPoint.label) + ' that’s the ' + esc(who) + ' assessment' + (who.indexOf(' and ') >= 0 ? 's' : '') + '. Children with only some done show as in progress, so the number can read lower than per-assessment counts.</span>' +
       '<button class="dialog-close" data-ruledismiss aria-label="Dismiss">×</button></div>';
   }
+  // For 30 days after the code changes: everyone who joined with the old code in
+  // the 30 days before it changed, so the admin can remove anyone who doesn't belong.
+  function codeJoinersHTML() {
+    var A = window.TilliAPI, sc = A && currentSchoolId() ? A.resolveSchool(currentSchoolId()) : null;
+    if (AD.pastYear || !sc || !sc.codeChangedAt || Date.now() - sc.codeChangedAt > 30 * 864e5 || !A.recentCodeJoiners) return '';
+    var list = A.recentCodeJoiners(sc.school_id, 30, sc.codeChangedAt);
+    if (!list.length) return '';
+    return '<div class="ui-card ad-waiting mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Check who joined with the old code</h3>' +
+        '<p class="ui-mod-note">Your code changed on ' + fmtInvDate(sc.codeChangedAt) + '. ' + countNoun(list.length, 'teacher', 'teachers') + ' joined with the old one in the 30 days before. Remove anyone who doesn’t belong.</p></div></div>' +
+      '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Teacher</th><th>Classes</th><th>Joined</th><th></th></tr></thead><tbody>' +
+      list.map(function (j) {
+        return '<tr><td class="name">' + esc(j.name) + '<br><small class="text-muted">' + esc(j.email) + '</small></td><td>' + esc(j.classes.join(', ') || '—') + '</td><td>' + fmtInvDate(j.joinedAt) + '</td>' +
+          '<td class="text-right nowrap"><button class="btn-link danger" data-unjoin="' + esc(j.email) + '" data-unjoin-name="' + esc(j.name) + '">Remove</button></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
   // For a week after the school code changes: the new code + the links to re-share.
   function codeChangedHTML() {
     var A = window.TilliAPI, sc = A && currentSchoolId() ? A.resolveSchool(currentSchoolId()) : null;
@@ -3699,7 +3778,8 @@
     var base = 'https://measures.tilli.app/' + String(sc.code).toLowerCase() + '/';
     var link = function (lbl, path) { return '<span class="ad-relink"><b>' + lbl + '</b> <span class="ad-num">' + esc(base + path) + '</span> <button class="btn-link" data-relink="' + esc(base + path) + '">Copy</button></span>'; };
     return '<div class="ui-note warn mb-3"><span aria-hidden="true">🔑</span><span><b>Your school code changed on ' + fmtInvDate(sc.codeChangedAt) + ' to ' + esc(sc.code) + '.</b> The old code and old staff links no longer work — re-share these with your teachers (the parents’ link hasn’t changed):<br>' +
-      link('Teachers & school admins', 'teacher') + link('Student assessments', 'direct') + '</span></div>';
+      link('Teachers & school admins', 'teacher') + link('Student assessments', 'direct') +
+      (A.recentCodeJoiners && A.recentCodeJoiners(sc.school_id, 30, sc.codeChangedAt).length ? '<br><button class="btn-link" data-goroster>Check who joined with the old code →</button>' : '') + '</span></div>';
   }
   // Shown on Overview once, after Tilli starts a new year.
   function yearNoticeHTML() {
@@ -3708,7 +3788,7 @@
     if (!n) return '';
     return '<div class="ui-note info mb-3 ad-yearnotice"><span aria-hidden="true">🌱</span><span><b>' + esc(n.year) + ' has started.</b> The Tilli team moved children up from ' + esc(n.rollover.from) + ': ' +
       n.rollover.moved.promoted + ' moved up, ' + n.rollover.moved.retained + ' stayed, ' + n.rollover.moved.graduated + ' graduated. ' +
-      '<button class="btn-link" data-yearsee="1">See grade migration</button></span><button class="dialog-close" data-yeardismiss aria-label="Dismiss">×</button></div>';
+      '<button class="btn-link" data-yearsee="1">See grade migration</button></span>' + (platformViewer ? '' : '<button class="dialog-close" data-yeardismiss aria-label="Dismiss">×</button>') + '</div>';
   }
   // ============================================================
   //  PREVIEW-STATE TOGGLE  (demo / dev tooling — NOT part of the

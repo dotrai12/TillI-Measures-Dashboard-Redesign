@@ -93,6 +93,8 @@
     step: 1, name: '', gender: '', age: '', years: '', edu: '',
     school: ctx.school, country: '', city: '', countryOpen: false, cityOpen: false,
     gradesSel: {}, secs: {}, subjects: {}, resSuff: '', resources: {},
+    // "My class isn't here": the open form + what was sent to the school admin.
+    askOpen: false, askGrade: '', askSection: '', askNote: '', classAsked: false,
   });
   // `students` holds structured records { first, last, adm, grade, section, uid }
   // (not display strings) so each add can run through the dedupe guard — the
@@ -165,14 +167,17 @@
   // the school doesn't have. Built from the school's own section records, so
   // renamed grades ("Sunflowers") and sections ("Rose") come through as named,
   // ordered by their fixed base grade (Nursery → Grade 12). Keys stay `gi` (index
-  // into GRADES) and `gi-<section name>`. Null when we have no school on file
+  // into GRADES) and `gi-<section name>`. Null only when we have no school on file
   // (standalone demo), in which case we fall back to DEMO_GRADES / DEMO_SECTIONS.
+  // A real school with no classes yet gets an empty list — the teacher can only
+  // ask their school admin to add their class.
+  const NO_CLASSES = { grades: [], secsByGi: {} };
   const SCHOOL_STRUCT = (function () {
     const A = window.TilliAPI;
     if (!INVITE || !INVITE.school || !A || !A.sectionsForSchool) return null;
     let secs = [];
-    try { secs = A.sectionsForSchool(INVITE.school.school_id) || []; } catch (e) { return null; }
-    if (!secs.length) return null;
+    try { secs = A.sectionsForSchool(INVITE.school.school_id) || []; } catch (e) { return NO_CLASSES; }
+    if (!secs.length) return NO_CLASSES;
     const bases = A.BASE_GRADES || [];
     const baseRank = (s) => { const i = bases.indexOf(s.base_grade || (A.baseGradeOf ? A.baseGradeOf(INVITE.school.school_id, s.grade) : '')); return i < 0 ? 999 : i; };
     const letterOf = (s) => String(s.base_section || s.section || '');
@@ -184,7 +189,7 @@
       (secsByName[g] = secsByName[g] || []);
       if (!secsByName[g].some((x) => x.name === sx)) secsByName[g].push({ name: sx, letter: letterOf(s) });
     });
-    if (!grades.length) return null;
+    if (!grades.length) return NO_CLASSES;
     grades.sort((a, b) => (rank[a] - rank[b]) || a.localeCompare(b));
     const secsByGi = {};
     grades.forEach((g, gi) => { secsByGi[gi] = (secsByName[g] || []).sort((a, b) => a.letter.localeCompare(b.letter)).map((x) => x.name); });
@@ -241,14 +246,20 @@
     return d;
   }
 
-  // Students the platform already has for this teacher (their sections), mapped
-  // into the onboarding roster shape so the garden is populated on day one.
-  function platformRoster() {
+  // Students the platform already has for this teacher, mapped into the
+  // onboarding roster shape so the garden is populated on day one. Only the
+  // teacher's own classes: the ones they were invited into, or (self-sign-up)
+  // the grade · section picks from step 3 — never the whole school.
+  function platformRoster(picks) {
     try {
       if (!INVITE || !INVITE.school || !window.TilliAPI.studentsForSchool) return {};
       const secIds = (INVITE.sections || []).map((s) => s.section_id);
+      const want = picks || [];
+      if (!secIds.length && !want.length) return {};
       let studs = window.TilliAPI.studentsForSchool(INVITE.school.school_id) || [];
-      if (secIds.length) studs = studs.filter((s) => secIds.indexOf(s.section_id) >= 0);
+      studs = studs.filter((s) => (want.length
+        ? want.indexOf((s.grade || '') + ' · Section ' + (s.section || '')) >= 0
+        : secIds.indexOf(s.section_id) >= 0));
       const rows = studs.map(function (s) {
         const parts = String(s.name || '').trim().split(' ');
         return {
@@ -271,6 +282,16 @@
       by[gs].rows.push({ first: r.first || '', last: r.last || '', adm: r.adm || '' });
     });
     return order.map((gs) => by[gs]);
+  }
+  // Entering "Add your students": drop sheet groups for classes the teacher no
+  // longer picks, and pre-fill the picked classes the sheet doesn't have yet.
+  function syncRosterToPicks() {
+    const picks = gradeSectionOpts();
+    const r = state.roster;
+    const kept = (r.groups || []).filter((g) => !g.gs || picks.indexOf(g.gs) >= 0);
+    const have = kept.map((g) => g.gs);
+    const fresh = (platformRoster(picks.filter((gs) => have.indexOf(gs) < 0)).groups || []);
+    state.roster = Object.assign({}, r, { groups: kept.filter((g) => g.gs || g.rows.some((x) => x.first || x.adm)).concat(fresh) });
   }
   function loadRoster(saved) {
     const r = Object.assign(blankRoster(), saved || {});
@@ -534,16 +555,45 @@
         <div class="onb-secgrid">${secs}</div>
       </div>`;
     }).join('');
+    const noClasses = !GRADES.length;
     return `<div class="onb-fields loose">
-      <div>
+      ${noClasses ? `<div class="ui-note warn">Your school hasn&rsquo;t added its classes yet. Ask your school admin to add yours &mdash; you can finish setting up meanwhile.</div>` : `<div>
         <label class="onb-label spaced">Grades you teach *</label>
         <div class="onb-pills">${gradePills}</div>
       </div>
       ${hasGrades ? `<div>
         <label class="onb-label spaced">Sections you teach in each grade *</label>
         ${secCards}
-      </div>` : ''}
+      </div>` : ''}`}
+      ${classAskHTML(noClasses)}
     </div>`;
+  }
+
+  // "My class isn't here" — the teacher can't create a class; this asks the
+  // school admin (and the Tilli team sees it too). Not shown for a standalone demo.
+  function classAskHTML(open) {
+    const d = state.demo;
+    if (!INVITE || !INVITE.school) return '';
+    if (d.classAsked) return `<div class="ui-note ok">Sent &mdash; your school admin and the Tilli team have been told${d.askGrade ? ` you teach <b>${esc((d.askGrade + ' ' + d.askSection).trim())}</b>` : ''}. You can add students once they&rsquo;ve placed you in your class.</div>`;
+    if (!d.askOpen && !open) return `<button type="button" class="onb-quiet focus" data-act="ask-open">My class isn&rsquo;t here &mdash; ask my school admin</button>`;
+    return `<div class="ui-card sm subtle">
+      <label class="onb-label">Which class do you teach?</label>
+      <div class="onb-grid2">
+        <input class="input focus" data-demo="askGrade" value="${esc(d.askGrade)}" placeholder="Grade (e.g. Grade 3)">
+        <input class="input focus" data-demo="askSection" value="${esc(d.askSection)}" placeholder="Section (e.g. B)">
+      </div>
+      <input class="input focus mt-2" data-demo="askNote" value="${esc(d.askNote)}" placeholder="Anything else your admin should know (optional)">
+      <div class="onb-actions tight">
+        <button type="button" class="btn btn-primary focus" data-act="ask-send">Ask my school admin</button>
+        ${open ? '' : '<button type="button" class="btn btn-ghost focus" data-act="ask-cancel">Cancel</button>'}
+      </div>
+    </div>`;
+  }
+  function sendClassRequest() {
+    const d = state.demo, A = window.TilliAPI;
+    if (!d.askGrade.trim()) { setDemo({ askOpen: true }); const g = root.querySelector('[data-demo="askGrade"]'); if (g) g.focus(); return; }
+    try { if (A && A.requestClass) A.requestClass({ email: ctx.email, school_id: INVITE.school.school_id, name: d.name, grade: d.askGrade, section: d.askSection, note: d.askNote }); } catch (e) {}
+    setDemo({ classAsked: true, askOpen: false });
   }
 
   function demoStep4() {
@@ -571,7 +621,8 @@
     if (d.step === 2) return !!(d.school && d.country.trim() && d.city.trim());
     if (d.step === 3) {
       const sel = Object.keys(d.gradesSel);
-      return sel.length > 0 && sel.every((gi) => allowedSecs(gi).some((sx) => d.secs[gi + '-' + sx]));
+      if (!sel.length) return !!d.classAsked;
+      return sel.every((gi) => allowedSecs(gi).some((sx) => d.secs[gi + '-' + sx]));
     }
     return Object.keys(d.subjects).length > 0 && !!d.resSuff && Object.keys(d.resources).length > 0;
   }
@@ -713,6 +764,13 @@
         ${sub ? `<p class="onb-help" style="margin-top:6px">${sub}</p>` : ''}
       </div>`;
 
+    // --- no class yet: they asked their school admin in step 3 ---
+    if (!gradeSectionOpts().length && state.demo.classAsked) {
+      return head('') + `
+        <div class="ui-note">Your school admin has been asked to add your class. Once they&rsquo;ve placed you in it, its students appear in your garden &mdash; nothing to add now.</div>
+        <div class="text-center mt-4"><button class="btn btn-primary focus" data-act="roster-skip">Enter my garden &#8594;</button></div>`;
+    }
+
     // --- entry: choose how to add students ---
     if (!r.method) {
       const preN = (r.groups || []).reduce((a, g) => a + g.rows.filter((x) => x.first || x.adm).length, 0);
@@ -814,9 +872,9 @@
   // Rows the guard bounces (same name / taken admission #) are flagged in place
   // and block finishing until the teacher resolves them.
   function commitSheet() {
-    const issues = {}, students = [], seen = {};
+    const issues = {}, students = [], seen = {}, picks = gradeSectionOpts();
     (state.roster.groups || []).forEach((g, gi) => {
-      if (!g.gs) return;
+      if (!g.gs || (picks.length && picks.indexOf(g.gs) < 0)) return;   // only the classes picked in step 3
       const gs = splitGS(g.gs), grade = gs[0], section = gs[1];
       g.rows.forEach((row, i) => {
         if (!rowComplete(row)) return;
@@ -825,6 +883,7 @@
         try {
           if (window.TilliAPI && window.TilliAPI.addStudent) {
             scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
+            if (!scope && INVITE && INVITE.school) { issues[gi + '-' + i] = { kind: 'no_class', text: noClassText(g.gs) }; return; }
             res = window.TilliAPI.addStudent({
               actorEmail: ctx.email, school_id: scope && scope.school_id, section_id: scope && scope.section_id,
               student_id: adm, first, last, grade, section, source: 'manual', force: row.force || null, request: !!row.request,
@@ -864,6 +923,7 @@
     if (rm.left) return `${rm.added} of ${rm.expected} students on file · ${rm.left} ${rm.left === 1 ? 'place' : 'places'} left.`;
     return `All ${rm.expected} students are on file. Anyone new goes to your school admin for approval.`;
   }
+  function noClassText(gsLabel) { return `Your school doesn’t have ${gsShown(gsLabel)} yet — ask your school admin to add it.`; }
   function overLimitText(rm) {
     return rm && rm.expected != null
       ? `Your class is full (${rm.expected} of ${rm.expected}). Send this child to your school admin for approval — you can still assess them meanwhile.`
@@ -927,6 +987,7 @@
       // DEMO: give this teacher scope over the section they picked (real system:
       // scope comes from the Admin invite, spec A3), then add within it.
       const scope = window.TilliAPI.ensureTeacherScope(ctx.email, ctx.school, grade, section);
+      if (!scope && INVITE && INVITE.school) { setRoster({ note: { kind: 'info', text: noClassText(label) } }); return; }
       res = window.TilliAPI.addStudent({
         actorEmail: ctx.email, school_id: scope && scope.school_id,
         section_id: scope && scope.section_id,
@@ -1202,7 +1263,10 @@
         } else set({ selfQ: state.selfQ + 1 });
         break;
       }
-      case 'to-roster': set({ phase: 'roster' }); break;
+      case 'to-roster': syncRosterToPicks(); set({ phase: 'roster' }); break;
+      case 'ask-open': setDemo({ askOpen: true }); break;
+      case 'ask-cancel': setDemo({ askOpen: false }); break;
+      case 'ask-send': sendClassRequest(); break;
       case 'roster-add': {
         const r = state.roster;
         if (!rosterAddValid()) return;   // all fields (first, last, admission #) required
@@ -1229,6 +1293,7 @@
         else commitSheet();
         break;
       }
+      case 'roster-skip': state.roster = Object.assign({}, state.roster, { groups: [], students: [] }); finishOnboard(); break;
       case 'replay': replayOnboarding(); break;
       case 'reflect-cancel': {
         // Leave without saving: put the previous answers back.

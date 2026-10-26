@@ -516,6 +516,9 @@
   /* Waiting-for-approval count on the Roster nav item */
   .ad-nav-badge { margin-left: auto; background: var(--pink-400); color: var(--white); font-size: var(--fs-xs); font-weight: 700; border-radius: var(--radius-pill); padding: 1px 7px; min-width: 18px; text-align: center; }
   .ui-nav-item.on .ad-nav-badge { background: var(--green-500); }
+  /* Phone bottom nav: the same count, pinned to the icon's top-right. */
+  .ui-bottomnav button { position: relative; }
+  .ad-nav-badge.ad-bottombadge { position: absolute; top: 2px; left: calc(50% + 6px); margin: 0; padding: 0 5px; min-width: 16px; line-height: 16px; }
   /* Roster: quiet year-end row */
   .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
   .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }

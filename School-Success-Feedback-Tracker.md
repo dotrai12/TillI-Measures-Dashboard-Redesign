@@ -269,7 +269,7 @@ Open issues that came out of those changes:
 - ~~**The year picker is hidden on phones.**~~ Fixed 26 Oct 2026: the account menu lists every school year (current + read-only past years) on any screen size; the old "Switch school year" placeholder is gone.
 - **Past-year view reloads the page.** The dashboard is built once per year, so switching years is a full reload. Fine for now; a real backend would fetch per year.
 - **History isn't filtered by year** in the past-year view — it shows every change at the school.
-- **Grades & sections additions on wizard-created schools still don't persist** (existing issue) — a section added there to a section-less grade disappears on reload.
+- **Grades & sections additions on wizard-created schools still don't persist** (existing issue) — a section added there to a section-less grade disappears on reload. Now also blocks CSV import — see *Success-lead re-review* below.
 - **Fixed in passing:** actions that refresh the screen you're on (Start new year, Approve / Turn down a new student) didn't redraw until you navigated away — they do now.
 
 **Rollout fix plan — Phase 2** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
@@ -291,6 +291,19 @@ Open issues that came out of those changes:
 - **Shift (calendar clash) moves a window just past the exams, never before tomorrow.** It can push a window across a term break (it stretches over the break) — check the dates before the window opens.
 - **One calendar for a group uses the first school's year to read an upload.** Schools in a group with different year dates should each get their own calendar.
 - **The teacher dashboard's "+ New" class is gone.** A teacher with no class sees "ask your school admin to put you in one" (not checked in the browser — it needs a teacher sign-in).
+
+**Success-lead re-review** (26 Oct 2026, after Rollout fix plan Phases 1–4)
+- **Grades & sections additions on wizard-created schools still don't persist — and since Phase 1.5 this blocks CSV import.** "+ Section" and "Add grade" (`tilli-admin.js` ~6038 / ~6044) call `ORG.server.addSection` / `addGrade` (`tilli-org-data.js` ~1252), which only change the in-memory school, never TilliAPI. CSV import now checks rows against TilliAPI (`classMatcher`), so it keeps rejecting "No Grade 1 C at this school — add it in Grades & sections first" after the admin has added it. The new class also vanishes on reload or after any import, because `refreshApiSchool` rebuilds the structure from the API. Setting a board on such a grade still toasts "follows CBSE" even though `setGradeBoard` returned `ok:false` (~5990). Manual add still works, because `ensureSection` creates the class, so the two import paths disagree. *Possible fix:* for created schools, route add-section / add-grade through new TilliAPI writes (keeping base grade, board and expected size), then `refreshApiSchool`; show the board toast only when the API returns ok. *Being fixed in Rollout plan Phase 5B (one shared add-grade / add-section save).*
+- **For Mayur — Revoke access, Resend and teacher reassignment only show a toast.** On the school dashboard, Revoke access (`admin.js` ~639, ~2518) and Resend in the detail modal (~2516) change nothing, so a teacher who left keeps access. Teacher reassignment (~2627–2633) changes memory only, but History logs it as done. *Possible fix:* wire all three to TilliAPI (`reassignTeacher` already exists; revoke = end the teacher membership; resend = new temporary password + expiry).
+- **For Mayur — Invitations never expire.** `invFromAccount` (`tilli-org-data.js` ~398) keeps "Account Created"; after day 14 an invite drops out of the Control Room's "Expiring / expired" (only `d >= 0` is counted), and the temporary password keeps working (`checkPassword`, `tilli-api.js` ~1175). *Fix in the real dashboard:* work out Expired from the expiry date, count `d < 0` on the Control Room, reject an expired temporary password with "This invitation has expired — ask for a new one".
+- **Decision (26 Oct 2026): leadership can see each student for now.** The school dashboard's Overview names each child with their band in Results mode, and the student profile shows a band per point. This goes against the school-admin spec §2 / §9 ("identity, not outcomes"); revisit before release.
+
+**Rollout fix plan — Phase 5A** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
+- **Teachers who already finished onboarding keep the roster they saved.** Their garden is built from their own browser copy, so anyone who onboarded before this fix with the whole school still sees it until Phase 5C (teacher dashboard reads the school's roster). *Possible fix if 5C slips:* clear `tilliMeasures.teacher.<email>` for those accounts.
+- **Self-joined teachers get access as soon as they pick a class.** Picking is now limited to real classes, but there is still no "waiting for the school admin to confirm" step. The regenerate review list (joined in the last 30 days, with Remove) is the safety net.
+- **Little Sprouts now shows "grades with no board yet".** It runs CBSE + IB and none of its grades are tagged — correct, but it will show on every demo.
+- **Board access is Tilli-only.** A school admin can't widen or narrow another admin's boards; ask Tilli.
+- **Class requests have no teacher-side status.** A teacher who asked sees "ask your admin" on their dashboard until they're placed; they aren't told when the admin marks the request done without placing them.
 
 **Expected class size + new-student approval** (added 23 Oct 2026)
 - **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.

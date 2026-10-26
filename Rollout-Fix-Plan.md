@@ -81,6 +81,71 @@ Source: Farah's walkthrough of `tilli.html` (create a school → deploy → Heri
 
 ---
 
+# Phase 5 — from Farah's re-review (26 Oct 2026, after Phases 1–4)
+
+Decisions by Ishani, 26 Oct 2026: leadership can see each student for now · parents need no code (admission number only) · board scope: fix all three leaks · one add-grade / add-section save used by school admin and Tilli · individual assessments are taken by a parent or teacher themselves, results on the Tilli side only, a teacher arriving by link signs up as a full teacher (school code required). Mayur items (revoke/resend/reassign, invite expiry) are in the tracker.
+
+## Phase 5A — Access and safety · ✅ done 26 Oct 2026
+
+| # | Item | What changes | Status |
+|---|---|---|---|
+| 5.1 | **Self-joined teacher gets only the classes they pick** | The Add-your-students sheet is built from the classes picked in step 3, never the whole school. Only picked classes are saved. A teacher can't create a class. | ✅ |
+| 5.2 | **"My class isn't listed"** | Exit at step 3 → a request the school admin (Overview warning + Roster badge) and Tilli (Control Room card) both see. No demo grade list for a real school. | ✅ |
+| 5.3 | **Sign out clears the session** | Teacher and parent sign-out clear the saved session, so the student link no longer opens as that teacher. | ✅ |
+| 5.4 | **Teacher sign-up: code first, then Confirm school** | No school search for teachers. Code → "Is this your school?" (name · city · board) → password. | ✅ |
+| 5.5 | **Review who joined after a regenerate** | Memberships store when and how a teacher joined. After Regenerate code: "N teachers joined with the code in the last 30 days" with Remove. | ✅ |
+| 5.6 | **Board scope, three leaks** | Scoped admins see only their boards' teachers (no false "no section" warning); invites pick a real in-scope class; Tilli / group drill-ins open as an all-boards viewer. | ✅ |
+| 5.7 | **Board access stays maintainable** | Rollover sections keep their grade's board; Edit board access on Staff & Access; untagged-grades nudge. | ✅ |
+
+## Phase 5B — School admin self-serves classes and students · ⬜
+
+| # | Item | Status |
+|---|---|---|
+| 5.8 | One add-grade / add-section save in TilliAPI, used by Tilli too (fixes the CSV-loop known issue) | ⬜ |
+| 5.9 | School dashboard: Grades & sections (in-scope boards only) | ⬜ |
+| 5.10 | School dashboard: Add students (paste, .csv, template), in-scope classes only | ⬜ |
+
+## Phase 5C — Teacher and parent across the year · ⬜
+
+| # | Item | Status |
+|---|---|---|
+| 5.11 | Teacher dashboard reads the school's roster; observations kept per year; completions only for the teacher's own children | ⬜ |
+| 5.12 | Parent after rollover: "New school year" notice, read-only last year, graduated children labelled | ⬜ |
+| 5.13 | Parents add a child by admission number only (no code) | ⬜ |
+
+## Phase 5D — Tilli team: windows and calendars · ⬜
+
+| # | Item | Status |
+|---|---|---|
+| 5.14 | Results show only once every part of the window has ended | ⬜ |
+| 5.15 | Plan from calendar never suggests a past window; Deploy blocks an end date before today | ⬜ |
+| 5.16 | Calendar queue clears on any Tilli save; a school's draft after sending shows "unsent changes" | ⬜ |
+| 5.17 | Shift on a Live window: disclaimer, then "only move the end date" or "move it and lose collected data" | ⬜ |
+| 5.18 | One calendar for a group only touches schools with no calendar or a Tilli-entered one | ⬜ |
+| 5.19 | Start new year confirm accepts any dash | ⬜ |
+| 5.20 | + New deployment hidden for real schools (use the school's planner) | ⬜ |
+| 5.21 | City "Other…" with free text; the new city joins the list | ⬜ |
+
+## Phase 5E — School dashboard polish · ⬜
+
+| # | Item | Status |
+|---|---|---|
+| 5.22 | Past-year Overview hides this year's warnings; exports name the year | ⬜ |
+| 5.23 | "Ask Tilli to start next year" only once Endline is deployed | ⬜ |
+| 5.24 | Waiting badge on the phone bottom nav (shipped with 5A) | ✅ |
+| 5.25 | Key hover-only explanations become tap ⓘ tips | ⬜ |
+
+## Phase 5F — Individual assessments per school · ⬜
+
+| # | Item | Status |
+|---|---|---|
+| 5.26 | Data + API (create, list, end, complete, link) | ⬜ |
+| 5.27 | Tilli school → Assessments: Individual assessments card (template, Parent/Teacher, dates, link, who's done it) | ⬜ |
+| 5.28 | Link opens sign-in/up with the role preselected and goes straight to the assessment, never a dashboard | ⬜ |
+| 5.29 | Light runner in `assess.html?ia=` with a closed message | ⬜ |
+
+---
+
 ## Risks to keep in mind
 
 - **One code means a parent link reveals the teacher code.** Anyone holding a parent or student link could sign up as a teacher. *Mitigation available later:* teachers who self-join land as "waiting for the school admin to confirm".

@@ -79,8 +79,11 @@
   // Board-scoped school admin: only their boards' classes and children reach the
   // dashboard, so every screen built on it (Overview, Outcomes, Reports, Roster,
   // Ask Tilli) stays inside those boards. null = every board.
+  // A Tilli / group admin who drilled in (from=tilli|group) always sees every
+  // board — the email in the link is the coordinator's, not theirs.
   var loginEmail0 = String(qp.get('email') || '').toLowerCase();
-  var scope = API.sectionsInScope ? API.sectionsInScope(id, loginEmail0) : null;
+  var platformView = qp.get('from') === 'tilli' || qp.get('from') === 'group';
+  var scope = !platformView && API.sectionsInScope ? API.sectionsInScope(id, loginEmail0) : null;
   var boards = scope ? API.adminBoards(id, loginEmail0) : null;
   if (scope) {
     apiSections = apiSections.filter(function (x) { return scope.indexOf(x.section_id) >= 0; });
@@ -88,7 +91,15 @@
   }
 
   // ---- teachers (staff → demo teacher shape). Email doubles as the id. ----
-  var teachers = apiStaff.filter(function (u) { return u.role === 'teacher'; }).map(function (u, i) {
+  // Board-scoped admin: only teachers of their boards' classes, plus not-yet-placed
+  // teachers whose invite named one of their boards (or no board).
+  var inScopeTeacher = function (u) {
+    if (!scope) return true;
+    if (u.section_id) return scope.indexOf(u.section_id) >= 0;
+    var a = API.getAccount ? API.getAccount(u.email) : null;
+    return !(a && a.board) || boards.indexOf(a.board) >= 0;
+  };
+  var teachers = apiStaff.filter(function (u) { return u.role === 'teacher' && inScopeTeacher(u); }).map(function (u, i) {
     var sec = apiSections.filter(function (s) { return s.section_id === u.section_id; })[0] || {};
     return { id: u.email || ('t-' + i), name: u.name, email: u.email || '',
       grade: sec.grade || '', section: sec.section || '', role: 'Class Teacher' };

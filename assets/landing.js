@@ -366,7 +366,7 @@
   // in place and slid out while the incoming card slides in from the side.
   const AUTH_ORDER = { role: 0, school: 1, email: 2, checking: 3, login: 4, schoolcode: 4, signup: 6, setpw: 5 };
   // School path runs email-first, so its school picker comes after the email check.
-  const AUTH_ORDER_SCHOOL = { role: 0, email: 1, checking: 2, login: 3, school: 3, schoolcode: 4, signup: 5, setpw: 4 };
+  const AUTH_ORDER_SCHOOL = { role: 0, email: 1, checking: 2, login: 3, school: 3, schoolcode: 3, confirmschool: 4, signup: 5, setpw: 4 };
   const authOrder = (step) => (state.role === 'teacher' ? AUTH_ORDER_SCHOOL : AUTH_ORDER)[step];
   let prevAuthStep = null;
   let slideCleanup = null;
@@ -383,6 +383,7 @@
     else if (s === 'checking') inner = checkingView();
     else if (s === 'login') inner = loginView(false);
     else if (s === 'schoolcode') inner = schoolCodeView();
+    else if (s === 'confirmschool') inner = confirmSchoolView();
     else if (s === 'signup') inner = loginView(true);
     else if (s === 'setpw') inner = setPwView();
 
@@ -571,25 +572,35 @@
   }
 
   // ===== School sign-up (new email, School role) =====
-  // The teacher already picked their school; the school code proves it.
+  // The school code decides the school — no search — then the teacher confirms it.
   function schoolCodeView() {
-    const known = window.TilliAPI && window.TilliAPI.resolveSchool ? window.TilliAPI.resolveSchool(state.school) : null;
     const e = state.errs.code;
-    if (!known) {
-      return `
-        <h2 class="dlg-title">We can&rsquo;t find your school yet</h2>
-        <p class="dlg-sub" style="line-height:1.5"><b>${esc(state.school)}</b> isn&rsquo;t set up on Tilli Measures. Check the name, or ask your school admin to invite you.</p>
-        <button class="btn btn-primary block focus" data-act="pick-school-again">Choose a different school</button>`;
-    }
     return `
       <h2 class="dlg-title">Enter your school code</h2>
-      <p class="text-center" style="margin:0 0 8px"><span class="pill-info">${esc(known.name)}</span></p>
-      <p class="dlg-sub">Your school admin can share it with you.</p>
+      <p class="dlg-sub">Your school admin can share it with you. It tells us which school you&rsquo;re joining.</p>
       <form id="code-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
         <input id="code-input" class="input focus ${e ? 'err' : ''}" required value="${esc(state.schoolCode)}" placeholder="e.g. ABCD-1234" aria-label="School code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-align:center;letter-spacing:.12em;font-weight:700;text-transform:uppercase" autofocus>
         ${e ? `<p class="err-text text-center">${esc(e)}</p>` : ''}
         <button type="submit" class="btn btn-primary block focus">Verify &#8594;</button>
       </form>`;
+  }
+  // "Is this your school?" — after the code, before the password. Name, place
+  // and board(s), so a teacher with the wrong code never joins the wrong school.
+  function confirmSchoolView() {
+    const sc = state.codeSchool || {};
+    const place = [sc.city, sc.country].filter(Boolean).join(', ');
+    const boards = (sc.boards && sc.boards.length ? sc.boards : [sc.board]).filter(Boolean).join(' · ');
+    return `
+      <h2 class="dlg-title">Is this your school?</h2>
+      <div class="dlg-schoolcard">
+        <b>${esc(sc.name || '')}</b>
+        ${place ? `<span>${esc(place)}</span>` : ''}
+        ${boards ? `<span>${esc(boards)}</span>` : ''}
+      </div>
+      <div class="dlg-form">
+        <button class="btn btn-primary block focus" data-act="confirm-school">Yes, that&rsquo;s my school &#8594;</button>
+        <button class="btn-link muted focus" data-act="not-my-school" style="align-self:center">Not my school</button>
+      </div>`;
   }
   // First-login password reset — shown once, right after an invited account
   // signs in with its temporary password. They set their own password here.
@@ -820,11 +831,12 @@
         clearTimeout(checkTimer);
         checkTimer = setTimeout(() => {
           // School path: the email alone finds the account (teacher, school admin
-          // or group admin). New email → pick school → school code → create password.
+          // or group admin). New email → school code → "Is this your school?" →
+          // create password. School users never search for their school.
           if (state.role === 'teacher') {
             const found = lookupSchoolAccount(email);
             if (found) set({ step: 'login', found, school: found.school || '' });
-            else set({ step: 'school', found: null, school: '', schoolQuery: '', schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
+            else set({ step: 'schoolcode', found: null, school: '', schoolCode: '', codeSchool: null, errs: {} });
             return;
           }
           const exists = !!loadAccounts()[email.toLowerCase()] || !!invitedAccount(email);
@@ -845,19 +857,18 @@
         ev.preventDefault();
         const code = (ci.value || '').trim();
         if (!code) return;
-        const res = window.TilliAPI && window.TilliAPI.verifySchoolCode
-          ? window.TilliAPI.verifySchoolCode(state.school, code) : { ok: false, reason: 'mismatch' };
-        if (!res.ok) {
-          const msg = res.reason === 'no_code'
-            ? 'This school hasn’t set up a school code yet — ask your school admin to invite you.'
-            : `That code doesn’t match ${state.school}. Check it with your school admin.`;
+        // The code alone finds the school. Never says which school a wrong code is for.
+        const sc = window.TilliAPI && window.TilliAPI.resolveSchoolCode ? window.TilliAPI.resolveSchoolCode(code) : null;
+        const GL = state.groupLink;
+        const msg = !sc ? 'We don’t recognise that code. Codes change sometimes — ask your school office for the current one.'
+          : GL && GL.schools.indexOf(sc.name) < 0 ? `That code isn’t for a school in ${GL.name}. Check it with your school office.` : '';
+        if (msg) {
           set({ errs: { code: msg }, shake: true, schoolCode: code });
           clearTimeout(shakeTimer);
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
           return;
         }
-        // Code matches the picked school → create a password (no extra confirm step).
-        set({ step: 'signup', codeSchool: res.school, school: res.school.name, password: '', errs: {} });
+        set({ step: 'confirmschool', codeSchool: sc, school: '', schoolCode: code, errs: {} });
       });
     }
 
@@ -1027,6 +1038,12 @@
       case 'forgot':
         set({ forgotSent: true });
         break;
+      case 'confirm-school':
+        set({ step: 'signup', school: (state.codeSchool || {}).name || '', password: '', errs: {} });
+        break;
+      case 'not-my-school':
+        set({ step: 'schoolcode', codeSchool: null, schoolCode: '', errs: { code: 'That code is for a different school. Check it with your school office.' } });
+        break;
       case 'pick-school-again':
         set({ step: 'school', school: '', schoolQuery: '', schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
         break;
@@ -1064,12 +1081,13 @@
     clearTimeout(checkTimer);
     const s = state.step;
     const schoolPath = state.role === 'teacher';
-    // School path runs email → school → code → password; back walks it in reverse.
+    // School path runs email → code → confirm school → password; back walks it in reverse.
     if (s === 'school') set(schoolPath ? { step: 'email', schoolListOpen: false } : { step: 'role' });
     // Tilli Team / School Group / School skip the school step before email, so email goes back to role.
     else if (s === 'email') set({ step: state.role === 'parent' ? 'school' : 'role' });
-    else if (s === 'signup' && schoolPath) set({ step: 'schoolcode', password: '', errs: {} });
-    else if (s === 'schoolcode') set({ step: 'school', schoolListOpen: false, errs: {} });
+    else if (s === 'signup' && schoolPath) set({ step: 'confirmschool', password: '', errs: {} });
+    else if (s === 'confirmschool') set({ step: 'schoolcode', errs: {} });
+    else if (s === 'schoolcode') set({ step: 'email', errs: {} });
     else set({ step: 'email', password: '', errs: {}, found: null });
   }
 

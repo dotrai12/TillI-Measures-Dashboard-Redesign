@@ -334,7 +334,7 @@
     else { m.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; m.style.top = (r.bottom + 6) + 'px'; }
     document.body.appendChild(m);
     if (groupPreview) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email) + '#/group?id=' + encodeURIComponent(GROUP.id); });
-    m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
+    m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); localStorage.removeItem('tilliMeasures.assessSession'); } catch (e) {} location.href = 'index.html'; });
     setTimeout(function () { document.addEventListener('click', function close(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', close); } }); }, 0);
   }
 
@@ -600,13 +600,14 @@
     var yearAsk = {};
     if (schState.flag === 'year-request' && window.TilliAPI) window.TilliAPI.openYearRequests().forEach(function (r) { yearAsk[r.school_id] = 1; });
     if (schState.flag === 'calendar' && window.TilliAPI) window.TilliAPI.calendarQueue().forEach(function (r) { yearAsk[r.school_id] = 1; });
+    if (schState.flag === 'class-request' && window.TilliAPI) window.TilliAPI.classRequests().forEach(function (r) { yearAsk[r.school_id] = 1; });
 
     // Every school in the current view (tab + country + flag + search) — the flat
     // list, and what the Schools CSV exports even when the screen shows groups.
     var rows = all.filter(function (s) {
       if (tabActive ? s.archived : !s.archived) return false;
       if (schState.flag === 'zero-students' && s.students !== 0) return false;
-      if ((schState.flag === 'year-request' || schState.flag === 'calendar') && !yearAsk[s.id]) return false;
+      if ((schState.flag === 'year-request' || schState.flag === 'calendar' || schState.flag === 'class-request') && !yearAsk[s.id]) return false;
       if (q && (s.name + ' ' + s.code).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -636,7 +637,7 @@
         : '<div class="ui-empty">' + (all.length ? 'No schools match.' : 'No schools yet — add your first school.') + '</div>';
     }
 
-    var flagName = { 'zero-students': 'schools with 0 students', 'year-request': 'schools asking to start next year', calendar: 'school calendars to review' }[schState.flag];
+    var flagName = { 'zero-students': 'schools with 0 students', 'year-request': 'schools asking to start next year', calendar: 'school calendars to review', 'class-request': 'teachers waiting for a class' }[schState.flag];
     var flagBanner = flagName
       ? '<div class="tl-filterbanner">Filtered to <b>' + flagName + '</b> · <button class="btn-link" id="sch-clearflag">clear</button></div>' : '';
 
@@ -1805,10 +1806,12 @@
       var b = /school admin/i.test(u.role || '') && tlUsesApi(s) && schoolBoardList(s).length > 1 ? window.TilliAPI.adminBoards(s.id, u.email) : null;
       return b ? ' <span class="ui-tag" title="Sees only these boards’ grades, children and results">' + esc(b.join(' + ')) + ' only</span>' : '';
     }
+    var multiBoard = tlUsesApi(s) && schoolBoardList(s).length > 1;
     function staffRowHtml(u) {
+      var boardsBtn = multiBoard && /school admin/i.test(u.role || '') ? '<button class="tl-rowact" data-boards="' + esc(u.email) + '" data-boards-name="' + esc(u.name) + '" title="Edit board access" aria-label="Edit board access for ' + esc(u.name) + '">' + ICONS.edit + '</button>' : '';
       return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td><td>' + esc(u.role) + boardScopeTag(u) + '</td>' +
         '<td>' + (u.sections && u.sections.length ? esc(u.sections.join(', ')) : '—') + '</td>' +
-        '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-role="' + esc(u.email) + '" title="Change role" aria-label="Change role for ' + esc(u.name) + '">' + ICONS.role + '</button>' +
+        '<td class="r"><div class="tl-rowacts">' + boardsBtn + '<button class="tl-rowact" data-role="' + esc(u.email) + '" title="Change role" aria-label="Change role for ' + esc(u.name) + '">' + ICONS.role + '</button>' +
         '<button class="tl-rowact danger" data-remove="' + esc(u.name) + '" title="Remove from school" aria-label="Remove ' + esc(u.name) + ' from this school">' + ICONS.trash + '</button></div></td></tr>';
     }
 
@@ -1857,16 +1860,58 @@
         '</div></div>';
     }
 
-    el.innerHTML = codesCard + joinCode +
+    // Teachers who said "My class isn't here" at sign-up, and — after a code
+    // regenerate — everyone who joined with the old code in the 30 days before.
+    var API = window.TilliAPI, apiS = tlUsesApi(s) && API;
+    var asks = apiS ? API.classRequests(s.id) : [];
+    var asksCard = !asks.length ? '' : '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Teachers waiting for a class</h3>' +
+        '<p class="ui-mod-note">They signed up but their class isn’t on the platform. Add it in Grades &amp; sections and give it this teacher — the request closes on its own. Or mark it done.</p></div>' +
+        '<button class="btn btn-outline btn-sm" data-grades>Grades &amp; sections</button></div>' +
+      '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Teacher</th><th>Class they teach</th><th>Note</th><th>Asked</th><th></th></tr></thead><tbody>' +
+      asks.map(function (r) {
+        return '<tr><td class="name">' + esc(r.name) + '<small>' + esc(r.email) + '</small></td><td>' + esc((r.grade + ' ' + r.section).trim() || '—') + '</td><td>' + esc(r.note || '—') + '</td><td>' + esc(fmtMs(r.at)) + '</td>' +
+          '<td class="r"><button class="btn-link" data-askdone="' + esc(r.id) + '">Mark done</button></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+    var changedAt = apiS && s.codeChangedAt ? s.codeChangedAt : (apiS ? (API.resolveSchool(s.id) || {}).codeChangedAt : null);
+    var joiners = changedAt && Date.now() - changedAt <= 30 * 864e5 ? API.recentCodeJoiners(s.id, 30, changedAt) : [];
+    var joinCard = !joiners.length ? '' : '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Check who joined with the old code</h3>' +
+        '<p class="ui-mod-note">The code changed on ' + esc(fmtMs(changedAt)) + '. ' + joiners.length + ' teacher' + (joiners.length === 1 ? '' : 's') + ' joined with it in the 30 days before. Remove anyone who doesn’t belong — removing ends their access at once.</p></div></div>' +
+      '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Teacher</th><th>Classes</th><th>Joined</th><th></th></tr></thead><tbody>' +
+      joiners.map(function (j) {
+        return '<tr><td class="name">' + esc(j.name) + '<small>' + esc(j.email) + '</small></td><td>' + esc(j.classes.join(', ') || '—') + '</td><td>' + esc(fmtMs(j.joinedAt)) + '</td>' +
+          '<td class="r"><button class="btn-link danger" data-unjoin="' + esc(j.email) + '" data-unjoin-name="' + esc(j.name) + '">Remove</button></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+
+    var untagged = multiBoard ? API.untaggedGrades(s.id) : [];
+    var untaggedNote = untagged.length ? untaggedNoteHtml(untagged) : '';
+    el.innerHTML = asksCard + joinCard + untaggedNote + codesCard + joinCode +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Staff at this school</h3>' + (d.staff_users.length ? '<p class="ui-mod-note">' + d.staff_users.length + ' staff</p>' : '') + '</div><button class="btn btn-outline btn-sm" data-invite>+ Invite to this school</button></div>' +
         (d.staff_users.length ? '<div id="staff-page"></div>' : '<div class="ui-empty">No staff yet — invite a school admin or teacher.</div>') + '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Invitations</h3></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Recipient</th><th>Role</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody>' + invRows + '</tbody></table></div></div>';
     el.querySelector('[data-invite]').addEventListener('click', function () { openInvite(s.id); });
+    el.querySelectorAll('[data-grades]').forEach(function (b) { b.addEventListener('click', function () { openStructureEditor(s); }); });
+    el.querySelectorAll('[data-askdone]').forEach(function (b) { b.addEventListener('click', function () {
+      var r = API.resolveClassRequest(b.dataset.askdone, me.email);
+      if (!r.ok) { toast('Couldn’t update that request.'); return; }
+      ORG.server.logAudit(me.name, 'class.request', 'marked done', 'school', s.id);
+      toast('Request marked done.'); go('school', { id: s.id, tab: 'staff' });
+    }); });
+    el.querySelectorAll('[data-unjoin]').forEach(function (b) { b.addEventListener('click', function () {
+      gated({ title: 'Remove teacher', danger: true, confirmLabel: 'Remove',
+        body: '<p>Remove <b>' + esc(b.dataset.unjoinName) + '</b> from ' + esc(s.name) + '? They lose access to the school’s classes and children at once.</p>',
+        audit: { action: 'user.remove', entity: b.dataset.unjoin, entityType: 'user', schoolId: s.id },
+        onConfirm: function () {
+          var r = API.removeTeacherAccess(s.id, b.dataset.unjoin, me.email);
+          toast(r.ok ? 'Removed from ' + s.name + '.' : 'Couldn’t remove them.');
+          ORG.refreshApiSchool(s.id);
+          go('school', { id: s.id, tab: 'staff' });
+        } });
+    }); });
     var rg = el.querySelector('[data-regen-code]');
     if (rg) rg.addEventListener('click', function () {
       gated({ title: 'Regenerate the school code', danger: true, confirmLabel: 'Regenerate now',
-        body: '<p>' + esc(s.name) + ' gets a new code. <b>The teacher and student-assessment links and the old code stop working now</b> — share the new ones straight after. The parents’ link doesn’t contain the code, so it keeps working.</p><p class="tl-muted">Teachers and parents already signed in aren’t affected.</p>',
+        body: '<p>' + esc(s.name) + ' gets a new code. <b>The teacher and student-assessment links and the old code stop working now</b> — share the new ones straight after. The parents’ link doesn’t contain the code, so it keeps working.</p><p class="tl-muted">Teachers and parents already signed in aren’t affected. Afterwards this tab lists every teacher who joined with the old code in the last 30 days, so you can remove anyone who doesn’t belong.</p>',
         audit: { action: 'school.code', entity: s.name, entityType: 'school', schoolId: s.id },
         onConfirm: function () {
           var r = window.TilliAPI.regenerateSchoolCode(s.id, me.email);
@@ -1896,10 +1941,38 @@
         mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
       mount.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('school', { id: s.id, tab: 'staff' }); }); }); });
+      mount.querySelectorAll('[data-boards]').forEach(function (b) { b.addEventListener('click', function () { openBoardAccess(s, b.dataset.boards, b.dataset.boardsName); }); });
       mount.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Remove from school', danger: true, body: '<p>Remove <b>' + esc(b.dataset.remove) + '</b> from ' + esc(s.name) + '?</p>', confirmLabel: 'Remove', audit: { action: 'user.remove', entity: b.dataset.remove, entityType: 'user', schoolId: s.id }, onConfirm: function () { toast('Removed from school.'); } }); }); });
     }
     if (mount) drawStaff();
   };
+
+  // Multi-board schools: grades with no board are invisible to a board-limited admin.
+  function untaggedNoteHtml(grades) {
+    return '<div class="ui-note warn mb-gap"><span aria-hidden="true">🏷️</span><span><b>' + grades.length + ' grade' + (grades.length === 1 ? ' has' : 's have') + ' no board yet</b> (' +
+      esc(grades.slice(0, 5).join(', ') + (grades.length > 5 ? '…' : '')) + '). A school admin limited to some boards can’t see these classes until each grade has one. ' +
+      '<button class="btn-link" data-grades>Set boards in Grades &amp; sections →</button></span></div>';
+  }
+  // Tilli changes which boards a school admin sees.
+  function openBoardAccess(s, email, name) {
+    var bl = schoolBoardList(s), cur = window.TilliAPI.adminBoards(s.id, email);
+    var close = openModal('Board access · ' + name,
+      '<div class="field"><span>' + esc(name) + ' sees</span>' +
+        '<label class="tl-check"><input type="radio" name="ba-scope" value="all"' + (cur ? '' : ' checked') + '> All boards (' + esc(bl.join(' + ')) + ')</label>' +
+        '<label class="tl-check"><input type="radio" name="ba-scope" value="some"' + (cur ? ' checked' : '') + '> Only these boards:</label>' +
+        '<div class="tl-inline-actions" style="padding-left:24px">' + bl.map(function (b) { return '<label class="tl-check"><input type="checkbox" data-baboard value="' + esc(b) + '"' + (cur && cur.indexOf(b) >= 0 ? ' checked' : '') + '> ' + esc(b) + '</label>'; }).join('') + '</div>' +
+        '<span class="tl-muted">A one-board admin sees only that board’s grades, children and results. The change applies the next time they open their dashboard.</span></div>',
+      function () {
+        var some = document.querySelector('input[name="ba-scope"]:checked').value === 'some';
+        var picked = Array.prototype.slice.call(document.querySelectorAll('[data-baboard]:checked')).map(function (x) { return x.value; });
+        if (some && !picked.length) { toast('Pick at least one board, or choose All boards.'); return false; }
+        var r = window.TilliAPI.setAdminBoards(s.id, email, some && picked.length < bl.length ? picked : null, me.email);
+        if (!r.ok) { toast('Couldn’t change board access.'); return false; }
+        ORG.server.logAudit(me.name, 'user.boards', name + ': ' + (r.boards ? r.boards.join(' + ') : 'All boards'), 'school', s.id);
+        close(); toast(name + ' now sees ' + (r.boards ? r.boards.join(' + ') + ' only' : 'all boards') + '.');
+        go('school', { id: s.id, tab: 'staff' });
+      }, 'Save');
+  }
 
   // ============================================================
   //  DEPLOYMENT DRILL-DOWN TIMELINE  (school Assessments tab)
@@ -3514,7 +3587,8 @@
         '<label class="tl-check"><input type="radio" name="iv-bscope" value="all" checked> All boards (' + esc(bl.join(' + ')) + ')</label>' +
         '<label class="tl-check"><input type="radio" name="iv-bscope" value="some"> Only these boards:</label>' +
         '<div class="tl-inline-actions" style="padding-left:24px">' + bl.map(function (b) { return '<label class="tl-check"><input type="checkbox" data-ivboard value="' + esc(b) + '"> ' + esc(b) + '</label>'; }).join('') + '</div>' +
-        '<span class="tl-muted">A one-board admin sees only that board’s grades, children and results.</span>';
+        '<span class="tl-muted">A one-board admin sees only that board’s grades, children and results.</span>' +
+        (function () { var ug = tlUsesApi(sc) ? window.TilliAPI.untaggedGrades(sc.id) : []; return ug.length ? '<span class="tl-muted" style="color:var(--warn-700)">' + ug.length + ' grade' + (ug.length === 1 ? ' has' : 's have') + ' no board yet (' + esc(ug.slice(0, 4).join(', ')) + ') — a one-board admin won’t see ' + (ug.length === 1 ? 'it' : 'them') + ' until you set one in Grades &amp; sections.</span>' : ''; })();
     }
     if (ivRole && ivCap) ivRole.addEventListener('change', function () {
       ivCap.textContent = roleCap(ivRole.value);

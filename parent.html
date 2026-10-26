@@ -1429,7 +1429,7 @@
         case 'back-phases': set({ view: 'phases', switcherOpen: false }); window.scrollTo(0, 0); break;
         case 'phase-open': set({ view: 'home', window: b.dataset.win, switcherOpen: false }); window.scrollTo(0, 0); break;
         case 'phase-report': set({ view: 'snapshot', window: b.dataset.win, switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
-        case 'logout': location.href = 'index.html'; break;
+        case 'logout': try { localStorage.removeItem('tilliMeasures.session'); localStorage.removeItem('tilliMeasures.assessSession'); } catch (e) {} location.href = 'index.html'; break;
         case 'open-snapshot': set({ view: 'snapshot', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'open-last-report': set({ view: 'snapshot', window: b.dataset.win, switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;
         case 'open-report': set({ view: 'report', switcherOpen: false, saved: '' }); window.scrollTo(0, 0); break;

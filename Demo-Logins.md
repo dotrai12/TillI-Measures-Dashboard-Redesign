@@ -3,7 +3,7 @@
 Five portfolio schools have real data in the shared store, so the Tilli platform admin, school admin dashboard, teacher app and parent app all show the same thing. It is created automatically the first time any page loads in a browser (`seedHeroSchools` in `assets/tilli-api.js`). Dates are relative to that day.
 
 **Password: anything works** (type any non-empty password). Sign in from `index.html` → *Get started*.
-- **Teachers & school admins:** choose the School card, then enter the email.
+- **Teachers & school admins:** choose the School card, then enter the email. A **new** teacher email asks for the **school code** next, then shows **Is this your school?** (name · city · board) before the password — no school search.
 - **Parents:** choose the Parent card, pick the school, then enter the email.
 
 | School | What's deployed |

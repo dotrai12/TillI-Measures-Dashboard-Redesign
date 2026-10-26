@@ -327,6 +327,18 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 19 — Access and safety (Phase 5A, 10 min)
+
+- [ ] `index.html` → School → a **new** email → enter a school code (e.g. `LSPR-2210`) → **Is this your school?** → **Not my school** goes back to the code; **Yes** → password. No school search.
+- [ ] Teacher onboarding step 3: pick one grade · section → later **Add your students** only shows that class's children (not the whole school). A class that doesn't exist can't be created.
+- [ ] Step 3 → **My class isn't here — ask my school admin** → enter Grade 3 / B → continue with no class → **Enter my garden**. The school admin's Overview says **Waiting for a class**, their **Roster** menu (and phone bottom bar) shows a count, and **Your team** lists the request with **Mark done**. Tilli's Control Room shows **Teachers waiting for a class** → Staff & Access.
+- [ ] Teacher **Sign out** (profile) → open `assess.html` on the same browser → it asks for the code and email again.
+- [ ] Staff & Access → **Regenerate** → the tab lists **Check who joined with the old code** (teachers who joined with it in the 30 days before) with **Remove**. The school admin sees the same on **Your team** for 30 days.
+- [ ] Multi-board school (Little Sprouts runs CBSE + IB): Staff & Access warns about **grades with no board yet**. A school admin row → ✏️ **Edit board access** → CBSE only. Their dashboard now lists only CBSE teachers (no false "no section" warning), and **Invite teachers** only accepts real CBSE classes. **Leadership dashboard →** from Tilli always shows every board.
+- [ ] Start new year on a school with an extra grade → new classes keep the grade's board.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

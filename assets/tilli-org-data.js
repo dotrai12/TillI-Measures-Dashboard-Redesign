@@ -865,6 +865,7 @@
     var API = window.TilliAPI, pendingKids = [], shortClasses = [];
     var yearReqs = API && API.openYearRequests ? API.openYearRequests() : [];
     var calQ = API && API.calendarQueue ? API.calendarQueue() : [];
+    var classAsks = API && API.classRequests ? API.classRequests() : [];
     if (API && API.pendingStudents) {
       pendingKids = API.pendingStudents();
       act.forEach(function (s) { API.schoolRooms(s.id).forEach(function (r) { if (r.expected == null || !r.confirmed || r.added < r.expected) shortClasses.push(r); }); });
@@ -876,6 +877,8 @@
         deeplink: yearReqs.length === 1 ? '#/school?id=' + encodeURIComponent(yearReqs[0].school_id) + '&tab=assessments' : '#/schools?flag=year-request' },
       { key: 'calendars', label: 'School calendars to review', count: calQ.length, severity: 2,
         deeplink: calQ.length === 1 ? '#/school?id=' + encodeURIComponent(calQ[0].school_id) + '&tab=assessments' : '#/schools?flag=calendar' },
+      { key: 'class-requests', label: 'Teachers waiting for a class', count: classAsks.length, severity: 2,
+        deeplink: classAsks.length === 1 ? '#/school?id=' + encodeURIComponent(classAsks[0].school_id) + '&tab=staff' : '#/schools?flag=class-request' },
       { key: 'student-requests', label: 'New students to approve', count: pendingKids.length, severity: 2, deeplink: '#/class-sizes' },
       { key: 'short-classes', label: 'Classes missing students', count: shortClasses.length, severity: 1, deeplink: '#/class-sizes?view=classes' },
       { key: 'zero-students', label: 'Schools with 0 students', count: zeroStudents.length, severity: 2, deeplink: '#/schools?flag=zero-students', items: zeroStudents.map(function (s) { return { id: s.id, label: s.name }; }) },

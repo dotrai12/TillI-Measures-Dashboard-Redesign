@@ -3631,13 +3631,18 @@
       ${mirrorCard()}
       <div class="td-btnrow">
         <button class="btn btn-ghost md focus" data-redo>Redo reflection</button>
-        <a class="btn btn-danger-outline td-btn-md focus" href="index.html">↩ Sign out</a>
+        <a class="btn btn-danger-outline td-btn-md focus" href="index.html" data-signout>↩ Sign out</a>
       </div>
     </div>`;
   }
 
   // ---------------- wiring ----------------
   function wire() {
+    // Sign out ends the saved session too, so the student-assessment link on a
+    // shared device no longer opens as this teacher.
+    root.querySelectorAll('[data-signout]').forEach((a) => a.addEventListener('click', () => {
+      try { localStorage.removeItem('tilliMeasures.session'); localStorage.removeItem('tilliMeasures.assessSession'); } catch (e) {}
+    }));
     root.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.nav;
       if (k === 'ask') {   // nav → full-screen Ask Tilli (the floating bubble opens the side panel)

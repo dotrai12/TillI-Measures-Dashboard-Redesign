@@ -670,24 +670,90 @@
   // DEMO ONLY — grant the onboarding teacher scope over the section they picked.
   // In the real system a teacher NEVER self-grants scope; it comes from the
   // Admin's invite (spec A3). Replace this with "accept invite" server-side.
+  // Only an existing class: a teacher never creates one (the school admin or Tilli
+  // adds it) — no match returns null and the row isn't added.
   function ensureTeacherScope(email, schoolNameOrId, grade, section){
     var db = getDB();
     var school = resolveSchool(schoolNameOrId);
     if (!school){ return null; }
     var sid = school.school_id;
-    // find (or create) a section for this grade+section label — the school's own
-    // section first, so a teacher's adds land in the class the admins sized.
     var found = findSection(db, sid, grade, section);
-    var secId = found ? found.section_id : 'sec_' + low((grade||'')+'_'+(section||'')).replace(/[^a-z0-9]+/g,'_');
-    if (!db.sections[secId]){
-      db.sections[secId] = { section_id:secId, school_id:sid, grade:grade||'', section:section||'', name:((grade||'')+' '+(section||'')).trim(), teacherId:null };
-    }
-    var m = db.teacherMemberships.find(function(x){ return x.user_id===low(email) && x.school_id===sid; });
-    if (!m){ m = { user_id:low(email), school_id:sid, section_ids:[], status:'active' }; db.teacherMemberships.push(m); }
+    if (!found) return null;
+    var secId = found.section_id;
+    var m = teacherMembershipFor(db, email, sid, 'code');
     if (m.section_ids.indexOf(secId) < 0) m.section_ids.push(secId);
     m.status = 'active';
     write(db);
     return { school_id:sid, section_id:secId };
+  }
+  // A teacher's membership at a school, made on first need. `via` records how they
+  // joined ('code' = self-sign-up with the school code, 'invite' = invited), with
+  // the date — so a code regenerate can list who joined with the old code.
+  function teacherMembershipFor(db, email, schoolId, via){
+    var m = db.teacherMemberships.find(function(x){ return x.user_id===low(email) && x.school_id===schoolId; });
+    if (!m){ m = { user_id:low(email), school_id:schoolId, section_ids:[], status:'active', via:via||'code', joinedAt:Date.now() }; db.teacherMemberships.push(m); }
+    return m;
+  }
+
+  /* ---------- "My class isn't listed" (teacher → school admin + Tilli) ----------
+     A teacher whose class isn't on the platform asks for it at sign-up. Open
+     until they're placed in any class, or an admin marks it done. */
+  function requestClass(input){
+    var db = getDB(); input = input || {};
+    var sc = resolveSchool(input.school_id); if (!sc) return { ok:false, reason:'not_found' };
+    var sid = sc.school_id, e = low(input.email); if (!e) return { ok:false, reason:'missing-email' };
+    teacherMembershipFor(db, e, sid, 'code');
+    db.classRequests = db.classRequests || [];
+    var r = { id: newId('creq'), school_id: sid, email: e, name: norm(input.name) || e,
+      grade: norm(input.grade), section: norm(input.section), note: norm(input.note), at: Date.now(), status: 'open' };
+    db.classRequests.push(r);
+    logHistory(db, { school_id: sid, section_id: null, section_name: '', students: [], kind: 'student', action: 'class.request',
+      changes: [{ label: 'Class asked for', from: '', to: ((r.grade + ' ' + r.section).trim() || 'not given') + ' · ' + r.name }], actor: actorFor(db, e, sid) });
+    write(db);
+    return { ok:true, request: clone(r) };
+  }
+  // Open requests (school_id omitted = every school, for Tilli's Control Room).
+  function classRequests(schoolId){
+    var db = getDB();
+    return (db.classRequests || []).filter(function(r){
+      return r.status === 'open' && (!schoolId || r.school_id === schoolId) && !teacherScope(db, r.email, r.school_id).length;
+    }).map(function(r){ var o = clone(r); o.school_name = (db.schools[r.school_id] || {}).name || r.school_id; return o; });
+  }
+  function resolveClassRequest(id, actorEmail){
+    var db = getDB(), r = (db.classRequests || []).find(function(x){ return x.id === id; });
+    if (!r) return { ok:false, reason:'not_found' };
+    var role = roleOf(db, actorEmail, r.school_id);
+    if (role === 'teacher' || role === 'parent') return { ok:false, reason:'not-authorized' };
+    r.status = 'done'; r.doneAt = Date.now(); r.doneBy = low(actorEmail);
+    write(db);
+    return { ok:true };
+  }
+
+  // Teachers who joined with the school code in the `days` days before `until`
+  // (default now) — listed after a code regenerate (until = when it changed) so
+  // an admin can check everyone who used the old code belongs.
+  function recentCodeJoiners(schoolId, days, until){
+    var db = getDB(), end = until || Date.now(), since = end - (days || 30) * 864e5;
+    return db.teacherMemberships.filter(function(m){
+      return m.school_id === schoolId && m.status === 'active' && m.via === 'code' && (m.joinedAt || 0) >= since && (m.joinedAt || 0) <= end;
+    }).map(function(m){
+      var a = db.accounts[m.user_id] || {};
+      return { email: m.user_id, name: nameFor(db, m.user_id, schoolId) || a.name || m.user_id, joinedAt: m.joinedAt,
+        classes: m.section_ids.map(function(id){ return (db.sections[id] || {}).name; }).filter(Boolean) };
+    });
+  }
+  // Remove a teacher's access to a school (Tilli or the school admin).
+  function removeTeacherAccess(schoolId, email, actorEmail){
+    var db = getDB(), role = roleOf(db, actorEmail, schoolId);
+    if (role === 'teacher' || role === 'parent') return { ok:false, reason:'not-authorized' };
+    var m = db.teacherMemberships.find(function(x){ return x.user_id===low(email) && x.school_id===schoolId; });
+    if (!m) return { ok:false, reason:'not_found' };
+    m.status = 'removed'; m.removedAt = Date.now();
+    db.staff[schoolId] = (db.staff[schoolId] || []).filter(function(u){ return low(u.email) !== low(email); });
+    logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], kind: 'student', action: 'teacher.remove',
+      changes: [{ label: 'Teacher access', from: nameFor(db, email, schoolId) || low(email), to: 'removed' }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true };
   }
 
   // Sections a teacher is allowed to touch (spec §4 A3/A4 scope).
@@ -1106,7 +1172,7 @@
     if (!inv) return { ok:false, error:'invalid-invite' };
     if (low(email) !== inv.email) return { ok:false, error:'email-mismatch' };
     if (inv.role==='admin') db.adminMemberships.push({ user_id:inv.email, school_id:inv.school_id, role:'admin', status:'active' });
-    else db.teacherMemberships.push({ user_id:inv.email, school_id:inv.school_id, section_ids:inv.section_ids.slice(), status:'active' });
+    else db.teacherMemberships.push({ user_id:inv.email, school_id:inv.school_id, section_ids:inv.section_ids.slice(), status:'active', via:'invite', joinedAt:Date.now() });
     inv.used = true; write(db);
     return { ok:true, role:inv.role, school_id:inv.school_id, section_ids:inv.section_ids };
   }
@@ -1161,7 +1227,7 @@
     if (acct.school_id && mRole==='admin' && !db.adminMemberships.some(function(m){ return m.user_id===email && m.school_id===acct.school_id; }))
       db.adminMemberships.push({ user_id:email, school_id:acct.school_id, role:'admin', status:'active', boards:acct.boards });
     if (acct.school_id && mRole==='teacher' && !db.teacherMemberships.some(function(m){ return m.user_id===email && m.school_id===acct.school_id; }))
-      db.teacherMemberships.push({ user_id:email, school_id:acct.school_id, section_ids:[], status:'active' });
+      db.teacherMemberships.push({ user_id:email, school_id:acct.school_id, section_ids:[], status:'active', via:'invite', joinedAt:Date.now() });
 
     write(db);
     return { ok:true, email:email, tempPassword:temp, role:acct.role, school_id:acct.school_id,
@@ -1520,6 +1586,30 @@
     var m = db.adminMemberships.find(function(x){ return x.user_id===e && x.school_id===schoolId && x.status==='active'; });
     var b = (m && m.boards) || (db.accounts[e] && db.accounts[e].school_id===schoolId && db.accounts[e].boards) || null;
     return b && b.length ? b.slice() : null;
+  }
+  // Tilli changes which boards a school admin sees (null / [] = every board).
+  function setAdminBoards(schoolId, email, boards, actorEmail){
+    var db = getDB(), e = low(email);
+    var m = db.adminMemberships.find(function(x){ return x.user_id===e && x.school_id===schoolId; });
+    if (!m) return { ok:false, reason:'not_found' };
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };   // Tilli only
+    var before = m.boards && m.boards.length ? m.boards.join(' + ') : 'All boards';
+    m.boards = Array.isArray(boards) && boards.length ? boards.slice() : null;
+    if (db.accounts[e]) db.accounts[e].boards = m.boards;
+    logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], kind: 'student', action: 'admin.boards',
+      changes: [{ label: 'Board access · ' + (nameFor(db, e, schoolId) || e), from: before, to: m.boards ? m.boards.join(' + ') : 'All boards' }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true, boards: m.boards };
+  }
+  // Multi-board schools: grades with no board yet. A board-limited admin can't see
+  // these classes until Tilli tags them (Grades & sections).
+  function untaggedGrades(schoolId){
+    var db = getDB();
+    if (schoolBoardsIn(db, schoolId).length < 2) return [];
+    var out = [];
+    schoolSections(db, schoolId).forEach(function(s){ if (!s.board && out.indexOf(s.grade) < 0) out.push(s.grade); });
+    emptyGradesOf(db, schoolId).forEach(function(g){ if (!g.board && out.indexOf(g.grade) < 0) out.push(g.grade); });
+    return out;
   }
   // Section ids a school admin may see (null = all of them).
   function sectionsInScope(schoolId, email){
@@ -2302,7 +2392,9 @@
         || secs.filter(function(t){ return t.base_grade === nb; })[0];
       if (!target){
         var id = 'sec_' + schoolId + '_' + slugify(nb + '_' + letter);
-        target = db.sections[id] = { section_id: id, school_id: schoolId, grade: nb, section: letter, name: nb + ' ' + letter, teacherId: null, base_grade: nb, base_section: letter };
+        // A new class keeps a board: the next grade's own, else the class the children came from.
+        var nbBoard = (secs.filter(function(t){ return t.base_grade === nb && t.board; })[0] || {}).board || sec.board || null;
+        target = db.sections[id] = { section_id: id, school_id: schoolId, grade: nb, section: letter, name: nb + ' ' + letter, teacherId: null, base_grade: nb, base_section: letter, board: nbBoard };
         secs.push(target);
       }
       x.section_id = target.section_id; x.grade = target.grade; x.section = target.section; moved.promoted++;
@@ -2480,6 +2572,11 @@
     var kid = Object.keys(db.students).map(function(k){ return db.students[k]; }).find(function(s){ return s.parentEmail===e && s.parentName; });
     if (kid) return kid.parentName;
     return e.split('@')[0];
+  }
+  // The Tilli team (Super Admin accounts / @tilli.org), whatever school memberships it also holds.
+  function isTilliActor(db, email){
+    var e = low(email), lbl = low(db.accounts[e] && db.accounts[e].role);
+    return lbl.indexOf('super') >= 0 || /@tilli\.org$/.test(e);
   }
   function roleKeyFor(db, email, schoolId){
     var e = low(email), r = roleOf(db, e, schoolId);
@@ -2713,6 +2810,11 @@
   window.TilliAPI = {
     // Flow A — roster
     ensureTeacherScope: ensureTeacherScope,   // DEMO helper (see note above)
+    requestClass: requestClass,
+    classRequests: classRequests,
+    resolveClassRequest: resolveClassRequest,
+    recentCodeJoiners: recentCodeJoiners,
+    removeTeacherAccess: removeTeacherAccess,
     sectionsForTeacher: sectionsForTeacher,
     listRoster: listRoster,
     addStudent: addStudent,
@@ -2721,6 +2823,8 @@
     // Boards per grade + board-scoped school admins
     setGradeBoard: setGradeBoard,
     adminBoards: adminBoards,
+    setAdminBoards: setAdminBoards,
+    untaggedGrades: untaggedGrades,
     sectionsInScope: sectionsInScope,
     // Completion = children fully done (one rule for every app)
     childrenDone: childrenDone,
