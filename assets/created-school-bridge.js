@@ -76,6 +76,17 @@
       .map(function (sid) { return Object.assign({ section_id: sid }, arch.sections[sid]); });
   }
 
+  // Board-scoped school admin: only their boards' classes and children reach the
+  // dashboard, so every screen built on it (Overview, Outcomes, Reports, Roster,
+  // Ask Tilli) stays inside those boards. null = every board.
+  var loginEmail0 = String(qp.get('email') || '').toLowerCase();
+  var scope = API.sectionsInScope ? API.sectionsInScope(id, loginEmail0) : null;
+  var boards = scope ? API.adminBoards(id, loginEmail0) : null;
+  if (scope) {
+    apiSections = apiSections.filter(function (x) { return scope.indexOf(x.section_id) >= 0; });
+    apiStudents = apiStudents.filter(function (x) { return scope.indexOf(x.section_id) >= 0; });
+  }
+
   // ---- teachers (staff → demo teacher shape). Email doubles as the id. ----
   var teachers = apiStaff.filter(function (u) { return u.role === 'teacher'; }).map(function (u, i) {
     var sec = apiSections.filter(function (s) { return s.section_id === u.section_id; })[0] || {};
@@ -141,5 +152,6 @@
   // Signals the full dashboard to use the REAL lifecycle (deploy + completion),
   // not the demo lifecycle dropdown, and to blank the hardcoded demo concern queue.
   // year: the closed year being viewed (null = the current year); years: all of them.
-  window.TILLI_CREATED = { schoolId: id, pointStatus: pointStatus, year: arch ? past : null, years: years };
+  // boards / scope: the signed-in admin's board scope (null = every board).
+  window.TILLI_CREATED = { schoolId: id, pointStatus: pointStatus, year: arch ? past : null, years: years, boards: boards, scope: scope };
 })();

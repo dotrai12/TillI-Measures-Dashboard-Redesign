@@ -14,6 +14,8 @@ Five portfolio schools have real data in the shared store, so the Tilli platform
 | **Colombo Kids Academy** | Baseline, Midline and Endline all **Scheduled** (start in ~12 days, ~3 months, ~6 months) |
 | **Heritage Oaks School** | **3rd year with Tilli.** 2024–25 and 2025–26 closed (all phases ended, read-only); 2026–27: **Baseline live now** (~60% done), Midline scheduled |
 
+**Completion** everywhere now means *children who finished every assessment in the phase* (teacher, parent and direct). The "~N% done" figures below are how much of each lane was seeded, so the headline completion reads lower — e.g. Heritage Oaks' Baseline shows 8 of 56 children (14%).
+
 Each school has 4 classes × 14 children (56 students), one teacher per class, and one school admin. In every school the **last teacher in the list is behind** (a realistic follow-up case). Parent 1's child has done everything; Parent 2's child hasn't started the phase that's live now.
 
 ---

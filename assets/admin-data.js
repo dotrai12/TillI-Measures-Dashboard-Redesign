@@ -218,9 +218,9 @@
   //   Completed   ('done')  — the child has completed EVERY assessment deployed to the school.
   //   In progress ('draft') — the child has started or completed AT LEAST ONE deployed assessment.
   //   Not started ('none')  — none of the deployed assessments has been completed.
-  // Created schools: counted from TilliAPI completions on the open window's
-  // Teacher lane ("started but not completed" isn't visible here — teacher
-  // drafts live in the teacher's browser). Demo school: a seeded share of each
+  // Created schools: TilliAPI.childStatus — the same rule every app uses
+  // (every per-child assessment deployed for the phase, all audiences). Teacher
+  // drafts aren't visible here (they live in the teacher's browser). Demo school: a seeded share of each
   // section is done (same count the section rows show), a seeded share of the
   // rest are in progress.
   var DRAFT_SHARE = 0.35;
@@ -231,11 +231,8 @@
     var ck = secDef.id + '|' + OPEN_POINT.key;
     if (!window.TILLI_CREATED && CHECKIN_CACHE[ck]) return CHECKIN_CACHE[ck];
     var API = window.TilliAPI;
-    if (window.TILLI_CREATED && API && API.completionStats) {
-      students.forEach(function (s) {
-        var c = API.completionStats(SCHOOL_ID, OPEN_POINT.label, 'Teacher', [s.adm]);
-        out[s.adm] = c.expected && c.done >= c.expected ? 'done' : c.done > 0 ? 'draft' : 'none';
-      });
+    if (window.TILLI_CREATED && API && API.childStatus) {
+      students.forEach(function (s) { out[s.adm] = API.childStatus(SCHOOL_ID, OPEN_POINT.label, s.adm) || 'none'; });
       return out;
     }
     var rnd = mulberry32(hashStr(secDef.id + ':' + OPEN_POINT.key + ':progress'));

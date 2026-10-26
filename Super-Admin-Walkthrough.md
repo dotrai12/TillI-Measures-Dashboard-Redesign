@@ -301,6 +301,19 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 17 — Setup and scope fixes (10 min)
+
+- [ ] **+ Add School** → Country **Jordan** → the cities are Amman, Irbid…; the academic year dates switch to **1 Sep → 30 Jun** ("Suggested for Jordan"). Set the end before the start → Next greys out with the reason.
+- [ ] Tick **CBSE** and **IB** → on **Grades**, each grade has a board picker → set Grade 1 to IB, Grade 6 to CBSE → the Review lists each grade's board.
+- [ ] On the new school → **Staff & Access** → **+ Invite to this school** → role **School Admin** → **Board access** → *Only these boards* → **CBSE**. The invitation row shows **CBSE only**.
+- [ ] Open that admin's dashboard (`admin.html?school=<id>&email=<their email>`) → header says **CBSE only**; Roster shows only Grade 6.
+- [ ] **Assessments** → Baseline: set an end date before the start → a red line explains it and Deploy stays off; nothing else moves. Fix it → **Deploy phase** → the dialog lists *no students*, *classes with no teacher* and *no live version* with links; the button says **Deploy anyway**.
+- [ ] **Heritage Oaks** → Overview: **Assessment progress** says "8 of 56 children", **Year 3 with Tilli** shows growth arrows only where the assessments match ("different assessments" otherwise), and **Outcomes** says which year and phase they're from. The leadership dashboard shows the same 8 of 56.
+- [ ] **Staff & Access** → **School code** → **Regenerate** (try it on a test school) → the old code stops working. The school admin can do the same from **Roster → Your team**.
+- [ ] **Add Students** → **CSV import** → **Upload .csv** / **Download template** (the template uses the school's real grades and sections).
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

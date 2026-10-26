@@ -519,7 +519,9 @@
   SCREEN.analytics = function (params, body) {
     var schools = ORG.activeSchools();
     function regionAvg(region, key) { var xs = schools.filter(function (s) { return s.region === region && s[key] != null; }); return xs.length ? Math.round(sum(xs, function (s) { return s[key]; }) / xs.length) : 0; }
-    var regionCard = ['India', 'Sri Lanka'].map(function (rg) {
+    // One block per country that has partner schools (India, Sri Lanka, Jordan…).
+    var regions = []; schools.forEach(function (s) { if (s.region && regions.indexOf(s.region) < 0) regions.push(s.region); });
+    var regionCard = regions.map(function (rg) {
       return '<div style="margin-bottom:6px;font-weight:700;font-size:var(--fs-sm);color:var(--ink-700)">' + rg + '</div>' +
         bar('Social-Emotional', regionAvg(rg, 'sel'), 'sel') + bar('Cognitive', regionAvg(rg, 'cog'), 'cog');
     }).join('<div style="height:10px"></div>');
@@ -1079,11 +1081,24 @@
     otherIn.addEventListener('input', function () { if (onChange) onChange(readBoardPicker(pfx)); });
   }
   // Country → cities. City picker is filtered by the chosen country (country first).
-  var ADD_COUNTRIES = ['India', 'Sri Lanka'];
+  var ADD_COUNTRIES = ['India', 'Sri Lanka', 'Jordan'];
   var ADD_CITIES = {
     'India': ['Bengaluru', 'Mumbai', 'Delhi', 'Gurugram', 'Chennai', 'Hyderabad', 'Kolkata', 'Pune', 'Jaipur'],
     'Sri Lanka': ['Colombo', 'Kandy', 'Galle', 'Jaffna', 'Negombo'],
+    'Jordan': ['Amman', 'Irbid', 'Zarqa', 'Aqaba', 'Madaba', 'Salt'],
   };
+  // Usual academic year per country, as [start month, start day, end month, end day]
+  // (months 1–12). Only a suggestion — Add School asks for this year's real dates.
+  var YEAR_SHAPE = { 'India': [6, 1, 5, 31], 'Sri Lanka': [1, 1, 12, 31], 'Jordan': [9, 1, 6, 30] };
+  // The suggested year that contains `iso` (YYYY-MM-DD) for a country.
+  function suggestYear(country, iso) {
+    var sh = YEAR_SHAPE[country] || YEAR_SHAPE.India, p = function (x) { return (x < 10 ? '0' : '') + x; };
+    var y = +iso.slice(0, 4), md = iso.slice(5);
+    var startMd = p(sh[0]) + '-' + p(sh[1]);
+    if (md < startMd) y -= 1;
+    var endY = sh[2] > sh[0] || (sh[2] === sh[0] && sh[3] >= sh[1]) ? y : y + 1;
+    return { start: y + '-' + startMd, end: endY + '-' + p(sh[2]) + '-' + p(sh[3]) };
+  }
   // Fixed base grades (TilliAPI.BASE_GRADES): every grade picks one, however the school names it.
   var BASE_GRADES = (window.TilliAPI && window.TilliAPI.BASE_GRADES) || ['Nursery', 'LKG', 'UKG', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
   function inferBase(name) { return window.TilliAPI && window.TilliAPI.inferBaseGrade ? window.TilliAPI.inferBaseGrade(name) : ''; }
@@ -1137,11 +1152,12 @@
   function openAddSchool() {
     var d = {
       name: '', boards: [], boardPick: { checked: [], other: '' }, city: '', country: 'India',
-      groupId: 'g-none', joined: todayISO(),
+      groupId: 'g-none', joined: todayISO(), yearStart: '', yearEnd: '', yearTouched: false,
       grades: [], admin: { name: '', email: '' },
     };
     var step = 0;
     var root = document.getElementById('tl-modal-root');
+    var sy0 = suggestYear(d.country, d.joined); d.yearStart = sy0.start; d.yearEnd = sy0.end;
 
     function close() { root.innerHTML = ''; }
 
@@ -1155,6 +1171,8 @@
         if (g('ws-city')) d.city = g('ws-city').value;
         if (g('ws-group')) d.groupId = g('ws-group').value;
         if (g('ws-joined')) d.joined = g('ws-joined').value.trim() || d.joined;
+        if (g('ws-ystart')) d.yearStart = g('ws-ystart').value;
+        if (g('ws-yend')) d.yearEnd = g('ws-yend').value;
       } else if (step === 2) {
         if (g('ws-admin-name')) d.admin.name = g('ws-admin-name').value.trim();
         if (g('ws-admin-email')) d.admin.email = g('ws-admin-email').value.trim();
@@ -1176,6 +1194,11 @@
         list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.city ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
     }
 
+    // "Suggested for Sri Lanka (Jan – Dec)" until the dates are changed by hand.
+    function yearHint() {
+      var sh = YEAR_SHAPE[d.country]; if (!sh || d.yearTouched) return 'The school’s own dates — windows and the year-end rollover follow them.';
+      return 'Suggested for ' + d.country + ' (' + MONTHS_SHORT[sh[0] - 1] + ' – ' + MONTHS_SHORT[sh[2] - 1] + '). Change them to the school’s own dates.';
+    }
     function bodyProfile() {
       var countryOpts = ADD_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.country ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
       var groupOpts = ORG.activeGroups().map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
@@ -1194,6 +1217,11 @@
             '<button class="btn btn-outline btn-sm" id="ws-newgroup-add" type="button">Create</button>' +
           '</div>' +
           '<label class="field">Joined <span class="tl-muted" style="font-weight:400">(defaults to today)</span><input class="input" type="date" id="ws-joined" value="' + esc(d.joined) + '" max="' + todayISO() + '"></label>' +
+          '<div class="tl-fieldrow" title="This academic year at the school. Suggested from the country — change it to the school’s own dates. Assessment windows and the year-end rollover follow these dates.">' +
+            '<label class="field flex-1">This academic year starts *<input class="input" type="date" id="ws-ystart" value="' + esc(d.yearStart) + '"></label>' +
+            '<label class="field flex-1">and ends *<input class="input" type="date" id="ws-yend" value="' + esc(d.yearEnd) + '"></label>' +
+          '</div>' +
+          '<p class="tl-muted m-0" id="ws-yearhint">' + esc(yearHint()) + '</p>' +
         '</div>';
     }
 
@@ -1210,8 +1238,12 @@
         }).join('') : '<span class="ws-nosec">No sections</span>' +
           '<label class="ws-gradenum-wrap">Students' +
             '<input class="ws-gradenum" type="number" min="0" data-gi="' + gi + '" value="' + (parseInt(g.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade) + '"></label>';
+        // Multi-board school: each grade runs one board (its sections inherit it).
+        if (d.boards.length > 1 && d.boards.indexOf(g.board) < 0) g.board = d.boards[0];
+        var boardSel = d.boards.length > 1 ? '<select class="select sm ws-gradeboard" data-gboard="' + gi + '" aria-label="Board for ' + esc(g.grade) + '" title="Which board this grade follows. A school admin limited to one board only sees that board’s grades.">' +
+          d.boards.map(function (b) { return '<option' + (b === g.board ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select>' : '';
         return '<div class="ws-grade-card">' +
-          '<div class="ws-gradeid"><input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. Base stays ' + esc(g.base) + '.">' + baseTag(g.grade, g.base) + '</div>' +
+          '<div class="ws-gradeid"><input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. Base stays ' + esc(g.base) + '.">' + baseTag(g.grade, g.base) + boardSel + '</div>' +
           '<div class="ws-secs">' + secs + '</div>' +
           '<div class="ws-grade-actions">' +
             '<button class="btn-link ws-add-sec" type="button" data-addsec="' + gi + '">＋ Section</button>' +
@@ -1249,8 +1281,9 @@
           row('Name', d.name) + row('Board', d.boards.join(', ')) +
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
           row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
+          row('Academic year', fmtJoined(d.yearStart) + ' → ' + fmtJoined(d.yearEnd)) +
           row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
-          row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base) + (!g.sections.length && !(parseInt(g.students, 10) || 0) ? ' (no sections yet)' : ''); }).join(', ')) +
+          row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base) + (d.boards.length > 1 ? ' · ' + (g.board || d.boards[0]) : '') + (!g.sections.length && !(parseInt(g.students, 10) || 0) ? ' (no sections yet)' : ''); }).join(', ')) +
           row('First admin', admin) +
         '</div>';
     }
@@ -1264,6 +1297,8 @@
         if (!d.name) return 'Add the school name';
         if (boardError(d.boardPick)) return boardError(d.boardPick);
         if (!d.country || !d.city) return 'Pick a country and a city';
+        if (!d.yearStart || !d.yearEnd) return 'Add this academic year’s start and end dates';
+        if (d.yearEnd <= d.yearStart) return 'The academic year must end after it starts';
       }
       if (step === 1 && !d.grades.length) return 'Add at least one grade';
       return '';
@@ -1305,11 +1340,16 @@
         // Country drives the city list — reset city and repopulate on change.
         var country = document.getElementById('ws-country');
         var cityEl = document.getElementById('ws-city');
+        var ys = document.getElementById('ws-ystart'), ye = document.getElementById('ws-yend'), yh = document.getElementById('ws-yearhint');
         country.addEventListener('change', function () {
           d.country = country.value; d.city = '';
           cityEl.innerHTML = cityOptions();
+          // Re-suggest the year for the new country unless it was typed in by hand.
+          if (!d.yearTouched) { var sy = suggestYear(d.country, d.joined); d.yearStart = ys.value = sy.start; d.yearEnd = ye.value = sy.end; }
+          yh.textContent = yearHint();
           syncNext();
         });
+        [ys, ye].forEach(function (x) { x.addEventListener('change', function () { d.yearStart = ys.value; d.yearEnd = ye.value; d.yearTouched = true; yh.textContent = yearHint(); syncNext(); }); });
         cityEl.addEventListener('change', function () { d.city = cityEl.value; syncNext(); });
         var sel = document.getElementById('ws-group');
         var row = document.getElementById('ws-newgroup-row');
@@ -1326,6 +1366,7 @@
       } else if (step === 1) {
         var body = document.getElementById('ws-body');
         body.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { addGrade(b.dataset.preset); }); });
+        body.querySelectorAll('[data-gboard]').forEach(function (sel) { sel.addEventListener('change', function () { d.grades[+sel.dataset.gboard].board = sel.value; }); });
         var ag = document.getElementById('ws-addgrade');
         if (ag) {
           ag.addEventListener('click', function () {
@@ -1532,7 +1573,8 @@
       var tone = !p.deployed ? 'muted' : (p.status === 'Live' ? 'live' : (p.status === 'Ended' ? 'done' : 'sched'));
       return '<div class="tl-phase ' + tone + '"><div class="tp-name">' + esc(p.phase) + '</div>' +
         '<div class="tp-state">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</div>' +
-        (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp">' + (p.completion != null ? pct(p.completion) + '% complete' : '') + '</div>' : '') + '</div>';
+        (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp" title="Children who have done every assessment in this phase">' +
+          (p.completion != null ? pct(p.completion) + '% complete' + (p.kidsTotal ? ' · ' + p.kidsDone + ' of ' + p.kidsTotal + ' children' : '') : '') + '</div>' : '') + '</div>';
     }).join('') + '</div>';
   }
 
@@ -1613,11 +1655,19 @@
     var issues = d.issues.filter(function (i) { return i.status === 'open'; }).slice(0, 4);
     var issuesHtml = issues.length ? issues.map(function (i) { return '<div class="tl-feed-row"><span class="tl-feed-when">' + esc(i.date) + '</span><span class="tl-feed-body">' + esc(i.page) + ' · <i>' + esc(i.reporter) + '</i></span></div>'; }).join('') : '<div class="ui-empty">No open issues.</div>';
 
+    // Live schools: outcomes come from the latest finished phase (any year), labelled
+    // with that year + phase; the Year over year card follows from year 2.
+    var yrs = schoolYears(s), latest = yrs ? latestOutcomes(s, yrs) : null;
+    var outcomes = GROUP ? '' : latest
+      ? outcomesCardHtml(latest.sel, latest.cog, 'Average skill score (0–100) · ' + latest.label + '.', 'span2')
+      : outcomesCardHtml(yrs ? null : s.sel, yrs ? null : s.cog, 'Average skill score (0–100) from this school’s latest results.', 'span2');
+    var yoy = yrs && yrs.length > 1 ? yearOverYearHtml(s, yrs).replace('<div class="ui-card mt-gap">', '<div class="ui-card span2">')
+      .replace('<h3 class="ui-mod-title">Year over year</h3>', '<h3 class="ui-mod-title">Year ' + yrs.length + ' with Tilli</h3>') : '';
     el.innerHTML = '<div class="tl-grid two">' +
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Structure</h3></div>' + structure + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Onboarding</h3></div>' + flags + '</div>' +
       '<div class="ui-card span2"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + progress + '</div>' +
-      (GROUP ? '' : outcomesCardHtml(s.sel, s.cog, 'Average band score (0–100) from this school’s latest results.', 'span2')) +
+      yoy + outcomes +
       '<div class="ui-card span2"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Open issues</h3></div><button class="btn-link" data-hubtab="issues">View all →</button></div>' + issuesHtml + '</div>' +
     '</div>';
     // [data-hubtab] triggers are wired by SCREEN.school's wireHubtabTriggers()
@@ -1718,15 +1768,20 @@
 
   HUB.staff = function (d, el) {
     var s = d.school;
+    // A school admin limited to some boards says so ("School Admin · CBSE only").
+    function boardScopeTag(u) {
+      var b = /school admin/i.test(u.role || '') && tlUsesApi(s) && schoolBoardList(s).length > 1 ? window.TilliAPI.adminBoards(s.id, u.email) : null;
+      return b ? ' <span class="ui-tag" title="Sees only these boards’ grades, children and results">' + esc(b.join(' + ')) + ' only</span>' : '';
+    }
     function staffRowHtml(u) {
-      return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td><td>' + esc(u.role) + '</td>' +
+      return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td><td>' + esc(u.role) + boardScopeTag(u) + '</td>' +
         '<td>' + (u.sections && u.sections.length ? esc(u.sections.join(', ')) : '—') + '</td>' +
         '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-role="' + esc(u.email) + '" title="Change role" aria-label="Change role for ' + esc(u.name) + '">' + ICONS.role + '</button>' +
         '<button class="tl-rowact danger" data-remove="' + esc(u.name) + '" title="Remove from school" aria-label="Remove ' + esc(u.name) + ' from this school">' + ICONS.trash + '</button></div></td></tr>';
     }
 
     var invRows = d.invitations.length ? d.invitations.map(function (i) {
-      return '<tr><td class="name">' + esc(i.name) + '<small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + invStatusPill(i) + '</td><td>' + esc(i.expires) + '</td>' +
+      return '<tr><td class="name">' + esc(i.name) + '<small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + boardScopeTag(i) + '</td><td>' + invStatusPill(i) + '</td><td>' + esc(i.expires) + '</td>' +
         '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-resend="' + esc(i.email) + '" title="Resend invitation" aria-label="Resend invitation to ' + esc(i.email) + '">' + ICONS.resend + '</button>' +
           '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
     }).join('') : '<tr><td colspan="5"><div class="ui-empty">No invitations.</div></td></tr>';
@@ -1738,7 +1793,8 @@
     var joinCode = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">School code</h3>' +
         '<p class="ui-mod-note">Teachers enter this to join ' + esc(s.name) + ' as a Teacher — no invite needed. It’s also part of every link this school shares, so share links only inside the school.</p></div></div>' +
       '<div class="tl-linkrow"><div><b>School code</b><span class="mono">' + esc(teacherJoin) + '</span></div>' +
-        '<button class="btn btn-outline btn-sm" data-copy="' + esc(teacherJoin) + '">Copy code</button></div></div>';
+        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-copy="' + esc(teacherJoin) + '">Copy code</button>' +
+        (tlUsesApi(s) && !GROUP ? '<button class="btn-link danger" data-regen-code title="Use this if the code was shared outside the school.">Regenerate</button>' : '') + '</div></div></div>';
 
     // Demo access panel — the exact logins + codes needed to click through the
     // whole flow (coordinator → teacher → parent) for a created school.
@@ -1775,6 +1831,19 @@
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Invitations</h3></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Recipient</th><th>Role</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody>' + invRows + '</tbody></table></div></div>';
     el.querySelector('[data-invite]').addEventListener('click', function () { openInvite(s.id); });
+    var rg = el.querySelector('[data-regen-code]');
+    if (rg) rg.addEventListener('click', function () {
+      gated({ title: 'Regenerate the school code', danger: true, confirmLabel: 'Regenerate now',
+        body: '<p>' + esc(s.name) + ' gets a new code. <b>Every link and code you’ve shared stops working now</b> — parents’, teachers’ and student-assessment links included. Share the new links straight after.</p><p class="tl-muted">Teachers and parents already signed in aren’t affected.</p>',
+        audit: { action: 'school.code', entity: s.name, entityType: 'school', schoolId: s.id },
+        onConfirm: function () {
+          var r = window.TilliAPI.regenerateSchoolCode(s.id, me.email);
+          if (!r.ok) { toast('Couldn’t change the code.'); return; }
+          s.code = s.joinCode = r.code;
+          toast('New school code: ' + r.code + '. Re-share the links from Assessments → Links to share.');
+          go('school', { id: s.id, tab: 'staff' });
+        } });
+    });
     el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy, 'School code copied.'); }); });
     el.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation', s.id); toast('Invitation resent to ' + b.dataset.resend + '.'); }); });
     el.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation', schoolId: s.id }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
@@ -2023,11 +2092,10 @@
     var win = tlWindowStatus(s, p); if (win === 'none' || win === 'scheduled') return null;
     var pl = TL_PLACES.find(function (x) { return x.mode === mode; }), done = 0, exp = 0;
     if (tlUsesApi(s)) {
-      var ids = window.TilliAPI.studentsForSchool(s.id).map(function (x) { return x.student_id; });
-      pl.auds.forEach(function (ak) {
-        var c = window.TilliAPI.itemCompletion(s.id, phase, TL_AUD_LABEL[ak], ids, tlInPlace(p, tlRunning(p, ak), mode));
-        done += c.done; exp += c.expected;
-      });
+      // Children who've done everything that runs in this place.
+      var k = window.TilliAPI.childrenDone(s.id, phase, null, { mode: mode });
+      if (k.pct == null) return null;
+      done = k.done; exp = k.total;
     } else {
       // Portfolio schools only report per audience: teachers at school, parents at home.
       var c2 = tlAudCompletion(s, phase, mode === 'school' ? 'teacher' : 'parent'); if (!c2) return null;
@@ -2057,17 +2125,20 @@
       if (c && c.expected) { done += c.done; exp += c.expected; known++; }
       auds[a.key] = { st: (pct === 100 && win !== 'scheduled') ? 'completed' : win, pct: pct, n: n };
     });
-    var pct = exp ? Math.round(done * 100 / exp) : null;
+    var pct = exp ? Math.round(done * 100 / exp) : null, kids = null;
+    // Live schools: the one completion number — children who've done everything.
+    if (tlUsesApi(s) && win !== 'none' && win !== 'scheduled') { kids = window.TilliAPI.childrenDone(s.id, phase); if (kids.pct != null) pct = kids.pct; }
     // Completed only when every deployed audience has every response in.
     var st = win !== 'none' && win !== 'scheduled' && deployedAuds && known === deployedAuds && pct === 100 ? 'completed' : win;
-    return { st: st, pct: pct, start: p.start, end: p.end, auds: auds, today: tlToday(s) };
+    return { st: st, pct: pct, kids: kids, start: p.start, end: p.end, auds: auds, today: tlToday(s) };
   }
   function tlDateLine(ps) {
     var f = function (v) { return v ? fmtJoined(v) : '—'; };
     if (ps.st === 'none') return '';
     if (ps.st === 'scheduled') return (ps.start <= ps.today ? 'Waiting to be published · window ' + f(ps.start) + ' → ' + f(ps.end) : 'Goes live ' + f(ps.start) + ' · ends ' + f(ps.end));
-    if (ps.st === 'live') return 'Live since ' + f(ps.start) + ' · ends ' + f(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '% complete' : '');
-    if (ps.st === 'ended') return 'Ended ' + f(ps.end) + (ps.pct != null ? ' · ' + ps.pct + '% complete' : '');
+    var done = ps.pct == null ? '' : ps.kids ? ' · ' + ps.kids.done + ' of ' + ps.kids.total + ' children done (' + ps.pct + '%)' : ' · ' + ps.pct + '% complete';
+    if (ps.st === 'live') return 'Live since ' + f(ps.start) + ' · ends ' + f(ps.end) + done;
+    if (ps.st === 'ended') return 'Ended ' + f(ps.end) + done;
     return 'Completed · ran ' + f(ps.start) + ' → ' + f(ps.end);
   }
   // Open tab: the live phase, else the next scheduled one, else the first not deployed.
@@ -2166,11 +2237,35 @@
     }, 0);
   }
 
+  // What would stop a phase running well once deployed: classes with no teacher,
+  // no students at all, and items whose template has no live version for this
+  // phase. Warnings only — the Tilli team can still deploy (e.g. to schedule ahead).
+  function deployChecks(s, phase, p) {
+    var out = [], A = window.TilliAPI;
+    var ids = TL_AUD.reduce(function (acc, a) { return acc.concat(tlRunning(p, a.key)); }, []);
+    if (tlUsesApi(s)) {
+      if (!A.studentsForSchool(s.id).length)
+        out.push({ text: 'This school has <b>no students</b> yet.', fix: 'Add students', href: href('add-students', { school: s.id }) });
+      var taught = {}; A.teachersFor(s.id).forEach(function (t) { t.section_ids.forEach(function (x) { taught[x] = 1; }); });
+      var teacherRuns = ids.some(function (id) { var it = p.byId[id]; return it.aud === 'teacher' || (it.aud === 'direct' && it.mode === 'school'); });
+      var bare = A.sectionsForSchool(s.id).filter(function (x) { return !taught[x.section_id]; });
+      if (teacherRuns && bare.length)
+        out.push({ text: '<b>' + bare.length + ' class' + (bare.length === 1 ? '' : 'es') + ' with no teacher</b> (' + esc(bare.slice(0, 4).map(function (x) { return x.name; }).join(', ') + (bare.length > 4 ? '…' : '')) + ') — nobody can run the at-school assessments there.', fix: 'Staff & Access', href: href('school', { id: s.id, tab: 'staff' }) });
+    }
+    // Teachers' own Pre / Post-training surveys aren't template-based, so they're skipped.
+    var noLive = ids.filter(function (id) { var it = p.byId[id], tpl = tlTemplateFor(it); return TL_PER_TEACHER.indexOf(it.name) < 0 && !it.version && !(tpl && tplLive(tpl, phase)); }).map(function (id) { return p.byId[id].name; });
+    if (noLive.length)
+      out.push({ text: '<b>' + esc(noLive.join(', ')) + '</b> ' + (noLive.length === 1 ? 'has' : 'have') + ' no live ' + esc(phase) + ' version — there may be nothing to answer.', fix: 'Templates', href: href('templates', {}) });
+    return out;
+  }
+
   function planPhaseBody(s, phase) {
     var p = tlPlan(s, phase), ps = tlPhaseStatus(s, phase), running = tlRunningCount(p);
     var missing = [];
     if (!p.start) missing.push('a start date'); if (!p.end) missing.push('an end date'); if (!running) missing.push('at least one assessment');
-    var ready = !missing.length && !p.deployed;
+    // End before start is shown as an error and blocks Deploy — never "fixed" for you.
+    var badDates = !!(p.start && p.end && p.end < p.start);
+    var ready = !missing.length && !badDates && !p.deployed;
     var deployBtn = p.deployed
       ? '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '" title="Take this phase back to draft — teachers and parents lose access">Undeploy</button>'
       : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' + (ready ? '' : ' disabled') + '>Deploy phase</button>';
@@ -2183,7 +2278,8 @@
         '<span class="dep-date-sep">→</span>' +
         '<label>End <input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '"' + (p.start ? ' min="' + esc(p.start) + '"' : '') + ' aria-label="' + esc(phase) + ' end date"></label>' +
       '</span>' + deployBtn + '</div>' +
-      (ps.st !== 'none' ? '<div class="dep-phase-when st-' + ps.st + '">' + esc(tlDateLine(ps)) + '</div>'
+      (badDates ? '<div class="dep-phase-when dep-date-err" role="alert">The end date (' + esc(fmtJoined(p.end)) + ') is before the start date (' + esc(fmtJoined(p.start)) + '). Fix one of them' + (p.deployed ? ' — until then the saved dates stay as they were.' : ' to deploy.') + '</div>'
+        : ps.st !== 'none' ? '<div class="dep-phase-when st-' + ps.st + '">' + esc(tlDateLine(ps)) + '</div>'
         : (!ready ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>' : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'));
 
     var chip = function (id, n, prev) {
@@ -2331,7 +2427,8 @@
       inp.addEventListener('change', function () {
         var parts = inp.dataset.date.split('|'), phase = parts[0], p = tlPlan(s, phase);
         p[parts[1]] = inp.value;
-        if (p.start && p.end && p.end < p.start) { if (parts[1] === 'start') p.end = p.start; else p.start = p.end; }
+        // End before start: show the error on the card and save nothing.
+        if (p.start && p.end && p.end < p.start) { refreshPlanner(d); return; }
         if (p.deployed) {
           p.endedEarly = false; p.held = false;
           tlPersistDeploy(s, phase);
@@ -2364,8 +2461,12 @@
           var o = p.ord[pl.mode].length, f = p.any[pl.mode].length;
           return pl.label + ': ' + [o ? o + ' in order' : '', f ? f + ' any time' : ''].filter(Boolean).join(', ');
         }).join(' · ');
-        gated({ title: 'Deploy ' + phase, confirmLabel: 'Deploy phase',
-          body: '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b>.</p>' +
+        var checks = deployChecks(s, phase, p);
+        gated({ title: 'Deploy ' + phase, confirmLabel: checks.length ? 'Deploy anyway' : 'Deploy phase',
+          body: (checks.length ? '<div class="ui-note warn mb-3 dep-checks"><span aria-hidden="true">⚠️</span><div><b>Before this can run smoothly:</b><ul>' +
+                  checks.map(function (c) { return '<li>' + c.text + ' <a class="btn-link" href="' + c.href + '" data-fixlink>' + esc(c.fix) + ' →</a></li>'; }).join('') +
+                  '</ul><span class="tl-muted">You can still deploy now — e.g. to schedule it ahead.</span></div></div>' : '') +
+                '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b>.</p>' +
                 '<p>' + (future ? 'It’s <b>Scheduled</b>: it goes live on <b>' + esc(fmtJoined(p.start)) + '</b>' : 'It goes live <b>now</b>') + ' and closes after <b>' + esc(fmtJoined(p.end)) + '</b>.</p>' +
                 '<p class="tl-muted">' + esc(orderLine) + '. You can change the dates and order later.</p>',
           audit: { action: 'phase.deploy', entity: phase, entityType: 'phase', schoolId: s.id },
@@ -2374,6 +2475,8 @@
             tlPersistDeploy(s, phase);   // → teacher/parent apps now see these assessments
             refreshPlanner(d); toast(phase + (future ? ' scheduled for ' + fmtJoined(p.start) + '.' : ' is live.'));
           } });
+        // A fix link leaves the dialog for the page that fixes it.
+        document.querySelectorAll('#tl-modal-root [data-fixlink]').forEach(function (a) { a.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; }); });
       });
     });
     mount.querySelectorAll('[data-undeploy]').forEach(function (b) {
@@ -2512,11 +2615,12 @@
       var rows = p.lanes.map(function (l) {
         var items = l.assessments.map(function (a) { return esc(a.name) + ' <small class="tl-ver">v' + a.version + '</small>'; }).join(', ');
         return '<tr><td class="name">' + esc(l.audience) + '</td><td>' + esc(l.window || (l.start + ' → ' + l.end)) + '</td><td>' + items + '</td>' +
-          '<td class="tl-num">' + l.done + ' / ' + l.expected + '</td><td class="tl-num"><b>' + (l.expected ? l.pct + '%' : '—') + '</b></td><td>' + laneChip(l.status) + '</td></tr>';
+          '<td class="tl-num">' + l.done + ' / ' + l.expected + '</td><td class="tl-num"><b>' + (l.pct == null ? '—' : l.kidsDone + ' of ' + l.kidsTotal) + '</b>' + (l.pct == null ? '' : ' <span class="tl-muted">(' + l.pct + '%)</span>') + '</td><td>' + laneChip(l.status) + '</td></tr>';
       }).join('');
       return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">' + esc(p.phase) + '</h3>' +
-          '<p class="ui-mod-note">' + (p.pct == null ? '' : p.pct + '% complete') + (p.avgSkill == null ? '' : ' · average skill score ' + p.avgSkill + '%') + '</p></div></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Audience</th><th>Window</th><th>Assessments</th><th>Responses</th><th>Done</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+          '<p class="ui-mod-note">' + (p.pct == null ? '' : p.kidsDone + ' of ' + p.kidsTotal + ' children did everything (' + p.pct + '%)') + (p.avgSkill == null ? '' : ' · average skill score ' + p.avgSkill + ' (0–100)') + '</p></div></div>' +
+        '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Audience</th><th>Window</th><th>Assessments</th>' +
+          '<th title="Responses received / expected — one per child per assessment (teachers’ own surveys not counted)">Responses</th><th title="Children who did every assessment in this lane">Children done</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     }).join('');
     var classes = sum.classes.length ? '<div class="tl-tree-grade">' + sum.classes.map(function (c) { return '<span class="tl-tree-sec">' + esc(c.label) + ' <i>' + c.students + '</i></span>'; }).join('') + '</div>' : '<div class="ui-empty">No classes recorded.</div>';
     return '<div class="ui-note tl-yearnote"><span class="ui-tag">Read-only</span><span><b>' + esc(y.label) + '</b> is closed (' + esc(yearRange(y)) + '). Nothing here can be changed — switch to the current year to deploy.</span></div>' +
@@ -2526,6 +2630,19 @@
       phases +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Classes in ' + esc(y.label) + '</h3><p class="ui-mod-note">Names as they were that year; a renamed class shows its base in brackets.</p></div></div>' + classes + '</div>';
   }
+  // The newest phase with results, across years (current year first): its
+  // Social-Emotional / Cognitive averages and a label like "2025–26 Endline".
+  function latestOutcomes(s, yrs) {
+    var API = window.TilliAPI;
+    for (var i = yrs.length - 1; i >= 0; i--) {
+      var sm = API.yearSummary(s.id, yrs[i].id);
+      for (var j = sm.phases.length - 1; j >= 0; j--) {
+        var p = sm.phases[j];
+        if (p.avgSel != null || p.avgCog != null) return { sel: p.avgSel, cog: p.avgCog, label: sm.year.label + ' ' + p.phase };
+      }
+    }
+    return null;
+  }
   // Phase × year: completion and average skill, flagging template version changes.
   function yearOverYearHtml(s, yrs) {
     if (yrs.length < 2) return '';
@@ -2534,14 +2651,24 @@
       var prev = i ? sums[i - 1] : null;
       return '<tr><td class="name">' + esc(sm.year.label) + (sm.current ? ' <small>current</small>' : '') + '</td>' + sm.phases.map(function (p, pi) {
         if (!p.lanes.length) return '<td class="text-muted">—</td>';
-        var pp = prev && prev.phases[pi], warn = '';
+        var pp = prev && prev.phases[pi], warn = '', growth = '';
+        // Growth within the year only between phases that used the same assessments.
+        var before = sm.phases.slice(0, pi).filter(function (x) { return x.avgSkill != null; }).pop();
+        if (before && p.avgSkill != null) {
+          if (before.instruments.join() === p.instruments.join()) {
+            var dlt = p.avgSkill - before.avgSkill;
+            growth = ' <span class="tl-growth ' + (dlt >= 0 ? 'up' : 'down') + '" title="Change since ' + esc(before.phase) + ' — same assessments, so comparable.">' + (dlt >= 0 ? '↑ +' : '↓ ') + dlt + '</span>';
+          } else {
+            growth = ' <span class="ui-chip muted" title="' + esc(before.phase + ' used ' + before.instruments.join(', ') + '; ' + p.phase + ' used ' + p.instruments.join(', ') + ' — skill scores aren’t comparable, so no growth is shown.') + '">different assessments</span>';
+          }
+        }
         if (pp && pp.versions.length && p.versions.length && pp.versions.join() !== p.versions.join())
           warn = ' <span class="ui-chip warn" title="The template changed since ' + esc(prev.year.label) + ' — compare these results with care.">⚠ ' + esc(pp.versions.join('/')) + ' → ' + esc(p.versions.join('/')) + '</span>';
-        return '<td><b>' + (p.pct == null ? '—' : p.pct + '%') + '</b> done' + (p.avgSkill == null ? '' : ' · skill ' + p.avgSkill + '%') + warn + '</td>';
+        return '<td title="' + (p.pct == null ? '' : p.kidsDone + ' of ' + p.kidsTotal + ' children did every assessment') + '"><b>' + (p.pct == null ? '—' : p.pct + '%') + '</b> of children done' + (p.avgSkill == null ? '' : ' · skill ' + p.avgSkill) + growth + warn + '</td>';
       }).join('') + '</tr>';
     }).join('');
     return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Year over year</h3>' +
-        '<p class="ui-mod-note">Completion and average skill score per phase, every year with Tilli. Skill scores show once a phase has ended.</p></div></div>' +
+        '<p class="ui-mod-note">Children who did every assessment, and the average skill score (0–100), per phase and year. Skill scores show once a phase has ended; growth arrows only compare phases that used the same assessments.</p></div></div>' +
       '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Year</th>' + PH_ORDER.map(function (p) { return '<th>' + p + '</th>'; }).join('') + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
   function openYearEdit(s, y) {
@@ -2771,7 +2898,16 @@
   SCREEN.student = function (params, body) {
     var s = ORG.byId(params.school);
     var stu = (TS && TS.findByAdm) ? TS.findByAdm(params.adm) : null;
-    if (!s || !stu) { body.innerHTML = '<div class="ui-empty">Student report is only available for schools with a live-wired roster.</div>'; return; }
+    if (!s || !stu) {
+      // No full report for this school here yet — say so plainly and give a way back.
+      var back = s ? href('school', { id: s.id, tab: 'students' }) : href('schools', {});
+      body.innerHTML = (s ? crumbs([{ label: 'All Schools', screen: 'schools' }, { label: s.name, screen: 'school', params: { id: s.id, tab: 'students' } }, { label: 'Student' }]) : '') +
+        '<div class="ui-card"><div class="ui-empty"><span class="big">Reports for this school aren’t available here yet.</span>' +
+          'You can still see this child in the Student Directory, and their teacher sees their progress in the teacher app.<br>' +
+          '<a class="btn btn-outline btn-sm mt-3" href="' + back + '">← Back to ' + (s ? esc(s.name) + '’s students' : 'All Schools') + '</a></div></div>';
+      if (s) wireCrumbs(body);
+      return;
+    }
     var tab = params.tab && STUDENT_TABS.some(function (t) { return t.key === params.tab; }) ? params.tab : 'skills';
 
     var crumbParts = [{ label: 'All Schools', screen: 'schools' }];
@@ -3191,6 +3327,7 @@
         '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(invRoles[0])) + '</span></label>' +
       '<label class="field" id="iv-school-f">School<select class="select" id="iv-school">' + schoolOpts + '</select></label>' +
       '<label class="field" id="iv-group-f" style="display:none">School group<select class="select" id="iv-group">' + groupOpts + '</select></label>' +
+      '<div class="field" id="iv-boards-f" style="display:none"><span>Board access</span><div id="iv-boards"></div></div>' +
       '</div>', function (close) {
         var em = (document.getElementById('iv-email').value || '').trim();
         if (!em) { toast('Recipient email is required.'); return false; }
@@ -3199,8 +3336,14 @@
         var schId = isGroup ? null : (document.getElementById('iv-school').value || null);
         var grpId = isGroup ? (document.getElementById('iv-group').value || null) : null;
         if (isGroup && !grpId) { toast('Pick the group this admin manages.'); return false; }
+        // School admin at a multi-board school: every board, or only the ticked ones.
+        var boards = null;
+        if (document.getElementById('iv-boards-f').style.display !== 'none' && document.querySelector('input[name="iv-bscope"]:checked').value === 'some') {
+          boards = Array.prototype.map.call(document.querySelectorAll('[data-ivboard]:checked'), function (c) { return c.value; });
+          if (!boards.length) { toast('Tick at least one board, or choose All boards.'); return false; }
+        }
         var res = window.TilliAPI
-          ? window.TilliAPI.createInvite({ email: em, role: role, school_id: schId, group_id: grpId, invitedBy: me.email })
+          ? window.TilliAPI.createInvite({ email: em, role: role, school_id: schId, group_id: grpId, boards: boards, invitedBy: me.email })
           : { ok: false };
         if (!res.ok) { toast('Could not create the invitation.'); return false; }
         // Surface it in the Invitations table (live + persisted via TilliAPI).
@@ -3212,14 +3355,28 @@
       }, 'Send invite');
     // Reflect what the chosen role can do, live, so the provisioning
     // hierarchy is visible before the invite goes out.
-    var ivRole = document.getElementById('iv-role'), ivCap = document.getElementById('iv-rolecap');
+    var ivRole = document.getElementById('iv-role'), ivCap = document.getElementById('iv-rolecap'), ivSchool = document.getElementById('iv-school');
+    // Board access shows only for a School Admin at a school with more than one board.
+    function syncBoards() {
+      var sc = ORG.byId(ivSchool.value), bl = sc ? schoolBoardList(sc) : [], show = ivRole.value === 'School Admin' && bl.length > 1;
+      document.getElementById('iv-boards-f').style.display = show ? '' : 'none';
+      if (!show) return;
+      document.getElementById('iv-boards').innerHTML =
+        '<label class="tl-check"><input type="radio" name="iv-bscope" value="all" checked> All boards (' + esc(bl.join(' + ')) + ')</label>' +
+        '<label class="tl-check"><input type="radio" name="iv-bscope" value="some"> Only these boards:</label>' +
+        '<div class="tl-inline-actions" style="padding-left:24px">' + bl.map(function (b) { return '<label class="tl-check"><input type="checkbox" data-ivboard value="' + esc(b) + '"> ' + esc(b) + '</label>'; }).join('') + '</div>' +
+        '<span class="tl-muted">A one-board admin sees only that board’s grades, children and results.</span>';
+    }
     if (ivRole && ivCap) ivRole.addEventListener('change', function () {
       ivCap.textContent = roleCap(ivRole.value);
       // A group admin belongs to a group, not a school.
       var g = ivRole.value === 'School Group Admin';
       document.getElementById('iv-school-f').style.display = g ? 'none' : '';
       document.getElementById('iv-group-f').style.display = g ? '' : 'none';
+      syncBoards();
     });
+    ivSchool.addEventListener('change', syncBoards);
+    syncBoards();
   }
 
   // Click a row's recipient to inspect the invite: role, school, status, dates
@@ -4293,7 +4450,7 @@
     return ({ 'year.start': 'Started academic year', 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template', 'template.archive': 'Archived template', 'template.unarchive': 'Restored template',
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
       'student.approve': 'Approved new student', 'student.reject': 'Turned down new student', 'school.size': 'Set expected class size',
-      'school.add': 'Added school', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
+      'school.add': 'Added school', 'school.code': 'Changed school code', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',
       'observation.publish': 'Published observation phase', 'reflection.edit': 'Edited teacher reflection questions', 'reflection.reset': 'Reset teacher reflection questions', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
       'group.create': 'Created group', 'group.rename': 'Renamed group', 'group.delete': 'Deleted group', 'group.archive': 'Archived group', 'group.unarchive': 'Restored group',
@@ -4409,7 +4566,10 @@
     } else {
       var sample = 'name,admission,grade,section\nAarav Sharma,ADM-2001,Grade 1,A\nDiya Nair,ADM-2002,Grade 1,B\n,ADM-2003,Grade 2,A';
       var prev = addState.preview;
-      el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Paste CSV</h3><p class="ui-mod-note">Columns: name, admission, grade, section. First row is the header.</p></div><button class="btn-link" id="csv-sample">Insert sample</button></div>' +
+      el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Upload or paste a CSV</h3><p class="ui-mod-note">Columns: name, admission, grade, section. First row is the header. Grades and sections must already exist at the school.</p></div>' +
+          '<div class="tl-inline-actions"><label class="btn btn-outline btn-sm">Upload .csv<input type="file" accept=".csv,text/csv" id="csv-file" class="hidden"></label>' +
+          '<button class="btn-link" id="csv-template" title="A CSV with the right columns and this school’s real grades and sections">Download template</button>' +
+          '<button class="btn-link" id="csv-sample">Insert sample</button></div></div>' +
           '<textarea class="input mono tl-csv-in" id="csv-in" rows="6" placeholder="' + esc(sample) + '"></textarea>' +
           '<div class="mt-3"><button class="btn btn-outline btn-sm" id="csv-validate">Validate</button></div></div>' +
         (prev ? '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Validation preview</h3>' +
@@ -4420,6 +4580,24 @@
               return '<tr class="' + (r.error ? 'tl-rowbad' : '') + '"><td class="tl-num">' + (i + 1) + '</td><td class="name">' + esc(r.name || '—') + '</td><td class="mono">' + esc(r.admission || '—') + '</td><td>' + esc((r.grade || '') + ' ' + (r.section || '')) + '</td><td>' + (r.error ? '<span class="tl-valid-err">' + esc(r.error) + '</span>' : '<span class="tl-valid-ok">OK</span>') + '</td></tr>';
             }).join('') + '</tbody></table></div></div>' : '');
       el.querySelector('#csv-sample').addEventListener('click', function () { document.getElementById('csv-in').value = sample; });
+      // A chosen file lands in the box, then validates straight away.
+      el.querySelector('#csv-file').addEventListener('change', function (e) {
+        var f = e.target.files && e.target.files[0]; if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function () {
+          document.getElementById('csv-in').value = String(rd.result || '').replace(/^\uFEFF/, '');
+          addState.preview = parseCsv(document.getElementById('csv-in').value, currentAddSchool(sc)); renderAddPanel(sc, el);
+          toast(f.name + ' loaded — check the rows below.');
+        };
+        rd.readAsText(f);
+      });
+      el.querySelector('#csv-template').addEventListener('click', function () {
+        var school = currentAddSchool(sc), rows = [];
+        var grades = school && tlUsesApi(school) ? window.TilliAPI.schoolStats(school.id).grades : ((school && school.structure && school.structure.grades) || []);
+        grades.forEach(function (g) { g.sections.slice(0, 2).forEach(function (x) { rows.push(['Example Child ' + (rows.length + 1), 'ADM-' + (1001 + rows.length), g.grade, x.name]); }); });
+        if (!rows.length) rows.push(['Example Child 1', 'ADM-1001', 'Grade 1', 'A']);
+        downloadCsv((school ? school.id + '-' : '') + 'students-template.csv', ['name', 'admission', 'grade', 'section'], rows);
+      });
       el.querySelector('#csv-validate').addEventListener('click', function () { addState.preview = parseCsv(document.getElementById('csv-in').value, currentAddSchool(sc)); renderAddPanel(sc, el); });
       var ci = el.querySelector('#csv-import'); if (ci) ci.addEventListener('click', function () { commitStudents(sc, addState.preview.valid.slice()); });
     }
@@ -5197,12 +5375,12 @@
       var API = window.TilliAPI, ids = API.studentsForSchool(s.id).map(function (x) { return x.student_id; });
       res = API.getDeployments(s.id).sort(function (a, b) { return TL_PHASES.indexOf(a.phase) - TL_PHASES.indexOf(b.phase); });
       rows = res.map(function (d) {
-        var c = API.completionStats(s.id, d.phase, d.audience, ids);
-        return [esc(d.phase + ' · ' + (d.assessments || []).filter(function (a) { return !a.perTeacher; }).map(function (a) { return a.name; }).join(', ')), esc(d.audience), c.done + ' / ' + c.expected, '<b>' + c.pct + '%</b>', esc(d.status)];
+        var c = API.completionStats(s.id, d.phase, d.audience, ids), k = API.childrenDone(s.id, d.phase, ids, { audience: d.audience });
+        return [esc(d.phase + ' · ' + (d.assessments || []).filter(function (a) { return !a.perTeacher; }).map(function (a) { return a.name; }).join(', ')), esc(d.audience), c.done + ' / ' + c.expected, '<b>' + (k.pct == null ? '—' : k.done + ' of ' + k.total) + '</b>', esc(d.status)];
       });
     }
     return '<p><b>' + esc(s.name) + '</b> is at <b>' + pct(s.completion || 0) + '%</b> completion overall.</p>' +
-      (rows.length ? askTable(['Assessment', 'Audience', 'Responses', 'Done', 'Status'], rows) : '<p>No assessments deployed here yet.</p>') +
+      (rows.length ? askTable(['Assessment', 'Audience', 'Responses', (s.created || s.live) && window.TilliAPI ? 'Children done' : 'Done', 'Status'], rows) : '<p>No assessments deployed here yet.</p>') +
       '<div class="tl-ask-acts">' + askLinkBtn('school', 'Open ' + s.name, { id: s.id, tab: 'assessments' }) + '</div>' + askSrc('From Deployments → Results · ' + res.length + ' deployment' + (res.length === 1 ? '' : 's'));
   }
   function askAnsSet(t) {
@@ -5466,8 +5644,8 @@
       '<label class="field">School name<input class="input" id="es-name" value="' + esc(s.name) + '"></label>' +
       boardPickerHtml('es', boardStateFrom(schoolBoardList(s))) +
       '<label class="field">Type<input class="input" id="es-type" value="' + esc(s.type) + '"></label>' +
-      '<div class="tl-fieldrow"><label class="field flex-1">City *<input class="input" id="es-city" value="' + esc(s.city) + '"></label>' +
-      '<label class="field flex-1">Country *<input class="input" id="es-country" value="' + esc(s.country) + '"></label></div>' +
+      '<div class="tl-fieldrow"><label class="field flex-1">Country *<select class="select" id="es-country">' + editCountryOpts(s.country) + '</select></label>' +
+      '<label class="field flex-1">City *<select class="select" id="es-city">' + editCityOpts(s.country, s.city) + '</select></label></div>' +
       '<label class="field">Group<select class="select" id="es-group">' + groupOpts + '</select></label>' +
       '</div>', function (close) {
         var nm = (document.getElementById('es-name').value || '').trim(); if (!nm) { toast('School name is required.'); return false; }
@@ -5479,6 +5657,18 @@
         close(); toast('School updated.'); go('school', { id: s.id });
       }, 'Save changes');
     wireBoardPicker('es');
+    var esC = document.getElementById('es-country'), esCity = document.getElementById('es-city');
+    esC.addEventListener('change', function () { esCity.innerHTML = editCityOpts(esC.value, ''); });
+  }
+  // Edit school uses the same Country → City lists as Add School; a value saved
+  // before the lists existed stays selectable so nothing is lost on save.
+  function editCountryOpts(cur) {
+    var list = ADD_COUNTRIES.slice(); if (cur && list.indexOf(cur) < 0) list.push(cur);
+    return list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+  }
+  function editCityOpts(country, cur) {
+    var list = (ADD_CITIES[country] || []).slice(); if (cur && list.indexOf(cur) < 0) list.push(cur);
+    return '<option value="">Select a city…</option>' + list.map(function (c) { return '<option value="' + esc(c) + '"' + (c === cur ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
   }
   // A school's boards as a list — the array when we have it, else split the display string.
   function schoolBoardList(s) {
@@ -5536,6 +5726,8 @@
       var soon = d <= ORG.emptyStructureWarnDays;
       return '<em class="tl-tree-ttl' + (soon ? ' soon' : '') + '" title="No students yet. Removed automatically in ' + d + ' day' + (d === 1 ? '' : 's') + ' unless students are added.">' + d + 'd left</em>';
     }
+    var liveBoard = {};   // grade → board, read live (the org record's structure doesn't carry it)
+    if (tlUsesApi(s)) window.TilliAPI.schoolStats(s.id).grades.forEach(function (x) { liveBoard[x.grade] = x.board; });
     var tree = s.structure.grades.length ? s.structure.grades.map(function (g) {
       var body = g.sections.length
         ? g.sections.map(function (sec) {
@@ -5550,8 +5742,11 @@
               baseTag(sec.name, sec.base, 'sec') + sizeHtml + emptyTag(g.grade + '|' + sec.name) + '</span>';
           }).join('')
         : '<span class="tl-tree-sec" title="Students and teachers are placed in sections — add a section to this grade before adding them.">No sections yet' + ((parseInt(g.students, 10) || 0) ? ' <i>' + parseInt(g.students, 10) + '</i>' : '') + emptyTag(g.grade + '|') + '</span>';
+      var bl = schoolBoardList(s), gBoardSel = tlUsesApi(s) && bl.length > 1
+        ? '<select class="select sm ws-gradeboard" data-sgboard="' + esc(g.grade) + '" aria-label="Board for ' + esc(g.grade) + '" title="Which board this grade follows. A school admin limited to one board only sees that board’s grades.">' +
+            '<option value="">Board…</option>' + bl.map(function (b) { return '<option' + (b === liveBoard[g.grade] ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select>' : '';
       return '<div class="tl-tree-grade"><div class="ws-gradeid"><input class="ws-gradename" data-rg="' + esc(g.grade) + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. The base stays ' + esc(g.base || inferBase(g.grade) || 'the same') + '.">' +
-        baseTag(g.grade, g.base || inferBase(g.grade)) + '</div>' + body +
+        baseTag(g.grade, g.base || inferBase(g.grade)) + gBoardSel + '</div>' + body +
         '<button class="btn-link" data-addsec="' + esc(g.grade) + '">+ Section</button></div>';
     }).join('') : '<div class="ui-empty">No grades yet — add one below.</div>';
     // Grades/sections the daily job removed — one click puts them back with a fresh window.
@@ -5583,6 +5778,14 @@
         ORG.server.logAudit(me.name, 'school.structure', label + ' added back', 'school', s.id);
         toast(label + ' added back.'); openStructureEditor(s);
       }); });
+      // Board per grade (multi-board schools) — saved on change.
+      document.querySelectorAll('[data-sgboard]').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          window.TilliAPI.setGradeBoard(s.id, sel.dataset.sgboard, sel.value);
+          ORG.server.logAudit(me.name, 'school.structure', sel.dataset.sgboard + ' board → ' + (sel.value || 'not set'), 'school', s.id);
+          toast(sel.dataset.sgboard + (sel.value ? ' follows ' + sel.value + '.' : ' has no board now.'));
+        });
+      });
       // Expected class size — saved on change (blur / Enter).
       document.querySelectorAll('[data-size-sec]').forEach(function (inp) {
         inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });

@@ -93,6 +93,7 @@
       case 'assessment.complete': return 'completed the <b>' + lane + '</b>' + (hide || !subj ? '' : ' for ' + subj);
       case 'year.start':         return 'started the <b>' + esc(((e.changes || [])[0] || {}).to || 'new') + '</b> academic year';
       case 'year.request':       return 'asked Tilli to start the next academic year';
+      case 'school.code':        return 'replaced the school code — old links and the old code stopped working';
     }
     return esc(e.action || 'made a change');
   }
@@ -203,8 +204,8 @@
     var school = opts.showSchool && opts.schoolName ? opts.schoolName(e.school_id) : '';
     var line = '<b class="hist-who">' + esc(who(e, opts)) + '</b> ' + sentenceHTML(e, opts) +
       (n > 1 ? ' <span class="hist-times" title="' + n + ' edits within ' + (BURST_MS / 60000) + ' min">' + n + '×</span>' : '') +
-      (inline ? '<span class="hist-inline">' + inline + '</span>' : '') +
-      (school ? '<span class="hist-where">· ' + esc(school) + '</span>' : '');
+      (inline ? ' <span class="hist-inline">' + inline + '</span>' : '') +
+      (school ? ' <span class="hist-where">· ' + esc(school) + '</span>' : '');
     var items = (e.action === 'assessment.complete' && (e.items || []).length > 1) ? '<div class="hist-names">' + esc(e.items.join(' · ')) + '</div>' : '';
     var detail = n > 1
       ? '<ol class="hist-subs">' + group.map(function (x) {

@@ -271,7 +271,7 @@
   function buildOrgRecordFromApi(api) {
     var st = window.TilliAPI.schoolStats(api.school_id);
     var grades = st.grades.map(function (g) {
-      return { grade: g.grade, base: g.base || '', students: 0, sections: g.sections.map(function (sec) { return { id: sec.id, name: sec.name, base: sec.base || sec.name, students: sec.students }; }) };
+      return { grade: g.grade, base: g.base || '', board: g.board || null, students: 0, sections: g.sections.map(function (sec) { return { id: sec.id, name: sec.name, base: sec.base || sec.name, students: sec.students }; }) };
     });
     var coord = st.coordinator ? { name: st.coordinator.name, email: st.coordinator.email } : { name: '—', email: '' };
     var grp = (api.group_id && GROUPS.find(function (g) { return g.id === api.group_id; })) || GROUPS[0];
@@ -302,20 +302,18 @@
       // store, keep its portfolio identity (type, stage, outcomes, joined).
       if (!api.seeded) return;
       var rec = buildOrgRecordFromApi(api);
-      ['live', 'created', 'seeded', 'students', 'staff', 'coordinator', 'joinCode', 'structure', 'gradeCount', 'sectionCount'].forEach(function (k) { hero[k] = rec[k]; });
+      ['live', 'created', 'seeded', 'students', 'staff', 'coordinator', 'code', 'joinCode', 'structure', 'gradeCount', 'sectionCount'].forEach(function (k) { hero[k] = rec[k]; });
       hero.seeded = true; hero.completion = apiCompletion(api.school_id);
       SEEDED_IDS[api.school_id] = 1;
     });
   }
   var SEEDED_IDS = {};
-  // Overall completion across phases that have opened (per-student items).
+  // Overall completion: children fully done, pooled over the phases that have opened.
   function apiCompletion(id) {
-    var API = window.TilliAPI, ids = API.studentsForSchool(id).map(function (x) { return x.student_id; }), done = 0, exp = 0;
-    API.getDeployments(id).forEach(function (d) {
-      if (d.status === 'Scheduled') return;
-      var c = API.completionStats(id, d.phase, d.audience, ids); done += c.done; exp += c.expected;
-    });
-    return exp ? Math.round(done * 100 / exp) : 0;
+    var API = window.TilliAPI, done = 0, total = 0, opened = {};
+    API.getDeployments(id).forEach(function (d) { if (d.status !== 'Scheduled') opened[d.phase] = 1; });
+    Object.keys(opened).forEach(function (ph) { var k = API.childrenDone(id, ph); done += k.done; total += k.total; });
+    return total ? Math.round(done * 100 / total) : 0;
   }
 
   // ============================================================
@@ -886,7 +884,7 @@
       'template.archive': 'archived template', 'template.unarchive': 'restored template',
       'student.merge': 'merged students', 'student.delete': 'deleted students', 'student.add': 'imported students', 'student.edit': 'edited student',
       'student.approve': 'approved new student', 'student.reject': 'turned down new student', 'school.size': 'set expected class size',
-      'school.add': 'added school', 'year.start': 'started academic year', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
+      'school.add': 'added school', 'school.code': 'changed school code', 'year.start': 'started academic year', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
       'role.change': 'changed role', 'deployment.create': 'created deployment', 'deployment.end': 'ended deployment',
       'observation.publish': 'published observation phase', 'observation.access': 'changed form access',
       'selfguided.publish': 'published self-guided game', 'selfguided.edit': 'edited self-guided game',
@@ -918,9 +916,9 @@
       var exp = lanes.reduce(function (a, c) { return a + c.expected; }, 0);
       var anyLive = lanes.some(function (c) { return c.status === 'Live'; });
       var allSched = lanes.every(function (c) { return c.status === 'Scheduled'; });
-      var first = lanes[0];
+      var first = lanes[0], kids = API.childrenDone(id, ph, studentIds);
       return { phase: ph, deployed: true, status: anyLive ? 'Live' : (allSched ? 'Scheduled' : 'Ended'),
-        window: first.start ? first.start + ' → ' + first.end : null, completion: exp ? Math.round(done * 100 / exp) : 0 };
+        window: first.start ? first.start + ' → ' + first.end : null, completion: kids.pct || 0, kidsDone: kids.done, kidsTotal: kids.total };
     });
     var staff = API.staffFor(id);
     var secs = API.sectionsForSchool(id);
@@ -1016,7 +1014,7 @@
     if (window.TilliAPI && window.TilliAPI.createSchoolFull) {
       var res = window.TilliAPI.createSchoolFull({
         name: input.name, board: input.board, boards: input.boards, city: input.city, country: input.country,
-        grades: input.grades, admin: input.admin,
+        grades: input.grades, admin: input.admin, yearStart: input.yearStart, yearEnd: input.yearEnd,
         groupId: input.groupId && input.groupId !== 'g-none' ? input.groupId : null,
       });
       if (res && res.ok) {
@@ -1032,7 +1030,7 @@
           role: 'School Admin', schoolId: s.id, sections: [] });
         INVITATIONS.unshift({ id: 'inv-' + s.id, name: res.coordinator.name, email: res.coordinator.email,
           role: 'School Admin', schoolId: s.id, status: 'Account Created',
-          delivery: 'Email sent', created: iso(TODAY), expires: iso(addDays(14)) });
+          delivery: 'Email sent', created: iso(new Date()), expires: iso(new Date(Date.now() + 14 * DAY)) });   // real date, not the demo date
         return s;
       }
     }
@@ -1079,7 +1077,7 @@
         role: 'School Admin', schoolId: id, sections: [] });
       INVITATIONS.unshift({ id: 'inv-' + id, name: (admin.name || admin.email).trim(), email: admin.email.trim(),
         role: 'School Admin', schoolId: id, status: 'Account Created',
-        delivery: 'Email sent', created: iso(TODAY), expires: iso(addDays(14)) });
+        delivery: 'Email sent', created: iso(new Date()), expires: iso(new Date(Date.now() + 14 * DAY)) });   // real date, not the demo date
     }
     return s;
   }

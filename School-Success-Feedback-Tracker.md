@@ -240,7 +240,7 @@ Open issues that came out of those changes:
 - **Ask Tilli's "running" now means "has some completion".** It used to mean "not at MoU". A school with phases deployed but 0% done now counts as "not started yet".
 
 **Add School wizard**
-- **Edit school uses free-text Country and City, but the wizard uses fixed dropdown lists.** A typo or "india" in Edit school won't match "India", and that school drops out of Analytics → Outcomes by region and the country grouping. *Possible fix:* give Edit school the same Country → City dropdowns as the wizard.
+- ~~**Edit school uses free-text Country and City, but the wizard uses fixed dropdown lists.**~~ Fixed 26 Oct 2026 (Phase 2.1). A typo or "india" in Edit school won't match "India", and that school drops out of Analytics → Outcomes by region and the country grouping. *Possible fix:* give Edit school the same Country → City dropdowns as the wizard.
 - **The hover reason on a greyed-out Next may not appear in Firefox or Safari.** It uses the browser's built-in tooltip, which those browsers don't always show on disabled buttons. *Possible fix:* show the reason as small text under Next while it's disabled.
 - **The 60-day auto-remove rule is only visible after a grade is added.** It moved into a ⓘ next to the totals line, which is hidden while there are no grades. *Possible fix:* mention it in the Profile step's intro if people get caught out.
 
@@ -271,6 +271,16 @@ Open issues that came out of those changes:
 - **History isn't filtered by year** in the past-year view — it shows every change at the school.
 - **Grades & sections additions on wizard-created schools still don't persist** (existing issue) — a section added there to a section-less grade disappears on reload.
 - **Fixed in passing:** actions that refresh the screen you're on (Start new year, Approve / Turn down a new student) didn't redraw until you navigated away — they do now.
+
+**Rollout fix plan — Phase 2** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
+- **Completion numbers dropped on every live school.** "Children fully done" counts a child only when the teacher, parent *and* direct assessments are all in (the agreed 19 Oct rule). Heritage Baseline went from 60% (Tilli) / 50% (school dashboard) to **14% (8 of 56)** on both. Tell schools before this ships.
+- **Board scope only covers the leadership dashboard's own screens.** Ask Tilli answers that call the store directly (not through the dashboard data) may still count other boards. *Possible fix:* pass the admin's section scope into Ask Tilli's completion answers.
+- **The Add School first admin always gets every board.** Board-limited admins are set on a later invite. *Possible fix:* add Board access to the wizard's First admin step.
+- **Schools created before boards-per-grade have no grade boards.** A board-limited admin there sees an empty dashboard with a note asking Tilli to set each grade's board (Settings → Grades & sections).
+- **Edit school's country / city now use the fixed lists** (fixes the free-text issue above). Values saved before stay selectable. Edits still don't persist on reload for wizard-created schools (existing issue).
+- **Regenerating the code doesn't tell anyone.** Parents and teachers with old links just get "wrong code". *Possible fix:* a banner on the school admin dashboard for a week listing the new links to re-share.
+- **The "no live version" deploy warning shows for IDELA, Home SEL Survey and the teacher observational report** on every new school, because those demo templates have no live Baseline version. Real templates will clear it.
+- **The Expiring invitations card still measures from the demo date (27 Aug 2026)**, so newly-sent invites (now dated from today) won't show as expiring until that's switched too.
 
 **Expected class size + new-student approval** (added 23 Oct 2026)
 - **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.

@@ -460,14 +460,16 @@
         var pl = H.plan[ph]; if (!pl) return;
         var start = now + pl[0] * DAY_MS, end = now + pl[1] * DAY_MS, rate = pl[2];
         var open = start <= now, liveNow = open && end >= now, upto = Math.min(now, end);
+        // Deployed a week before it opens — or, for a window still ahead, a little before today (never in the future).
+        var depAt = Math.min(start - 7 * DAY_MS, now - (HERO_PHASES.indexOf(ph) + 1) * 3 * 3600000);
         Object.keys(HERO_ITEMS[ph]).forEach(function(aud){
           var items = HERO_ITEMS[ph][aud].map(function(x, xi){
             var mode = aud === 'Parent' ? 'home' : aud === 'Teacher' ? 'school' : (xi % 2 ? 'home' : 'school');
             return x[2] ? { id: x[0], name: x[1], perTeacher: true, mode: mode } : { id: x[0], name: x[1], mode: mode };
           });
           db.deployments[id][ph + '|' + aud] = { phase: ph, audience: aud, deployed: true, status: 'Live', window: heroISO(start) + ' → ' + heroISO(end),
-            start: heroISO(start), end: heroISO(end), assessments: items, deployedAt: start - 7 * DAY_MS, endedAt: null };
-          history.push({ at: start - 7 * DAY_MS, school_id: id, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'phase.deploy',
+            start: heroISO(start), end: heroISO(end), assessments: items, deployedAt: depAt, endedAt: null };
+          history.push({ at: depAt, school_id: id, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'phase.deploy',
             phase: ph, audience: aud, changes: [{ label: 'Window', from: '', to: heroISO(start) + ' → ' + heroISO(end) }], items: items.map(function(x){ return x.name; }), actor: team });
           if (!open) return;
           var perStudent = items.filter(function(x){ return !x.perTeacher; });
@@ -582,6 +584,15 @@
     if (!db.selfReports){ db.selfReports = {}; write(db); }
     // The four fully-populated demo schools (after history, which re-seeds itself).
     if (db.heroSeedVer !== HERO_SEED_VER){ seedHeroSchools(db); db.heroSeedVer = HERO_SEED_VER; write(db); }
+    // History can't be in the future: older seeds dated a scheduled window's deploy
+    // a week before it opens, which put it above "Today". Pull those back.
+    if (!db.histFutureFix){
+      var nowMs = Date.now();
+      (db.history || []).forEach(function(e, i){ if (e.at > nowMs) e.at = nowMs - (i % 12 + 1) * 3600000; });
+      (db.history || []).sort(function(x, y){ return x.at - y.at; });
+      Object.keys(db.deployments).forEach(function(sid){ Object.keys(db.deployments[sid] || {}).forEach(function(k){ var d = db.deployments[sid][k]; if (d.deployedAt > nowMs) d.deployedAt = nowMs; }); });
+      db.histFutureFix = 1; write(db);
+    }
     // One school code: the separate teacher join code is folded into it.
     if (!db.oneCodeVer){
       Object.keys(db.schools).forEach(function(id){ var sc = db.schools[id]; if (sc.code) sc.joinCode = sc.code; else if (sc.joinCode) sc.code = sc.joinCode; });
@@ -1128,6 +1139,8 @@
       // so the school dashboard can render the full invite receipt + user table.
       name: input.name || null, grade: input.grade || null,
       section: input.section || null, board: input.board || null,
+      // School admins in a multi-board school: null = every board, else the boards they may see.
+      boards: Array.isArray(input.boards) && input.boards.length ? input.boards.slice() : null,
     };
     db.accounts[email] = acct;
 
@@ -1135,7 +1148,7 @@
     // so first login routes correctly (created schools resolve role via roleOf).
     var mRole = membershipRoleFor(acct.role);
     if (acct.school_id && mRole==='admin' && !db.adminMemberships.some(function(m){ return m.user_id===email && m.school_id===acct.school_id; }))
-      db.adminMemberships.push({ user_id:email, school_id:acct.school_id, role:'admin', status:'active' });
+      db.adminMemberships.push({ user_id:email, school_id:acct.school_id, role:'admin', status:'active', boards:acct.boards });
     if (acct.school_id && mRole==='teacher' && !db.teacherMemberships.some(function(m){ return m.user_id===email && m.school_id===acct.school_id; }))
       db.teacherMemberships.push({ user_id:email, school_id:acct.school_id, section_ids:[], status:'active' });
 
@@ -1253,11 +1266,11 @@
     var grades = (input.grades||[]).map(function(g){
       var secs = (g.sections||[]).slice();
       if (!secs.length && (parseInt(g.students,10)||0) > 0) secs = [{ name:'A', students:parseInt(g.students,10)||0 }];
-      return { grade:g.grade, base:g.base || inferBaseGrade(g.grade), sections:secs };
+      return { grade:g.grade, base:g.base || inferBaseGrade(g.grade), board:g.board || null, sections:secs };
     }).filter(function(g){ return g.grade; });
     // A grade added without sections is kept (it shows in Structure); students
     // and teachers attach to sections, so it holds nobody until one is added.
-    db.schools[id].emptyGrades = grades.filter(function(g){ return !g.sections.length; }).map(function(g){ return { grade:g.grade, base:g.base }; });
+    db.schools[id].emptyGrades = grades.filter(function(g){ return !g.sections.length; }).map(function(g){ return { grade:g.grade, base:g.base, board:g.board }; });
 
     var teachers = [];
     grades.forEach(function(g){
@@ -1269,7 +1282,7 @@
         // "one teacher per section" auto-seed was removed per product rule.
         db.sections[secId] = { section_id:secId, school_id:id, grade:g.grade, section:sec.name,
           name:(g.grade+' '+sec.name).trim(), teacherId:null,
-          base_grade: g.base || '', base_section: sec.base || sec.name,
+          base_grade: g.base || '', base_section: sec.base || sec.name, board: g.board || null,
           expected: (parseInt(sec.students,10) || 0) > 0 ? parseInt(sec.students,10) : null };
 
         // Students are NOT seeded here either — the section is created empty so
@@ -1281,6 +1294,11 @@
 
     db.deployments[id] = {};
     db.completions[id] = {};
+    // This academic year, as entered in Add School (else yearsIn() guesses later).
+    if (input.yearStart && input.yearEnd && input.yearEnd > input.yearStart){
+      var yl = yearLabel(input.yearStart, input.yearEnd);
+      (db.years = db.years || {})[id] = [{ id: yearId(yl), label: yl, start: input.yearStart, end: input.yearEnd, status: 'current', startedAt: Date.now(), startedBy: '' }];
+    }
     if (db.createdSchools.indexOf(id) < 0) db.createdSchools.push(id);
     write(db);
 
@@ -1311,6 +1329,23 @@
     if (!sc.code) return { ok:false, reason:'no_code' };
     if (!clean(codeStr) || clean(codeStr)!==clean(sc.code)) return { ok:false, reason:'mismatch' };
     return { ok:true, school:Object.assign({}, sc) };
+  }
+  // SERVER-SIDE: Tilli team or the school's admin. A new code replaces the old
+  // one at once — every link and code shared before stops working.
+  function regenerateSchoolCode(schoolId, actorEmail){
+    var db = getDB(), sc = db.schools[schoolId];
+    if (!sc) return { ok:false, reason:'not_found' };
+    var role = roleOf(db, actorEmail, schoolId);
+    if (role==='teacher' || role==='parent') return { ok:false, reason:'not-authorized' };
+    var prefix = (up(sc.name).replace(/[^A-Z]/g,'').slice(0,4) || 'SCHL'); while (prefix.length < 4) prefix += 'X';
+    var taken = function(c){ return Object.keys(db.schools).some(function(k){ return up(db.schools[k].code)===c; }); };
+    var old = sc.code, code;
+    do { code = prefix + '-' + (1000 + Math.floor(Math.random() * 9000)); } while (code === up(old) || taken(code));
+    sc.code = sc.joinCode = code;
+    logHistory(db, { school_id:schoolId, section_id:null, section_name:'', students:[], kind:'student', action:'school.code',
+      changes:[{ label:'School code', from: old || '', to: code }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true, code:code, old:old };
   }
   function listSchools(){ var db=getDB(); return Object.keys(db.schools).map(function(k){ return Object.assign({}, db.schools[k]); }); }
   // Platform Admin moves a created school between groups (null / 'g-none' = no group).
@@ -1449,6 +1484,37 @@
     write(db); return { ok:true };
   }
 
+  /* ---------- Boards per grade + board-scoped school admins ----------
+     In a multi-board school each GRADE has a board (its sections inherit it).
+     A school admin sees every board (boards null) or only the boards they were
+     given. Leadership never sees another board's classes, children or results. */
+  function schoolBoardsIn(db, schoolId){ var sc = db.schools[schoolId] || {}; return Array.isArray(sc.boards) && sc.boards.length ? sc.boards : (sc.board ? String(sc.board).split(/\s*,\s*/) : []); }
+  // The section's board; a single-board school's sections are that board without tagging.
+  function boardOfSec(db, sec){
+    if (sec.board) return sec.board;
+    var b = schoolBoardsIn(db, sec.school_id); return b.length === 1 ? b[0] : null;
+  }
+  function setGradeBoard(schoolId, grade, board){
+    var db = getDB(), n = 0;
+    schoolSections(db, schoolId).forEach(function(s){ if (low(s.grade)===low(grade)){ s.board = board || null; n++; } });
+    emptyGradesOf(db, schoolId).forEach(function(g){ if (low(g.grade)===low(grade)){ g.board = board || null; n++; } });
+    if (n) write(db);
+    return { ok: !!n };
+  }
+  // null = every board; ['CBSE'] = only those. Tilli staff (no membership) see everything.
+  function adminBoards(schoolId, email){
+    var db = getDB(), e = low(email);
+    var m = db.adminMemberships.find(function(x){ return x.user_id===e && x.school_id===schoolId && x.status==='active'; });
+    var b = (m && m.boards) || (db.accounts[e] && db.accounts[e].school_id===schoolId && db.accounts[e].boards) || null;
+    return b && b.length ? b.slice() : null;
+  }
+  // Section ids a school admin may see (null = all of them).
+  function sectionsInScope(schoolId, email){
+    var boards = adminBoards(schoolId, email); if (!boards) return null;
+    var db = getDB();
+    return schoolSections(db, schoolId).filter(function(s){ return boards.indexOf(boardOfSec(db, s)) >= 0; }).map(function(s){ return s.section_id; });
+  }
+
   // Grade/section structure + counts, for the org portfolio hub.
   function schoolStats(schoolId){
     var secs = sectionsForSchool(schoolId);
@@ -1460,8 +1526,9 @@
         students: mine.length, expected: sec.expected > 0 ? sec.expected : null,
         pending: mine.filter(function(s){ return s.approval==='pending'; }).length });
     });
-    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, base:baseGradeOf(schoolId, g), sections:byGrade[g] }; })
-      .concat(emptyGradesOf(getDB(), schoolId).map(function(g){ return { grade:g.grade, base:g.base, sections:[] }; }))
+    var dbx = getDB(), gradeBoard = function(g){ var sec = schoolSections(dbx, schoolId).filter(function(x){ return low(x.grade)===low(g); })[0]; return sec ? boardOfSec(dbx, sec) : null; };
+    var grades = Object.keys(byGrade).map(function(g){ return { grade:g, base:baseGradeOf(schoolId, g), board:gradeBoard(g), sections:byGrade[g] }; })
+      .concat(emptyGradesOf(dbx, schoolId).map(function(g){ return { grade:g.grade, base:g.base, board:g.board || null, sections:[] }; }))
       .sort(function(p, q){ var at = function(b){ var i = BASE_GRADES.indexOf(b); return i < 0 ? 999 : i; }; return at(p.base) - at(q.base); });
     var staff = staffFor(schoolId);
     return { students:studs.length, sections:secs.length, grades:grades,
@@ -1478,9 +1545,10 @@
     if (found) return found.section_id;
     var secId = 'sec_' + schoolId + '_' + slugify(grade + '_' + (section||'na'));
     if (!db.sections[secId]){
+      var sib = schoolSections(db, schoolId).filter(function(x){ return low(x.grade)===low(grade); })[0];
       db.sections[secId] = { section_id:secId, school_id:schoolId, grade:grade, section:section,
         name:(grade+' '+(section||'')).trim(), teacherId:null,
-        base_grade: baseGradeIn(db, schoolId, grade), base_section: section };
+        base_grade: baseGradeIn(db, schoolId, grade), base_section: section, board: (sib && sib.board) || null };
       write(db);
     }
     return secId;
@@ -1766,6 +1834,50 @@
       status: effectiveStatus(dep), start: dep ? dep.start : '', end: dep ? dep.end : '' };
   }
 
+  /* ---------- Children fully done (THE completion number) ----------
+     PRODUCT RULE (agreed 19 Oct 2026): a child is Completed when they've done
+     EVERY per-child assessment deployed for the phase (all audiences; teachers'
+     own Pre/Post-training surveys don't count); In progress = at least one;
+     Not started = none. Every completion % in every app reads this.
+     filter (optional): { audience, mode:'school'|'home' } narrows the items —
+     e.g. one lane, or what runs at school. */
+  function phaseItems(deps, phase, filter){
+    filter = filter || {}; var out = [];
+    Object.keys(deps).forEach(function(k){
+      var d = deps[k]; if (d.phase !== phase || d.notRun) return;
+      if (filter.audience && d.audience !== filter.audience) return;
+      (d.assessments || []).forEach(function(a){
+        if (a.perTeacher) return;
+        if (filter.mode && (a.mode || (d.audience === 'Parent' ? 'home' : 'school')) !== filter.mode) return;
+        out.push({ audience: d.audience, id: a.id });
+      });
+    });
+    return out;
+  }
+  function childStatusFrom(items, comp, phase, sid){
+    if (!items.length) return null;
+    var got = items.filter(function(it){ return comp[compKey(phase, it.audience, sid, it.id)]; }).length;
+    return got >= items.length ? 'done' : got ? 'draft' : 'none';
+  }
+  function childrenDoneFrom(deps, comp, phase, ids, filter){
+    var items = phaseItems(deps, phase, filter), r = { done: 0, draft: 0, none: 0, total: (ids || []).length, items: items.length };
+    if (!items.length) { r.none = r.total; r.pct = null; return r; }
+    (ids || []).forEach(function(sid){ r[childStatusFrom(items, comp, phase, sid)]++; });
+    r.pct = r.total ? Math.round(r.done * 100 / r.total) : 0;
+    return r;
+  }
+  // Current year. ids default to every child at the school.
+  function childrenDone(schoolId, phase, ids, filter){
+    var db = getDB();
+    return childrenDoneFrom(db.deployments[schoolId] || {}, db.completions[schoolId] || {}, phase,
+      ids || studentsForSchool(schoolId).map(function(x){ return x.student_id; }), filter);
+  }
+  // One child: 'done' | 'draft' | 'none' (null = nothing deployed for the phase).
+  function childStatus(schoolId, phase, studentId, filter){
+    var db = getDB();
+    return childStatusFrom(phaseItems(db.deployments[schoolId] || {}, phase, filter), db.completions[schoolId] || {}, phase, up(studentId));
+  }
+
   /* ======================================================================
      ACADEMIC YEARS — a school runs Baseline → Midline → Endline once per year.
      ----------------------------------------------------------------------
@@ -1853,20 +1965,26 @@
     var ids = enrolledIn(db, schoolId, y.id);
     var phases = ['Baseline', 'Midline', 'Endline'].map(function(ph){
       var lanes = Object.keys(deps).map(function(k){ return deps[k]; }).filter(function(d){ return d.phase === ph; }).map(function(d){
-        var st = statsFrom(deps, comps, ph, d.audience, ids);
+        var st = statsFrom(deps, comps, ph, d.audience, ids), kids = childrenDoneFrom(deps, comps, ph, ids, { audience: d.audience });
+        // done / expected = responses (child × assessment); pct = children fully done in this lane.
         return { audience: d.audience, start: d.start || '', end: d.end || '', window: d.window || '',
           status: current ? effectiveStatus(d) : (d.notRun ? 'Not run' : 'Ended'),
           assessments: (d.assessments || []).map(function(x){ return { name: x.name, version: x.version || 1, perTeacher: !!x.perTeacher }; }),
-          done: st.done, expected: st.expected, pct: st.pct };
+          done: st.done, expected: st.expected, kidsDone: kids.done, kidsTotal: kids.total, pct: kids.pct };
       });
       var done = lanes.reduce(function(n, l){ return n + l.done; }, 0), exp = lanes.reduce(function(n, l){ return n + l.expected; }, 0);
+      var kids = childrenDoneFrom(deps, comps, ph, ids);
+      // Which per-child assessments ran — growth is only compared between phases that match.
+      var instruments = {}; lanes.forEach(function(l){ l.assessments.forEach(function(x){ if (!x.perTeacher) instruments[x.name] = 1; }); });
       var versions = {}; lanes.forEach(function(l){ l.assessments.forEach(function(x){ versions['v' + x.version] = 1; }); });
       // Skill averages only once a phase has finished (current outcomes hold all three points up front).
       var finished = lanes.length && lanes.every(function(l){ return l.status === 'Ended'; });
-      var vals = [];
-      if (finished) Object.keys(outs).forEach(function(sid){ (outs[sid] || []).forEach(function(sk){ var v = sk[PHASE_FIELD[ph]]; if (typeof v === 'number') vals.push(v); }); });
-      return { phase: ph, lanes: lanes, done: done, expected: exp, pct: exp ? Math.round(done * 100 / exp) : null,
-        avgSkill: vals.length ? Math.round(vals.reduce(function(n, v){ return n + v; }, 0) / vals.length) : null,
+      var vals = [], byGroup = { sel: [], cog: [] };
+      if (finished) Object.keys(outs).forEach(function(sid){ (outs[sid] || []).forEach(function(sk){ var v = sk[PHASE_FIELD[ph]]; if (typeof v === 'number'){ vals.push(v); if (byGroup[sk.group]) byGroup[sk.group].push(v); } }); });
+      var avg = function(xs){ return xs.length ? Math.round(xs.reduce(function(n, v){ return n + v; }, 0) / xs.length) : null; };
+      return { phase: ph, lanes: lanes, done: done, expected: exp, pct: lanes.length ? kids.pct : null, kidsDone: kids.done, kidsTotal: kids.total,
+        instruments: Object.keys(instruments).sort(),
+        avgSkill: avg(vals), avgSel: avg(byGroup.sel), avgCog: avg(byGroup.cog),   // 0–100 skill scores
         versions: Object.keys(versions).sort() };
     });
     // Classes as they were that year (renamed ones carry their base in brackets).
@@ -2397,6 +2515,13 @@
     addStudent: addStudent,
     addStudentsBulk: addStudentsBulk,
     reviewQueue: reviewQueue,
+    // Boards per grade + board-scoped school admins
+    setGradeBoard: setGradeBoard,
+    adminBoards: adminBoards,
+    sectionsInScope: sectionsInScope,
+    // Completion = children fully done (one rule for every app)
+    childrenDone: childrenDone,
+    childStatus: childStatus,
     // Expected class size — teachers add up to it; past it, admins approve
     sectionRoom: sectionRoom,
     schoolRooms: schoolRooms,
@@ -2436,6 +2561,7 @@
     // NEW — full school creation + directory (Platform Admin "Add school")
     createSchoolFull: createSchoolFull,
     resolveJoinCode: resolveJoinCode,
+    regenerateSchoolCode: regenerateSchoolCode,
     verifySchoolCode: verifySchoolCode,
     // My School Check-in + own-class rule (student direct link)
     CHECKIN_NAME: CHECKIN_NAME,

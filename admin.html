@@ -505,6 +505,10 @@
   .ad-yearpick select { appearance: none; -webkit-appearance: none; border: 0; background: transparent; font: inherit; color: inherit; padding: 6px 12px; cursor: pointer; }
   .ad-pastbanner { align-items: center; }
   .ad-pastbanner .btn { margin-left: auto; flex: none; }
+  /* School code strip (Roster → Your team) */
+  .ad-codestrip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--line-200); border-radius: var(--radius-md); }
+  .ad-codestrip > div { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 220px; }
+  .ad-codestrip .text-muted { font-size: var(--fs-sm); }
   /* Roster: quiet year-end row */
   .ad-yearend { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--line-200); border-radius: var(--radius-md); }
   .ad-yearend b { display: block; font-size: var(--fs-sm); color: var(--ink-700); }
@@ -558,11 +562,11 @@
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p1"></script>
-<script src="assets/tilli-history.js?v=20261026p1"></script>
-<script src="assets/created-school-bridge.js?v=20261026p1b"></script>
-<script src="assets/admin-data.js?v=20261026p1"></script>
+<script src="assets/tilli-api.js?v=20261026p2"></script>
+<script src="assets/tilli-history.js?v=20261026p2"></script>
+<script src="assets/created-school-bridge.js?v=20261026p2"></script>
+<script src="assets/admin-data.js?v=20261026p2"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/admin.js?v=20261026p1b"></script>
+<script src="assets/admin.js?v=20261026p2"></script>
 </body>
 </html>

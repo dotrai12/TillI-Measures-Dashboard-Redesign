@@ -530,6 +530,7 @@
           yrs.slice().reverse().map(function (y) { return '<option value="' + esc(y.id) + '"' + (vy && vy.id === y.id ? ' selected' : '') + '>' + esc(y.label) + (y.status === 'current' ? ' · current' : '') + '</option>'; }).join('') +
         '</select></label>'
       : '<span class="ad-year">' + esc(AD.academicYears[0]) + '</span>';
+    yearCtrl += boardScopeChip();
     var side = '<aside class="ui-side dash-side">' +
       '<span class="lockup"><img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli"><span class="divider"></span><span class="measures">Measures</span></span>' +
       '<nav class="ui-nav">' + navItems().filter(function (n) { return n.key !== 'asktilli'; }).map(function (n) {
@@ -661,6 +662,7 @@
       try { SCREEN[r.screen](r.params, body); }
       catch (e) { console.error(e); body.innerHTML = stError('This screen could not be built.'); }
       if (AD.pastYear) body.insertAdjacentHTML('afterbegin', pastYearBannerHTML());
+      body.insertAdjacentHTML('afterbegin', boardScopeNoteHTML());
     }
     wireChrome();
     app.querySelectorAll('[data-yearpick]').forEach(function (sel) { sel.addEventListener('change', function () { switchYear(sel.value); }); });
@@ -1361,8 +1363,8 @@
   // TilliAPI completions; the demo has none missing (every child has scores).
   function dlMissed(studs, pt) {
     var A = window.TilliAPI;
-    if (!window.TILLI_CREATED || !A || !A.completionStats) return [];
-    return studs.filter(function (s) { var c = A.completionStats(currentSchoolId(), pt.label, 'Teacher', [s.adm]); return c.expected && c.done < c.expected; });
+    if (!window.TILLI_CREATED || !A || !A.childStatus) return [];
+    return studs.filter(function (s) { var st = A.childStatus(currentSchoolId(), pt.label, s.adm); return st && st !== 'done'; });
   }
 
   // Priority 1 — warnings for the whole school, most urgent first.
@@ -2186,7 +2188,13 @@
       return rows.length ? rows.map(function (r) { return userRowHTML(r.u, r.i); }).join('')
         : '<tr><td colspan="' + colCount + '" class="text-muted ad-teamnone">No one matches “' + esc(teamView.q.trim()) + '”.</td></tr>';
     };
-    var userBody = '<div class="row mb-3 ad-teamtop">' +
+    // The one school code: teachers join with it, and it's in every link the school shares.
+    var scRec = window.TilliAPI && currentSchoolId() ? TilliAPI.resolveSchool(currentSchoolId()) : null;
+    var codeStrip = scRec && scRec.code ? '<div class="ad-codestrip mb-3"><div><b>School code</b> <span class="ad-num">' + esc(scRec.code) + '</span>' +
+        '<span class="text-muted">Teachers enter it to join as a teacher — it’s also in every link you share.</span></div>' +
+        '<button class="btn btn-outline btn-sm" data-codecopy="' + esc(scRec.code) + '">Copy</button>' +
+        '<button class="btn-link" data-coderegen title="Use this if the code was shared outside the school">Regenerate</button></div>' : '';
+    var userBody = codeStrip + '<div class="row mb-3 ad-teamtop">' +
         '<input class="input ad-teamq" id="team-q" type="search" placeholder="Search by name or email…" value="' + esc(teamView.q) + '" aria-label="Search your team by name or email">' +
         '<button class="btn btn-cyan btn-sm" data-invite="1">+ Invite teachers</button></div>' +
       '<div class="ui-tablewrap"><table class="ui-table mw-640 ad-teamtable"><thead><tr>' + sortHead('name', 'Name') + sortHead('email', 'Email') + '<th>Role</th>' + sortHead('grade', 'Grade') + '<th>Section</th>' +
@@ -2229,6 +2237,8 @@
     body.querySelectorAll('[data-kidok]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidok], true); }); });
     body.querySelectorAll('[data-kidno]').forEach(function (b) { b.addEventListener('click', function () { decideKid(waiting[+b.dataset.kidno], false); }); });
     body.querySelectorAll('[data-yearask]').forEach(function (b) { b.addEventListener('click', askNewYear); });
+    body.querySelectorAll('[data-codecopy]').forEach(function (b) { b.addEventListener('click', function () { try { navigator.clipboard.writeText(b.dataset.codecopy); } catch (e) {} toast('School code copied.'); }); });
+    body.querySelectorAll('[data-coderegen]').forEach(function (b) { b.addEventListener('click', regenSchoolCode); });
     body.querySelectorAll('[data-yearsee]').forEach(function (b) { b.addEventListener('click', showYearMigration); });
     body.querySelectorAll('[data-invite]').forEach(function (b) { b.addEventListener('click', inviteUser); });
     function wireUserRows(root) {
@@ -2364,7 +2374,22 @@
     if (!A || !A.historyFor || !sid) return [];
     var list = A.historyFor(email, sid, filter || {});
     if (list == null && (role === 'tilli' || role === 'group') && A.historyAcross) list = A.historyAcross([sid], filter || {});
+    // Board-scoped admin: drop changes to other boards' classes (school-wide ones stay).
+    var sc = boardScope();
+    if (sc) list = (list || []).filter(function (e) { return !e.section_id || sc.indexOf(e.section_id) >= 0; });
     return list || [];
+  }
+  // Section ids this admin may see, or null for every board.
+  function boardScope() { return window.TILLI_CREATED && window.TILLI_CREATED.scope || null; }
+  function boardScopeChip() {
+    var b = window.TILLI_CREATED && window.TILLI_CREATED.boards;
+    return b ? '<span class="ad-year" title="You see only ' + esc(b.join(' + ')) + ' grades, children and results.">' + esc(b.join(' + ')) + ' only</span>' : '';
+  }
+  // Scoped to boards, but no grade is tagged with them yet → say why it's empty.
+  function boardScopeNoteHTML() {
+    var b = window.TILLI_CREATED && window.TILLI_CREATED.boards;
+    if (!b || AD.sections.length) return '';
+    return '<div class="ui-note warn mb-3"><span aria-hidden="true">⚠️</span><span>Your access is limited to <b>' + esc(b.join(' + ')) + '</b>, but no grade at your school is set to ' + (b.length === 1 ? 'that board' : 'those boards') + ' yet. Ask the Tilli team to set each grade’s board.</span></div>';
   }
 
   // Re-reveal one invited teacher's still-valid temporary password (relayable
@@ -2441,7 +2466,10 @@
   }
   // ---- Expected class size — teachers add up to it; past it, the child waits for an admin ----
   function apiRoom(sec) { return window.TilliAPI && TilliAPI.sectionRoom && currentSchoolId() ? TilliAPI.sectionRoom(currentSchoolId(), sec.id) : null; }
-  function waitingKids() { return window.TilliAPI && TilliAPI.pendingStudents && currentSchoolId() ? TilliAPI.pendingStudents(currentSchoolId()) : []; }
+  function waitingKids() {
+    var list = window.TilliAPI && TilliAPI.pendingStudents && currentSchoolId() ? TilliAPI.pendingStudents(currentSchoolId()) : [], sc = boardScope();
+    return sc ? list.filter(function (k) { return sc.indexOf(k.section_id) >= 0; }) : list;
+  }
   function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
   function roomTone(rm) { return rm.expected == null ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
   function decideKid(st, approve) {
@@ -3549,6 +3577,15 @@
       '<button class="btn btn-outline btn-sm" data-yearsee="1">See grade migration</button>');
     return strip('When ' + esc(ys.cur.label) + ' ends, ask the Tilli team to start the next year. They move children up a grade and keep this year’s results.',
       (ys.cur.rollover ? '<button class="btn-link" data-yearsee="1">Last migration</button> ' : '') + '<button class="btn btn-outline btn-sm" data-yearask="1">Ask Tilli to start next year</button>');
+  }
+  function regenSchoolCode() {
+    var ov = openModal(modalHead('Regenerate the school code?') +
+      '<p class="mb-4">Your school gets a new code. <b>Every link and code you’ve shared stops working now</b> — for parents, teachers and student assessments. Teachers and parents already signed in aren’t affected.</p>' +
+      '<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-danger btn-sm" data-regengo>Regenerate now</button></div>');
+    ov.querySelector('[data-regengo]').addEventListener('click', function () {
+      var r = TilliAPI.regenerateSchoolCode(currentSchoolId(), email);
+      closeModal(); toast(r.ok ? 'New school code: ' + r.code + '. Share it with your teachers again.' : 'Couldn’t change the code.'); render();
+    });
   }
   function askNewYear() {
     var r = TilliAPI.requestNewYear(currentSchoolId(), email);
