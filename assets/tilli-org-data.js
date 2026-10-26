@@ -660,7 +660,13 @@
   ];
 
   // ---- Share links: one per school per audience (school → Assessments → Links to share) ----
-  function masterLinkUrl(schoolCode, slug) { return 'https://measures.tilli.app/' + String(schoolCode).toLowerCase() + '/' + slug; }
+  // The parent (home) link carries the school's name slug, NOT its code: the code
+  // also signs teachers up, so it must never travel home with families. Staff and
+  // student-assessment links keep the code.
+  function masterLinkUrl(school, slug) {
+    var key = slug === 'parent' ? school.id : school.code;
+    return 'https://measures.tilli.app/' + String(key).toLowerCase() + '/' + slug;
+  }
   // One link for a whole school group: opens a pick-your-school page listing the
   // group's active schools, then continues to that school's normal flow.
   function groupLinkUrl(group, slug) { return 'https://measures.tilli.app/g/' + group.code + '/' + slug; }

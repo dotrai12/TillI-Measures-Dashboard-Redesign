@@ -264,7 +264,7 @@ Open issues that came out of those changes:
 - **Two sections can merge on promotion.** If Grade 1 has A and B but Grade 2 only has A, both move into Grade 2 A. *Possible fix:* create a matching Grade 2 B automatically, or ask in the wizard.
 
 **Rollout fix plan — Phase 1** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
-- **One school code is now also the teacher sign-up code.** Anyone holding a parent or student link (which contains the code) can sign up as a teacher. *Possible fix:* teachers who self-join wait for the school admin to confirm them.
+- **One school code is now also the teacher sign-up code.** ✅ 26 Oct 2026: the parents' (home) link no longer contains it — it uses the school's name slug (`…/heritage-oaks/parent`), so families never see the code. *Still open:* the student-assessment link (opened on children's devices at school) does contain it; if those devices go home, the code goes with them. *Possible fix:* teachers who self-join wait for the school admin to confirm them.
 - **Existing teacher join codes stopped working.** Schools that had shared the old 6-letter join code must share the school code instead (e.g. HROK-4410).
 - ~~**The year picker is hidden on phones.**~~ Fixed 26 Oct 2026: the account menu lists every school year (current + read-only past years) on any screen size; the old "Switch school year" placeholder is gone.
 - **Past-year view reloads the page.** The dashboard is built once per year, so switching years is a full reload. Fine for now; a real backend would fetch per year.

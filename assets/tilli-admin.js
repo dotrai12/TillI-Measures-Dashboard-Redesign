@@ -1801,7 +1801,7 @@
     // stays available for named onboarding.
     var teacherJoin = s.code;
     var joinCode = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">School code</h3>' +
-        '<p class="ui-mod-note">Teachers enter this to join ' + esc(s.name) + ' as a Teacher — no invite needed. It’s also part of every link this school shares, so share links only inside the school.</p></div></div>' +
+        '<p class="ui-mod-note">Teachers enter this to join ' + esc(s.name) + ' as a Teacher — no invite needed. It’s in the teacher and student-assessment links (keep those inside the school); the parents’ link doesn’t contain it.</p></div></div>' +
       '<div class="tl-linkrow"><div><b>School code</b><span class="mono">' + esc(teacherJoin) + '</span></div>' +
         '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-copy="' + esc(teacherJoin) + '">Copy code</button>' +
         (tlUsesApi(s) && !GROUP ? '<button class="btn-link danger" data-regen-code title="Use this if the code was shared outside the school.">Regenerate</button>' : '') + '</div></div></div>';
@@ -1844,13 +1844,13 @@
     var rg = el.querySelector('[data-regen-code]');
     if (rg) rg.addEventListener('click', function () {
       gated({ title: 'Regenerate the school code', danger: true, confirmLabel: 'Regenerate now',
-        body: '<p>' + esc(s.name) + ' gets a new code. <b>Every link and code you’ve shared stops working now</b> — parents’, teachers’ and student-assessment links included. Share the new links straight after.</p><p class="tl-muted">Teachers and parents already signed in aren’t affected.</p>',
+        body: '<p>' + esc(s.name) + ' gets a new code. <b>The teacher and student-assessment links and the old code stop working now</b> — share the new ones straight after. The parents’ link doesn’t contain the code, so it keeps working.</p><p class="tl-muted">Teachers and parents already signed in aren’t affected.</p>',
         audit: { action: 'school.code', entity: s.name, entityType: 'school', schoolId: s.id },
         onConfirm: function () {
           var r = window.TilliAPI.regenerateSchoolCode(s.id, me.email);
           if (!r.ok) { toast('Couldn’t change the code.'); return; }
           s.code = s.joinCode = r.code;
-          toast('New school code: ' + r.code + '. Re-share the links from Assessments → Links to share.');
+          toast('New school code: ' + r.code + '. Re-share the teacher and student-assessment links — the parents’ link hasn’t changed.');
           go('school', { id: s.id, tab: 'staff' });
         } });
     });
@@ -2772,12 +2772,12 @@
 
     // What to send the school: who each link is for, and where it lands.
     var SHARE = [
-      { slug: 'parent', label: 'Parents', note: 'Parents sign in and find their child at this school.' },
+      { slug: 'parent', label: 'Parents', note: 'Parents sign in and find their child at this school. Safe to send home — it doesn’t contain the school code.' },
       { slug: 'teacher', label: 'Teachers & school admins', note: 'Staff sign in straight into this school.' },
       { slug: 'direct', label: 'Student assessments', note: 'Opened on each child’s device — a teacher signs in with the school code, picks a class and runs the assessments.', preview: 'assess.html' },
     ];
     var links = SHARE.map(function (k) {
-      var url = ORG.masterLinkUrl(s.code, k.slug);
+      var url = ORG.masterLinkUrl(s, k.slug);
       var preview = k.preview ? '<a class="btn btn-outline btn-sm" href="' + k.preview + '" target="_blank" rel="noopener" title="Open the student assessment page (local prototype)">Preview</a>' : '';
       return '<div class="tl-linkrow"><div><b>' + esc(k.label) + '</b><span class="tl-linknote">' + esc(k.note) + '</span><span class="mono">' + esc(url) + '</span></div><span class="tl-inline-actions">' + preview + '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
     }).join('');

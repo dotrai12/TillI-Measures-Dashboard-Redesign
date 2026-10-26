@@ -2202,7 +2202,7 @@
     // The one school code: teachers join with it, and it's in every link the school shares.
     var scRec = window.TilliAPI && currentSchoolId() ? TilliAPI.resolveSchool(currentSchoolId()) : null;
     var codeStrip = scRec && scRec.code ? '<div class="ad-codestrip mb-3"><div><b>School code</b> <span class="ad-num">' + esc(scRec.code) + '</span>' +
-        '<span class="text-muted">Teachers enter it to join as a teacher — it’s also in every link you share.</span></div>' +
+        '<span class="text-muted">Teachers enter it to join as a teacher. It’s in the teacher and student-assessment links — never send those home.</span></div>' +
         '<button class="btn btn-outline btn-sm" data-codecopy="' + esc(scRec.code) + '">Copy</button>' +
         '<button class="btn-link" data-coderegen title="Use this if the code was shared outside the school">Regenerate</button></div>' : '';
     var userBody = codeStrip + '<div class="row mb-3 ad-teamtop">' +
@@ -3591,7 +3591,7 @@
   }
   function regenSchoolCode() {
     var ov = openModal(modalHead('Regenerate the school code?') +
-      '<p class="mb-4">Your school gets a new code. <b>Every link and code you’ve shared stops working now</b> — for parents, teachers and student assessments. Teachers and parents already signed in aren’t affected.</p>' +
+      '<p class="mb-4">Your school gets a new code. <b>The old code and the teacher and student-assessment links stop working now.</b> The parents’ link doesn’t contain the code, so it keeps working. Anyone already signed in isn’t affected.</p>' +
       '<div class="row" style="gap:8px;justify-content:flex-end"><button class="btn btn-outline btn-sm" data-mclose="1">Cancel</button><button class="btn btn-danger btn-sm" data-regengo>Regenerate now</button></div>');
     ov.querySelector('[data-regengo]').addEventListener('click', function () {
       var r = TilliAPI.regenerateSchoolCode(currentSchoolId(), email);
@@ -3645,10 +3645,11 @@
   function codeChangedHTML() {
     var A = window.TilliAPI, sc = A && currentSchoolId() ? A.resolveSchool(currentSchoolId()) : null;
     if (AD.pastYear || !sc || !sc.codeChangedAt || Date.now() - sc.codeChangedAt > 7 * 86400000) return '';
-    var slug = String(sc.code).toLowerCase(), base = 'https://measures.tilli.app/' + slug + '/';
+    // Only staff links carry the code; the parents' link (school id) never changes.
+    var base = 'https://measures.tilli.app/' + String(sc.code).toLowerCase() + '/';
     var link = function (lbl, path) { return '<span class="ad-relink"><b>' + lbl + '</b> <span class="ad-num">' + esc(base + path) + '</span> <button class="btn-link" data-relink="' + esc(base + path) + '">Copy</button></span>'; };
-    return '<div class="ui-note warn mb-3"><span aria-hidden="true">🔑</span><span><b>Your school code changed on ' + fmtInvDate(sc.codeChangedAt) + ' to ' + esc(sc.code) + '.</b> Old links and the old code no longer work — re-share these:<br>' +
-      link('Parents', 'parent') + link('Teachers & school admins', 'teacher') + link('Student assessments', 'direct') + '</span></div>';
+    return '<div class="ui-note warn mb-3"><span aria-hidden="true">🔑</span><span><b>Your school code changed on ' + fmtInvDate(sc.codeChangedAt) + ' to ' + esc(sc.code) + '.</b> The old code and old staff links no longer work — re-share these with your teachers (the parents’ link hasn’t changed):<br>' +
+      link('Teachers & school admins', 'teacher') + link('Student assessments', 'direct') + '</span></div>';
   }
   // Shown on Overview once, after Tilli starts a new year.
   function yearNoticeHTML() {
