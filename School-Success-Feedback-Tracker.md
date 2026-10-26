@@ -311,6 +311,14 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Rollout fix plan — Phase 5F: Sessions** (26 Oct 2026)
+- **Self-guided games aren't playable in the prototype.** A game session's **Finish** records a random score (40–95). A developer wires the real game result into `TilliAPI.submitSession(…, score)`.
+- **Pre and post are matched by email.** Someone who uses a different email after the session counts as two people (one pre, one post) and isn't in "did both".
+- **A survey session doesn't follow conditional questions** — every question is shown on one page.
+- **Scores are a share of the top score** on scored multiple-choice questions (e.g. "Often" on a 1–3 scale = 100%). Unscored questions (yes/no feedback) only show answer bars.
+- **Anyone with the link can answer** once signed in — there's no list of who was invited, so "took part" counts everyone who answered.
+- **A session's questions are a copy** taken when it's created; editing the template later doesn't change it (on purpose).
+
 **Expected class size + new-student approval** (added 23 Oct 2026)
 - **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.
 - **A new school's sections start with no size unless the wizard count is filled in.** With no size, every child a teacher adds needs approval, so a school onboarding teachers before sizes are set floods its admin with approvals. *Possible fix:* make the per-section count required in the wizard, or default it to a typical class size.

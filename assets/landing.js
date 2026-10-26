@@ -249,6 +249,15 @@
   function enterFound() { if (state.role === 'teacher' && state.found && state.found.kind === 'group') state.role = 'group'; }
 
   function go() {
+    // A session link (pre / post outside the phases) goes straight into that
+    // session — never to a dashboard. Parents don't add a child for it.
+    const SL = state.sessionLink;
+    if (SL && (state.role === 'parent' || state.role === 'teacher')) {
+      setSession(state.role === 'parent' ? 'parent' : 'teacher', state.email);
+      window.location.href = 'assess.html?session=' + encodeURIComponent(SL.id) + '&part=' + encodeURIComponent(SL.part)
+        + '&email=' + encodeURIComponent(state.email);
+      return;
+    }
     // "New" = the teacher is activating an account: a fresh signup (create
     // password) OR a temp-password holder who just set their own (setpw). Both
     // should land in onboarding; a returning "enter password" login should not.
@@ -391,6 +400,7 @@
         ${showBack ? `<button class="btn-ghost dialog-back focus" data-act="back">&#8592; Back</button>` : ''}
         <button class="dialog-close focus" data-act="close" aria-label="Close">&#215;</button>
         <div class="dlg-logo"><img src="${LOGO}" alt="Tilli"></div>
+        ${state.sessionLink && s !== 'role' ? `<p class="text-center" style="margin:-4px 0 14px"><span class="pill-info">You&rsquo;re taking: ${esc(state.sessionLink.name)}${state.sessionLink.partLabel ? ' · ' + esc(state.sessionLink.partLabel) : ''}</span></p>` : ''}
         ${inner}
       </div>`;
   }
@@ -790,6 +800,7 @@
       b.addEventListener('click', () => {
         const role = b.dataset.role;
         state.groupLink = null;   // picking a role by hand leaves any group-link scope
+        state.sessionLink = null; // …and any session link
         // Tilli Team is internal — it doesn't belong to a school, so skip the
         // school picker and go straight to the email/password step.
         // Same for a School Group Admin: their scope is a group, not one school.
@@ -861,7 +872,8 @@
         const sc = window.TilliAPI && window.TilliAPI.resolveSchoolCode ? window.TilliAPI.resolveSchoolCode(code) : null;
         const GL = state.groupLink;
         const msg = !sc ? 'We don’t recognise that code. Codes change sometimes — ask your school office for the current one.'
-          : GL && GL.schools.indexOf(sc.name) < 0 ? `That code isn’t for a school in ${GL.name}. Check it with your school office.` : '';
+          : GL && GL.schools.indexOf(sc.name) < 0 ? `That code isn’t for a school in ${GL.name}. Check it with your school office.`
+          : state.sessionLink && sc.school_id !== state.sessionLink.schoolId ? `This session is for ${state.sessionLink.schoolName}. Use that school’s code.` : '';
         if (msg) {
           set({ errs: { code: msg }, shake: true, schoolCode: code });
           clearTimeout(shakeTimer);
@@ -1099,6 +1111,21 @@
   // Admin → a group's page → Group links): skip the role step and limit the school
   // picker to that group's active schools. Parents land on the picker; teachers
   // keep their email-first flow and meet the same short list if they're new.
+  // Session link (index.html?session=<id>&part=pre|post|once, from Tilli → a
+  // school's Sessions): the role comes from who the session is for and the
+  // school is already known, so parents skip the school picker.
+  (function openSessionLink() {
+    const qp = new URLSearchParams(location.search);
+    const id = qp.get('session'), A = window.TilliAPI;
+    if (!id || !A || !A.getSession) return;
+    const ss = A.getSession(id); if (!ss) return;
+    const part = ss.parts[qp.get('part')] ? qp.get('part') : Object.keys(ss.parts)[0];
+    const sc = A.resolveSchool(ss.school_id) || {};
+    state.sessionLink = { id: ss.id, part, name: ss.name, partLabel: ss.prePost ? A.SESSION_PART_LABEL[part] : '', schoolId: ss.school_id, schoolName: sc.name || '' };
+    if (ss.audience === 'Parent') set({ step: 'email', role: 'parent', school: sc.name || '', schoolQuery: sc.name || '', schoolListOpen: false, email: '', password: '', found: null });
+    else set({ step: 'email', role: 'teacher', school: '', email: '', password: '', found: null });
+  })();
+
   (function openGroupLink() {
     const qp = new URLSearchParams(location.search);
     const code = qp.get('group'), as = qp.get('as');

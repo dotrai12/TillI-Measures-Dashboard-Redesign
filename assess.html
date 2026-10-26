@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261026p3b">
+<link rel="stylesheet" href="assets/tilli.css?v=20261026p5">
 <style>
   /* Student direct-assessment page — opened from the school's student master
      link on each child's device. Never links to a dashboard. */
@@ -54,6 +54,16 @@
   .as-run-top .as-h1 { margin: 0; }
   .as-run-body { flex: 1; display: grid; place-items: center; margin: 20px 0; border: 2px dashed var(--line-200); border-radius: var(--radius-card); color: var(--ink-450); font-weight: 600; text-align: center; padding: 24px; }
   .as-run-foot { display: flex; justify-content: flex-end; gap: 10px; }
+  /* Session runner (pre / post surveys) */
+  .as-ses-sec { margin: 22px 0 6px; }
+  .as-ses-q { padding: 16px 0; border-top: 1px solid var(--line-200); }
+  .as-ses-qh { display: flex; gap: 10px; align-items: baseline; margin-bottom: 10px; line-height: 1.45; }
+  .as-ses-qh small { color: var(--ink-450); font-weight: 600; }
+  .as-ses-n { flex: none; min-width: 22px; font-weight: 700; color: var(--ink-450); font-variant-numeric: tabular-nums; }
+  .as-ses-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .as-ses-opt { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--line-200); border-radius: var(--radius-md); font-weight: 600; font-size: var(--fs-sm); cursor: pointer; }
+  .as-ses-opt.on { border-color: var(--green-500); background: var(--wash-green); }
+  .as-ses-q textarea { width: 100%; box-sizing: border-box; }
   .as-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 9; background: var(--ink-900); color: var(--white); font-weight: 600; font-size: var(--fs-sm); padding: 10px 16px; border-radius: var(--radius-pill); }
   @media (max-width: 640px) { .as-card { padding: 18px; } .as-kid { flex-wrap: wrap; } .as-steps { width: 100%; } }
 </style>
@@ -61,7 +71,7 @@
 <body>
 <div id="app"></div>
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p3b"></script>
-<script src="assets/assess.js?v=20261023bg"></script>
+<script src="assets/tilli-api.js?v=20261026p5"></script>
+<script src="assets/assess.js?v=20261026p5"></script>
 </body>
 </html>

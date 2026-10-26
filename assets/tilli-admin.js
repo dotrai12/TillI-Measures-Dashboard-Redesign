@@ -187,7 +187,7 @@
 
   // ---------- chrome ----------
   // Which nav item is active for a given screen (hub → schools, etc).
-  var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', 'class-sizes': 'schools', search: 'controlroom',
+  var SCREEN_PARENT = { school: 'schools', group: 'schools', student: 'schools', session: 'schools', directory: 'schools', 'add-students': 'schools', merge: 'schools', 'class-sizes': 'schools', search: 'controlroom',
     observation: 'templates', template: 'templates', reflection: 'templates', invitations: 'users', results: 'deployments', 'master-links': 'schools', gschool: 'groupoverview' };
   function navKeyFor(screen) { return SCREEN_PARENT[screen] || screen; }
 
@@ -2999,9 +2999,15 @@
           '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Links to share</h3><p class="ui-mod-note">Send these to ' + esc(s.name) + '. Each one opens straight into this school.</p></div></div>' + links + grpNote + '</div>' +
+      (tlUsesApi(s) ? sessionsCardHtml(s) : '') +
       '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>' + (yrs ? yearOverYearHtml(s, yrs) : '');
     if (yearBar) { el.insertAdjacentHTML('afterbegin', calendarClashHtml(s)); el.insertAdjacentHTML('afterbegin', yearBar); wireYearBar(s, d, el); }
     el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
+    var ns = el.querySelector('[data-newsession]'); if (ns) ns.addEventListener('click', function () { openNewSession(s); });
+    el.querySelectorAll('[data-session]').forEach(function (b) {
+      b.addEventListener('click', function () { go('session', { id: b.dataset.session }); });
+      b.addEventListener('keydown', function (e) { if (e.key === 'Enter') go('session', { id: b.dataset.session }); });
+    });
     var gl = el.querySelector('[data-grouplinks]'); if (gl) gl.addEventListener('click', function () { go('group', { id: gl.dataset.grouplinks }); });
     renderPlanner(d, el.querySelector('#dep-planner'));
     var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
@@ -3111,6 +3117,188 @@
     { key: 'parent', label: 'Parent', color: window.TilliPalette.PERSPECTIVE.parent },
     { key: 'student', label: 'Student Direct', color: window.TilliPalette.PERSPECTIVE.student },
   ];
+
+  // ============================================================
+  //  SESSIONS — a pre / post survey (or a one-off) for a separate parent or
+  //  teacher session, e.g. a workshop. Outside Baseline / Midline / Endline:
+  //  never in completion numbers or the school dashboard. Tilli team only.
+  // ============================================================
+  var SES_CLR = { pre: '#26BDE2', post: '#348C11', once: '#348C11' };   // cyan-500 / green-700 — checked with the dataviz palette validator
+  function sesLink(id, part) { try { return new URL(window.TilliAPI.sessionLink(id, part), location.href).href; } catch (e) { return window.TilliAPI.sessionLink(id, part); } }
+  function sesStatusChip(st) {
+    return st === 'Open' ? '<span class="ui-chip active"><span class="dot"></span>Open</span>'
+      : st === 'Scheduled' ? '<span class="ui-chip slowing"><span class="dot"></span>Scheduled</span>' : '<span class="ui-chip"><span class="dot"></span>Closed</span>';
+  }
+  function sesDates(p) { return p.start || p.end ? (p.start ? fmtJoined(p.start) : 'Now') + ' – ' + (p.end ? fmtJoined(p.end) : 'until you end it') : 'Open until you end it'; }
+  function sessionsCardHtml(s) {
+    var A = window.TilliAPI, list = A.listSessions(s.id);
+    var rows = list.map(function (ss) {
+      var R = A.sessionResults(ss.id), parts = R.parts;
+      var got = parts.map(function (pt) { return A.SESSION_PART_LABEL[pt] + ' ' + R.counts[pt]; }).join(' · ');
+      var st = parts.map(function (pt) { return A.sessionPartStatus(ss, pt); });
+      var stNow = st.indexOf('Open') >= 0 ? 'Open' : st.indexOf('Scheduled') >= 0 ? 'Scheduled' : 'Closed';
+      return '<tr class="tl-rowlink" data-session="' + esc(ss.id) + '" tabindex="0"><td class="name">' + esc(ss.name) + '<small>' + esc(ss.templateName || '') + '</small></td><td>' + esc(ss.audience + 's') + '</td>' +
+        '<td>' + (ss.prePost ? 'Pre &amp; post' : 'Once') + '</td><td class="tl-num">' + esc(got) + '</td><td>' + sesStatusChip(stNow) + '</td></tr>';
+    }).join('');
+    return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Sessions</h3>' +
+        '<p class="ui-mod-note">Pre / post surveys for a separate parent or teacher session (a workshop, a training). Not part of Baseline, Midline or Endline, and the school never sees them.</p></div>' +
+        '<button class="btn btn-outline btn-sm" data-newsession>+ New session</button></div>' +
+      (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-560"><thead><tr><th>Session</th><th>Who takes it</th><th>Type</th><th>Collected</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="ui-empty">No sessions yet.</div>') + '</div>';
+  }
+  // Templates a session can use: each published version of a survey template,
+  // plus the published self-guided games.
+  function sessionTemplateOptions() {
+    var out = [];
+    ORG.templates.filter(function (t) { return !t.archived; }).forEach(function (t) {
+      TL_PHASES.forEach(function (ph) {
+        var lv = tplLive(t, ph); if (!lv) return;
+        out.push({ key: 'tpl|' + t.id + '|' + ph, label: t.title + ' · ' + ph + ' v' + lv.v + ' (' + tplCountQ(lv.questions) + ' questions)', kind: 'survey', name: t.title, version: ph + ' v' + lv.v, questions: lv.questions, templateId: t.id });
+      });
+    });
+    (ORG.selfGuided || []).filter(function (g) { return g.status === 'Published'; }).forEach(function (g) {
+      out.push({ key: 'game|' + g.id, label: g.name + ' · self-guided game', kind: 'game', name: g.name, version: null, questions: [], templateId: g.id });
+    });
+    return out;
+  }
+  function openNewSession(s) {
+    var opts = sessionTemplateOptions();
+    var dateRow = function (pt, lbl) {
+      return '<div class="field" data-sespart="' + pt + '"><span>' + lbl + ' opens / closes <small class="tl-muted">(optional)</small></span><div class="tl-inline-actions">' +
+        '<input type="date" class="input sm" id="ns-' + pt + '-start" aria-label="' + lbl + ' opens"> <input type="date" class="input sm" id="ns-' + pt + '-end" aria-label="' + lbl + ' closes"></div></div>';
+    };
+    var close = openModal('New session · ' + s.name,
+      '<label class="field"><span>Name</span><input class="input" id="ns-name" placeholder="e.g. Parent workshop – 12 Nov"></label>' +
+      '<div class="field"><span>Who takes it</span><div class="tl-inline-actions"><label class="tl-check"><input type="radio" name="ns-aud" value="Parent" checked> Parents</label><label class="tl-check"><input type="radio" name="ns-aud" value="Teacher"> Teachers</label></div>' +
+        '<span class="tl-muted">They take it themselves — no child is picked.</span></div>' +
+      '<label class="field"><span>Template</span><select class="select" id="ns-tpl"><option value="">Choose…</option>' + opts.map(function (o) { return '<option value="' + esc(o.key) + '">' + esc(o.label) + '</option>'; }).join('') + '</select>' +
+        '<span class="tl-muted">Its questions are copied in now, so later template edits don’t change this session.</span></label>' +
+      '<label class="tl-check"><input type="checkbox" id="ns-prepost" checked> Pre and post — one link before the session, one after</label>' +
+      '<div id="ns-dates">' + dateRow('pre', 'Pre') + dateRow('post', 'Post') + '</div>',
+      function () {
+        var name = document.getElementById('ns-name').value.trim(), key = document.getElementById('ns-tpl').value;
+        var o = opts.filter(function (x) { return x.key === key; })[0], prePost = document.getElementById('ns-prepost').checked;
+        if (!name) { toast('Give the session a name.'); return false; }
+        if (!o) { toast('Pick a template.'); return false; }
+        var parts = {}, bad = null;
+        (prePost ? ['pre', 'post'] : ['once']).forEach(function (pt) {
+          var st = document.getElementById('ns-' + pt + '-start').value || null, en = document.getElementById('ns-' + pt + '-end').value || null;
+          if (st && en && en < st) bad = pt; parts[pt] = { start: st, end: en };
+        });
+        if (bad) { toast('The ' + window.TilliAPI.SESSION_PART_LABEL[bad].toLowerCase() + ' closes before it opens.'); return false; }
+        var r = window.TilliAPI.createSession(me.email, s.id, { name: name, audience: document.querySelector('input[name="ns-aud"]:checked').value,
+          kind: o.kind, templateId: o.templateId, templateName: o.name, version: o.version, questions: o.questions, prePost: prePost, parts: parts });
+        if (!r.ok) { toast('Couldn’t create the session.'); return false; }
+        ORG.server.logAudit(me.name, 'session.create', name, 'school', s.id);
+        close(); toast('Session created — copy its link' + (prePost ? 's' : '') + ' below.');
+        go('session', { id: r.session.id });
+      }, 'Create session');
+    var pp = document.getElementById('ns-prepost');
+    function syncParts() {
+      var on = pp.checked, box = document.getElementById('ns-dates');
+      box.innerHTML = on ? dateRow('pre', 'Pre') + dateRow('post', 'Post') : dateRow('once', 'Session');
+    }
+    pp.addEventListener('change', syncParts);
+  }
+
+  // Grouped bars: one row per option, a bar per part (pre / post) — share of
+  // that part's answers, with the % and count printed (the light cyan needs labels).
+  function sesBarsHtml(labels, parts, series) {
+    return '<div class="tl-sbars">' + labels.map(function (lbl, i) {
+      return '<div class="tl-sbar-row"><div class="tl-sbar-lbl" title="' + esc(lbl) + '">' + esc(lbl) + '</div><div class="tl-sbar-grp">' +
+        parts.map(function (pt) {
+          var c = series[pt].counts[i], n = series[pt].n, pc = n ? Math.round(c * 100 / n) : 0;
+          var tip = window.TilliAPI.SESSION_PART_LABEL[pt] + ': ' + c + ' of ' + n + ' (' + pc + '%)';
+          return '<div class="tl-sbar" title="' + esc(tip) + '"><span class="tl-sbar-fill" style="width:' + pc + '%;background:' + SES_CLR[pt] + '"></span><span class="tl-sbar-val">' + pc + '% · ' + c + '</span></div>';
+        }).join('') + '</div></div>';
+    }).join('') + '</div>';
+  }
+  function sesLegendHtml(parts) {
+    if (parts.length < 2) return '';
+    return '<div class="tl-slegend">' + parts.map(function (pt) { return '<span><i style="background:' + SES_CLR[pt] + '"></i>' + window.TilliAPI.SESSION_PART_LABEL[pt] + '</span>'; }).join('') + '</div>';
+  }
+  function sesMovedHtml(m, both) {
+    if (!m || !both) return '';
+    return '<p class="tl-smoved">Of the <b>' + both + '</b> who did both: <b>' + m.up + '</b> moved up · <b>' + m.same + '</b> stayed the same · <b>' + m.down + '</b> moved down.</p>';
+  }
+  // Score spread (0–100 in five bands) for games and scored surveys.
+  function sesSpread(scores) {
+    var c = [0, 0, 0, 0, 0]; scores.forEach(function (x) { c[Math.min(4, Math.floor(x / 20))]++; });
+    return { counts: c, n: scores.length };
+  }
+  SCREEN.session = function (params, body) {
+    var A = window.TilliAPI, R = A && A.sessionResults(params.id);
+    if (!R) { body.innerHTML = '<div class="ui-card"><div class="ui-empty"><span class="big">That session doesn’t exist.</span><a class="btn btn-outline btn-sm mt-3" href="' + href('schools', {}) + '">← All Schools</a></div></div>'; return; }
+    var ss = R.session, s = ORG.byId(ss.school_id), parts = R.parts, L = A.SESSION_PART_LABEL;
+    var partRows = parts.map(function (pt) {
+      var url = sesLink(ss.id, pt), st = A.sessionPartStatus(ss, pt);
+      return '<div class="tl-linkrow"><div><b>' + L[pt] + ' link ' + sesStatusChip(st) + '</b><span class="tl-linknote">' + esc(sesDates(ss.parts[pt])) +
+          (ss.prePost ? (pt === 'pre' ? ' · send before the session' : ' · send after the session') : '') + '</span><span class="mono">' + esc(url) + '</span></div>' +
+        '<span class="tl-inline-actions"><a class="btn btn-outline btn-sm" href="' + esc(url) + '" target="_blank" rel="noopener">Open</a>' +
+          (ss.endedAt ? '' : '<button class="btn-link" data-sesdates="' + pt + '">Dates</button>') + '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
+    }).join('');
+    var tiles = '<div class="tl-kpis four">' + parts.map(function (pt) { return kpi(R.counts[pt], ss.prePost ? 'did the ' + L[pt].toLowerCase() : 'took part'); }).join('') +
+      (ss.prePost ? kpi(R.counts.both, 'did both') + kpi(R.counts.people, 'took part') : '') + '</div>';
+    var legend = sesLegendHtml(parts);
+    var overall = '';
+    if (R.overall) {
+      var sp = {}; parts.forEach(function (pt) { sp[pt] = sesSpread(R.overall[pt].scores); });
+      overall = '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">' + (ss.kind === 'game' ? 'Scores' : 'Overall score') + '</h3>' +
+          '<p class="ui-mod-note">' + parts.map(function (pt) { return L[pt] + ' average <b>' + (R.overall[pt].avg == null ? '—' : R.overall[pt].avg + '%') + '</b>'; }).join(' · ') +
+          (ss.kind === 'game' ? '' : ' — share of the top score on the scored questions.') + '</p></div>' + legend + '</div>' +
+        sesBarsHtml(['0–19', '20–39', '40–59', '60–79', '80–100'], parts, sp) + sesMovedHtml(R.overall.moved, R.counts.both) + '</div>';
+    }
+    var qCards = R.questions.map(function (q, i) {
+      var inner;
+      if (q.type === 'mc') inner = (q[parts[0]].n || (parts[1] && q[parts[1]].n) ? sesBarsHtml(q.options, parts, q) : '<p class="tl-muted">No answers yet.</p>') + sesMovedHtml(q.moved, R.counts.both);
+      else inner = parts.map(function (pt) {
+        var xs = q[pt];
+        return (parts.length > 1 ? '<div class="ui-eyebrow mt-2">' + L[pt] + ' · ' + xs.length + '</div>' : '') +
+          (xs.length ? '<ul class="tl-stext">' + xs.map(function (x) { return '<li>' + esc(x.text) + ' <small>— ' + esc(x.name) + '</small></li>'; }).join('') + '</ul>' : '<p class="tl-muted">No answers yet.</p>');
+      }).join('');
+      return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><span class="ui-eyebrow">Question ' + (i + 1) + (q.type === 'text' ? ' · open answer' : '') + '</span><h3 class="ui-mod-title">' + esc(q.title) + '</h3></div>' + (q.type === 'mc' ? legend : '') + '</div>' + inner + '</div>';
+    }).join('');
+    var people = R.people.length ? '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Who took part</h3></div><div class="ui-tablewrap"><table class="ui-table mw-560"><thead><tr><th>Name</th>' +
+        parts.map(function (pt) { return '<th>' + L[pt] + '</th>' + (R.overall ? '<th class="r">' + L[pt] + ' score</th>' : ''); }).join('') + '</tr></thead><tbody>' +
+        R.people.map(function (p) {
+          return '<tr><td class="name">' + esc(p.name) + '<small>' + esc(p.email) + '</small></td>' + parts.map(function (pt) {
+            return '<td>' + (p[pt] ? esc(fmtMs(p[pt].at)) : '—') + '</td>' + (R.overall ? '<td class="r tl-num">' + (p[pt + 'Score'] == null ? '—' : p[pt + 'Score'] + '%') + '</td>' : '');
+          }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div></div>' : '';
+    body.innerHTML = crumbs([{ label: 'All Schools', screen: 'schools' }, { label: s ? s.name : 'School', screen: 'school', params: { id: ss.school_id, tab: 'assessments' } }, { label: ss.name }]) +
+      '<div class="tl-hub-head"><div><h1 class="ui-screen-title" style="margin-bottom:4px">' + esc(ss.name) + '</h1>' +
+        '<p class="ui-screen-sub m-0">' + esc(ss.audience + 's') + ' · ' + esc(ss.templateName || '') + (ss.version ? ' (' + esc(ss.version) + ')' : '') + ' · ' + (ss.prePost ? 'Pre &amp; post' : 'Once') + ' · not part of Baseline / Midline / Endline</p></div>' +
+        '<div class="tl-hub-actions"><button class="btn btn-outline btn-sm" data-sescsv="all">Download CSV</button>' +
+          (ss.prePost ? '<button class="btn btn-outline btn-sm" data-sescsv="pre">Pre only</button><button class="btn btn-outline btn-sm" data-sescsv="post">Post only</button>' : '') +
+          (ss.endedAt ? '<span class="ui-chip">Ended ' + esc(fmtMs(ss.endedAt)) + '</span>' : '<button class="btn btn-outline btn-sm" data-sesend>End session</button>') + '</div></div>' +
+      '<div class="ui-card mt-3"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Links</h3><p class="ui-mod-note">People sign in (or sign up) and go straight into it — never to a dashboard. ' +
+        (ss.audience === 'Teacher' ? 'New teachers need the school code.' : 'Parents don’t add a child for this.') + '</p></div></div>' + partRows + '</div>' +
+      '<div class="mt-gap">' + tiles + '</div>' + overall + qCards + people;
+    wireCrumbs(body);
+    body.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy); }); });
+    body.querySelectorAll('[data-sescsv]').forEach(function (b) { b.addEventListener('click', function () {
+      var c = A.sessionCsv(ss.id, b.dataset.sescsv), slug = ss.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      if (!c.rows.length) { toast('Nobody has taken ' + (b.dataset.sescsv === 'all' ? 'it' : 'the ' + L[b.dataset.sescsv].toLowerCase()) + ' yet.'); return; }
+      downloadCsv(slug + (b.dataset.sescsv === 'all' ? '' : '-' + b.dataset.sescsv) + '.csv', c.headers, c.rows);
+    }); });
+    var en = body.querySelector('[data-sesend]');
+    if (en) en.addEventListener('click', function () {
+      gated({ title: 'End session', danger: true, confirmLabel: 'End session', body: '<p>Close every link for <b>' + esc(ss.name) + '</b> now? Answers already in are kept.</p>',
+        audit: { action: 'session.end', entity: ss.name, entityType: 'school', schoolId: ss.school_id },
+        onConfirm: function () { A.endSession(me.email, ss.id); toast('Session ended.'); go('session', { id: ss.id }); } });
+    });
+    body.querySelectorAll('[data-sesdates]').forEach(function (b) { b.addEventListener('click', function () {
+      var pt = b.dataset.sesdates, cur = ss.parts[pt];
+      var close = openModal(L[pt] + ' dates · ' + ss.name,
+        '<div class="tl-inline-actions"><label class="field"><span>Opens</span><input type="date" class="input sm" id="sd-start" value="' + esc(cur.start || '') + '"></label>' +
+        '<label class="field"><span>Closes</span><input type="date" class="input sm" id="sd-end" value="' + esc(cur.end || '') + '"></label></div><span class="tl-muted">Leave empty to open now / stay open until you end it.</span>',
+        function () {
+          var r = A.updateSessionPart(me.email, ss.id, pt, { start: document.getElementById('sd-start').value || null, end: document.getElementById('sd-end').value || null });
+          if (!r.ok) { toast(r.reason === 'dates' ? 'It closes before it opens.' : 'Couldn’t save the dates.'); return false; }
+          close(); toast('Dates saved.'); go('session', { id: ss.id });
+        }, 'Save');
+    }); });
+  };
 
   SCREEN.student = function (params, body) {
     var s = ORG.byId(params.school);

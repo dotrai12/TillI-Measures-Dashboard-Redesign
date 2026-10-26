@@ -1808,6 +1808,162 @@
   }
 
   /* ======================================================================
+     SESSIONS — a pre / post survey (or one-off) for a separate parent or
+     teacher session (e.g. a workshop). Never part of Baseline / Midline /
+     Endline, completion numbers or the school dashboard; Tilli team only.
+     The template's questions are copied in when the session is made, so
+     later template edits never change a running session.
+       sessions[school_id][id] = { id, name, audience:'Parent'|'Teacher',
+         kind:'survey'|'game', templateId, templateName, version, questions[],
+         prePost, parts:{ pre|post|once: { start, end } }, createdAt, createdBy, endedAt }
+       sessionAnswers[school_id][id][part][email] = { name, at, answers:{qid:value}, score }
+     ====================================================================== */
+  function sessionPartsOf(ss){ return ss.prePost ? ['pre', 'post'] : ['once']; }
+  var PART_LABEL = { pre: 'Pre', post: 'Post', once: 'Session' };
+  function createSession(actorEmail, schoolId, input){
+    var db = getDB(); input = input || {};
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };
+    if (!db.schools[schoolId]) return { ok:false, reason:'not_found' };
+    if (!norm(input.name)) return { ok:false, reason:'name' };
+    var ss = { id: newId('ses'), school_id: schoolId, name: norm(input.name), audience: input.audience === 'Teacher' ? 'Teacher' : 'Parent',
+      kind: input.kind === 'game' ? 'game' : 'survey', templateId: input.templateId || null, templateName: norm(input.templateName),
+      version: input.version || null, questions: clone(input.questions || []), prePost: !!input.prePost, parts: {},
+      createdAt: Date.now(), createdBy: low(actorEmail), endedAt: null };
+    sessionPartsOf(ss).forEach(function(pt){ var d = (input.parts || {})[pt] || {}; ss.parts[pt] = { start: d.start || null, end: d.end || null }; });
+    ((db.sessions = db.sessions || {})[schoolId] = db.sessions[schoolId] || {})[ss.id] = ss;
+    write(db);
+    return { ok:true, session: clone(ss) };
+  }
+  function findSessionIn(db, id){
+    var all = db.sessions || {};
+    for (var k in all){ if (all[k][id]) return all[k][id]; }
+    return null;
+  }
+  function getSession(id){ var ss = findSessionIn(getDB(), id); return ss ? clone(ss) : null; }
+  function listSessions(schoolId){
+    var db = getDB(), m = (db.sessions || {})[schoolId] || {};
+    return Object.keys(m).map(function(k){ return clone(m[k]); }).sort(function(a, b){ return b.createdAt - a.createdAt; });
+  }
+  // 'Scheduled' before its start, 'Open', 'Closed' after its end or once ended.
+  function sessionPartStatus(ss, part){
+    var p = ss && ss.parts && ss.parts[part]; if (!p) return 'Closed';
+    if (ss.endedAt) return 'Closed';
+    var t = todayLocalISO();
+    if (p.start && t < p.start) return 'Scheduled';
+    if (p.end && t > p.end) return 'Closed';
+    return 'Open';
+  }
+  function updateSessionPart(actorEmail, id, part, dates){
+    var db = getDB(), ss = findSessionIn(db, id);
+    if (!ss || !ss.parts[part]) return { ok:false, reason:'not_found' };
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };
+    if (dates.start && dates.end && dates.end < dates.start) return { ok:false, reason:'dates' };
+    ss.parts[part] = { start: dates.start || null, end: dates.end || null };
+    write(db); return { ok:true };
+  }
+  function endSession(actorEmail, id){
+    var db = getDB(), ss = findSessionIn(db, id);
+    if (!ss) return { ok:false, reason:'not_found' };
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };
+    ss.endedAt = Date.now(); write(db); return { ok:true };
+  }
+  // One answer set per person per part; taking it again replaces the earlier one.
+  function submitSession(id, part, email, name, answers, score){
+    var db = getDB(), ss = findSessionIn(db, id), e = low(email);
+    if (!ss) return { ok:false, reason:'not_found' };
+    if (!e) return { ok:false, reason:'missing-email' };
+    if (sessionPartStatus(ss, part) !== 'Open') return { ok:false, reason:'closed' };
+    var bySes = ((db.sessionAnswers = db.sessionAnswers || {})[ss.school_id] = db.sessionAnswers[ss.school_id] || {});
+    var byPart = ((bySes[ss.id] = bySes[ss.id] || {})[part] = bySes[ss.id][part] || {});
+    byPart[e] = { name: norm(name) || e, at: Date.now(), answers: clone(answers || {}), score: score == null ? null : Number(score) };
+    write(db); return { ok:true };
+  }
+  function sessionAnswered(id, part, email){
+    var db = getDB(), ss = findSessionIn(db, id); if (!ss) return null;
+    var r = (((db.sessionAnswers || {})[ss.school_id] || {})[ss.id] || {})[part] || {};
+    return r[low(email)] ? clone(r[low(email)]) : null;
+  }
+  // Score of one answer set (scored multiple choice only): sum and maximum.
+  function answerScore(ss, ans){
+    var got = 0, max = 0, any = false;
+    ss.questions.forEach(function(q){
+      if (q.type !== 'mc' || q.scoring === 'none') return;
+      var scores = (q.options || []).map(function(o){ return o.score; }).filter(function(x){ return x != null; });
+      if (!scores.length) return;
+      max += Math.max.apply(null, scores);
+      var o = (q.options || [])[ans.answers[q.id]];
+      if (o && o.score != null){ got += o.score; any = true; }
+    });
+    return any || max ? { got: got, max: max } : null;
+  }
+  // Everything the session page shows: who took part, and results per question.
+  function sessionResults(id){
+    var db = getDB(), ss = findSessionIn(db, id); if (!ss) return null;
+    var raw = ((db.sessionAnswers || {})[ss.school_id] || {})[ss.id] || {}, parts = sessionPartsOf(ss);
+    var people = {};
+    parts.forEach(function(pt){ Object.keys(raw[pt] || {}).forEach(function(e){ (people[e] = people[e] || { email: e, name: raw[pt][e].name })[pt] = raw[pt][e]; }); });
+    var list = Object.keys(people).map(function(e){ return people[e]; }).sort(function(a, b){ return a.name.localeCompare(b.name); });
+    var counts = { people: list.length };
+    parts.forEach(function(pt){ counts[pt] = list.filter(function(p){ return p[pt]; }).length; });
+    if (ss.prePost) counts.both = list.filter(function(p){ return p.pre && p.post; }).length;
+    var scoreOf = function(a){ if (!a) return null; if (ss.kind === 'game') return a.score; var sc = answerScore(ss, a); return sc && sc.max ? Math.round(sc.got * 100 / sc.max) : null; };
+    list.forEach(function(p){ parts.forEach(function(pt){ p[pt + 'Score'] = scoreOf(p[pt]); }); });
+    var moved = function(get){
+      var m = { up: 0, same: 0, down: 0 };
+      list.forEach(function(p){ if (!p.pre || !p.post) return; var a = get(p.pre), b = get(p.post); if (a == null || b == null) return; m[b > a ? 'up' : b < a ? 'down' : 'same']++; });
+      return m;
+    };
+    var questions = ss.questions.filter(function(q){ return q.type === 'mc' || q.type === 'text'; }).map(function(q){
+      var out = { id: q.id, title: q.title, type: q.type, scored: q.type === 'mc' && q.scoring !== 'none' };
+      if (q.type === 'mc'){
+        out.options = (q.options || []).map(function(o){ return o.text; });
+        parts.forEach(function(pt){
+          var c = out.options.map(function(){ return 0; }), n = 0;
+          list.forEach(function(p){ var v = p[pt] && p[pt].answers[q.id]; if (v != null && c[v] != null){ c[v]++; n++; } });
+          out[pt] = { counts: c, n: n };
+        });
+        if (ss.prePost && out.scored) out.moved = moved(function(a){ var o = (q.options || [])[a.answers[q.id]]; return o ? o.score : null; });
+      } else {
+        parts.forEach(function(pt){ out[pt] = list.filter(function(p){ return p[pt] && norm(p[pt].answers[q.id]); }).map(function(p){ return { name: p.name, text: norm(p[pt].answers[q.id]) }; }); });
+      }
+      return out;
+    });
+    var overall = null;
+    if (ss.kind === 'game' || questions.some(function(q){ return q.scored; })){
+      overall = { moved: ss.prePost ? moved(scoreOf) : null };
+      parts.forEach(function(pt){ var xs = list.map(function(p){ return p[pt + 'Score']; }).filter(function(x){ return x != null; }); overall[pt] = { scores: xs, avg: xs.length ? Math.round(xs.reduce(function(a, b){ return a + b; }, 0) / xs.length) : null }; });
+    }
+    return { session: clone(ss), parts: parts, counts: counts, people: clone(list), questions: questions, overall: overall };
+  }
+  // CSV: which = 'all' (one row per person, every part side by side) | a part.
+  function sessionCsv(id, which){
+    var R = sessionResults(id); if (!R) return null;
+    var ss = R.session, parts = which && which !== 'all' ? [which] : R.parts;
+    var qs = ss.questions.filter(function(q){ return q.type === 'mc' || q.type === 'text'; });
+    var head = ['Name', 'Email', 'Role'];
+    parts.forEach(function(pt){
+      var L = PART_LABEL[pt];
+      head.push(L + ' done at');
+      if (ss.kind === 'game') head.push(L + ' score'); else { qs.forEach(function(q, i){ head.push(L + ' Q' + (i + 1) + ': ' + q.title); }); if (R.overall) head.push(L + ' score %'); }
+    });
+    var rows = R.people.filter(function(p){ return parts.some(function(pt){ return p[pt]; }); }).map(function(p){
+      var row = [p.name, p.email, ss.audience];
+      parts.forEach(function(pt){
+        var a = p[pt];
+        row.push(a ? new Date(a.at).toISOString().slice(0, 16).replace('T', ' ') : '');
+        if (ss.kind === 'game') row.push(a && a.score != null ? a.score : '');
+        else {
+          qs.forEach(function(q){ var v = a ? a.answers[q.id] : null; row.push(v == null ? '' : q.type === 'mc' ? (((q.options || [])[v] || {}).text || '') : v); });
+          if (R.overall) row.push(p[pt + 'Score'] == null ? '' : p[pt + 'Score']);
+        }
+      });
+      return row;
+    });
+    return { headers: head, rows: rows };
+  }
+  function sessionLink(id, part){ return 'index.html?session=' + encodeURIComponent(id) + '&part=' + encodeURIComponent(part); }
+
+  /* ======================================================================
      NEW — ASSESSMENT DEPLOYMENT + COMPLETION  (the end of the flow)
      ====================================================================== */
   function depKey(phase, audience){ return phase + '|' + audience; }
@@ -2974,6 +3130,11 @@
     setGradeBoard: setGradeBoard,
     adminBoards: adminBoards,
     setAdminBoards: setAdminBoards,
+    // Sessions (pre / post outside the phases — Tilli only)
+    createSession: createSession, getSession: getSession, listSessions: listSessions,
+    sessionPartStatus: sessionPartStatus, updateSessionPart: updateSessionPart, endSession: endSession,
+    submitSession: submitSession, sessionAnswered: sessionAnswered, sessionResults: sessionResults,
+    sessionCsv: sessionCsv, sessionLink: sessionLink, SESSION_PART_LABEL: PART_LABEL,
     addGrade: addGrade,
     addSection: addSection,
     setSectionTeacher: setSectionTeacher,

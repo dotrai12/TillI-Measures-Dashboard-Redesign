@@ -206,5 +206,94 @@
     if (t.hasAttribute('data-restart')) { S = { step: 'code', school: null, email: '', viaDashboard: false, phase: null, sectionId: null, studentId: null, itemId: null, err: '', code: '' }; boot(); }
   });
 
-  boot();
+  if (!new URLSearchParams(location.search).get('session')) boot();
+})();
+
+/* ============================================================
+   SESSION RUNNER (assess.html?session=<id>&part=pre|post|once&email=)
+   ------------------------------------------------------------
+   A parent or teacher takes a session's survey (or game) themselves —
+   reached from a Tilli session link after signing in. Never part of the
+   phases and never links to a dashboard. Survey: the template's own
+   questions on one page. Game: not playable in this prototype, so Finish
+   records a simulated score.
+   ============================================================ */
+(function () {
+  'use strict';
+  var qp = new URLSearchParams(location.search), id = qp.get('session');
+  if (!id) return;
+  var A = window.TilliAPI, app = document.getElementById('app');
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
+  var session = null; try { session = JSON.parse(localStorage.getItem('tilliMeasures.session') || 'null'); } catch (e) { /* signed out */ }
+  var email = String(qp.get('email') || (session && session.email) || '').trim().toLowerCase();
+  var ss = A && A.getSession ? A.getSession(id) : null;
+  var part = ss && ss.parts[qp.get('part')] ? qp.get('part') : (ss ? Object.keys(ss.parts)[0] : null);
+  // Not signed in → the sign-in page, which brings them straight back.
+  if (ss && !email) { location.href = 'index.html?session=' + encodeURIComponent(id) + '&part=' + encodeURIComponent(part); return; }
+  var acct = A && A.getAccount && email ? A.getAccount(email) : null;
+  var V = { answers: {}, name: (acct && acct.name) || '', err: '', done: false, again: false };
+  var label = ss ? (ss.prePost ? A.SESSION_PART_LABEL[part] + ' · ' : '') + ss.name : '';
+  var fmt = function (iso) { try { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } };
+
+  function shell(inner) {
+    app.innerHTML = '<header class="as-top"><span class="lockup">Tilli Measures</span><span class="as-who">' + esc(label) + (email ? '<br>' + esc(email) : '') + '</span></header>' +
+      '<main class="as-wrap">' + inner + '</main>';
+  }
+  function card(title, sub) { return '<div class="as-card narrow"><h1 class="as-h1">' + title + '</h1>' + (sub ? '<p class="as-sub">' + sub + '</p>' : '') + '</div>'; }
+  function questionHTML(q, n) {
+    if (q.type === 'section') return '<div class="as-ses-sec"><h2 class="as-h1">' + esc(q.title) + '</h2>' + (q.desc ? '<p class="as-sub">' + esc(q.desc) + '</p>' : '') + '</div>';
+    var head = '<div class="as-ses-qh"><span class="as-ses-n">' + n + '</span><b>' + esc(q.title) + '</b>' + (q.required === false ? ' <small>(optional)</small>' : '') + '</div>';
+    if (q.type === 'text') return '<div class="as-ses-q">' + head + '<textarea class="input" rows="3" data-sestext="' + esc(q.id) + '" aria-label="' + esc(q.title) + '">' + esc(V.answers[q.id] || '') + '</textarea></div>';
+    return '<div class="as-ses-q" role="radiogroup" aria-label="' + esc(q.title) + '">' + head + '<div class="as-ses-opts">' +
+      (q.options || []).map(function (o, i) {
+        return '<label class="as-ses-opt' + (V.answers[q.id] === i ? ' on' : '') + '"><input type="radio" name="sq-' + esc(q.id) + '" data-sesq="' + esc(q.id) + '" value="' + i + '"' + (V.answers[q.id] === i ? ' checked' : '') + '> ' + esc(o.text) + '</label>';
+      }).join('') + '</div></div>';
+  }
+  function render() {
+    if (!A || !ss) return shell(card('This link doesn’t work any more', 'Ask whoever sent it for a new one.'));
+    var st = A.sessionPartStatus(ss, part);
+    if (V.done) return shell(card('Thank you!', 'Your answers are in. You can close this page.'));
+    if (st === 'Scheduled') return shell(card('Not open yet', esc(ss.name) + ' opens on ' + esc(fmt(ss.parts[part].start)) + '. Come back then with the same link.'));
+    if (st === 'Closed') return shell(card('This has closed', esc(ss.name) + (ss.prePost ? ' (' + esc(A.SESSION_PART_LABEL[part].toLowerCase()) + ')' : '') + ' isn’t taking answers any more. Thank you!'));
+    var prev = A.sessionAnswered(ss.id, part, email);
+    if (prev && !V.again) return shell('<div class="as-card narrow"><h1 class="as-h1">You’ve already done this</h1><p class="as-sub">Thank you, ' + esc(prev.name) + '. Taking it again replaces your earlier answers.</p><button type="button" class="btn btn-outline" data-sesagain>Take it again</button></div>');
+    var nameField = '<label class="as-field">Your name<input class="input" data-sesname value="' + esc(V.name) + '" autocomplete="name"></label>';
+    var err = V.err ? '<p class="as-err">' + esc(V.err) + '</p>' : '';
+    if (ss.kind === 'game') {
+      return shell('<div class="as-card"><h1 class="as-h1">' + esc(ss.templateName || ss.name) + '</h1><p class="as-sub">' + esc(ss.name) + (ss.prePost ? ' · ' + esc(A.SESSION_PART_LABEL[part]) : '') + '</p>' +
+        nameField + '<div class="as-run-body" style="min-height:160px">The game runs here in the Tilli app. In this prototype, press Finish to record a score.</div>' + err +
+        '<div class="as-run-foot"><button type="button" class="btn btn-primary" data-sesgame>Finish</button></div></div>');
+    }
+    var n = 0;
+    return shell('<div class="as-card"><h1 class="as-h1">' + esc(ss.name) + '</h1><p class="as-sub">' + (ss.prePost ? esc(A.SESSION_PART_LABEL[part]) + ' survey · ' : '') + 'Your answers go to the Tilli team only.</p>' +
+      nameField + ss.questions.map(function (q) { return questionHTML(q, q.type === 'section' ? 0 : ++n); }).join('') + err +
+      '<div class="as-run-foot"><button type="button" class="btn btn-primary" data-sessubmit>Send my answers</button></div></div>');
+  }
+  app.addEventListener('input', function (e) {
+    var t = e.target;
+    if (t.hasAttribute('data-sesname')) V.name = t.value;
+    if (t.dataset.sestext) V.answers[t.dataset.sestext] = t.value;
+  });
+  app.addEventListener('change', function (e) {
+    var t = e.target; if (!t.dataset.sesq) return;
+    V.answers[t.dataset.sesq] = +t.value;
+    t.closest('.as-ses-opts').querySelectorAll('.as-ses-opt').forEach(function (l) { l.classList.toggle('on', l.contains(t)); });
+  });
+  function send(score) {
+    if (!V.name.trim()) { V.err = 'Add your name so the Tilli team knows whose answers these are.'; render(); return; }
+    var res = A.submitSession(ss.id, part, email, V.name.trim(), V.answers, score);
+    if (!res.ok) { V.err = res.reason === 'closed' ? 'This has just closed — your answers couldn’t be saved.' : 'Couldn’t save — try again.'; render(); return; }
+    V.done = true; render(); window.scrollTo(0, 0);
+  }
+  app.addEventListener('click', function (e) {
+    var t = e.target.closest('button'); if (!t) return;
+    if (t.hasAttribute('data-sesagain')) { V.again = true; render(); return; }
+    if (t.hasAttribute('data-sesgame')) { send(40 + Math.floor(Math.random() * 56)); return; }   // simulated game score, 40–95
+    if (t.hasAttribute('data-sessubmit')) {
+      var missing = ss.questions.filter(function (q) { return q.type === 'mc' && q.required !== false && V.answers[q.id] == null; });
+      if (missing.length) { V.err = missing.length === 1 ? 'One question still needs an answer.' : missing.length + ' questions still need an answer.'; render(); return; }
+      send(null);
+    }
+  });
+  render();
 })();

@@ -350,6 +350,17 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 21 — Sessions: pre / post for a workshop (Phase 5F, 10 min)
+
+- [ ] A school (e.g. Heritage Oaks) → **Assessments** → **Sessions** → **+ New session**: name "Parent workshop", **Parents**, template **Parent Report · Baseline v1**, keep **Pre and post** ticked → **Create session**.
+- [ ] The session page has a **Pre** and a **Post** link → **Open** the Pre link → you land on sign-in as a Parent with the school already chosen and "You're taking: Parent workshop · Pre" → any email + password → straight into the survey (no child, no dashboard) → answer → **Send my answers** → Thank you.
+- [ ] Do the Pre as 2–3 different emails, then the Post as some of the same ones (pick higher answers) → the session page shows **did the pre / did the post / did both**, an **Overall score** spread, and per question a bar for Pre (cyan) and Post (green) with "moved up / same / down" for people who did both.
+- [ ] **Download CSV** (one row per person, pre and post side by side), **Pre only**, **Post only**.
+- [ ] A **Teachers** session with a self-guided game (e.g. Hearts & Flowers): a new teacher needs the school code (and it must be this school's); the game records a simulated score on **Finish**.
+- [ ] **Dates** on a link sets when it opens/closes; **End session** closes every link (the page then says it has closed). None of this shows on the school dashboard or in any Baseline/Midline/Endline number.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

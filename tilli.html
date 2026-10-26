@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261026p3b">
+<link rel="stylesheet" href="assets/tilli.css?v=20261026p5">
 <style>
   /* ============================================================
      Tilli Measures — INTERNAL managing platform chrome.
@@ -411,6 +411,22 @@
   .tl-linkrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line-200); }
   .tl-linkrow .tl-linknote { display: block; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); margin: 1px 0 3px; }
   .tl-linkrow:last-child { border-bottom: none; }
+  /* Sessions (pre / post) — clickable rows + grouped bars */
+  .tl-rowlink { cursor: pointer; }
+  .tl-rowlink:hover td, .tl-rowlink:focus-visible td { background: var(--surface-100); }
+  .tl-sbars { display: flex; flex-direction: column; gap: 10px; }
+  .tl-sbar-row { display: grid; grid-template-columns: minmax(90px, 200px) 1fr; gap: 12px; align-items: center; }
+  .tl-sbar-lbl { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-sbar-grp { display: flex; flex-direction: column; gap: 2px; }   /* 2px surface gap between a row's bars */
+  .tl-sbar { display: flex; align-items: center; gap: 8px; height: 14px; }
+  .tl-sbar-fill { display: block; height: 10px; min-width: 2px; border-radius: 0 4px 4px 0; }   /* anchored at the baseline, rounded data-end */
+  .tl-sbar-val { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-600); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tl-slegend { display: flex; gap: 14px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-600); }
+  .tl-slegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .tl-smoved { margin: 12px 0 0; font-size: var(--fs-sm); color: var(--ink-600); }
+  .tl-stext { margin: 6px 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--ink-700); line-height: 1.6; }
+  .tl-stext small { color: var(--ink-450); font-weight: 600; }
+  @media (max-width: 640px) { .tl-sbar-row { grid-template-columns: 1fr; gap: 4px; } }
   .tl-linkrow b { display: block; font-weight: 700; font-size: var(--fs-sm); color: var(--ink-900); }
   .tl-linkrow .mono { display: block; font-size: var(--fs-sm); color: var(--ink-450); margin-top: 2px; word-break: break-all; }
   .tl-inline-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -859,11 +875,11 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p3b"></script>
+<script src="assets/tilli-api.js?v=20261026p5"></script>
 <script src="assets/tilli-history.js?v=20261026p3"></script>
 <script src="assets/calendar-form.js?v=20261026p3b"></script>
-<script src="assets/tilli-org-data.js?v=20261026p4"></script>
+<script src="assets/tilli-org-data.js?v=20261026p5"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261026p4c"></script>
+<script src="assets/tilli-admin.js?v=20261026p5"></script>
 </body>
 </html>
