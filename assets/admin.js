@@ -587,17 +587,24 @@
     // Tilli Team drilled in from the internal platform — offer a way back to it.
     var fromTilli = qp.get('from') === 'tilli' || role === 'tilli';
     var fromGroup = qp.get('from') === 'group' && qp.get('group');
-    m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span></div>' +
+    // School years — the header picker is hidden on phones, so the years live here too.
+    var yrs = AD.years || [], vy = AD.viewYear, boards = window.TILLI_CREATED && window.TILLI_CREATED.boards;
+    var yearItems = yrs.length > 1 ? '<div class="ad-acct-sec">School year</div>' + yrs.slice().reverse().map(function (y) {
+      var on = vy && vy.id === y.id;
+      return '<button class="ui-menu-item' + (on ? ' on' : '') + '" data-amyear="' + esc(y.id) + '"' + (on ? ' aria-current="true"' : '') + '>' +
+        (on ? '✓ ' : '') + esc(y.label) + (y.status === 'current' ? ' · current' : ' · read-only') + '</button>';
+    }).join('') : '';
+    m.innerHTML = '<div class="who"><b>' + esc(me.name) + '</b><span>' + esc(me.email) + '</span>' + (boards ? '<span>' + esc(boards.join(' + ')) + ' only</span>' : '') + '</div>' +
       (fromTilli ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
       (fromGroup ? '<button class="ui-menu-item" data-am="group">← Group view</button>' : '') +
-      '<button class="ui-menu-item" data-am="switch">Switch school year</button>' +
+      yearItems +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
     document.body.appendChild(m);
     placeAcctMenu(m, anchor);
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     if (fromGroup) m.querySelector('[data-am="group"]').addEventListener('click', function () { location.href = 'tilli.html?group=' + encodeURIComponent(qp.get('group')); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); } catch (e) {} location.href = 'index.html'; });
-    m.querySelector('[data-am="switch"]').addEventListener('click', function () { toast('Only one academic year of data exists yet.'); closeAcctMenu(); });
+    m.querySelectorAll('[data-amyear]').forEach(function (b) { b.addEventListener('click', function () { closeAcctMenu(); if (!(vy && vy.id === b.dataset.amyear)) switchYear(b.dataset.amyear); }); });
     setTimeout(function () { document.addEventListener('click', closeAcctMenu, { once: true }); }, 0);
   }
   function closeAcctMenu() { var m = document.getElementById('ad-acct-menu'); if (m) m.remove(); }

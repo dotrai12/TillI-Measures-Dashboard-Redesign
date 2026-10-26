@@ -266,7 +266,7 @@ Open issues that came out of those changes:
 **Rollout fix plan — Phase 1** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
 - **One school code is now also the teacher sign-up code.** Anyone holding a parent or student link (which contains the code) can sign up as a teacher. *Possible fix:* teachers who self-join wait for the school admin to confirm them.
 - **Existing teacher join codes stopped working.** Schools that had shared the old 6-letter join code must share the school code instead (e.g. HROK-4410).
-- **The year picker is hidden on phones** (the header year chip is desktop-only). On a phone, past years are reachable only from the Outcomes / Reports empty state. *Possible fix:* put the picker in the account menu on mobile.
+- ~~**The year picker is hidden on phones.**~~ Fixed 26 Oct 2026: the account menu lists every school year (current + read-only past years) on any screen size; the old "Switch school year" placeholder is gone.
 - **Past-year view reloads the page.** The dashboard is built once per year, so switching years is a full reload. Fine for now; a real backend would fetch per year.
 - **History isn't filtered by year** in the past-year view — it shows every change at the school.
 - **Grades & sections additions on wizard-created schools still don't persist** (existing issue) — a section added there to a section-less grade disappears on reload.
