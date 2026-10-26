@@ -237,6 +237,8 @@
   // Small live counts on nav items (open issues, expiring invites).
   function navBadge(key) {
     if (key === 'issues') { var n = ORG.issues.filter(function (i) { return i.status === 'open'; }).length; return n || ''; }
+    // Children a teacher added past their class size, waiting for approval (any school).
+    if (key === 'schools' && !GROUP && window.TilliAPI && window.TilliAPI.pendingStudents) return window.TilliAPI.pendingStudents().length || '';
     return '';
   }
 
@@ -452,7 +454,7 @@
     'zero-students': { icon: '◎', tone: 'warn' }, 'no-role': { icon: '◌', tone: 'low' },
     invites: { icon: '✉', tone: 'warn' }, duplicates: { icon: '⧉', tone: 'warn' },
     drafts: { icon: '✎', tone: 'low' }, deployments: { icon: '⏻', tone: 'warn' },
-    'student-requests': { icon: '＋', tone: 'warn' }, 'short-classes': { icon: '▢', tone: 'low' }, 'year-requests': { icon: '↻', tone: 'warn' },
+    'student-requests': { icon: '＋', tone: 'warn' }, 'short-classes': { icon: '▢', tone: 'low' }, 'year-requests': { icon: '↻', tone: 'warn' }, calendars: { icon: '📅', tone: 'warn' },
   };
   SCREEN.controlroom = function (params, body) {
     var cr = ORG.server.controlRoom();
@@ -597,13 +599,14 @@
     var grouped = !q && !schState.flag;
     var yearAsk = {};
     if (schState.flag === 'year-request' && window.TilliAPI) window.TilliAPI.openYearRequests().forEach(function (r) { yearAsk[r.school_id] = 1; });
+    if (schState.flag === 'calendar' && window.TilliAPI) window.TilliAPI.calendarQueue().forEach(function (r) { yearAsk[r.school_id] = 1; });
 
     // Every school in the current view (tab + country + flag + search) — the flat
     // list, and what the Schools CSV exports even when the screen shows groups.
     var rows = all.filter(function (s) {
       if (tabActive ? s.archived : !s.archived) return false;
       if (schState.flag === 'zero-students' && s.students !== 0) return false;
-      if (schState.flag === 'year-request' && !yearAsk[s.id]) return false;
+      if ((schState.flag === 'year-request' || schState.flag === 'calendar') && !yearAsk[s.id]) return false;
       if (q && (s.name + ' ' + s.code).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
@@ -633,7 +636,7 @@
         : '<div class="ui-empty">' + (all.length ? 'No schools match.' : 'No schools yet — add your first school.') + '</div>';
     }
 
-    var flagName = { 'zero-students': 'schools with 0 students', 'year-request': 'schools asking to start next year' }[schState.flag];
+    var flagName = { 'zero-students': 'schools with 0 students', 'year-request': 'schools asking to start next year', calendar: 'school calendars to review' }[schState.flag];
     var flagBanner = flagName
       ? '<div class="tl-filterbanner">Filtered to <b>' + flagName + '</b> · <button class="btn-link" id="sch-clearflag">clear</button></div>' : '';
 
@@ -732,6 +735,7 @@
         '<a class="btn btn-outline btn-sm" href="tilli.html?group=' + encodeURIComponent(g.id) + '&from=tilli&email=' + encodeURIComponent(me.email) + '" style="text-decoration:none" title="Open the School Group Admin view of this group — what its group admin sees">Group admin view →</a>' +
         '<button class="btn btn-outline btn-sm" id="grp-dl-assess" title="Assessment completion log for every school in this group — responses vs expected per teacher / parent / student assessment.">↓ Assessments CSV</button>' +
         '<button class="btn btn-outline btn-sm" id="grp-dl-staff" title="Every staff member across this group — name, email, role and sections.">↓ Staff CSV</button>' +
+        (g.archived ? '' : '<button class="btn btn-outline btn-sm" id="grp-calendar" title="Enter one school calendar and use it for every active school in this group.">One calendar for all</button>') +
         '<button class="btn btn-outline btn-sm" id="grp-manage" title="Rename, archive or delete this group.">Manage ⋯</button>' +
         (g.archived ? '' : '<button class="btn btn-primary btn-sm" id="grp-add">+ Add School</button>')) +
       (g.archived ? '<div class="tl-filterbanner">This group was <b>archived</b>' + (g.archivedAt ? ' on ' + esc(fmtJoined(g.archivedAt)) : '') + ' — its schools are archived and its group admin sees an archived notice. <button class="btn-link" id="grp-unarch">Un-archive group</button></div>' : '') +
@@ -756,6 +760,7 @@
     body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); go('school', { id: b.dataset.open }); }); });
     wireIssueChips(body);
     var ab = body.querySelector('#grp-add'); if (ab) ab.addEventListener('click', openAddSchool);
+    var gc = body.querySelector('#grp-calendar'); if (gc) gc.addEventListener('click', function () { openGroupCalendar(g, inGroup.filter(function (x) { return !x.archived; })); });
     var ua = body.querySelector('#grp-unarch'); if (ua) ua.addEventListener('click', function () { archiveGroupFlow(g); });
     var gm = body.querySelector('#grp-manage'); if (gm) gm.addEventListener('click', function () { openGroupMenu(g.id); });
     body.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy); }); });
@@ -1121,6 +1126,7 @@
     { key: 'review', label: 'Review' },
   ];
   function secLetter(i) { return String.fromCharCode(65 + i); }
+  var WIZ_SECTION_SIZE = 30;   // Add School: default expected students in a new section
 
   // Canonical grade ordering: early years (Nursery → KG) first, then Grade 1..N
   // numerically, then any unrecognised custom names alphabetically at the end.
@@ -1225,6 +1231,9 @@
             '<label class="field flex-1">and ends *<input class="input" type="date" id="ws-yend" value="' + esc(d.yearEnd) + '"></label>' +
           '</div>' +
           '<p class="tl-muted m-0" id="ws-yearhint">' + esc(yearHint()) + '</p>' +
+          '<div class="field"><span>School calendar <span class="tl-muted" style="font-weight:400">(optional)</span></span>' +
+            '<div class="tl-inline-actions"><label class="btn btn-outline btn-sm">Upload a PDF or photo<input type="file" accept=".pdf,image/*" class="hidden" id="ws-calfile"></label>' +
+            '<span class="tl-muted" id="ws-calname">' + (d.calFileName ? esc(d.calFileName) + ' — we’ll read the dates after the school is created' : 'Or add it later: Assessments → Plan from calendar.') + '</span></div></div>' +
         '</div>';
     }
 
@@ -1291,6 +1300,7 @@
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
           row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
           row('Academic year', fmtJoined(d.yearStart) + ' → ' + fmtJoined(d.yearEnd)) +
+          (d.calFileName ? row('School calendar', d.calFileName + ' (read after create — check it)') : '') +
           (d.admin.email && d.boards.length > 1 ? row('Admin board access', d.admin.boards ? d.admin.boards.join(' + ') + ' only' : 'All boards') : '') +
           row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
           row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base) + (d.boards.length > 1 ? ' · ' + (g.board || d.boards[0]) : '') + (!g.sections.length && !(parseInt(g.students, 10) || 0) ? ' (no sections yet)' : ''); }).join(', ')) +
@@ -1361,6 +1371,10 @@
         });
         [ys, ye].forEach(function (x) { x.addEventListener('change', function () { d.yearStart = ys.value; d.yearEnd = ye.value; d.yearTouched = true; yh.textContent = yearHint(); syncNext(); }); });
         cityEl.addEventListener('change', function () { d.city = cityEl.value; syncNext(); });
+        document.getElementById('ws-calfile').addEventListener('change', function (e) {
+          var f = e.target.files && e.target.files[0]; if (!f) return;
+          d.calFileName = f.name; document.getElementById('ws-calname').textContent = f.name + ' — we’ll read the dates after the school is created';
+        });
         var sel = document.getElementById('ws-group');
         var row = document.getElementById('ws-newgroup-row');
         sel.addEventListener('change', function () {
@@ -1393,7 +1407,9 @@
           if (!g.sections.length && (parseInt(g.students, 10) || 0) > 0) {
             g.sections.push({ name: secLetter(0), base: secLetter(0), students: parseInt(g.students, 10) || 0 }); g.students = 0;
           } else {
-            g.sections.push({ name: secLetter(g.sections.length), base: secLetter(g.sections.length), students: 0 });
+            // A new section starts at a typical class size (editable) — 0 would mean "no size",
+            // and then every child a teacher adds would need an admin's approval.
+            g.sections.push({ name: secLetter(g.sections.length), base: secLetter(g.sections.length), students: WIZ_SECTION_SIZE });
           }
           rerenderStructure();
         }); });
@@ -1472,8 +1488,11 @@
         var s = ORG.server.createSchool(Object.assign({}, d, { joined: fmtJoined(d.joined) }));
         ORG.server.logAudit(me.name, 'school.add', s.name, 'school', s.id);
         if (d.admin.email) ORG.server.logAudit(me.name, 'invitation.send', d.admin.email, 'invitation', s.id);
+        // Calendar uploaded in Profile: read it into the new school, waiting for review.
+        var calRead = d.calFileName && window.TilliAPI ? window.TilliAPI.readCalendarFile(s.id, d.calFileName) : null;
+        if (calRead) window.TilliAPI.saveCalendar(s.id, calRead, me.email, { status: 'submitted', source: 'upload', fileName: d.calFileName });
         close();
-        toast(s.name + ' created' + (draftSectionTotal(d) ? ' with ' + draftSectionTotal(d) + ' sections.' : '.'));
+        toast(s.name + ' created' + (draftSectionTotal(d) ? ' with ' + draftSectionTotal(d) + ' sections.' : '.') + (calRead ? ' Calendar read — check it in Assessments → Plan from calendar.' : ''));
         go('school', { id: s.id });
       }, 1100);
     }
@@ -1600,6 +1619,7 @@
     if (!room) return ' <i>' + fallback + '</i>';
     var html = ' <i>' + room.added + (room.expected != null ? '/' + room.expected : '') + '</i>';
     if (room.expected == null) html += '<em class="tl-room-tag warn" title="No expected class size set — teachers can’t add students here without an admin’s approval.">no size set</em>';
+    else if (!room.confirmed) html += '<em class="tl-room-tag warn" title="Set automatically from the headcount — confirm it in Settings → Grades & sections.">not confirmed</em>';
     else if (room.left) html += '<em class="tl-room-tag" title="' + room.left + ' still to add before this class is complete.">' + room.left + ' to add</em>';
     if (room.pending) html += '<em class="tl-room-tag pend" title="New students a teacher added past the expected size — waiting for approval.">+' + room.pending + ' pending</em>';
     return html;
@@ -2065,6 +2085,10 @@
             });
           });
           placed.sort(function (a, b) { return a.pos - b.pos; }).forEach(function (x) { (x.ordered ? ord : any)[byId[x.id].mode].push(x.id); });
+        } else {
+          // Not deployed yet: dates the Tilli team applied from the school calendar are the draft.
+          var calc = window.TilliAPI.calendarFor(s.id), ap = calc && calc.applied && calc.applied[phase];
+          if (ap) { rec.start = ap.start; rec.end = ap.end; rec.fromCalendar = true; }
         }
       } else {
         var md = ORG.deployments.filter(function (x) { return x.schoolId === s.id && x.phase === phase; });
@@ -2290,6 +2314,7 @@
       '</span>' + deployBtn + '</div>' +
       (badDates ? '<div class="dep-phase-when dep-date-err" role="alert">The end date (' + esc(fmtJoined(p.end)) + ') is before the start date (' + esc(fmtJoined(p.start)) + '). Fix one of them' + (p.deployed ? ' — until then the saved dates stay as they were.' : ' to deploy.') + '</div>'
         : ps.st !== 'none' ? '<div class="dep-phase-when st-' + ps.st + '">' + esc(tlDateLine(ps)) + '</div>'
+        : p.fromCalendar && ready ? '<div class="dep-phase-when">Dates from the school calendar — ready to deploy; it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'
         : (!ready ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>' : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'));
 
     var chip = function (id, n, prev) {
@@ -2607,11 +2632,15 @@
     var newYearBtn = !rd ? '' : ready
       ? '<button class="btn btn-outline btn-sm" data-yearnew title="Close ' + esc(cur.label) + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>'
       : '<button class="btn-link tl-yearearly" data-yearnew data-early="1" title="Start new year appears once every assessment window in ' + esc(cur.label) + ' has ended. Use this only if the school has asked to close the year early.">Close the year early…</button>';
+    var cal = rd && window.TilliAPI.calendarFor(s.id);
+    var calNote = cal && cal.status === 'submitted' ? '<div class="ui-note info mt-2"><span aria-hidden="true">📅</span><span><b>' + esc(cal.submittedByName || 'The school') + '</b> sent the school calendar on ' + esc(fmtJoined(localISO(new Date(cal.submittedAt)))) + ' — <button class="btn-link" data-yearcal>review it and apply the dates</button>.</span></div>' : '';
+    var calBtn = rd ? '<button class="btn btn-outline btn-sm" data-yearcal title="Suggest Baseline / Midline / Endline dates from the school’s terms, exams and holidays.">Plan from calendar</button>' : '';
     var ask = rd && window.TilliAPI.yearRequest(s.id), askNote = ask && ask.status === 'open'
       ? '<div class="ui-note warn mt-2"><span aria-hidden="true">↻</span><span><b>' + esc(ask.byName || ask.by) + '</b> asked on ' + esc(fmtJoined(localISO(new Date(ask.at)))) + ' to start the next academic year.</span></div>' : '';
     return '<div class="ui-card mb-gap tl-yearbar"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Academic year</h3>' +
-        '<p class="ui-mod-note">' + (cur ? esc(yearRange(cur)) + ' · year ' + n + ' with Tilli' : '') + '</p>' + askNote + '</div>' +
+        '<p class="ui-mod-note">' + (cur ? esc(yearRange(cur)) + ' · year ' + n + ' with Tilli' : '') + '</p>' + askNote + calNote + '</div>' +
         '<div class="tl-inline-actions">' +
+          calBtn +
           (viewingCur ? '<button class="btn btn-outline btn-sm" data-yearedit title="Change this year’s name or dates. Dates are set per school.">Edit dates</button>' : '') +
           newYearBtn +
         '</div></div>' + seg + '</div>';
@@ -2693,6 +2722,92 @@
         close(); toast('Year updated.'); go('school', { id: s.id, tab: 'assessments' });
       }, 'Save');
   }
+  // ---- One calendar for a whole school group ----
+  // Saves it to every active live school in the group and applies the suggested
+  // dates to each school's phases that aren't deployed yet (drafts only).
+  function openGroupCalendar(g, schools) {
+    var live = schools.filter(tlUsesApi), A = window.TilliAPI, form;
+    if (!live.length) { toast('None of this group’s schools are live yet.'); return; }
+    var boards = []; live.forEach(function (x) { schoolBoardList(x).forEach(function (b) { if (boards.indexOf(b) < 0) boards.push(b); }); });
+    openModal('One calendar for ' + g.name,
+      '<p class="tl-muted">For groups whose schools share a calendar. It’s saved to <b>' + live.length + ' school' + (live.length === 1 ? '' : 's') + '</b> (' + esc(live.map(function (x) { return x.name; }).join(', ')) + '), and each one’s Baseline / Midline / Endline dates are set as drafts where nothing is deployed yet. Each school’s own year must cover these dates.</p>' +
+      '<div id="gc-form"></div>',
+      function (close) {
+        if (form.hasErrors()) { toast('Fix the dates that end before they start.'); return false; }
+        var c = form.read(); if (!c.terms.length) { toast('Add at least one term.'); return false; }
+        var n = 0;
+        live.forEach(function (x) {
+          if (!A.saveCalendar(x.id, c, me.email, form.meta()).ok) return;
+          var sug = A.suggestWindows(x.id, c), dates = {};
+          TL_PHASES.forEach(function (ph) { if (sug && sug[ph] && !tlPlan(x, ph).deployed) dates[ph] = { start: sug[ph].start, end: sug[ph].end }; });
+          if (Object.keys(dates).length) { A.applyCalendarDates(x.id, dates, me.email); Object.keys(dates).forEach(function (ph) { var p = tlPlan(x, ph); p.start = dates[ph].start; p.end = dates[ph].end; p.fromCalendar = true; }); }
+          n++;
+        });
+        ORG.server.logAudit(me.name, 'phase.dates', g.name + ': one calendar for ' + n + ' schools', 'group');
+        close(); toast('Calendar saved to ' + n + ' school' + (n === 1 ? '' : 's') + ' — draft dates set where nothing is deployed.');
+      }, 'Save to all schools');
+    form = window.TilliCalendarForm.mount(document.getElementById('gc-form'), null, { boards: boards,
+      onUpload: function (f) { return A.readCalendarFile(live[0].id, f.name); } });
+  }
+
+  // ---- Plan from calendar ----
+  // Deployed windows that now overlap an exam block in the school calendar.
+  function calendarClashHtml(s) {
+    var list = tlUsesApi(s) && window.TilliAPI.calendarConflicts ? window.TilliAPI.calendarConflicts(s.id) : [];
+    return list.map(function (c) {
+      return '<div class="ui-note warn mb-gap"><span aria-hidden="true">📅</span><span><b>Calendar changed: ' + esc(c.phase) + ' now overlaps ' + esc(c.exam.name + (c.exam.board ? ' (' + c.exam.board + ')' : '')) + '</b> (' +
+        esc(fmtJoined(c.exam.start)) + ' → ' + esc(fmtJoined(c.exam.end)) + '). It’s ' + esc(c.status.toLowerCase()) + ' for ' + esc(fmtJoined(c.start)) + ' → ' + esc(fmtJoined(c.end)) + '.' +
+        (c.suggestion ? ' <button class="btn-link" data-calshift="' + esc(c.phase) + '">Shift it to ' + esc(fmtJoined(c.suggestion.start)) + ' → ' + esc(fmtJoined(c.suggestion.end)) + '</button>' : '') + '</span></div>';
+    }).join('');
+  }
+  // Review / enter the calendar, see suggested windows with reasons, and apply
+  // them to the planner as DRAFT dates (deployed phases are never touched).
+  function openPlanFromCalendar(s) {
+    var A = window.TilliAPI, cal = A.calendarFor(s.id), form, sug = null;
+    var deployed = {}; TL_PHASES.forEach(function (ph) { deployed[ph] = tlPlan(s, ph).deployed; });
+    var note = cal && cal.status === 'submitted'
+      ? '<div class="ui-note info mb-3"><span aria-hidden="true">📅</span><span><b>' + esc(cal.submittedByName || 'The school') + '</b> sent this on ' + esc(fmtJoined(localISO(new Date(cal.submittedAt)))) + (cal.source === 'upload' && cal.fileName ? ' (read from ' + esc(cal.fileName) + ')' : '') + '. Check it, then apply the dates.</span></div>'
+      : cal && cal.status === 'applied' ? '<div class="ui-note mb-3"><span aria-hidden="true">✓</span><span>Dates from this calendar were applied on ' + esc(fmtJoined(localISO(new Date(cal.appliedAt)))) + '. Change anything below and apply again.</span></div>' : '';
+    openModal('Plan from calendar · ' + s.name, note + '<div id="pfc-form"></div>' +
+      '<div class="ui-eyebrow mt-3 mb-2">Suggested windows</div><div id="pfc-sugg" class="cal-sugg"></div>',
+      function (close) {
+        if (form.hasErrors()) { toast('Fix the dates that end before they start.'); return false; }
+        var c = form.read(); if (!c.terms.length) { toast('Add at least one term.'); return false; }
+        var r = A.saveCalendar(s.id, c, me.email, form.meta()); if (!r.ok) { toast('Couldn’t save the calendar.'); return false; }
+        var dates = {};
+        document.querySelectorAll('[data-pfc]:checked').forEach(function (cb) { var w = sug && sug[cb.dataset.pfc]; if (w) dates[cb.dataset.pfc] = { start: w.start, end: w.end }; });
+        if (!Object.keys(dates).length) { close(); toast('Calendar saved — no dates applied.'); go('school', { id: s.id, tab: 'assessments' }); return; }
+        A.applyCalendarDates(s.id, dates, me.email);
+        Object.keys(dates).forEach(function (ph) { var p = tlPlan(s, ph); p.start = dates[ph].start; p.end = dates[ph].end; p.fromCalendar = true; });
+        ORG.server.logAudit(me.name, 'phase.dates', Object.keys(dates).join(', ') + ' from the school calendar', 'phase', s.id);
+        close(); toast(Object.keys(dates).join(', ') + ' dates set from the calendar — check the planner, then deploy.');
+        go('school', { id: s.id, tab: 'assessments' });
+      }, 'Apply to planner');
+    // "Save calendar" without touching the planner.
+    var foot = document.querySelector('#tl-modal-root .ui-modal-foot');
+    foot.insertAdjacentHTML('afterbegin', '<button class="btn-link" style="margin-right:auto" id="pfc-save">Save calendar only</button>');
+    document.getElementById('pfc-save').addEventListener('click', function () {
+      var c = form.read(); if (!c.terms.length) { toast('Add at least one term.'); return; }
+      var r = A.saveCalendar(s.id, c, me.email, form.meta()); toast(r.ok ? 'Calendar saved.' : 'Couldn’t save the calendar.');
+    });
+    function drawSugg() {
+      var box = document.getElementById('pfc-sugg'), c = form.read();
+      if (!c.terms.length) { sug = null; box.innerHTML = '<div class="ui-empty">Add at least one term to see suggested windows.</div>'; return; }
+      sug = A.suggestWindows(s.id, c);
+      box.innerHTML = TL_PHASES.map(function (ph) {
+        var w = sug[ph]; if (!w) return '';
+        var dep = deployed[ph];
+        return '<label class="cal-sugg-row' + (dep ? ' locked' : '') + '"><b><input type="checkbox" data-pfc="' + ph + '"' + (dep ? ' disabled' : ' checked') + '> ' + ph + '</b>' +
+          '<span class="when">' + esc(fmtJoined(w.start) + ' → ' + fmtJoined(w.end)) + (dep ? ' · already deployed — change it in the planner' : '') + '</span><span class="why">' + esc(w.reason) + '</span></label>';
+      }).join('') +
+        (sug.problems.length ? '<div class="ui-note warn"><span aria-hidden="true">⚠️</span><span>' + sug.problems.map(esc).join(' ') + '</span></div>' : '') +
+        '<p class="tl-muted m-0">Applying fills the planner dates as drafts — nothing is deployed. Timing rules: Deployments → Scheduling rules.</p>';
+    }
+    form = window.TilliCalendarForm.mount(document.getElementById('pfc-form'), cal, { boards: schoolBoardList(s),
+      onUpload: function (f) { return A.readCalendarFile(s.id, f.name); }, onChange: drawSugg });
+    drawSugg();
+  }
+
   // Start next year: close this one (read-only), move children up by base grade, empty planner.
   function openNewYear(s, early) {
     var API = window.TilliAPI, rd = API.yearReadiness(s.id), cur = rd.year, token = 'CLOSE ' + cur.label;
@@ -2727,6 +2842,9 @@
         '<label class="field">Name<input class="input" id="ny-label" value="' + esc(autoLabel(nStart, nEnd)) + '"></label>' +
         '<div class="ui-eyebrow mt-3">3 · Students</div>' +
         '<p class="tl-muted m-0">By base grade — renamed classes move with their base (Grade 1 A → Grade 2 A).</p>' + grades +
+        '<div class="ui-eyebrow mt-3">4 · Next year’s calendar <span class="tl-muted" style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>' +
+        '<div class="tl-inline-actions"><label class="btn btn-outline btn-sm">Upload a PDF or photo<input type="file" accept=".pdf,image/*" class="hidden" id="ny-calfile"></label>' +
+          '<span class="tl-muted" id="ny-calname">Holidays move every year (Eid, Diwali, Poya days) — last year’s calendar isn’t copied.</span></div>' +
         '<label class="field mt-3">Type <b>' + esc(token) + '</b> to confirm<input class="input" id="ny-confirm" autocomplete="off" placeholder="' + esc(token) + '"></label>' +
       '</div>',
       function (close) {
@@ -2741,11 +2859,14 @@
           return false;
         }
         ORG.server.logAudit(me.name, 'year.start', s.name + ' · ' + r.year.label, 'school', s.id);
+        var nyFile = document.getElementById('ny-calfile').files[0];
+        if (nyFile) { var nyCal = API.readCalendarFile(s.id, nyFile.name); if (nyCal) API.saveCalendar(s.id, nyCal, me.email, { status: 'submitted', source: 'upload', fileName: nyFile.name }); }
         delete TL_PLAN[s.id]; delete TL_CHAIN[s.id]; delete TL_TAB[s.id]; delete HUB_YEAR[s.id];
         close();
         toast(r.year.label + ' started · ' + r.moved.promoted + ' moved up, ' + r.moved.retained + ' stayed, ' + r.moved.graduated + ' graduated.');
         go('school', { id: s.id, tab: 'assessments' });
       }, 'Start new year');
+    document.getElementById('ny-calfile').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; if (f) document.getElementById('ny-calname').textContent = f.name + ' — read into ' + 'the new year for you to check.'; });
     var save = document.getElementById('tl-save'), cf = document.getElementById('ny-confirm');
     save.classList.replace('btn-primary', 'btn-danger'); save.disabled = true;
     cf.addEventListener('input', function () { save.disabled = cf.value.trim().toUpperCase() !== token.toUpperCase(); });
@@ -2757,6 +2878,17 @@
     el.querySelectorAll('[data-year]').forEach(function (b) { b.addEventListener('click', function () { HUB_YEAR[s.id] = b.dataset.year; HUB.assessments(d, el); }); });
     var ed = el.querySelector('[data-yearedit]'); if (ed) ed.addEventListener('click', function () { openYearEdit(s, window.TilliAPI.currentYear(s.id)); });
     var ny = el.querySelector('[data-yearnew]'); if (ny) ny.addEventListener('click', function () { openNewYear(s, !!ny.dataset.early); });
+    el.querySelectorAll('[data-yearcal]').forEach(function (b) { b.addEventListener('click', function () { openPlanFromCalendar(s); }); });
+    // A deployed window that now clashes with the calendar: shift it to the suggestion.
+    el.querySelectorAll('[data-calshift]').forEach(function (b) { b.addEventListener('click', function () {
+      var c = window.TilliAPI.calendarConflicts(s.id).filter(function (x) { return x.phase === b.dataset.calshift; })[0];
+      if (!c || !c.suggestion) return;
+      var p = tlPlan(s, c.phase); p.start = c.suggestion.start; p.end = c.suggestion.end;
+      tlPersistDeploy(s, c.phase);
+      ORG.server.logAudit(me.name, 'phase.dates', c.phase + ': ' + p.start + ' → ' + p.end + ' (calendar)', 'phase', s.id);
+      toast(c.phase + ' moved to ' + fmtJoined(p.start) + ' → ' + fmtJoined(p.end) + '.');
+      go('school', { id: s.id, tab: 'assessments' });
+    }); });
   }
 
   HUB.assessments = function (d, el) {
@@ -2793,7 +2925,7 @@
         '<div class="dep-chains" id="dep-planner"></div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Links to share</h3><p class="ui-mod-note">Send these to ' + esc(s.name) + '. Each one opens straight into this school.</p></div></div>' + links + grpNote + '</div>' +
       '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>' + (yrs ? yearOverYearHtml(s, yrs) : '');
-    if (yearBar) { el.insertAdjacentHTML('afterbegin', yearBar); wireYearBar(s, d, el); }
+    if (yearBar) { el.insertAdjacentHTML('afterbegin', calendarClashHtml(s)); el.insertAdjacentHTML('afterbegin', yearBar); wireYearBar(s, d, el); }
     el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
     var gl = el.querySelector('[data-grouplinks]'); if (gl) gl.addEventListener('click', function () { go('group', { id: gl.dataset.grouplinks }); });
     renderPlanner(d, el.querySelector('#dep-planner'));
@@ -3058,7 +3190,7 @@
     var short = [];
     ORG.activeSchools().forEach(function (s) {
       (A && A.schoolRooms ? A.schoolRooms(s.id) : []).forEach(function (r) {
-        if (r.expected == null || r.added < r.expected) short.push({ s: s, r: r });
+        if (r.expected == null || !r.confirmed || r.added < r.expected) short.push({ s: s, r: r });
       });
     });
     var view = params.view === 'classes' ? 'classes' : 'waiting';
@@ -3076,9 +3208,9 @@
             var r = x.r;
             return '<tr><td><a class="btn-link" href="' + href('school', { id: x.s.id }) + '">' + esc(x.s.name) + '</a></td><td>' + esc(A.sectionLabel ? A.sectionLabel(x.s.id, r.section_id) : r.name) + '</td>' +
               '<td>' + r.added + (r.pending ? ' <span class="tl-room-tag pend">+' + r.pending + ' pending</span>' : '') + '</td>' +
-              '<td>' + (r.expected == null ? '<span class="tl-room-tag warn">Not set</span>' : r.expected) + '</td>' +
-              '<td>' + (r.expected == null ? 'Teachers can’t add without approval' : (r.expected - r.added) + ' still to add') + '</td>' +
-              '<td class="r"><button class="btn-link" data-cssize="' + i + '">Set size</button></td></tr>';
+              '<td>' + (r.expected == null ? '<span class="tl-room-tag warn">Not set</span>' : r.expected + (r.confirmed ? '' : ' <span class="tl-room-tag warn" title="Set automatically from the headcount — an admin hasn’t checked it.">not confirmed</span>')) + '</td>' +
+              '<td>' + (r.expected == null ? 'Teachers can’t add without approval' : r.added < r.expected ? (r.expected - r.added) + ' still to add' : 'Check the size is right') + '</td>' +
+              '<td class="r">' + (r.expected != null && !r.confirmed ? '<button class="btn-link" data-csconfirm="' + i + '">Confirm ' + r.expected + '</button> · ' : '') + '<button class="btn-link" data-cssize="' + i + '">Set size</button></td></tr>';
           }).join('') + '</tbody></table></div></div>'
         : '<div class="tl-allclear">Every class has all its expected students. 🌱</div>';
     }
@@ -3088,6 +3220,11 @@
     var pend = body.querySelector('#cs-pending');
     if (pend) wirePendingTable(pend, waiting, function () { go('class-sizes', {}); });
     body.querySelectorAll('[data-cssize]').forEach(function (b) { b.addEventListener('click', function () { openStructureEditor(short[+b.dataset.cssize].s); }); });
+    body.querySelectorAll('[data-csconfirm]').forEach(function (b) { b.addEventListener('click', function () {
+      var x = short[+b.dataset.csconfirm], r = A.setSectionExpected(x.s.id, x.r.section_id, x.r.expected, me.email);
+      if (r.ok) { ORG.server.logAudit(me.name, 'school.size', x.r.name + ' confirmed at ' + x.r.expected, 'school', x.s.id); toast(x.r.name + ': ' + x.r.expected + ' confirmed.'); }
+      go('class-sizes', { view: 'classes' });
+    }); });
   };
 
   SCREEN.merge = function (params, body) {
@@ -3536,7 +3673,36 @@
       '</div><div id="dep-panel"></div>';
     (panels[tab])(params, document.getElementById('dep-panel'));
     body.querySelectorAll('[data-deptab]').forEach(function (b) { b.addEventListener('click', function () { go('deployments', { tab: b.dataset.deptab }); }); });
+    if (tab === 'list' && !GROUP && window.TilliAPI && window.TilliAPI.schedulingRules) {
+      body.insertAdjacentHTML('beforeend', schedulingRulesHtml());
+      wireSchedulingRules(body);
+    }
   };
+  // Timing rules behind "Plan from calendar" — one set for every school, editable here.
+  var SCHED_FIELDS = [
+    { k: 'baselineWeeksIn', label: 'Baseline starts', unit: 'weeks after Term 1 starts', tip: 'Gives children time to settle before the first check-in.' },
+    { k: 'windowWeeks', label: 'Each window lasts', unit: 'weeks', tip: 'Length of every Baseline / Midline / Endline window, before holidays stretch it.' },
+    { k: 'midlineWeeksIn', label: 'Midline starts', unit: 'weeks into the middle term', tip: 'Midline is placed in the middle term (or halfway through the year with fewer than two terms).' },
+    { k: 'midlineGapWeeks', label: 'Midline is at least', unit: 'weeks after Baseline ends', tip: 'Enough time between check-ins for growth to show.' },
+    { k: 'endlineBufferWeeks', label: 'Endline ends', unit: 'weeks before the final exams', tip: 'Finishes before the exam rush (or the last term’s end when there are no exams).' },
+  ];
+  function schedulingRulesHtml() {
+    var r = window.TilliAPI.schedulingRules();
+    return '<div class="ui-card mt-gap" id="sched-rules"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Scheduling rules</h3><p class="ui-mod-note">Used by <b>Plan from calendar</b> on every school. Windows never overlap an exam block and stretch over holidays.</p></div></div>' +
+      '<div class="tl-stack">' + SCHED_FIELDS.map(function (f) {
+        return '<label class="tl-schedrow" title="' + esc(f.tip) + '"><span>' + esc(f.label) + '</span><input type="number" min="' + (f.k === 'windowWeeks' ? 1 : 0) + '" max="52" class="input sm" data-sched="' + f.k + '" value="' + r[f.k] + '"><span class="tl-muted">' + esc(f.unit) + '</span></label>';
+      }).join('') + '</div></div>';
+  }
+  function wireSchedulingRules(body) {
+    body.querySelectorAll('[data-sched]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var patch = {}; patch[inp.dataset.sched] = inp.value;
+        var r = window.TilliAPI.setSchedulingRules(patch); inp.value = r[inp.dataset.sched];
+        ORG.server.logAudit(me.name, 'deployment.rules', inp.dataset.sched + ' = ' + r[inp.dataset.sched], 'deployment');
+        toast('Scheduling rule saved — applies the next time a calendar is planned.');
+      });
+    });
+  }
 
   // Mock portfolio rows have no academic year of their own — label them with
   // the year their window starts in (Jun → May), like the seeded schools.
@@ -4460,7 +4626,7 @@
     return ({ 'year.start': 'Started academic year', 'template.publish': 'Published template', 'template.create': 'Created template', 'template.duplicate': 'Duplicated template', 'template.delete': 'Deleted template', 'template.edit': 'Edited template', 'template.archive': 'Archived template', 'template.unarchive': 'Restored template',
       'student.merge': 'Merged students', 'student.delete': 'Deleted students', 'student.add': 'Imported students', 'student.edit': 'Edited student',
       'student.approve': 'Approved new student', 'student.reject': 'Turned down new student', 'school.size': 'Set expected class size',
-      'school.add': 'Added school', 'school.code': 'Changed school code', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
+      'school.add': 'Added school', 'school.code': 'Changed school code', 'deployment.rules': 'Changed scheduling rules', 'school.archive': 'Archived school', 'school.delete': 'Deleted school', 'school.edit': 'Edited school', 'school.structure': 'Updated grades / sections', 'school.structure.auto': 'Auto-removed empty grade / section', 'role.change': 'Changed role',
       'deployment.create': 'Created deployment', 'deployment.end': 'Ended deployment',
       'observation.publish': 'Published observation phase', 'reflection.edit': 'Edited teacher reflection questions', 'reflection.reset': 'Reset teacher reflection questions', 'observation.access': 'Changed form access', 'selfguided.publish': 'Published self-guided game', 'selfguided.edit': 'Edited self-guided game',
       'group.create': 'Created group', 'group.rename': 'Renamed group', 'group.delete': 'Deleted group', 'group.archive': 'Archived group', 'group.unarchive': 'Restored group',
@@ -4665,6 +4831,7 @@
           var msg = res.added + ' student(s) added to ' + school.name + '.';
           if (res.skipped) msg += ' ' + res.skipped + ' skipped (duplicate / conflict).';
           toast(msg);
+          if (res.sized.length) { askClassSizes(school, res.sized, function () { go('school', { id: school.id, tab: 'students' }); }); return; }
         } else {
           toast(rows.length + ' student(s) imported to ' + school.name + '.');
         }
@@ -4679,16 +4846,40 @@
   function persistStudents(school, rows) {
     if (!(school.created && window.TilliAPI && school.coordinator && school.coordinator.email))
       return { persisted: false };
-    var actor = school.coordinator.email, added = 0, skipped = 0;
+    var actor = school.coordinator.email, added = 0, skipped = 0, before = {};
     rows.forEach(function (r) {
       var parts = String(r.name || '').trim().split(/\s+/);
       var first = parts.shift() || '', last = parts.join(' ');
       var secId = window.TilliAPI.ensureSection(school.id, r.grade || 'Grade 1', r.section || '');
+      if (!before[secId]) before[secId] = window.TilliAPI.sectionRoom(school.id, secId);
       var out = window.TilliAPI.addStudent({ actorEmail: actor, school_id: school.id, section_id: secId,
         student_id: r.admission, first: first, last: last, grade: r.grade, section: r.section, source: 'admin' });
       if (out && (out.result === 'created' || out.result === 'merged')) added++; else skipped++;
     });
-    return { persisted: true, added: added, skipped: skipped };
+    // Classes whose expected size the import just set — the admin is asked to confirm each.
+    var sized = Object.keys(before).map(function (id) { var a = window.TilliAPI.sectionRoom(school.id, id), b = before[id]; return a && b && a.expected !== b.expected && !a.confirmed ? a : null; }).filter(Boolean);
+    return { persisted: true, added: added, skipped: skipped, sized: sized };
+  }
+  // "Grade 2 A now has 15 — is that the whole class?" after an import sets class sizes.
+  function askClassSizes(school, rooms, after) {
+    openModal('Is that the whole class?',
+      '<p class="tl-muted">The import set these class sizes from the number of students in the file. Teachers can add up to the size; past it, each new child needs approval — so a half-imported class would block them.</p>' +
+      '<div class="tl-stack">' + rooms.map(function (r, i) {
+        return '<div class="tl-sizeask"><span><b>' + esc(r.name) + '</b> now has <b>' + r.added + '</b> student' + (r.added === 1 ? '' : 's') + '.</span>' +
+          '<label class="tl-check"><input type="radio" name="sz-' + i + '" value="yes" checked> Yes, ' + r.added + ' is the whole class</label>' +
+          '<label class="tl-check"><input type="radio" name="sz-' + i + '" value="no"> No, it should be <input type="number" min="1" class="input sm tl-sizein-n" data-szn="' + i + '" value="' + r.added + '" aria-label="Real size of ' + esc(r.name) + '"></label></div>';
+      }).join('') + '</div>',
+      function (close) {
+        rooms.forEach(function (r, i) {
+          var no = document.querySelector('input[name="sz-' + i + '"][value="no"]').checked;
+          var n = no ? document.querySelector('[data-szn="' + i + '"]').value : r.added;
+          window.TilliAPI.setSectionExpected(school.id, r.section_id, n, me.email);
+        });
+        ORG.server.logAudit(me.name, 'school.size', rooms.length + ' class size(s) confirmed after import', 'school', school.id);
+        close(); toast('Class sizes saved.'); after();
+      }, 'Save sizes');
+    // Typing a number picks "No, it should be…".
+    document.querySelectorAll('[data-szn]').forEach(function (inp) { inp.addEventListener('input', function () { document.querySelector('input[name="sz-' + inp.dataset.szn + '"][value="no"]').checked = true; }); });
   }
 
   // ============================================================
@@ -5071,7 +5262,8 @@
     'Structure': 'Grades and sections with students added / expected. Teachers can add up to the expected size; more needs approval. Empty ones are removed automatically after ' + ORG.emptyStructureTtlDays + ' days.',
     'Class sizes': 'Expected class sizes across schools: new students a teacher asked to add over the size, and classes still missing students.',
     'Waiting for approval': 'A teacher added these children past their class’s expected size. They can already be assessed. Approve to confirm them (the class size goes up), or turn down a duplicate or a child who isn’t at the school.',
-    'Classes missing students': 'Classes with fewer students added than expected, or with no expected size set. With no size set, teachers can’t add anyone without approval.',
+    'Scheduling rules': 'How Plan from calendar places Baseline, Midline and Endline. Changing a rule never moves dates that are already applied or deployed.',
+    'Classes missing students': 'Classes with fewer students added than expected, with no expected size set, or with a size set automatically that no admin has confirmed. With no size set, teachers can’t add anyone without approval.',
     'Onboarding': 'Setup checks worked out automatically from the school’s data: missing students or staff, no live assessment, empty sections close to removal.',
     'Assessment progress': 'Each phase (Baseline, Midline, Endline): whether it’s deployed, its window and completion so far.',
     'Open issues': 'Unresolved problem reports from this school.',
@@ -5746,6 +5938,7 @@
             var sizeHtml = room
               ? ' <i>' + room.added + '</i><label class="tl-sizein" title="Expected students in ' + esc(g.grade + ' ' + sec.name) + '. Teachers can add up to this many; more needs an admin’s approval. Leave empty and teachers can’t add anyone without approval.">of' +
                   '<input type="number" min="0" class="ws-secnum" data-size-sec="' + esc(room.section_id) + '" value="' + (room.expected || '') + '" placeholder="—" aria-label="Expected students in ' + esc(g.grade + ' ' + sec.name) + '"></label>' +
+                  (room.expected != null && !room.confirmed ? '<button class="btn-link tl-room-tag warn" data-size-ok="' + esc(room.section_id) + '" data-size-n="' + room.expected + '" title="Set automatically from the headcount. Confirm it if it’s right, or type the real size.">confirm</button>' : '') +
                   (room.pending ? '<em class="tl-room-tag pend">+' + room.pending + ' pending</em>' : '')
               : ' <i>' + sec.students + '</i>';
             return '<span class="tl-tree-sec"><input class="ws-secname" data-rs-grade="' + esc(g.grade) + '" data-rs="' + esc(sec.name) + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. The base stays the same.">' +
@@ -5796,6 +5989,12 @@
           toast(sel.dataset.sgboard + (sel.value ? ' follows ' + sel.value + '.' : ' has no board now.'));
         });
       });
+      // "confirm" on a size the system set — saves it as checked.
+      document.querySelectorAll('[data-size-ok]').forEach(function (b) { b.addEventListener('click', function () {
+        var r = window.TilliAPI.setSectionExpected(s.id, b.dataset.sizeOk, b.dataset.sizeN, me.email);
+        if (r.ok) toast(r.room.name + ': ' + r.room.expected + ' confirmed.');
+        openStructureEditor(s);
+      }); });
       // Expected class size — saved on change (blur / Enter).
       document.querySelectorAll('[data-size-sec]').forEach(function (inp) {
         inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });

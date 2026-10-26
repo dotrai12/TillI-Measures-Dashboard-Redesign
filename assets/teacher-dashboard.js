@@ -2769,7 +2769,8 @@
     a.sectionId = sec.id;
     return sec;
   }
-  function addSectionOK() { const a = S.add; return a.sectionId !== 'new' || !!(a.newGrade || '').trim(); }
+  // Teachers add children only to the school's own classes (no "+ New" — admins create classes).
+  function addSectionOK() { return S.add.sectionId !== 'new'; }
   function addSheetValid() { return addSectionOK() && S.add.rows.some(addRowComplete); }
   // Expected class size for the batch's section: the school admin or Tilli set
   // it; teachers add up to it, and past it a child waits for their approval.
@@ -2904,14 +2905,14 @@
       `<button class="ui-filterchip focus${a.sectionId === x.id ? ' on' : ''}" data-add-sec="${esc(x.id)}">${esc(secLabel(x))}</button>`).join('');
     const secPick = `<div class="add-secpick">
         <div class="ui-eyebrow mb-2">Grade · section</div>
-        <div class="add-secchips">${secChips}<button class="ui-filterchip focus${a.sectionId === 'new' ? ' on' : ''}" data-add-sec="new">+ New</button></div>
-        ${a.sectionId === 'new' ? `<div class="add-newsec"><input id="add-new-grade" class="input td-in" value="${esc(a.newGrade)}" placeholder="Grade (e.g. Grade 1)"><input id="add-new-section" class="input td-in" value="${esc(a.newSection)}" placeholder="Section (e.g. A)" maxlength="3"></div>` : ''}
+        ${secChips ? `<div class="add-secchips">${secChips}</div>` : ''}
+        ${a.sectionId === 'new' ? `<p class="add-room">You don’t have a class yet. Your school admin adds classes — ask them to put you in one, then add your students here.</p>` : ''}
       </div>`;
     const title = (sub) => `<h2 class="ui-title xl add-title">Add your students</h2>${sub ? `<p class="add-sub">${sub}</p>` : ''}`;
     let step = '';
     if (a.step === 'method') {
       step = `${title('')}${secPick}
-        <div class="onb-methods add-methods">
+        <div class="onb-methods add-methods"${a.sectionId === 'new' ? ' hidden' : ''}>
           <button class="onb-method focus" data-add-method="sheet"><span class="ic">🌱</span><span class="lb">Type them in</span></button>
           <button class="onb-method focus" data-add-method="csv"><span class="ic">📄</span><span class="lb">Upload a CSV</span></button>
           <button class="onb-method focus" data-add-method="pic"><span class="ic">📷</span><span class="lb">Upload a picture</span></button>

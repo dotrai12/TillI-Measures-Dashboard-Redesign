@@ -44,28 +44,28 @@ Source: Farah's walkthrough of `tilli.html` (create a school → deploy → Heri
 
 ---
 
-## Phase 3 — New features
+## Phase 3 — New features · ✅ done 26 Oct 2026
 
 ### 3A. Plan from calendar
 
 | # | Item | What changes | Status |
 |---|---|---|---|
-| 3.1 | **Calendar data** | One calendar per school: terms (start/end), exam blocks (each can be tagged to a board), holidays. Stored per academic year. | ⬜ |
-| 3.2 | **Timing rules, editable** | Defaults: Baseline starts 2 weeks into Term 1, runs 3 weeks · Midline starts ~2 weeks into the middle term, ≥10 weeks after Baseline ends · Endline ends ≥2 weeks before finals · windows stretch over holidays · never overlap an exam block (board-tagged exams only affect that board's grades). Editable on a **Scheduling rules** card on the Deployments page. | ⬜ |
-| 3.3 | **School admin puts the calendar in** | Leadership dashboard → **School calendar**: type it in, or **upload a PDF/photo** and Ask Tilli fills the form (simulated in this prototype; the school checks it). Status: *Waiting for Tilli*. | ⬜ |
-| 3.4 | **Tilli reviews and applies** | School → Assessments → Academic year card → **Plan from calendar** (also a Control Room card "Calendars to review"). Shows suggested Baseline / Midline / Endline dates, each with a one-line reason. **Apply** fills the phase dates as drafts — never deploys. Tilli can also enter/upload the calendar here. | ⬜ |
-| 3.5 | **Other entry points** | Add School → Profile (optional upload). Start new year dialog asks for next year's calendar. Group page: **Apply one calendar to all schools in this group**. | ⬜ |
-| 3.6 | **Calendar changes after deploy** | Never moves a deployed or scheduled window. Shows "Calendar changed: Midline now overlaps exams — shift it?" with a one-click shift. | ⬜ |
+| 3.1 | **Calendar data** | One calendar per school: terms (start/end), exam blocks (each can be tagged to a board), holidays. Stored per academic year. | ✅ |
+| 3.2 | **Timing rules, editable** | Defaults: Baseline starts 2 weeks into Term 1, runs 3 weeks · Midline starts ~2 weeks into the middle term, ≥10 weeks after Baseline ends · Endline ends ≥2 weeks before finals · windows stretch over holidays · never overlap an exam block (board-tagged exams only affect that board's grades). Editable on a **Scheduling rules** card on the Deployments page. | ✅ |
+| 3.3 | **School admin puts the calendar in** | Leadership dashboard → **School calendar**: type it in, or **upload a PDF/photo** and Ask Tilli fills the form (simulated in this prototype; the school checks it). Status: *Waiting for Tilli*. | ✅ |
+| 3.4 | **Tilli reviews and applies** | School → Assessments → Academic year card → **Plan from calendar** (also a Control Room card "Calendars to review"). Shows suggested Baseline / Midline / Endline dates, each with a one-line reason. **Apply** fills the phase dates as drafts — never deploys. Tilli can also enter/upload the calendar here. | ✅ |
+| 3.5 | **Other entry points** | Add School → Profile (optional upload). Start new year dialog asks for next year's calendar. Group page: **Apply one calendar to all schools in this group**. | ✅ |
+| 3.6 | **Calendar changes after deploy** | Never moves a deployed or scheduled window. Shows "Calendar changed: Midline now overlaps exams — shift it?" with a one-click shift. | ✅ |
 
 ### 3B. Class-size follow-ups
 
 | # | Item | What changes | Status |
 |---|---|---|---|
-| 3.7 | **"Not confirmed" sizes** | Sizes set automatically from headcount show *not confirmed* and appear under Classes missing students until an admin saves one. | ⬜ |
-| 3.8 | **Waiting badge** | Count badge on the school admin's **Roster** menu and Tilli's **All Schools** menu when children wait for approval. | ⬜ |
-| 3.9 | **Ask on CSV import** | After an admin import changes a class's size: "Grade 2 A now has 15 — is that the whole class?" → **Yes** / **No, it should be __**. | ⬜ |
-| 3.10 | **Wizard size defaults to 30** | Add School's per-section count starts at 30 (editable). | ⬜ |
-| 3.11 | **Teachers can't create classes** | The **+ New** section chip is removed from the teacher's Add students. Missing classes are added by the school admin or Tilli. | ⬜ |
+| 3.7 | **"Not confirmed" sizes** | Sizes set automatically from headcount show *not confirmed* and appear under Classes missing students until an admin saves one. | ✅ |
+| 3.8 | **Waiting badge** | Count badge on the school admin's **Roster** menu and Tilli's **All Schools** menu when children wait for approval. | ✅ |
+| 3.9 | **Ask on CSV import** | After an admin import changes a class's size: "Grade 2 A now has 15 — is that the whole class?" → **Yes** / **No, it should be __**. | ✅ |
+| 3.10 | **Wizard size defaults to 30** | Add School's per-section count starts at 30 (editable). | ✅ |
+| 3.11 | **Teachers can't create classes** | The **+ New** section chip is removed from the teacher's Add students. Missing classes are added by the school admin or Tilli. | ✅ |
 
 ✅ **Phase 3 check:** school admin enters a calendar → Tilli sees it, applies suggested dates (reasons shown) → nothing deploys; change the calendar after deploying → warning, no move; badge appears when a teacher sends a child for approval; CSV import asks about the class size.
 

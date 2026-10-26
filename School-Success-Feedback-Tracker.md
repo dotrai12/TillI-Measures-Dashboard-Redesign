@@ -282,6 +282,16 @@ Open issues that came out of those changes:
 - **The "no live version" deploy warning shows for IDELA, Home SEL Survey and the teacher observational report** on every new school, because those demo templates have no live Baseline version. Real templates will clear it.
 - ~~**The Expiring invitations card still measures from the demo date.**~~ Fixed 26 Oct 2026: invitations sent from the platform count from today; sample ones keep the demo date.
 
+**Rollout fix plan — Phase 3** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
+- **Board-tagged exams block the whole school's windows.** Phase windows are school-wide, so a window avoids every exam block; a block tagged CBSE still moves IB's dates. *Possible fix:* per-board phase windows (a bigger change to deployments).
+- **Calendar upload is simulated.** It fills plausible terms / exams / holidays from the school's year and country for someone to check. A developer swaps `TilliAPI.readCalendarFile` for real extraction.
+- **"Classes missing students" jumps to ~55 on the demo data.** Every demo class's size is "not confirmed" until an admin confirms it (Class sizes page → Confirm, or Grades & sections → confirm). Expected — but the card will look alarming until then.
+- **Applied calendar dates are drafts held per browser session for deploy.** They're stored with the calendar and reload into the planner, but nothing is deployed until someone presses Deploy.
+- **Changing the Scheduling rules doesn't re-plan anything.** Dates already applied or deployed stay; the rules apply the next time Plan from calendar is used.
+- **Shift (calendar clash) moves a window just past the exams, never before tomorrow.** It can push a window across a term break (it stretches over the break) — check the dates before the window opens.
+- **One calendar for a group uses the first school's year to read an upload.** Schools in a group with different year dates should each get their own calendar.
+- **The teacher dashboard's "+ New" class is gone.** A teacher with no class sees "ask your school admin to put you in one" (not checked in the browser — it needs a teacher sign-in).
+
 **Expected class size + new-student approval** (added 23 Oct 2026)
 - **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.
 - **A new school's sections start with no size unless the wizard count is filled in.** With no size, every child a teacher adds needs approval, so a school onboarding teachers before sizes are set floods its admin with approvals. *Possible fix:* make the per-section count required in the wizard, or default it to a typical class size.

@@ -606,6 +606,15 @@
       Object.keys(db.sections).forEach(function(id){ var sec = db.sections[id]; if (sec.expected === undefined) sec.expected = heads[id] || null; });
       db.expectedVer = 1; write(db);
     }
+    // Sizes the system set itself (from headcount / seed data) are "not confirmed"
+    // until an admin saves one. Wizard-created schools typed theirs in, so they count.
+    if (db.expectedVer < 2){
+      Object.keys(db.sections).forEach(function(id){
+        var sec = db.sections[id], sc = db.schools[sec.school_id] || {};
+        if (sec.expectedConfirmed === undefined) sec.expectedConfirmed = !!(sec.expected > 0 && sc.source === 'created' && !sc.seeded);
+      });
+      db.expectedVer = 2; write(db);
+    }
     // Older deployments don't say where each assessment runs: teachers at
     // school, parents at home, student direct alternating school / home
     // (the same default the platform-admin planner shows).
@@ -801,7 +810,7 @@
     db.students[k] = rec;
     logHistory(db, studentEvent(db, rec, pending ? 'student.request' : 'student.add', actor, { source: rec.source }));
     // An admin's add is the class list itself: the expected size never sits below it.
-    if (role==='admin' && sec){ var have = roomIn(db, sec).added; if (!(sec.expected >= have)) sec.expected = have; }
+    if (role==='admin' && sec){ var have = roomIn(db, sec).added; if (!(sec.expected >= have)){ sec.expected = have; sec.expectedConfirmed = false; } }
     write(db);
     return { ok:true, result: pending ? 'requested' : 'created', student:Object.assign({}, rec) };
   }
@@ -837,6 +846,7 @@
     var kids = kidsIn(db, sec.section_id), pending = kids.filter(function(s){ return s.approval==='pending'; }).length;
     var exp = sec.expected > 0 ? sec.expected : null;
     return { section_id: sec.section_id, name: sec.name, expected: exp, added: kids.length - pending, pending: pending,
+      confirmed: exp != null && sec.expectedConfirmed !== false,   // false = set automatically, an admin hasn't checked it
       total: kids.length, left: exp == null ? 0 : Math.max(0, exp - kids.length),
       full: exp == null || kids.length >= exp };   // full = a teacher can't add without approval
   }
@@ -856,8 +866,9 @@
     if (role==='teacher' || role==='parent') return { ok:false, reason:'not-authorized' };
     var v = parseInt(n, 10); v = v > 0 ? v : null;
     var was = sec.expected > 0 ? sec.expected : null;
+    if (v != null && sec.expectedConfirmed === false){ sec.expectedConfirmed = true; write(db); }   // saving a size = an admin checked it
     if (v !== was){
-      sec.expected = v;
+      sec.expected = v; sec.expectedConfirmed = v != null;
       logHistory(db, { school_id:schoolId, section_id:sec.section_id, section_name:sec.name, students:[], kind:'student', action:'section.expected',
         changes:[{ label:'Expected students', from: was == null ? 'Not set' : String(was), to: v == null ? 'Not set' : String(v) }],
         actor: actorFor(db, actorEmail, schoolId) });
@@ -1284,7 +1295,8 @@
         db.sections[secId] = { section_id:secId, school_id:id, grade:g.grade, section:sec.name,
           name:(g.grade+' '+sec.name).trim(), teacherId:null,
           base_grade: g.base || '', base_section: sec.base || sec.name, board: g.board || null,
-          expected: (parseInt(sec.students,10) || 0) > 0 ? parseInt(sec.students,10) : null };
+          expected: (parseInt(sec.students,10) || 0) > 0 ? parseInt(sec.students,10) : null,
+          expectedConfirmed: (parseInt(sec.students,10) || 0) > 0 };
 
         // Students are NOT seeded here either — the section is created empty so
         // the coordinator can add students via the roster / CSV flow and
@@ -2016,6 +2028,196 @@
     return { year: currentYear(schoolId), live: lanes.filter(function(l){ return l.status === 'Live'; }), scheduled: lanes.filter(function(l){ return l.status === 'Scheduled'; }),
       ended: lanes.filter(function(l){ return l.status === 'Ended'; }), grades: list };
   }
+  /* ======================================================================
+     SCHOOL CALENDAR → suggested Baseline / Midline / Endline windows
+     ----------------------------------------------------------------------
+     One calendar per school per academic year: terms, exam blocks (each can
+     name a board) and holidays. The school admin enters or uploads it and
+     sends it; the Tilli team reviews the suggested windows and applies them
+     as DRAFT phase dates — nothing is ever deployed or moved automatically.
+       db.calendars[school][yearId] = { terms[], exams[], holidays[], status:
+         'draft'|'submitted'|'applied', source, fileName, applied:{phase:{start,end}}, … }
+     Windows are school-wide, so they avoid every exam block (a board-tagged
+     one is named in the reason).
+     ====================================================================== */
+  var DEFAULT_SCHED_RULES = { baselineWeeksIn: 2, windowWeeks: 3, midlineWeeksIn: 2, midlineGapWeeks: 10, endlineBufferWeeks: 2 };
+  function schedulingRules(){ var db = getDB(); return Object.assign({}, DEFAULT_SCHED_RULES, (db.config || {}).schedRules || {}); }
+  function setSchedulingRules(patch){
+    var db = getDB(), cur = schedulingRules();
+    Object.keys(DEFAULT_SCHED_RULES).forEach(function(k){ var v = parseInt(patch && patch[k], 10); if (v >= 0 && v <= 52) cur[k] = v; });
+    if (cur.windowWeeks < 1) cur.windowWeeks = 1;
+    db.config = db.config || {}; db.config.schedRules = cur; write(db);
+    return clone(cur);
+  }
+  function calYearId(db, schoolId, yearId){ return yearId || ((currentIn(db, schoolId) || {}).id) || ''; }
+  function calendarFor(schoolId, yearId){
+    var db = getDB(), y = calYearId(db, schoolId, yearId), c = ((db.calendars || {})[schoolId] || {})[y];
+    return c ? clone(c) : null;
+  }
+  function cleanBlocks(list){
+    return (list || []).filter(function(r){ return r && r.start && r.end && r.end >= r.start; })
+      .map(function(r){ return { name: norm(r.name), start: r.start, end: r.end, board: r.board || null }; })
+      .sort(function(a, b){ return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
+  }
+  // opts: { yearId, status:'draft'|'submitted', source:'typed'|'upload', fileName }
+  function saveCalendar(schoolId, cal, actorEmail, opts){
+    opts = opts || {}; cal = cal || {};
+    var db = getDB(), y = calYearId(db, schoolId, opts.yearId); if (!y) return { ok:false, reason:'no_year' };
+    var role = roleOf(db, actorEmail, schoolId);
+    if (role === 'teacher' || role === 'parent') return { ok:false, reason:'not-authorized' };
+    db.calendars = db.calendars || {}; var byS = db.calendars[schoolId] = db.calendars[schoolId] || {}, prev = byS[y] || {};
+    var rec = { terms: cleanBlocks(cal.terms), exams: cleanBlocks(cal.exams), holidays: cleanBlocks(cal.holidays),
+      source: opts.source || prev.source || 'typed', fileName: opts.fileName || prev.fileName || null,
+      status: opts.status || (prev.status === 'applied' ? 'applied' : prev.status) || 'draft',
+      updatedAt: Date.now(), updatedBy: low(actorEmail),
+      submittedAt: prev.submittedAt || null, submittedBy: prev.submittedBy || null, submittedByName: prev.submittedByName || null,
+      applied: prev.applied || null, appliedAt: prev.appliedAt || null };
+    if (!rec.terms.length) return { ok:false, reason:'no_terms' };
+    if (opts.status === 'submitted'){ rec.submittedAt = Date.now(); rec.submittedBy = low(actorEmail); rec.submittedByName = nameFor(db, actorEmail, schoolId) || low(actorEmail); }
+    byS[y] = rec;
+    logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], kind: 'assessment', action: opts.status === 'submitted' ? 'calendar.submit' : 'calendar.save',
+      changes: [{ label: 'School calendar', from: '', to: rec.terms.length + ' terms · ' + rec.exams.length + ' exam blocks · ' + rec.holidays.length + ' holidays' }], actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true, calendar: clone(rec) };
+  }
+  // Tilli applies suggested dates as drafts (only phases not deployed yet).
+  function applyCalendarDates(schoolId, dates, actorEmail, yearId){
+    var db = getDB(), y = calYearId(db, schoolId, yearId), rec = ((db.calendars || {})[schoolId] || {})[y];
+    if (!rec) return { ok:false, reason:'no_calendar' };
+    rec.applied = Object.assign({}, rec.applied || {}, dates || {}); rec.status = 'applied'; rec.appliedAt = Date.now(); rec.appliedBy = low(actorEmail);
+    logHistory(db, { school_id: schoolId, section_id: null, section_name: '', students: [], kind: 'assessment', action: 'calendar.apply',
+      changes: Object.keys(dates || {}).map(function(ph){ return { label: ph, from: '', to: dates[ph].start + ' → ' + dates[ph].end }; }), actor: actorFor(db, actorEmail, schoolId) });
+    write(db);
+    return { ok:true };
+  }
+  function dayCount(a, b){ return Math.round((Date.parse(b + 'T00:00:00') - Date.parse(a + 'T00:00:00')) / DAY_MS) + 1; }
+  function overlapDays(a0, a1, b0, b1){ var s0 = a0 > b0 ? a0 : b0, s1 = a1 < b1 ? a1 : b1; return s0 <= s1 ? dayCount(s0, s1) : 0; }
+  function examLabel(e){ return (e.name || 'exams') + (e.board ? ' (' + e.board + ')' : ''); }
+  // Gaps between consecutive terms count as holidays (school is closed).
+  function closedBlocks(cal){
+    var out = cleanBlocks(cal.holidays);
+    for (var i = 1; i < cal.terms.length; i++){
+      var a = isoAddDays(cal.terms[i - 1].end, 1), b = isoAddDays(cal.terms[i].start, -1);
+      if (a <= b) out.push({ name: 'the break after ' + (cal.terms[i - 1].name || 'Term ' + i), start: a, end: b });
+    }
+    return out;
+  }
+  // Window of `len` days from `start`, moved past exams / closed days and stretched over holidays.
+  function placeForward(cal, closed, start, len, notes){
+    for (var guard = 0; guard < 30; guard++){
+      var inBlock = closed.concat(cal.exams).filter(function(b){ return start >= b.start && start <= b.end; })[0];
+      if (inBlock){ start = isoAddDays(inBlock.end, 1); notes.push('moved past ' + (inBlock.board !== undefined && cal.exams.indexOf(inBlock) >= 0 ? examLabel(inBlock) : inBlock.name)); continue; }
+      var end = isoAddDays(start, len - 1), extra = 0, hols = [];
+      closed.forEach(function(h){ var d = overlapDays(start, end, h.start, h.end); if (d){ extra += d; hols.push(h.name); } });
+      if (extra) end = isoAddDays(end, extra);
+      var ex = cal.exams.filter(function(e){ return overlapDays(start, end, e.start, e.end); })[0];
+      if (ex){ start = isoAddDays(ex.end, 1); notes.push('moved past ' + examLabel(ex)); continue; }
+      if (extra) notes.push('stretched ' + extra + ' day' + (extra === 1 ? '' : 's') + ' over ' + hols.join(', '));
+      return { start: start, end: end };
+    }
+    return null;
+  }
+  // Window of `len` days ending on `end`, moved earlier past exams / closed days.
+  function placeBackward(cal, closed, end, len, notes){
+    for (var guard = 0; guard < 30; guard++){
+      var inBlock = closed.concat(cal.exams).filter(function(b){ return end >= b.start && end <= b.end; })[0];
+      if (inBlock){ end = isoAddDays(inBlock.start, -1); notes.push('ends before ' + (cal.exams.indexOf(inBlock) >= 0 ? examLabel(inBlock) : inBlock.name)); continue; }
+      var start = isoAddDays(end, -(len - 1)), extra = 0, hols = [];
+      closed.forEach(function(h){ var d = overlapDays(start, end, h.start, h.end); if (d){ extra += d; hols.push(h.name); } });
+      if (extra) start = isoAddDays(start, -extra);
+      var ex = cal.exams.filter(function(e){ return overlapDays(start, end, e.start, e.end); }).pop();
+      if (ex){ end = isoAddDays(ex.start, -1); notes.push('ends before ' + examLabel(ex)); continue; }
+      if (extra) notes.push('stretched ' + extra + ' day' + (extra === 1 ? '' : 's') + ' over ' + hols.join(', '));
+      return { start: start, end: end };
+    }
+    return null;
+  }
+  function fmtShort(iso){ var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return (+iso.slice(8, 10)) + ' ' + m[+iso.slice(5, 7) - 1]; }
+  // → { Baseline:{start,end,reason}, Midline:…, Endline:…, problems:[] } from a calendar.
+  function suggestWindows(schoolId, cal){
+    var db = getDB(); cal = cal || calendarFor(schoolId); if (!cal) return null;
+    cal = { terms: cleanBlocks(cal.terms), exams: cleanBlocks(cal.exams), holidays: cleanBlocks(cal.holidays) };
+    var R = schedulingRules(), len = R.windowWeeks * 7, closed = closedBlocks(cal), out = { problems: [] };
+    var yr = currentIn(db, schoolId) || {}, terms = cal.terms.length ? cal.terms : [{ name: 'the year', start: yr.start, end: yr.end }];
+    var t1 = terms[0], last = terms[terms.length - 1];
+    // Baseline: a few weeks into Term 1, once children have settled.
+    var n1 = [R.baselineWeeksIn + ' week' + (R.baselineWeeksIn === 1 ? '' : 's') + ' after ' + (t1.name || 'Term 1') + ' starts (' + fmtShort(t1.start) + ')'];
+    var b = placeForward(cal, closed, isoAddDays(t1.start, R.baselineWeeksIn * 7), len, n1);
+    if (b){ out.Baseline = { start: b.start, end: b.end, reason: n1.join(' · ') }; if (b.end > t1.end) out.problems.push('Baseline runs past the end of ' + (t1.name || 'Term 1') + '.'); }
+    // Midline: into the middle term, and long enough after Baseline to show growth.
+    var mid = terms.length >= 2 ? terms[Math.floor(terms.length / 2)] : null, n2 = [];
+    var fromTerm = mid ? isoAddDays(mid.start, R.midlineWeeksIn * 7) : isoAddDays(t1.start, Math.round(dayCount(t1.start, last.end) / 2));
+    var fromGap = b ? isoAddDays(b.end, R.midlineGapWeeks * 7 + 1) : fromTerm;
+    var mStart = fromGap > fromTerm ? fromGap : fromTerm;
+    n2.push(fromGap > fromTerm ? R.midlineGapWeeks + ' weeks after Baseline ends, so there’s growth to measure'
+      : mid ? R.midlineWeeksIn + ' week' + (R.midlineWeeksIn === 1 ? '' : 's') + ' into ' + (mid.name || 'the middle term') + ' (' + fmtShort(mid.start) + ')' : 'halfway through the year');
+    var m = placeForward(cal, closed, mStart, len, n2);
+    if (m) out.Midline = { start: m.start, end: m.end, reason: n2.join(' · ') };
+    // Endline: finished a couple of weeks before the final exams (or the last term's end).
+    var finals = cal.exams.filter(function(e){ return !m || e.start > m.end; }).pop(), n3 = [];
+    var anchor = finals ? finals.start : isoAddDays(last.end, 1);
+    n3.push(R.endlineBufferWeeks + ' week' + (R.endlineBufferWeeks === 1 ? '' : 's') + ' before ' + (finals ? examLabel(finals) + ' (' + fmtShort(finals.start) + ')' : 'the end of ' + (last.name || 'the year') + ' (' + fmtShort(last.end) + ')'));
+    var e = placeBackward(cal, closed, isoAddDays(anchor, -(R.endlineBufferWeeks * 7) - 1), len, n3);
+    if (e) out.Endline = { start: e.start, end: e.end, reason: n3.join(' · ') };
+    if (m && e && e.start <= m.end) out.problems.push('Midline and Endline overlap — the year is too short for these rules. Adjust the dates by hand.');
+    if (b && m && m.start <= b.end) out.problems.push('Baseline and Midline overlap.');
+    return out;
+  }
+  // Deployed (scheduled or live) windows that now clash with the calendar's exams.
+  function calendarConflicts(schoolId){
+    var cal = calendarFor(schoolId); if (!cal) return [];
+    var deps = getDeployments(schoolId), seen = {}, out = [], sug = null;
+    deps.forEach(function(d){
+      if (seen[d.phase] || !d.start || !d.end || (d.status !== 'Scheduled' && d.status !== 'Live')) return; seen[d.phase] = 1;
+      var ex = cleanBlocks(cal.exams).filter(function(x){ return overlapDays(d.start, d.end, x.start, x.end); })[0];
+      if (!ex) return;
+      out.push({ phase: d.phase, start: d.start, end: d.end, status: d.status, exam: ex, suggestion: shiftPastExams(schoolId, cal, d) });
+    });
+    return out;
+  }
+  // The smallest move that clears the exams: same length, pushed just past them
+  // (never before tomorrow); Endline is pulled earlier instead when that still
+  // leaves it in the future, so it keeps finishing before the year's end.
+  function shiftPastExams(schoolId, cal, d){
+    cal = { terms: cleanBlocks(cal.terms), exams: cleanBlocks(cal.exams), holidays: cleanBlocks(cal.holidays) };
+    var closed = closedBlocks(cal), len = dayCount(d.start, d.end), tomorrow = isoAddDays(todayLocalISO(), 1), notes = [];
+    if (d.phase === 'Endline'){
+      var back = placeBackward(cal, closed, d.end, len, notes);
+      if (back && back.start >= tomorrow) return back;
+    }
+    var from = d.start > tomorrow ? d.start : tomorrow;
+    return placeForward(cal, closed, from, len, notes);
+  }
+  // Control Room: calendars waiting for Tilli, and schools whose windows now clash.
+  function calendarQueue(){
+    var db = getDB(), out = [];
+    Object.keys(db.calendars || {}).forEach(function(sid){
+      var y = calYearId(db, sid), c = (db.calendars[sid] || {})[y]; if (!c) return;
+      var clash = calendarConflicts(sid).length;
+      if (c.status === 'submitted' || clash) out.push({ school_id: sid, school_name: (db.schools[sid] || {}).name || sid, status: c.status, conflicts: clash });
+    });
+    return out;
+  }
+  // PROTOTYPE: "reading" an uploaded calendar. Returns plausible terms / exams /
+  // holidays for the school's current year (shaped by country) for someone to
+  // check. A developer swaps this for real extraction (Ask Tilli reading the file).
+  function readCalendarFile(schoolId, fileName){
+    var db = getDB(), sc = db.schools[schoolId] || {}, yr = currentIn(db, schoolId); if (!yr) return null;
+    var total = dayCount(yr.start, yr.end), at = function(f){ return isoAddDays(yr.start, Math.round(total * f)); };
+    var block = function(name, a, b){ return { name: name, start: at(a), end: at(b) }; };
+    var two = /jordan/i.test(sc.country || '');
+    var fest = /jordan/i.test(sc.country || '') ? 'Eid break' : /sri lanka/i.test(sc.country || '') ? 'Vesak holidays' : 'Diwali break';
+    var cal = two
+      ? { terms: [block('Term 1', 0, 0.45), block('Term 2', 0.52, 0.95)],
+          exams: [block('Mid-term exams', 0.22, 0.24), block('Term 1 exams', 0.41, 0.45), block('Final exams', 0.88, 0.95)],
+          holidays: [block(fest, 0.64, 0.66)] }
+      : { terms: [block('Term 1', 0, 0.32), block('Term 2', 0.36, 0.64), block('Term 3', 0.68, 0.92)],
+          exams: [block('Half-yearly exams', 0.29, 0.32), block('Final exams', 0.85, 0.92)],
+          holidays: [block(fest, 0.45, 0.47)] };
+    cal.source = 'upload'; cal.fileName = fileName || 'calendar';
+    return cal;
+  }
+
   /* ---------- Year-end requests (school → Tilli) ----------
      Only the Tilli team starts a new year. A school admin asks for it; the
      request shows on Tilli's Control Room and closes when the year starts.
@@ -2110,7 +2312,7 @@
     // year's size as its starting guess until an admin changes it.
     var intake = {};
     studs.forEach(function(x){ if (x.status !== 'graduated') intake[x.section_id] = (intake[x.section_id] || 0) + 1; });
-    secs.forEach(function(t){ if (intake[t.section_id]) t.expected = intake[t.section_id]; });
+    secs.forEach(function(t){ if (intake[t.section_id]){ t.expected = intake[t.section_id]; t.expectedConfirmed = false; } });
 
     // 4) The new current year.
     var y = { id: yearId(label), label: label, start: start, end: end, status: 'current', startedAt: now, startedBy: low(opts.actorEmail),
@@ -2624,6 +2826,16 @@
     yearSummary: yearSummary,
     yearReadiness: yearReadiness,
     startNewYear: startNewYear,
+    // School calendar → suggested windows
+    schedulingRules: schedulingRules,
+    setSchedulingRules: setSchedulingRules,
+    calendarFor: calendarFor,
+    saveCalendar: saveCalendar,
+    applyCalendarDates: applyCalendarDates,
+    suggestWindows: suggestWindows,
+    calendarConflicts: calendarConflicts,
+    calendarQueue: calendarQueue,
+    readCalendarFile: readCalendarFile,
     requestNewYear: requestNewYear,
     yearRequest: yearRequest,
     openYearRequests: openYearRequests,

@@ -93,6 +93,9 @@
       case 'assessment.complete': return 'completed the <b>' + lane + '</b>' + (hide || !subj ? '' : ' for ' + subj);
       case 'year.start':         return 'started the <b>' + esc(((e.changes || [])[0] || {}).to || 'new') + '</b> academic year';
       case 'year.request':       return 'asked Tilli to start the next academic year';
+      case 'calendar.save':      return 'saved the school calendar';
+      case 'calendar.submit':    return 'sent the school calendar to Tilli';
+      case 'calendar.apply':     return 'set assessment dates from the school calendar';
       case 'school.code':        return 'replaced the school code — old links and the old code stopped working';
     }
     return esc(e.action || 'made a change');

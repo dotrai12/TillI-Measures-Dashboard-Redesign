@@ -314,6 +314,19 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 18 — Plan from the school calendar (10 min)
+
+- [ ] As `admin@heritageoaks.edu` (Leadership dashboard) → **Calendar** → **Upload a PDF or photo** (any file — the prototype fills plausible dates) → check the terms, exams and holidays → **Send to Tilli**.
+- [ ] Tilli → Control Room → **School calendars to review** → Heritage Oaks → the Academic year card says who sent it → **Plan from calendar**.
+- [ ] Read the suggested windows and their reasons. Deployed phases are locked; tick the rest → **Apply to planner** → the phase shows "Dates from the school calendar". Nothing is deployed.
+- [ ] Add an exam block over a scheduled window (e.g. Midline) and save → the Assessments tab shows **Calendar changed: Midline now overlaps …** → **Shift it**.
+- [ ] **Deployments** → **Scheduling rules**: change how many weeks a window lasts, etc. It applies the next time a calendar is planned.
+- [ ] A group page → **One calendar for all** → saves to every live school in the group and sets draft dates where nothing is deployed.
+- [ ] **+ Add School** → Profile → upload a calendar (optional) → after Create it's waiting in Plan from calendar. **Start new year** also asks for next year's calendar.
+- [ ] Class sizes: **Class sizes → Classes missing students** lists sizes marked **not confirmed** → **Confirm**. A child waiting for approval puts a count on Tilli's **All Schools** menu and the school admin's **Roster** menu. After an admin CSV import that sets a size, you're asked **Is that the whole class?** New sections in Add School start at **30**.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

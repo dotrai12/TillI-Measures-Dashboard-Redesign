@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261022a">
+<link rel="stylesheet" href="assets/tilli.css?v=20261026p3b">
 <style>
   /* ============================================================
      Tilli Measures — INTERNAL managing platform chrome.
@@ -135,6 +135,11 @@
   .dep-checks ul { margin: 6px 0; padding-left: 18px; }
   .dep-checks li { margin: 4px 0; }
   .tl-growth { font-weight: 700; font-size: var(--fs-xs); }
+  .tl-sizeask { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--line-200); border-radius: var(--radius-sm); }
+  .tl-sizein-n { width: 72px; display: inline-block; margin-left: 4px; }
+  .tl-schedrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 600; font-size: var(--fs-sm); }
+  .tl-schedrow > span:first-child { min-width: 150px; }
+  .tl-schedrow .input { width: 72px; text-align: center; }
   .tl-growth.up { color: var(--green-700); }
   .tl-growth.down { color: var(--warn-700); }
   .dep-phase-when.st-completed { color: var(--green-700); font-weight: 700; }
@@ -851,10 +856,11 @@
 <div class="ui-toast" id="tl-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026p2c"></script>
-<script src="assets/tilli-history.js?v=20261026p2"></script>
-<script src="assets/tilli-org-data.js?v=20261026p2e"></script>
+<script src="assets/tilli-api.js?v=20261026p3b"></script>
+<script src="assets/tilli-history.js?v=20261026p3"></script>
+<script src="assets/calendar-form.js?v=20261026p3b"></script>
+<script src="assets/tilli-org-data.js?v=20261026p3"></script>
 <script src="assets/float-help.js?v=20261016zx"></script>
-<script src="assets/tilli-admin.js?v=20261026p2e"></script>
+<script src="assets/tilli-admin.js?v=20261026p3"></script>
 </body>
 </html>

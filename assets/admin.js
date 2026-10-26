@@ -90,7 +90,7 @@
     var g = String(u.grade || ''), list = String(u.section || '');
     return /,/.test(g) ? list : list.split(/,\s*/).filter(Boolean).map(function (x) { return secShort(g, x); }).join(', ');
   }
-  var SCREENS = ['overview', 'implementation', 'outcomes', 'roster', 'history', 'reports', 'asktilli'];
+  var SCREENS = ['overview', 'implementation', 'outcomes', 'roster', 'calendar', 'history', 'reports', 'asktilli'];
 
   var toastTimer;
   function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2200); }
@@ -504,19 +504,22 @@
     implementation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>',
     outcomes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
     roster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>',
     reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>',
   };
   var NAV = [
     { key: 'overview', label: 'Overview' },   // Outcomes is reached from the Overview button, not the nav
     { key: 'roster', label: 'Roster' },
+    { key: 'calendar', label: 'Calendar' },
     { key: 'history', label: 'History' },
     { key: 'reports', label: 'Reports' },
     { key: 'asktilli', label: 'Ask Tilli' }, // live assistant — also reachable via the floating button
   ];
   // Outcomes lives under Overview, so Overview stays highlighted there.
   function navOn(key, screen) { return key === screen || (key === 'overview' && screen === 'outcomes'); }
-  function navItems() { return NAV; }
+  // A closed year has no calendar to send — the Calendar item is for the current year.
+  function navItems() { return AD.pastYear ? NAV.filter(function (n) { return n.key !== 'calendar'; }) : NAV; }
 
   function chromeHTML(r) {
     var roleLabel = role === 'tilli' ? 'Tilli Team' : role === 'group' ? 'School group admin' : 'School admin';
@@ -539,7 +542,10 @@
         // "open" (green text, no fill) while you're on Outcomes, which then gets the fill.
         if (n.key === 'overview') return '<button class="ui-nav-item' + (r.screen === 'overview' ? ' on' : r.screen === 'outcomes' ? ' open' : '') + '" data-nav="overview"><span class="ic">' + ICONS.overview + '</span>Overview</button>' +
           '<button class="ui-nav-item ad-nav-sub' + (r.screen === 'outcomes' ? ' on' : '') + '" data-nav="outcomes"' + (r.screen === 'outcomes' ? ' aria-current="page"' : '') + '><span class="ic">' + ICONS.outcomes + '</span>Outcomes</button>';
-        return '<button class="ui-nav-item' + (navOn(n.key, r.screen) ? ' on' : '') + '" data-nav="' + n.key + '"><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) + '</button>';
+        // Roster: how many new children are waiting for this admin's approval.
+        var nb = n.key === 'roster' && !AD.pastYear ? waitingKids().length : 0;
+        return '<button class="ui-nav-item' + (navOn(n.key, r.screen) ? ' on' : '') + '" data-nav="' + n.key + '"' + (nb ? ' title="' + nb + ' new ' + (nb === 1 ? 'child' : 'children') + ' waiting for your approval"' : '') + '><span class="ic">' + ICONS[n.key] + '</span>' + esc(n.label) +
+          (nb ? '<span class="ad-nav-badge" aria-label="' + nb + ' waiting">' + nb + '</span>' : '') + '</button>';
       }).join('') +
       // Ask Tilli is mostly asked from the Overview now, so its full screen gets a quieter link under the nav.
       '<button class="ad-nav-mini' + (r.screen === 'asktilli' ? ' on' : '') + '" data-nav="asktilli" title="Open Ask Tilli full screen, with your saved chats">' + ICONS.asktilli + '<span>Ask Tilli · full screen</span></button>' +
@@ -1894,6 +1900,42 @@
     if (yd) yd.addEventListener('click', function () { TilliAPI.dismissYearNotice(currentSchoolId(), email); render(); });
   };
 
+  // ========================================================
+  //  SCHOOL CALENDAR — terms, exams and holidays for this year.
+  //  The school sends it; the Tilli team turns it into Baseline /
+  //  Midline / Endline dates that avoid exams and holidays.
+  // ========================================================
+  SCREEN.calendar = function (params, body) {
+    var A = window.TilliAPI, sid = currentSchoolId();
+    if (!A || !A.calendarFor || !sid || AD.pastYear) { go('overview', {}, { replace: true }); return; }
+    var cal = A.calendarFor(sid), yr = AD.currentYear || {}, when = function (ms) { return fmtInvDate(ms); };
+    var status = !cal ? 'Not sent yet.'
+      : cal.status === 'submitted' ? 'Sent to the Tilli team on ' + when(cal.submittedAt) + ' — they’ll set your assessment dates from it.'
+      : cal.status === 'applied' ? 'The Tilli team set your assessment dates from this calendar on ' + when(cal.appliedAt) + '.'
+      : 'Saved as a draft on ' + when(cal.updatedAt) + ' — not sent yet.';
+    var PH = ['Baseline', 'Midline', 'Endline'], applied = cal && cal.applied ? PH.filter(function (p) { return cal.applied[p]; }) : [];
+    var appliedCard = applied.length ? card('Assessment dates from your calendar', 'Set by the Tilli team. They can still change before each window opens.',
+      '<div class="ui-tablewrap"><table class="ui-table mw-360"><tbody>' + applied.map(function (p) {
+        return '<tr><td class="name">' + esc(p) + '</td><td>' + esc(AD.pointRange({ start: cal.applied[p].start, end: cal.applied[p].end })) + '</td></tr>';
+      }).join('') + '</tbody></table></div>', 'mb-gap') : '';
+    body.innerHTML = screenHead('School calendar', 'Your terms, exams and holidays for ' + (yr.label || 'this year') + '. The Tilli team uses them to set Baseline, Midline and Endline so they never land on exams, and stretch over holidays.') +
+      appliedCard +
+      card(yr.label || 'This year', esc(status),
+        '<div id="cal-form"></div>' +
+        '<div class="row" style="gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn btn-outline btn-sm" data-calsave>Save draft</button><button class="btn btn-cyan btn-sm" data-calsend>' + (cal && cal.status !== 'draft' ? 'Send changes to Tilli' : 'Send to Tilli') + '</button></div>', 'span2');
+    var form = window.TilliCalendarForm.mount(body.querySelector('#cal-form'), cal, { boards: schoolBoards(),
+      onUpload: function (f) { return A.readCalendarFile(sid, f.name); } });
+    function save(status) {
+      if (form.hasErrors()) { toast('Fix the dates that end before they start.'); return; }
+      var c = form.read(); if (!c.terms.length) { toast('Add at least one term with its dates.'); return; }
+      var r = A.saveCalendar(sid, c, email, Object.assign(form.meta(), { status: status }));
+      toast(!r.ok ? 'Couldn’t save the calendar.' : status === 'submitted' ? 'Sent — the Tilli team will set your assessment dates.' : 'Draft saved.');
+      render();
+    }
+    body.querySelector('[data-calsave]').addEventListener('click', function () { save('draft'); });
+    body.querySelector('[data-calsend]').addEventListener('click', function () { save('submitted'); });
+  };
+
   var cmpTwo = { a: null, b: null };  // "Compare two sections" picker state (Outcomes) — any two sections, school-wide
   var progSkill = '';                 // "Progress over time" chart — '' = all skills, else a skill key
   var progPeriod = 'all';             // "Progress over time" chart — 'all' = time on x-axis, else a point key = skills on x-axis
@@ -2481,8 +2523,8 @@
     var list = window.TilliAPI && TilliAPI.pendingStudents && currentSchoolId() ? TilliAPI.pendingStudents(currentSchoolId()) : [], sc = boardScope();
     return sc ? list.filter(function (k) { return sc.indexOf(k.section_id) >= 0; }) : list;
   }
-  function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
-  function roomTone(rm) { return rm.expected == null ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
+  function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.confirmed ? '' : ' · not confirmed') + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
+  function roomTone(rm) { return rm.expected == null || !rm.confirmed ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
   function decideKid(st, approve) {
     var nm = st.name || st.student_id;
     if (approve) {
@@ -2514,7 +2556,8 @@
         var rm = AD.pastYear ? null : apiRoom(s);
         // Expected size: teachers can add up to it; past it (or with none set) a new child waits for approval.
         var size = rm ? '<label class="ad-sizein" title="Expected students in ' + esc(secShort(s.grade, s.section)) + '. Teachers can add up to this many; more waits for your approval. Leave empty and every new child needs approval.">' +
-            '<span>' + rm.added + ' of</span><input type="number" min="0" class="input sm" data-grsize="' + esc(s.id) + '" value="' + (rm.expected || '') + '" placeholder="—" aria-label="Expected students in ' + esc(secShort(s.grade, s.section)) + '"></label>' : '';
+            '<span>' + rm.added + ' of</span><input type="number" min="0" class="input sm" data-grsize="' + esc(s.id) + '" value="' + (rm.expected || '') + '" placeholder="—" aria-label="Expected students in ' + esc(secShort(s.grade, s.section)) + '"></label>' +
+            (rm.expected != null && !rm.confirmed ? '<button class="btn-link" data-grsizeok="' + esc(s.id) + '" data-n="' + rm.expected + '" title="This size was set automatically from the headcount. Confirm it if it’s right, or type the real size.">Confirm ' + rm.expected + '</button>' : '') : '';
         return '<div class="row" style="gap:8px">' +
           '<span class="ui-metachip" style="padding:7px 13px"><b>' + esc(secShort(s.grade, s.section)) + '</b></span>' +
           '<label class="select-wrap" style="min-width:180px"><select class="select sm" data-grteacher="' + esc(s.id) + '"' + (AD.pastYear ? ' disabled' : '') + '>' + opts + '</select></label>' + size + '</div>';
@@ -2561,6 +2604,13 @@
       });
     });
 
+    modalRoot.querySelectorAll('[data-grsizeok]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var r = TilliAPI.setSectionExpected(currentSchoolId(), b.dataset.grsizeok, b.dataset.n, email);
+        if (r.ok) toast(r.room.name + ': ' + r.room.expected + ' confirmed.');
+        render(); openGradeRoster(grade);
+      });
+    });
     modalRoot.querySelectorAll('[data-grsize]').forEach(function (inp) {
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
       inp.addEventListener('change', function () {

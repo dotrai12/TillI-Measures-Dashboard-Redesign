@@ -1386,3 +1386,34 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
   .askx-foot { padding: 10px var(--askx-foot-pr) 8px 14px; }
   .askx-try { margin-top: 22px; }
 }
+
+/* ---- School calendar form (assets/calendar-form.js) — Tilli admin + school admin ---- */
+.cal-upload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: var(--space-3); }
+.cal-muted { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+.cal-readnote { margin-bottom: var(--space-3); }
+.cal-kind { margin-bottom: var(--space-4); }
+.cal-kind-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+/* name · start → end · × on one line; board (multi-board exams) underneath. Phones: name + × on top, dates below. */
+.cal-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(112px, 136px) 12px minmax(112px, 136px) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cal-row .input, .cal-row .select { width: 100%; min-width: 0; }
+.cal-n { grid-column: 1; grid-row: 1; } .cal-s { grid-column: 2; grid-row: 1; } .cal-to { grid-column: 3; grid-row: 1; }
+.cal-e { grid-column: 4; grid-row: 1; } .cal-x { grid-column: 5; grid-row: 1; } .cal-b { grid-column: 1 / 5; grid-row: 2; }
+@media (max-width: 560px) {
+  .cal-row { grid-template-columns: 1fr 12px 1fr 24px; }
+  .cal-n { grid-column: 1 / 4; } .cal-x { grid-column: 4; }
+  .cal-s { grid-column: 1; grid-row: 2; } .cal-to { grid-column: 2; grid-row: 2; } .cal-e { grid-column: 3; grid-row: 2; }
+  .cal-b { grid-column: 1 / 4; grid-row: 3; }
+}
+.cal-row.bad .input[type="date"] { border-color: var(--danger-line); }
+.cal-to { color: var(--ink-450); font-weight: 700; }
+.cal-x { background: none; border: 0; cursor: pointer; font-size: var(--fs-lg); line-height: 1; color: var(--ink-450); padding: 2px 6px; }
+.cal-x:hover { color: var(--danger-700); }
+.cal-err { grid-column: 1 / -1; font-size: var(--fs-xs); font-weight: 600; color: var(--danger-700); }
+.cal-add { font-size: var(--fs-sm); }
+/* Suggested windows (Plan from calendar) */
+.cal-sugg { display: grid; gap: 8px; }
+.cal-sugg-row { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; padding: 10px 12px; border: 1px solid var(--line-200); border-radius: var(--radius-sm); }
+.cal-sugg-row b { font-size: var(--fs-sm); }
+.cal-sugg-row .when { font-weight: 700; font-size: var(--fs-sm); color: var(--ink-700); }
+.cal-sugg-row .why { grid-column: 2; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+.cal-sugg-row.locked { opacity: .7; }

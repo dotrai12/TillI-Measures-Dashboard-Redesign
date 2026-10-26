@@ -855,15 +855,18 @@
     // the expected size, and classes still short of it or with no size set.
     var API = window.TilliAPI, pendingKids = [], shortClasses = [];
     var yearReqs = API && API.openYearRequests ? API.openYearRequests() : [];
+    var calQ = API && API.calendarQueue ? API.calendarQueue() : [];
     if (API && API.pendingStudents) {
       pendingKids = API.pendingStudents();
-      act.forEach(function (s) { API.schoolRooms(s.id).forEach(function (r) { if (r.expected == null || r.added < r.expected) shortClasses.push(r); }); });
+      act.forEach(function (s) { API.schoolRooms(s.id).forEach(function (r) { if (r.expected == null || !r.confirmed || r.added < r.expected) shortClasses.push(r); }); });
     }
 
     var cards = [
       { key: 'issues', label: 'Open issues', count: openIssues.length, severity: 3, deeplink: '#/issues?status=open' },
       { key: 'year-requests', label: 'Schools asking to start next year', count: yearReqs.length, severity: 2,
         deeplink: yearReqs.length === 1 ? '#/school?id=' + encodeURIComponent(yearReqs[0].school_id) + '&tab=assessments' : '#/schools?flag=year-request' },
+      { key: 'calendars', label: 'School calendars to review', count: calQ.length, severity: 2,
+        deeplink: calQ.length === 1 ? '#/school?id=' + encodeURIComponent(calQ[0].school_id) + '&tab=assessments' : '#/schools?flag=calendar' },
       { key: 'student-requests', label: 'New students to approve', count: pendingKids.length, severity: 2, deeplink: '#/class-sizes' },
       { key: 'short-classes', label: 'Classes missing students', count: shortClasses.length, severity: 1, deeplink: '#/class-sizes?view=classes' },
       { key: 'zero-students', label: 'Schools with 0 students', count: zeroStudents.length, severity: 2, deeplink: '#/schools?flag=zero-students', items: zeroStudents.map(function (s) { return { id: s.id, label: s.name }; }) },
@@ -893,7 +896,7 @@
       'template.archive': 'archived template', 'template.unarchive': 'restored template',
       'student.merge': 'merged students', 'student.delete': 'deleted students', 'student.add': 'imported students', 'student.edit': 'edited student',
       'student.approve': 'approved new student', 'student.reject': 'turned down new student', 'school.size': 'set expected class size',
-      'school.add': 'added school', 'school.code': 'changed school code', 'year.start': 'started academic year', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
+      'school.add': 'added school', 'school.code': 'changed school code', 'deployment.rules': 'changed scheduling rules', 'year.start': 'started academic year', 'school.archive': 'archived school', 'school.delete': 'deleted school', 'school.edit': 'edited school', 'school.structure': 'updated grades / sections', 'school.structure.auto': 'auto-removed empty',
       'role.change': 'changed role', 'deployment.create': 'created deployment', 'deployment.end': 'ended deployment',
       'observation.publish': 'published observation phase', 'observation.access': 'changed form access',
       'selfguided.publish': 'published self-guided game', 'selfguided.edit': 'edited self-guided game',
