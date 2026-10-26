@@ -2690,6 +2690,7 @@
     var db = getDB(), cur = currentIn(db, schoolId);
     if (!cur) return { ok: false, reason: 'not_found' };
     if (roleOf(db, actorEmail, schoolId) !== 'admin') return { ok: false, reason: 'not-authorized' };
+    if (!Object.keys(db.deployments[schoolId] || {}).some(function(k){ return db.deployments[schoolId][k].phase === 'Endline'; })) return { ok: false, reason: 'no_endline' };
     db.yearRequests = db.yearRequests || {};
     var open = db.yearRequests[schoolId];
     if (open && open.status === 'open') return { ok: true, request: clone(open) };

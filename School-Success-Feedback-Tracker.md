@@ -311,6 +311,11 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Rollout fix plan — Phase 5E** (26 Oct 2026)
+- **Tap ⓘ tips are added automatically** to any explanation over 40 characters kept in a hover-only `title` (plain text, chips, labels, table heads). A new screen gets them for free — but a long title used only to show a truncated name would also get an ⓘ. *Fix if it happens:* shorten that title, or raise `TAP_TIP_MIN`.
+- **Buttons keep hover-only titles** unless marked `data-tipnext` (only the two Start new year buttons are). A button whose title explains why it's disabled still needs that mark.
+- **A school with no Endline this year can't ask for the next year from the dashboard** — Tilli can still start it (Close the year early…).
+
 **Rollout fix plan — Phase 5D** (26 Oct 2026)
 - **Results show later now.** A school's Overview waits until every deployed part of a window (teacher, parent, student) has ended or reached 100% — schools used to see results as soon as the teacher part finished. Expect "where are our results?" while parent check-ins are still open.
 - **"Move the whole window" on a live phase deletes what was collected** in that phase at that school (it asks for CLEAR first). There's no undo.

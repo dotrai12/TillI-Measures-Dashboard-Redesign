@@ -126,14 +126,14 @@ Decisions by Ishani, 26 Oct 2026: leadership can see each student for now · par
 | 5.20 | + New deployment hidden for real schools (use the school's planner) | ✅ |
 | 5.21 | City "Other…" with free text; the new city joins the list | ✅ |
 
-## Phase 5E — School dashboard polish · ⬜
+## Phase 5E — School dashboard polish · ✅ done 26 Oct 2026
 
 | # | Item | Status |
 |---|---|---|
-| 5.22 | Past-year Overview hides this year's warnings; exports name the year | ⬜ |
-| 5.23 | "Ask Tilli to start next year" only once Endline is deployed | ⬜ |
+| 5.22 | Past-year Overview hides this year's warnings; exports name the year | ✅ |
+| 5.23 | "Ask Tilli to start next year" only once Endline is deployed | ✅ |
 | 5.24 | Waiting badge on the phone bottom nav (shipped with 5A) | ✅ |
-| 5.25 | Key hover-only explanations become tap ⓘ tips | ⬜ |
+| 5.25 | Key hover-only explanations become tap ⓘ tips | ✅ |
 
 ## Phase 5F — Sessions (pre / post outside the phases) · ✅ done 26 Oct 2026 (built right after 5B)
 

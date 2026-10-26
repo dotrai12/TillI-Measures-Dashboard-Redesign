@@ -384,6 +384,15 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 24 — School dashboard polish (Phase 5E, 5 min)
+
+- [ ] Heritage Oaks leadership dashboard → account menu → a closed year (e.g. 2025–26): the Overview shows no invite / staffing / concern warnings — they belong to this year.
+- [ ] Reports → download a CSV and the PDF summary: the file name, CSV header and PDF title name the school year.
+- [ ] Roster → year-end strip: on a school where Endline isn't deployed (Kandy Hill) **Ask Tilli to start next year** is greyed out with "Once Endline is deployed…"; on Banyan Tree (Endline live) it works.
+- [ ] On a phone (or a narrow window): tap the small **ⓘ** next to explanations — e.g. "No sections yet" and class-size tags in Grades & sections, the **Close the year early…** link, a board tag on Staff & Access, a class size on the school's Roster → the explanation shows (it used to be hover-only).
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

@@ -1397,6 +1397,9 @@
 
   // Priority 1 — warnings for the whole school, most urgent first.
   function dlWarnings() {
+    // A closed year is read-only history: today's invites, staffing gaps and
+    // concerns belong to this year, not to the year being looked at.
+    if (AD.pastYear) return [];
     var out = [], warn = 'var(--warn-700)', op = AD.openPoint;
     if (op) {
       var left = dlDaysLeft(), notDone = AD.students.filter(function (s) { return AD.checkinStatus(s) !== 'done'; });
@@ -3162,14 +3165,14 @@
     // The popup is a separate window WITHOUT tilli.css, so its CSS stays self-contained:
     // sizes use the type-scale values (11/13/15/24) and colours are the tokens resolved to hex here.
     var C = PRINT_COLOURS();
-    var html = '<!doctype html><html><head><meta charset="utf-8"><title>Tilli Measures — Leadership summary</title>' +
+    var html = '<!doctype html><html><head><meta charset="utf-8"><title>Tilli Measures — Leadership summary' + (yearLbl() ? ' ' + esc(yearLbl()) : '') + '</title>' +
       '<style>body{font-family:Arial,Helvetica,sans-serif;color:' + C.ink + ';margin:0;padding:32px;max-width:820px}h1{font-size:24px;margin:0 0 2px}.sub{color:' + C.soft + ';font-size:13px;margin:0 0 18px}.meta{font-size:13px;color:' + C.muted + ';margin-bottom:18px}' +
       'table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 8px;border-bottom:1px solid ' + C.line + ';text-align:left}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:' + C.soft + '}' +
       '.tiles{display:flex;gap:24px;margin:16px 0 22px}.tile b{display:block;font-size:24px}.tile span{font-size:13px;color:' + C.soft + '}.leg{font-size:11px;color:' + C.soft + ';margin-top:10px}.print{margin:20px 0;text-align:center}' +
       '.mini{display:inline-flex;width:200px;height:14px;border-radius:4px;overflow:hidden;vertical-align:middle}.mini i{display:block;height:100%}.mini-l{font-size:11px;color:' + C.soft + '}' +
       '.print button{padding:10px 22px;font-size:15px;border:none;border-radius:999px;background:' + C.green + ';color:' + C.white + ';font-weight:700;cursor:pointer}@media print{.print{display:none}}</style></head><body>' +
-      '<h1>' + esc(scopeName) + ' — Leadership summary</h1><p class="sub">Social-emotional & cognitive skills · Tilli Measures</p>' +
-      '<p class="meta">Assessment point: <b>' + esc(pointLabel(pt)) + '</b> · Generated ' + genStamp() + '</p>' +
+      '<h1>' + esc(scopeName) + ' — Leadership summary' + (yearLbl() ? ' ' + esc(yearLbl()) : '') + '</h1><p class="sub">Social-emotional & cognitive skills · Tilli Measures</p>' +
+      '<p class="meta">' + (yearLbl() ? 'School year: <b>' + esc(yearLbl()) + '</b>' + (AD.pastYear ? ' (closed)' : '') + ' · ' : '') + 'Assessment point: <b>' + esc(pointLabel(pt)) + '</b> · Generated ' + genStamp() + '</p>' +
       '<div class="tiles"><div class="tile"><b>' + secs.length + '</b><span>sections running</span></div><div class="tile"><b>' + students.length + '</b><span>students assessed</span></div><div class="tile"><b>' + AD.completedPoints.length + '</b><span>assessment points complete</span></div></div>' +
       '<table><thead><tr><th>Skill</th><th>Band distribution (Sprouting / Growing / Blooming)</th><th>Movement</th></tr></thead><tbody>' + skillRows + '</tbody></table>' +
       '<p class="leg">Bands: Sprouting (blue) · Growing (amber) · Blooming (green). Figures are group distributions — no individual results are shown. No section-level teacher attribution.</p>' +
@@ -3187,10 +3190,13 @@
       return '<i style="width:' + p[b.key] + '%;background:' + PAL.css(b.token) + '"></i>';
     }).join('') + '</span> <span class="mini-l">' + p.secure + '% blooming</span>';
   }
+  // The school year an export is about (the one being viewed).
+  function yearLbl() { return (AD.viewYear && AD.viewYear.label) || ''; }
+  function yearSlug() { return yearLbl().replace(/[^0-9A-Za-z]+/g, '-').replace(/^-|-$/g, ''); }
   function exportCSV(kind, scope, point) {
     var pt = AD.points.find(function (p) { return p.key === point; });
     var lines = [], name;
-    var header = '# Tilli Measures export · ' + (scope === 'school' ? AD.school.name : gLbl(scope)) + ' · Assessment point: ' + pt.label + ' · Generated ' + genStamp();
+    var header = '# Tilli Measures export · ' + (scope === 'school' ? AD.school.name : gLbl(scope)) + (yearLbl() ? ' · School year: ' + yearLbl() : '') + ' · Assessment point: ' + pt.label + ' · Generated ' + genStamp();
     if (kind === 'roster') {
       name = 'roster';
       lines.push(header); lines.push('Student ID,Name,Grade,Base grade,Section,Base section,Enrolment,Parent linked');
@@ -3206,7 +3212,7 @@
     }
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     var url = URL.createObjectURL(blob);
-    var a = document.createElement('a'); a.href = url; a.download = 'tilli-' + name + '-' + point + '-' + genStamp() + '.csv';
+    var a = document.createElement('a'); a.href = url; a.download = 'tilli-' + name + (yearSlug() ? '-' + yearSlug() : '') + '-' + point + '-' + genStamp() + '.csv';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 500);
     toast('CSV exported.');
   }
@@ -3845,7 +3851,9 @@
     if (!A || !A.currentYear || !sid) return null;
     var cur = A.currentYear(sid); if (!cur) return null;
     var rd = A.yearReadiness(sid), finished = rd.ended.length && !rd.live.length && !rd.scheduled.length;
-    return { cur: cur, request: A.yearRequest(sid), finished: finished };
+    // Only once Endline is deployed (scheduled, live or ended) does asking for next year make sense.
+    var endline = rd.live.concat(rd.scheduled, rd.ended).some(function (l) { return l.phase === 'Endline'; });
+    return { cur: cur, request: A.yearRequest(sid), finished: finished, endline: endline };
   }
   function yearEndHTML() {
     var ys = yearState(); if (!ys) return '';
@@ -3856,6 +3864,8 @@
     if (ys.cur.rollover && !ys.finished) return strip('Tilli started ' + esc(ys.cur.label) + ' on ' + fmtInvDate(ys.cur.startedAt) + ' and moved children up from ' + esc(ys.cur.rollover.from) + '.',
       '<button class="btn btn-outline btn-sm" data-yearsee="1">See grade migration</button>');
     if (platformViewer) return strip('The school admin asks for the next year here. You start it from the school’s Assessments tab on the Tilli platform.', '');
+    if (!ys.endline) return strip('Once Endline is deployed for ' + esc(ys.cur.label) + ', you can ask the Tilli team to start the next year here.',
+      (ys.cur.rollover ? '<button class="btn-link" data-yearsee="1">Last migration</button> ' : '') + '<button class="btn btn-outline btn-sm" disabled title="Available once Endline is deployed">Ask Tilli to start next year</button>');
     return strip('When ' + esc(ys.cur.label) + ' ends, ask the Tilli team to start the next year. They move children up a grade and keep this year’s results.',
       (ys.cur.rollover ? '<button class="btn-link" data-yearsee="1">Last migration</button> ' : '') + '<button class="btn btn-outline btn-sm" data-yearask="1">Ask Tilli to start next year</button>');
   }
@@ -3869,7 +3879,8 @@
     });
   }
   function askNewYear() {
-    if (platformViewer) return;
+    var ys = yearState();
+    if (platformViewer || !ys || !ys.endline) return;
     var r = TilliAPI.requestNewYear(currentSchoolId(), email);
     toast(r.ok ? 'Request sent — the Tilli team will start the next year.' : 'Only a school admin can ask for this.');
     render();
@@ -4007,6 +4018,26 @@
     });
   }
   window.matchMedia('(max-width: 860px)').addEventListener('change', placeStatePanel);
+
+  // ---------- tap tips ----------
+  // Sentence-length explanations in a hover-only `title` are invisible on phones.
+  // Each becomes the same ⓘ tooltip as withInfo (shows on hover, and on tap since
+  // a tap focuses it). Buttons, links and form fields keep their title; short
+  // titles (names, truncated labels) are left alone.
+  var TAP_TIP_MIN = 40;   // shortest title (characters) that counts as an explanation
+  function tapTips(root) {
+    root.querySelectorAll('[title]').forEach(function (el) {
+      if (el.dataset.taptip || /^(BUTTON|A|INPUT|SELECT|TEXTAREA|OPTION)$/.test(el.tagName) || el.closest('button, a')) return;
+      var t = (el.getAttribute('title') || '').trim();
+      if (t.length < TAP_TIP_MIN || t === (el.textContent || '').trim()) return;
+      el.dataset.taptip = '1'; el.removeAttribute('title');
+      // Inside a <label> a tap would focus its field instead, so the ⓘ goes after it.
+      el.insertAdjacentHTML(el.tagName === 'LABEL' ? 'afterend' : 'beforeend', ' <span class="ui-tooltip help down" data-tip="' + esc(t) + '" tabindex="0" aria-label="' + esc(t) + '"><span class="ui-info" aria-hidden="true">i</span></span>');
+    });
+  }
+  var tapPending = false;
+  new MutationObserver(function () { if (tapPending) return; tapPending = true; requestAnimationFrame(function () { tapPending = false; tapTips(document.body); }); })
+    .observe(document.body, { childList: true, subtree: true });
 
   // ---------- boot ----------
   buildStatePanel();

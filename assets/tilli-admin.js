@@ -2726,8 +2726,8 @@
     var rd = viewingCur && !GROUP ? window.TilliAPI.yearReadiness(s.id) : null;
     var ready = rd && rd.ended.length && !rd.live.length && !rd.scheduled.length;
     var newYearBtn = !rd ? '' : ready
-      ? '<button class="btn btn-outline btn-sm" data-yearnew title="Close ' + esc(cur.label) + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>'
-      : '<button class="btn-link tl-yearearly" data-yearnew data-early="1" title="Start new year appears once every assessment window in ' + esc(cur.label) + ' has ended. Use this only if the school has asked to close the year early.">Close the year early…</button>';
+      ? '<button class="btn btn-outline btn-sm" data-yearnew data-tipnext title="Close ' + esc(cur.label) + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>'
+      : '<button class="btn-link tl-yearearly" data-yearnew data-early="1" data-tipnext title="Start new year appears once every assessment window in ' + esc(cur.label) + ' has ended. Use this only if the school has asked to close the year early.">Close the year early…</button>';
     var cal = rd && window.TilliAPI.calendarFor(s.id);
     var calNote = cal && cal.status === 'submitted' ? '<div class="ui-note info mt-2"><span aria-hidden="true">📅</span><span><b>' + esc(cal.submittedByName || 'The school') + '</b> sent the school calendar on ' + esc(fmtJoined(localISO(new Date(cal.submittedAt)))) + ' — <button class="btn-link" data-yearcal>review it and apply the dates</button>.</span></div>' : '';
     var calBtn = rd ? '<button class="btn btn-outline btn-sm" data-yearcal title="Suggest Baseline / Midline / Endline dates from the school’s terms, exams and holidays.">Plan from calendar</button>' : '';
@@ -5628,6 +5628,7 @@
     return '';
   }
   function decorateTips(root) {
+    tapTips(root);
     if (GROUP) return;
     root.querySelectorAll(TIP_SELECTORS).forEach(function (el) {
       if (el.dataset.tipped) return;
@@ -5635,6 +5636,26 @@
       if (!t) return;
       el.dataset.tipped = '1';
       el.insertAdjacentHTML('beforeend', ' <span class="tl-tip" tabindex="0" role="button" aria-label="What does “' + esc(key) + '” mean?" data-tip="' + esc(t) + '">i</span>');
+    });
+  }
+  // Sentence-length explanations kept in a hover-only `title` are invisible on
+  // phones and tablets. Each becomes a tappable ⓘ (same bubble as the help tips):
+  // on plain text / chips / labels / table heads the ⓘ goes inside; on a button
+  // marked data-tipnext it goes right after. Short titles (names, truncated
+  // labels) are left alone.
+  var TAP_TIP_MIN = 40;   // shortest title (characters) that counts as an explanation
+  var TAP_TIP_SKIP = { BUTTON: 1, A: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1, OPTION: 1, svg: 1, SVG: 1 };
+  function tapTips(root) {
+    root.querySelectorAll('[title]').forEach(function (el) {
+      if (el.dataset.taptip) return;
+      var t = (el.getAttribute('title') || '').trim();
+      if (t.length < TAP_TIP_MIN || t === (el.textContent || '').trim()) return;
+      var next = el.hasAttribute('data-tipnext');
+      if (!next && (TAP_TIP_SKIP[el.tagName] || el.closest('button, a'))) return;
+      el.dataset.taptip = '1';
+      var tip = '<span class="tl-tip" tabindex="0" role="button" aria-label="More about this" data-tip="' + esc(t) + '">i</span>';
+      if (next) el.insertAdjacentHTML('afterend', tip);
+      else { el.removeAttribute('title'); el.insertAdjacentHTML('beforeend', ' ' + tip); }
     });
   }
   // One floating bubble for every [data-tip] — positioned in JS so table /
@@ -5665,6 +5686,10 @@
     var pending = false;
     new MutationObserver(function () { if (pending) return; pending = true; requestAnimationFrame(function () { pending = false; decorateTips(app); }); })
       .observe(app, { childList: true, subtree: true });
+    // Dialogs render outside the app (Grades & sections, Start new year…): tap tips there too.
+    var mroot = document.getElementById('tl-modal-root'), mpending = false;
+    if (mroot) new MutationObserver(function () { if (mpending) return; mpending = true; requestAnimationFrame(function () { mpending = false; tapTips(mroot); }); })
+      .observe(mroot, { childList: true, subtree: true });
   }
 
   // ---- FAQ ----
