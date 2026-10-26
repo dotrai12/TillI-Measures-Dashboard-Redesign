@@ -273,14 +273,14 @@ Open issues that came out of those changes:
 - **Fixed in passing:** actions that refresh the screen you're on (Start new year, Approve / Turn down a new student) didn't redraw until you navigated away — they do now.
 
 **Rollout fix plan — Phase 2** (26 Oct 2026, see `Rollout-Fix-Plan.md`)
-- **Completion numbers dropped on every live school.** "Children fully done" counts a child only when the teacher, parent *and* direct assessments are all in (the agreed 19 Oct rule). Heritage Baseline went from 60% (Tilli) / 50% (school dashboard) to **14% (8 of 56)** on both. Tell schools before this ships.
-- **Board scope only covers the leadership dashboard's own screens.** Ask Tilli answers that call the store directly (not through the dashboard data) may still count other boards. *Possible fix:* pass the admin's section scope into Ask Tilli's completion answers.
-- **The Add School first admin always gets every board.** Board-limited admins are set on a later invite. *Possible fix:* add Board access to the wizard's First admin step.
+- **Completion rule (confirmed by Ishani 26 Oct 2026):** a child is fully done when they've finished every assessment *deployed to that school* for the phase — only teacher deployed → teacher only; teacher + parent → both; all three → all three. Heritage Baseline (all three deployed) reads **8 of 56 (14%)** on both dashboards, down from 60% / 50%. ✅ The school dashboard now explains it: a one-time "How completion is counted" note on Overview naming what was deployed, and a line on the check-in card. Still worth telling schools before release.
+- ~~**Ask Tilli may count other boards.**~~ Checked 26 Oct 2026: the school dashboard's Ask Tilli only reads the dashboard's own (already board-scoped) data — no leak. *Still open:* the Your team tab lists every teacher, including other boards' (names only, no children's data).
+- ~~**The Add School first admin always gets every board.**~~ Fixed 26 Oct 2026: the wizard's First admin step has Board access (multi-board schools).
 - **Schools created before boards-per-grade have no grade boards.** A board-limited admin there sees an empty dashboard with a note asking Tilli to set each grade's board (Settings → Grades & sections).
 - **Edit school's country / city now use the fixed lists** (fixes the free-text issue above). Values saved before stay selectable. Edits still don't persist on reload for wizard-created schools (existing issue).
-- **Regenerating the code doesn't tell anyone.** Parents and teachers with old links just get "wrong code". *Possible fix:* a banner on the school admin dashboard for a week listing the new links to re-share.
+- ~~**Regenerating the code doesn't tell anyone.**~~ Fixed 26 Oct 2026: for 7 days the school dashboard's Overview shows the new code and the three links to re-share, with Copy buttons. Parents and teachers who don't get the new links still see "wrong code".
 - **The "no live version" deploy warning shows for IDELA, Home SEL Survey and the teacher observational report** on every new school, because those demo templates have no live Baseline version. Real templates will clear it.
-- **The Expiring invitations card still measures from the demo date (27 Aug 2026)**, so newly-sent invites (now dated from today) won't show as expiring until that's switched too.
+- ~~**The Expiring invitations card still measures from the demo date.**~~ Fixed 26 Oct 2026: invitations sent from the platform count from today; sample ones keep the demo date.
 
 **Expected class size + new-student approval** (added 23 Oct 2026)
 - **Existing classes were taken as complete.** The first load gives every existing section its current headcount as its size, so an incomplete roster now reads as full. *Possible fix:* mark those sizes "not confirmed" until an admin saves one.

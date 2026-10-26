@@ -27,6 +27,9 @@
   var TODAY = new Date('2026-08-27T00:00:00');
   var DAY = 86400000;
   var daysFromNow = function (d) { return Math.round((new Date(d) - TODAY) / DAY); };
+  // Days until an invitation expires. Invitations sent from this browser (real: true)
+  // are dated from the real day, so they count from today; sample ones from the demo date.
+  var inviteDaysLeft = function (i) { return i.real ? Math.round((new Date(i.expires) - new Date(new Date().toDateString())) / DAY) : daysFromNow(i.expires); };
   var addDays = function (n) { return new Date(TODAY.getTime() + n * DAY); };
   var iso = function (d) { return new Date(d).toISOString().slice(0, 10); };
 
@@ -389,7 +392,7 @@
       name: TITLES(local) || acct.email, email: acct.email, role: acct.role || 'School Admin',
       schoolId: acct.school_id || null, groupId: acct.group_id || null,
       status: acct.status === 'active' ? 'Activated' : 'Account Created',
-      delivery: 'Email sent', created: iso(created), expires: iso(expires),
+      delivery: 'Email sent', created: iso(created), expires: iso(expires), real: !!acct.createdAt,
     };
   }
   // Fold any accounts provisioned in a previous session (persisted in TilliAPI)
@@ -832,7 +835,7 @@
     var noRole = USERS.filter(function (u) { return u.role === 'none' && !u.schoolId; });
     var expiringInv = INVITATIONS.filter(function (i) {
       if (i.status === 'Activated') return false;
-      var d = daysFromNow(i.expires);
+      var d = inviteDaysLeft(i);
       return i.status === 'Expired' || (d >= 0 && d <= 7);
     });
     var draftTpls = TEMPLATES.filter(function (t) { return t.hasDraft && !t.archived; });   // a phase draft waiting to be published
@@ -1030,7 +1033,7 @@
           role: 'School Admin', schoolId: s.id, sections: [] });
         INVITATIONS.unshift({ id: 'inv-' + s.id, name: res.coordinator.name, email: res.coordinator.email,
           role: 'School Admin', schoolId: s.id, status: 'Account Created',
-          delivery: 'Email sent', created: iso(new Date()), expires: iso(new Date(Date.now() + 14 * DAY)) });   // real date, not the demo date
+          delivery: 'Email sent', created: iso(new Date()), expires: iso(new Date(Date.now() + 14 * DAY)), real: true });   // real date, not the demo date
         return s;
       }
     }
@@ -1077,7 +1080,7 @@
         role: 'School Admin', schoolId: id, sections: [] });
       INVITATIONS.unshift({ id: 'inv-' + id, name: (admin.name || admin.email).trim(), email: admin.email.trim(),
         role: 'School Admin', schoolId: id, status: 'Account Created',
-        delivery: 'Email sent', created: iso(new Date()), expires: iso(new Date(Date.now() + 14 * DAY)) });   // real date, not the demo date
+        delivery: 'Email sent', created: iso(new Date()), expires: iso(new Date(Date.now() + 14 * DAY)), real: true });   // real date, not the demo date
     }
     return s;
   }
@@ -1392,7 +1395,7 @@
     observation: OBSERVATION, selfGuided: SELF_GUIDED, results: RESULTS,
     roles: ROLES,
     // helpers the client needs but must not re-derive
-    daysFromNow: daysFromNow, iso: iso, normName: normName, masterLinkUrl: masterLinkUrl,
+    daysFromNow: daysFromNow, inviteDaysLeft: inviteDaysLeft, iso: iso, normName: normName, masterLinkUrl: masterLinkUrl,
     groupLinkUrl: groupLinkUrl, groupLinkPreview: groupLinkPreview,
     emptyStructureTtlDays: EMPTY_STRUCTURE_TTL_DAYS, emptyStructureWarnDays: EMPTY_STRUCTURE_WARN_DAYS,
     // server-computed views

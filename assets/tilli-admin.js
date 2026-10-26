@@ -1176,6 +1176,9 @@
       } else if (step === 2) {
         if (g('ws-admin-name')) d.admin.name = g('ws-admin-name').value.trim();
         if (g('ws-admin-email')) d.admin.email = g('ws-admin-email').value.trim();
+        var bsc = document.querySelector('input[name="ws-bscope"]:checked');
+        if (bsc) d.admin.boards = bsc.value === 'some' ? Array.prototype.map.call(document.querySelectorAll('[data-wsboard]:checked'), function (c) { return c.value; }) : null;
+        if (d.admin.boards && !d.admin.boards.length) d.admin.boards = null;
       }
     }
 
@@ -1268,6 +1271,12 @@
         '<div class="tl-stack">' +
           '<label class="field">Admin name<input class="input" id="ws-admin-name" placeholder="e.g. Meera Krishnan" value="' + esc(d.admin.name) + '"></label>' +
           '<label class="field">Admin email<input class="input" id="ws-admin-email" type="email" placeholder="name@school.edu" value="' + esc(d.admin.email) + '"></label>' +
+          // Multi-board school: the first admin can be limited to some boards.
+          (d.boards.length > 1 ? '<div class="field"><span>Board access</span>' +
+            '<label class="tl-check"><input type="radio" name="ws-bscope" value="all"' + (d.admin.boards ? '' : ' checked') + '> All boards (' + esc(d.boards.join(' + ')) + ')</label>' +
+            '<label class="tl-check"><input type="radio" name="ws-bscope" value="some"' + (d.admin.boards ? ' checked' : '') + '> Only these boards:</label>' +
+            '<div class="tl-inline-actions" style="padding-left:24px">' + d.boards.map(function (b) { return '<label class="tl-check"><input type="checkbox" data-wsboard value="' + esc(b) + '"' + (d.admin.boards && d.admin.boards.indexOf(b) >= 0 ? ' checked' : '') + '> ' + esc(b) + '</label>'; }).join('') + '</div>' +
+            '<span class="tl-muted">A one-board admin sees only that board’s grades, children and results.</span></div>' : '') +
         '</div>' +
         '<button class="btn-link mt-3" id="ws-skip-admin" type="button">Skip this step →</button>';
     }
@@ -1282,6 +1291,7 @@
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
           row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
           row('Academic year', fmtJoined(d.yearStart) + ' → ' + fmtJoined(d.yearEnd)) +
+          (d.admin.email && d.boards.length > 1 ? row('Admin board access', d.admin.boards ? d.admin.boards.join(' + ') + ' only' : 'All boards') : '') +
           row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
           row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base) + (d.boards.length > 1 ? ' · ' + (g.board || d.boards[0]) : '') + (!g.sections.length && !(parseInt(g.students, 10) || 0) ? ' (no sections yet)' : ''); }).join(', ')) +
           row('First admin', admin) +
@@ -1573,7 +1583,7 @@
       var tone = !p.deployed ? 'muted' : (p.status === 'Live' ? 'live' : (p.status === 'Ended' ? 'done' : 'sched'));
       return '<div class="tl-phase ' + tone + '"><div class="tp-name">' + esc(p.phase) + '</div>' +
         '<div class="tp-state">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</div>' +
-        (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp" title="Children who have done every assessment in this phase">' +
+        (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp" title="Children who have finished every assessment deployed to this school for this phase">' +
           (p.completion != null ? pct(p.completion) + '% complete' + (p.kidsTotal ? ' · ' + p.kidsDone + ' of ' + p.kidsTotal + ' children' : '') : '') + '</div>' : '') + '</div>';
     }).join('') + '</div>';
   }
@@ -3292,7 +3302,7 @@
       if (!peopleRowMatches(i, f)) return false;
       if (!attn) return true;
       if (i.status === 'Activated') return false;
-      var d = ORG.daysFromNow(i.expires);
+      var d = ORG.inviteDaysLeft(i);
       return i.status === 'Expired' || (d >= 0 && d <= 7);
     });
     var filtered = !!(f.role || f.q.trim() || f.school || f.group);

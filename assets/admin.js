@@ -1417,7 +1417,8 @@
     var op = AD.openPoint, n = studs.length, c = dlCheckinCounts(studs), left = dlDaysLeft(), ink = 'var(--accent-ink)', out = [];
     out.push({ kind: 'progress', eyebrow: op.label + ' check-in',
       head: dlHl(c.done + ' of ' + n, DL_STATUS.done.ink) + ' children assessed' + (c.draft ? ', ' + dlHl(c.draft + ' in progress', DL_STATUS.draft.ink) : '') + '.',
-      body: (c.done >= n ? 'Everyone is done' : Math.round(c.done / (n || 1) * 100) + '% complete') + ' · ' + countNoun(left, 'day', 'days') + ' left in the window.',
+      body: (c.done >= n ? 'Everyone is done' : Math.round(c.done / (n || 1) * 100) + '% complete') + ' · ' + countNoun(left, 'day', 'days') + ' left in the window.' +
+        (deployedForText(op.label) ? ' Assessed = finished every ' + op.label + ' assessment deployed here (' + deployedForText(op.label) + ').' : ''),
       hl: dlKidKeys(studs.filter(function (s) { return AD.checkinStatus(s) !== 'none'; })) });
     var waiting = studs.filter(function (s) { return (AD.checkinStatus(s) || 'none') === 'none'; });
     if (waiting.length) out.push({ kind: 'progress', eyebrow: 'Still to start',
@@ -1876,9 +1877,12 @@
 
   // Overview = the living dandelion + its guided story, free-flowing on the page (no cards).
   SCREEN.overview = function (params, body) {
-    body.innerHTML = yearNoticeHTML() + dandelionHTML(params);   // invite / setup warnings live in the 3 points (dlWarnings)
+    body.innerHTML = codeChangedHTML() + yearNoticeHTML() + completionRuleNoteHTML() + dandelionHTML(params);   // invite / setup warnings live in the 3 points (dlWarnings)
     wireDandelion(body, params);
     body.querySelectorAll('[data-yearsee]').forEach(function (b) { b.addEventListener('click', showYearMigration); });
+    var rd = body.querySelector('[data-ruledismiss]');
+    if (rd) rd.addEventListener('click', function () { try { localStorage.setItem(RULE_KEY + '.' + currentSchoolId() + '.' + email, '1'); } catch (e) {} render(); });
+    body.querySelectorAll('[data-relink]').forEach(function (b) { b.addEventListener('click', function () { try { navigator.clipboard.writeText(b.dataset.relink); } catch (e) {} toast('Link copied.'); }); });
     var yd = body.querySelector('[data-yeardismiss]');
     if (yd) yd.addEventListener('click', function () { TilliAPI.dismissYearNotice(currentSchoolId(), email); render(); });
   };
@@ -3607,6 +3611,37 @@
       '<p class="ui-mod-note mb-3">Started by the Tilli team on ' + fmtInvDate(ys.cur.startedAt) + ': ' + ro.moved.promoted + ' moved up, ' + ro.moved.retained + ' stayed, ' + ro.moved.graduated + ' graduated. ' +
         esc(ro.from) + ' results stay attached to each child and their class that year.</p>' + migrationTableHTML(ro) +
       '<p class="ui-mod-note mt-3">Something wrong — a child in the wrong class? Use <b>Need help?</b> to tell the Tilli team.</p>');
+  }
+  // Which audiences a phase was deployed to, in words: "teacher, parent and student".
+  // A child counts as done only when every one of those is finished.
+  function deployedForText(phase) {
+    var A = window.TilliAPI, sid = currentSchoolId(); if (!window.TILLI_CREATED || !A || !sid) return '';
+    var NAME = { 'Teacher': 'teacher', 'Parent': 'parent', 'Direct Assessment': 'student' }, auds = [];
+    A.getDeployments(sid).forEach(function (d) {
+      if (String(d.phase) !== String(phase) || d.notRun) return;
+      if ((d.assessments || []).some(function (a) { return !a.perTeacher; }) && auds.indexOf(NAME[d.audience]) < 0) auds.push(NAME[d.audience]);
+    });
+    auds.sort(function (a, b) { return ['teacher', 'parent', 'student'].indexOf(a) - ['teacher', 'parent', 'student'].indexOf(b); });
+    return auds.length > 1 ? auds.slice(0, -1).join(', ') + ' and ' + auds[auds.length - 1] : (auds[0] || '');
+  }
+  // One-time note on how completion is counted (it reads lower than the old per-lane %).
+  var RULE_KEY = 'tilliMeasures.completionRuleSeen';
+  function completionRuleNoteHTML() {
+    if (AD.pastYear || !AD.openPoint) return '';
+    var who = deployedForText(AD.openPoint.label); if (!who) return '';
+    try { if (localStorage.getItem(RULE_KEY + '.' + currentSchoolId() + '.' + email)) return ''; } catch (e) { /* no storage → show it */ }
+    return '<div class="ui-note info mb-3 ad-yearnotice"><span aria-hidden="true">ℹ️</span><span><b>How completion is counted:</b> a child is complete once they’ve finished every assessment deployed to your school — for ' +
+      esc(AD.openPoint.label) + ' that’s the ' + esc(who) + ' assessment' + (who.indexOf(' and ') >= 0 ? 's' : '') + '. Children with only some done show as in progress, so the number can read lower than per-assessment counts.</span>' +
+      '<button class="dialog-close" data-ruledismiss aria-label="Dismiss">×</button></div>';
+  }
+  // For a week after the school code changes: the new code + the links to re-share.
+  function codeChangedHTML() {
+    var A = window.TilliAPI, sc = A && currentSchoolId() ? A.resolveSchool(currentSchoolId()) : null;
+    if (AD.pastYear || !sc || !sc.codeChangedAt || Date.now() - sc.codeChangedAt > 7 * 86400000) return '';
+    var slug = String(sc.code).toLowerCase(), base = 'https://measures.tilli.app/' + slug + '/';
+    var link = function (lbl, path) { return '<span class="ad-relink"><b>' + lbl + '</b> <span class="ad-num">' + esc(base + path) + '</span> <button class="btn-link" data-relink="' + esc(base + path) + '">Copy</button></span>'; };
+    return '<div class="ui-note warn mb-3"><span aria-hidden="true">🔑</span><span><b>Your school code changed on ' + fmtInvDate(sc.codeChangedAt) + ' to ' + esc(sc.code) + '.</b> Old links and the old code no longer work — re-share these:<br>' +
+      link('Parents', 'parent') + link('Teachers & school admins', 'teacher') + link('Student assessments', 'direct') + '</span></div>';
   }
   // Shown on Overview once, after Tilli starts a new year.
   function yearNoticeHTML() {

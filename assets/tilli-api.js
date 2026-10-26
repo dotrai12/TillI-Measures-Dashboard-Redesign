@@ -1258,7 +1258,8 @@
     // Coordinator (school admin) — from the wizard, or generated.
     var coordEmail = low(input.admin && input.admin.email) || ('coordinator@' + baseId + '.edu');
     var coordName  = norm(input.admin && input.admin.name) || 'School Coordinator';
-    db.adminMemberships.push({ user_id:coordEmail, school_id:id, role:'admin', name:coordName, status:'active' });
+    var coordBoards = input.admin && Array.isArray(input.admin.boards) && input.admin.boards.length ? input.admin.boards.slice() : null;   // null = every board
+    db.adminMemberships.push({ user_id:coordEmail, school_id:id, role:'admin', name:coordName, status:'active', boards:coordBoards });
     db.staff[id].push({ name:coordName, email:coordEmail, role:'coordinator', section_id:null });
 
     // Normalise grades: a grade with no explicit sections but a count becomes
@@ -1341,7 +1342,7 @@
     var taken = function(c){ return Object.keys(db.schools).some(function(k){ return up(db.schools[k].code)===c; }); };
     var old = sc.code, code;
     do { code = prefix + '-' + (1000 + Math.floor(Math.random() * 9000)); } while (code === up(old) || taken(code));
-    sc.code = sc.joinCode = code;
+    sc.code = sc.joinCode = code; sc.codeChangedAt = Date.now();   // the school dashboard shows a re-share banner for a week
     logHistory(db, { school_id:schoolId, section_id:null, section_name:'', students:[], kind:'student', action:'school.code',
       changes:[{ label:'School code', from: old || '', to: code }], actor: actorFor(db, actorEmail, schoolId) });
     write(db);
