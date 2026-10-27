@@ -311,6 +311,18 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Translation — Phase 6C: page translator + hand-over to Mayur** (27 Oct 2026)
+- **Sentences with a name or number stay English** on the teacher app and school dashboard ("12 of 56 done", "Aarav's garden"). The page translator only swaps text that matches an approved translation exactly. *Fix (real build):* wrap those strings with `t()` and placeholders, as the parent app does.
+- **Names can still land on the Translations list** when they're part of a sentence ("Aarav's garden") or not in the page's roster. Use **Not text** to drop them.
+- **Strings appear only once someone opens the screen in English.** A screen nobody has visited isn't listed yet.
+- **Changed English shows as a new row.** The old row (and its translation) stays until someone marks it Not text.
+- **Mayur — connections to build:**
+  1. **Translation service** behind "Draft with Ask Tilli". It writes Claude's bundled drafts for the sign-in, consent and parent strings (`assets/i18n-drafts.js`) and a `[Hindi draft] …` placeholder for everything else.
+  2. **Store translations, language picks, discovered strings and Not-text marks in the real backend.** Today they're `db.translations`, `db.userLangs`, `db.uiStrings` and `db.uiIgnored` in TilliAPI's localStorage.
+  3. **Replace the page translator with build-time string extraction** (keys + `t()`) in the real dashboard, so sentences with names and numbers translate too.
+  4. **Assessment screens after the redesign:** template question text per language, responses record their language, and a deploy warning when a template lacks a school's language.
+  5. **Arabic + right-to-left** (6E).
+
 **Translation — Phase 6B** (27 Oct 2026)
 - **Hindi drafts use masculine verb forms for the child** ("{name} पसंद करता है") in the parent snapshot and a few parent-app lines. Tamil uses the respectful neutral form and Sinhala verbs carry no gender, so only Hindi is affected. *Fix:* the reviewer rewrites those lines neutrally before approving, or we add a boy/girl variant per string.
 - **Translations can't use the English pronoun slots.** Snapshot copy fills `{subj}`, `{obj}`, `{poss}` and `{be}` with English words (he / her / their / is). A translation that uses them would show English mid-sentence; translations use `{name}` instead. Nothing stops a reviewer typing one on Tilli → Translations yet.

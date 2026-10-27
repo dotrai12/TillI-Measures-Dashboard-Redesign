@@ -2949,6 +2949,25 @@
     var db = getDB(); (db.userLangs = db.userLangs || {})[e] = lang; write(db);
     return { ok:true };
   }
+  // Screen text the page translator has seen, by area (teacher app, school
+  // dashboard). Front-end stand-in: a real build lists strings at build time.
+  function noteUiStrings(area, list){
+    var db = getDB(), ign = db.uiIgnored || {};
+    var m = ((db.uiStrings = db.uiStrings || {})[area] = db.uiStrings[area] || {}), n = 0;
+    (list || []).forEach(function(t){ if (!m[t] && !ign[t]){ m[t] = Date.now(); n++; } });
+    if (n) write(db);
+    return n;
+  }
+  function uiStrings(){ return clone(getDB().uiStrings || {}); }
+  // "Not for translating" (a name, a code…): dropped from every area and never noted again.
+  function ignoreUiString(actorEmail, text){
+    var db = getDB();
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };
+    (db.uiIgnored = db.uiIgnored || {})[text] = Date.now();
+    Object.keys(db.uiStrings || {}).forEach(function(a){ delete db.uiStrings[a][text]; });
+    write(db);
+    return { ok:true };
+  }
 
   /* ---------- reflection question bank (Platform Admin editable) ---------- */
   function getReflectionConfig(){ return clone(getDB().config.reflection); }
@@ -3325,6 +3344,7 @@
     makeUid: makeUid,
     getReflectionConfig: getReflectionConfig,
     translationsFor: translationsFor, setTranslation: setTranslation, userLang: userLang, setUserLang: setUserLang,
+    noteUiStrings: noteUiStrings, uiStrings: uiStrings, ignoreUiString: ignoreUiString,
     consentConfig: consentConfig, consentFor: consentFor, needsConsent: needsConsent,
     saveConsent: saveConsent, consentForSchool: consentForSchool,
     setReflectionConfig: setReflectionConfig,

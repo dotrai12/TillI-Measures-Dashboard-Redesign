@@ -423,6 +423,14 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 - [ ] In a snapshot row, the English has `{subj}` / `{poss}` slots; the drafts use `{name}` instead. Keep it that way when editing.
 - [ ] Still English on purpose: assessment names, the demo sign-in hints, and the parent check-in screens (6C, after the redesign).
 
+## Mission 28 — Teacher app + school dashboard (page translator, Phase 6C, 10 min)
+
+- [ ] In English, open the teacher app (`teacher@tilli.edu`) and the school admin dashboard (`meera.krishnan@littlesprouts.edu`), and click through a few screens.
+- [ ] Tilli → **Assessments → Translations** → **Where it shows: Teacher app** / **School dashboard** → the text you just saw is listed (no numbers, no emails).
+- [ ] A row that's a name or code → **Not text** → it's gone and won't come back.
+- [ ] **Tamil** tab → type a translation for a menu item or heading → **Approve** → switch that app to தமிழ் → it shows in Tamil. Sentences with a name or number stay English (known gap, see the tracker).
+- [ ] "Draft with Ask Tilli" fills these rows with `[Tamil draft] …` placeholders — a real translation service is Mayur's to connect.
+
 ---
 
 ## Demo-only gaps (so they don't surprise you)

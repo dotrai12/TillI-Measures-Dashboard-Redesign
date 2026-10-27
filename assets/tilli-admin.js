@@ -6109,7 +6109,7 @@
     var langs = I.LANGS.filter(function (l) { return l.code !== 'en'; });
     var lang = langs.some(function (l) { return l.code === params.lang; }) ? params.lang : langs[0].code, L = langs.filter(function (l) { return l.code === lang; })[0];
     var cat = I.catalog(), recs = A.translationsFor(lang);
-    var rows = cat.map(function (c) { var r = recs[c.key]; return { key: c.key, area: c.area, en: c.en, rec: r || null, st: trStatus(r, c.en) }; });
+    var rows = cat.map(function (c) { var r = recs[c.key]; return { key: c.key, area: c.area, en: c.en, ui: !!c.ui, rec: r || null, st: trStatus(r, c.en) }; });
     var count = function (st) { return rows.filter(function (r) { return st === 'draft' ? r.st === 'draft' || r.st === 'stale' : r.st === st; }).length; };
     var areas = []; rows.forEach(function (r) { if (areas.indexOf(r.area) < 0) areas.push(r.area); });
     var q = trState.q.trim().toLowerCase();
@@ -6120,7 +6120,7 @@
     });
     var tone = { missing: 'warn', draft: 'warn', stale: 'warn', approved: 'ok' };
     body.innerHTML = '<h1 class="ui-screen-title">Translations</h1>' +
-      '<p class="ui-screen-sub">Every piece of screen text, in each language. Parents, teachers and schools only ever see <b>Approved</b> translations — anything else shows in English. If the English changes, its translation goes back to needing review.</p>' +
+      '<p class="ui-screen-sub">Every piece of screen text, in each language. Parents, teachers and schools only ever see <b>Approved</b> translations — anything else shows in English. If the English changes, its translation goes back to needing review. Teacher app and School dashboard text is added here as people open those screens; mark a name or code as <b>Not text</b> to drop it.</p>' +
       '<div class="ui-tabs mt-3">' + langs.map(function (l) { return '<button class="ui-tab' + (l.code === lang ? ' on' : '') + '" data-trlang="' + l.code + '">' + esc(l.name) + ' · ' + esc(l.native) + '</button>'; }).join('') + '</div>' +
       '<div class="tl-kpis four mt-3">' + kpi(count('approved'), 'Approved') + kpi(count('draft'), 'Needs review') + kpi(count('missing'), 'Missing') + kpi(rows.length, 'Strings') + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><div class="tl-inline-actions">' +
@@ -6134,7 +6134,7 @@
             return '<tr><td class="tl-tr-en">' + esc(r.en) + '<small>' + esc(r.area) + ' · ' + esc(r.key) + '</small></td>' +
               '<td><textarea class="input sm tl-tr-in" rows="2" lang="' + lang + '" data-trkey="' + esc(r.key) + '" aria-label="' + esc(L.name) + ' for: ' + esc(r.en) + '">' + esc(r.rec ? r.rec.text : '') + '</textarea></td>' +
               '<td>' + statusPill(TR_LABEL[r.st], tone[r.st]) + (r.rec ? '<small class="tl-muted" style="display:block">' + esc(fmtMs(r.rec.at)) + '</small>' : '') + '</td>' +
-              '<td class="r nowrap"><button class="btn-link" data-trsave="' + esc(r.key) + '">Save</button> <button class="btn btn-outline btn-sm" data-trok="' + esc(r.key) + '">Approve</button></td></tr>';
+              '<td class="r nowrap">' + (r.ui ? '<button class="btn-link" data-trignore="' + esc(r.en) + '" title="A name, code or other data — drop it from this list for good">Not text</button> ' : '') + '<button class="btn-link" data-trsave="' + esc(r.key) + '">Save</button> <button class="btn btn-outline btn-sm" data-trok="' + esc(r.key) + '">Approve</button></td></tr>';
           }).join('') + '</tbody></table></div>' : '<div class="ui-empty">Nothing matches.</div>') + '</div>';
 
     var enOf = {}; cat.forEach(function (c) { enOf[c.key] = c.en; });
@@ -6154,6 +6154,11 @@
     };
     body.querySelectorAll('[data-trsave]').forEach(function (b) { b.addEventListener('click', function () { save(b.dataset.trsave, false); }); });
     body.querySelectorAll('[data-trok]').forEach(function (b) { b.addEventListener('click', function () { save(b.dataset.trok, true); }); });
+    body.querySelectorAll('[data-trignore]').forEach(function (b) { b.addEventListener('click', function () {
+      if (!A.ignoreUiString(me.email, b.dataset.trignore).ok) { toast('Couldn’t remove it.'); return; }
+      ORG.server.logAudit(me.name, 'translation.ignore', b.dataset.trignore, 'platform');
+      toast('Removed — it won’t be listed again.'); redraw();
+    }); });
     var dr = body.querySelector('[data-trdraft]');
     if (dr) dr.addEventListener('click', function () {
       // Ask Tilli's draft: the bundled machine drafts where we have one, else a

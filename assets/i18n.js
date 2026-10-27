@@ -11,8 +11,9 @@
    else English. Load after tilli-api.js.
 
    6A: the groundwork + the consent screens. 6B: sign-in, the parent app
-   and the parent snapshot. Each later phase adds its app's strings to
-   STRINGS (and its machine drafts to i18n-drafts.js).
+   and the parent snapshot (keys in STRINGS, machine drafts in
+   i18n-drafts.js). The teacher app and school dashboard use the page
+   translator instead (autoTranslate, below) — no keys, no drafts.
    ============================================================ */
 (function () {
   'use strict';
@@ -378,9 +379,13 @@
     c.items.forEach(function (it) { out['consent.item.' + it.id] = { area: 'Parent consent', en: it.text }; });
     return out;
   }
+  // Everything Tilli → Translations lists: the word list, then the page
+  // translator's strings (one row per English text, even if seen in two apps).
   function catalog() {
-    var all = Object.assign({}, STRINGS, dynamicStrings());
-    return Object.keys(all).map(function (k) { return { key: k, en: all[k].en, area: all[k].area }; });
+    var all = Object.assign({}, STRINGS, dynamicStrings()), have = {};
+    var out = Object.keys(all).map(function (k) { have[k] = 1; return { key: k, en: all[k].en, area: all[k].area }; });
+    uiCatalog().forEach(function (c) { if (!have[c.key]) { have[c.key] = 1; out.push(c); } });
+    return out;
   }
 
   // Machine drafts for "Draft with Ask Tilli" live in i18n-drafts.js, which
@@ -471,7 +476,100 @@
     });
   }
 
+  // ---------- the page translator (teacher app, school dashboard) ----------
+  // For screens whose text isn't wired to t(): any text node, placeholder, title
+  // or aria-label whose whole text matches an APPROVED translation is swapped
+  // on screen (key 'ui:' + the English). While the page is in English, new text
+  // is noted for Tilli → Translations. Left alone: text with a number, an email
+  // or a link, people's and the school's names, anything inside translate="no"
+  // or .notranslate, and form fields.
+  var UI_ATTRS = ['placeholder', 'title', 'aria-label'];
+  var UI_SKIP_TAGS = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1, NOSCRIPT: 1 };
+  var UI_SKIP_SEL = '[translate="no"], .notranslate, [contenteditable="true"]';
+  var UI_MAX_LEN = 300;      // longer text is content, not a screen string
+  var UI_NOTE_MS = 1500;     // new strings are saved in one batch after this pause
+  var UI_PREFIX = 'ui:';
+  function uiCandidate(s) {
+    return s.length >= 2 && s.length <= UI_MAX_LEN && /[A-Za-z]{2}/.test(s) && !/\d/.test(s) && !/@|https?:|www\./i.test(s);
+  }
+  // People's and the school's names from the page's roster — data, not screen text.
+  function rosterNames() {
+    var out = {}, S = window.TILLI_SCHOOL || {}, add = function (x) { if (x) out[String(x).trim()] = 1; };
+    (S.students || []).forEach(function (s) { add(s.first); add(s.last); add(s.name); add((s.first || '') + ' ' + (s.last || '')); });
+    (S.teachers || []).forEach(function (t) { add(t.name); });
+    if (S.school) add(S.school.name);
+    return out;
+  }
+  function autoTranslate(opts) {
+    opts = opts || {};
+    var area = opts.area, root = opts.root || document.body, A = window.TilliAPI;
+    if (!area || !root || !A || !A.noteUiStrings || typeof MutationObserver === 'undefined') return;
+    var lang = current(), map = {};
+    if (lang !== 'en') {
+      var recs = A.translationsFor(lang);
+      Object.keys(recs).forEach(function (k) {
+        var r = recs[k], en = k.slice(UI_PREFIX.length);
+        if (k.indexOf(UI_PREFIX) === 0 && r.status === 'approved' && r.src === en) map[en] = r.text;
+      });
+    }
+    var skipText = rosterNames();
+    Object.keys(STRINGS).forEach(function (k) { skipText[STRINGS[k].en] = 1; });   // already in the word list
+    var seen = (A.uiStrings()[area]) || {}, pending = {}, timer = null;
+    var mine = new WeakMap();   // text node → the text we put there, so our own swap isn't read back as English
+    function queue(s) {
+      if (lang !== 'en' || seen[s] || skipText[s]) return;
+      pending[s] = 1;
+      if (!timer) timer = setTimeout(function () {
+        var list = Object.keys(pending); pending = {}; timer = null;
+        list.forEach(function (x) { seen[x] = 1; });
+        if (list.length) A.noteUiStrings(area, list);
+      }, UI_NOTE_MS);
+    }
+    function skipped(el) { return !el || UI_SKIP_TAGS[el.tagName] || (el.closest && el.closest(UI_SKIP_SEL)); }
+    function doText(node) {
+      var v = node.nodeValue;
+      if (mine.get(node) === v || skipped(node.parentElement)) return;
+      var s = v.trim();
+      if (!uiCandidate(s)) return;
+      if (map[s]) { var nv = v.replace(s, map[s]); mine.set(node, nv); node.nodeValue = nv; }
+      else queue(s);
+    }
+    function doAttrs(el) {
+      UI_ATTRS.forEach(function (a) {
+        var v = el.getAttribute(a), s = v && v.trim();
+        if (!s || !uiCandidate(s)) return;
+        if (map[s]) el.setAttribute(a, map[s]); else queue(s);
+      });
+    }
+    function walk(node) {
+      if (node.nodeType === 3) { doText(node); return; }
+      if (node.nodeType !== 1 || skipped(node)) return;
+      doAttrs(node);
+      var w = document.createTreeWalker(node, 5 /* elements + text */, {
+        acceptNode: function (n) { return n.nodeType === 1 && skipped(n) ? 2 /* reject subtree */ : 1; },
+      });
+      for (var n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) doText(n); else doAttrs(n); }
+    }
+    walk(root);
+    // Runs before the browser paints, so a translated screen never flashes English.
+    new MutationObserver(function (list) {
+      list.forEach(function (m) {
+        if (m.type === 'childList') m.addedNodes.forEach(walk);
+        else if (m.type === 'characterData') doText(m.target);
+        else if (m.type === 'attributes' && !skipped(m.target)) doAttrs(m.target);
+      });
+    }).observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: UI_ATTRS });
+  }
+  // The page translator's strings, for Tilli → Translations.
+  function uiCatalog() {
+    var A = window.TilliAPI, by = (A && A.uiStrings) ? A.uiStrings() : {}, out = [];
+    Object.keys(by).forEach(function (area) {
+      Object.keys(by[area]).forEach(function (en) { out.push({ key: UI_PREFIX + en, en: en, area: area, ui: true }); });
+    });
+    return out;
+  }
+
   document.documentElement.lang = current();
   window.TilliI18n = { LANGS: LANGS, CODES: CODES, catalog: catalog, drafts: DRAFTS, current: current, detect: detect,
-    setLang: setLang, deviceOnly: deviceOnly, t: t, html: html, apply: apply, refresh: refresh, fmtDate: fmtDate, switcherHTML: switcherHTML, wire: wire };
+    setLang: setLang, deviceOnly: deviceOnly, t: t, html: html, apply: apply, refresh: refresh, autoTranslate: autoTranslate, fmtDate: fmtDate, switcherHTML: switcherHTML, wire: wire };
 })();

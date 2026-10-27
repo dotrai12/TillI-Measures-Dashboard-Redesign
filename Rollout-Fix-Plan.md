@@ -176,10 +176,17 @@ Trimmed 27 Oct: the parent assessment / survey screens are being redesigned firs
 | 6.9 | **Need help? button** (every app). | ✅ |
 | 6.10 | **Drafts** for all 370 strings in Hindi, Tamil and Sinhala, moved to `assets/i18n-drafts.js` (only the Tilli console loads them). | ✅ |
 
-## Phase 6C — Assessments + teacher app · ⬜ (after the assessment redesign)
-Teacher observation form, student assessment page (own switcher — a shared device), parent check-ins and session surveys, teacher app, teacher reflection questions, template question text; templates' language tabs gain Needs review / Approved; deploy warns when a template lacks a school's languages; responses record the language used.
+## Phase 6C — Teacher app + school dashboard (page translator) · ✅ done 27 Oct 2026
 
-## Phase 6D — School dashboard · ⬜
+Decided 27 Oct: no more Claude-written translations, and no hand-wiring of the remaining ~2,000 strings. The front end is finished with a page translator; the connections are Mayur's (see the tracker).
+
+| # | Item | Status |
+|---|---|---|
+| 6.11 | **Page translator** (`TilliI18n.autoTranslate`) on `teacher.html` and `admin.html`: screen text, placeholders, titles and aria-labels that exactly match an approved translation are swapped before the page paints. Skips text with numbers, emails or links, roster names, `translate="no"` / `.notranslate`, and form fields. | ✅ |
+| 6.12 | **String discovery**: while a page is in English, new text is saved (`noteUiStrings`) and listed on Tilli → Translations under **Teacher app** / **School dashboard** (key `ui:<English>`). | ✅ |
+| 6.13 | **Not text** on Tilli → Translations drops a name or code for good (`ignoreUiString`, Tilli only). | ✅ |
+
+**Still to do (Mayur):** the assessment screens after the redesign (template question text, responses record their language, deploy warning when a template lacks a school's language), plus the connections listed in the tracker.
 
 ## Phase 6E — Arabic + right-to-left · later
 
