@@ -19,6 +19,9 @@
    ============================================================ */
 (function () {
   var HELP_EMAIL = 'info@tillikids.com';
+  // Help text follows the page's language (i18n.js) when the page loads it.
+  function L(key, en) { var I = window.TilliI18n; return I ? I.t(key, en) : en; }
+  function A(key, en) { return L(key, en).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   var ICON = {
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
@@ -147,11 +150,11 @@
   }
 
   function popHTML() {
-    return '<div class="tf-pop" id="tf-pop" role="dialog" aria-label="Need help?" hidden>' +
-      '<div class="tf-pop-h"><b>Need help?</b><button class="tf-pop-x" data-tf-close aria-label="Close">×</button></div>' +
-      '<p class="tf-pop-sub">Questions about the dashboard, or something not working? The Tilli team is happy to help.</p>' +
-      '<a class="tf-pop-item" href="' + mailto('Tilli Measures — help') + '">' + ICON.mail + '<span><b>Email the Tilli team</b><small>' + HELP_EMAIL + '</small></span></a>' +
-      '<a class="tf-pop-item" href="' + mailto('Tilli Measures — problem report') + '">' + ICON.flag + '<span><b>Report a problem</b><small>Tell us what happened and where</small></span></a>' +
+    return '<div class="tf-pop" id="tf-pop" role="dialog" aria-label="' + A('help.need', 'Need help?') + '" hidden>' +
+      '<div class="tf-pop-h"><b>' + A('help.need', 'Need help?') + '</b><button class="tf-pop-x" data-tf-close aria-label="' + A('help.close', 'Close') + '">×</button></div>' +
+      '<p class="tf-pop-sub">' + A('help.sub', 'Questions about the dashboard, or something not working? The Tilli team is happy to help.') + '</p>' +
+      '<a class="tf-pop-item" href="' + mailto('Tilli Measures — help') + '">' + ICON.mail + '<span><b>' + A('help.email', 'Email the Tilli team') + '</b><small>' + HELP_EMAIL + '</small></span></a>' +
+      '<a class="tf-pop-item" href="' + mailto('Tilli Measures — problem report') + '">' + ICON.flag + '<span><b>' + A('help.report', 'Report a problem') + '</b><small>' + A('help.reportSub', 'Tell us what happened and where') + '</small></span></a>' +
       (opts.ask ? '<button class="tf-pop-item" data-tf-ask>' + ICON.chat + '<span><b>Ask Tilli</b><small>' + String(opts.askSub || 'Quick answers about your class and data').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }) + '</small></span></button>' : '') +
     '</div>';
   }
@@ -173,8 +176,8 @@
         '<button class="tf-bubble tf-ask" data-tf-ask aria-label="' + (askOpen ? 'Close Ask Tilli' : 'Ask Tilli') + '" aria-expanded="' + askOpen + '" title="Ask Tilli — your assistant · drag to move">' +
           '<span class="tf-ic-chat">' + ICON.chat + '</span><span class="tf-ic-close">' + ICON.close + '</span></button></div>' : '') +
       '<div class="tf-row">' +
-        '<span class="tf-label" aria-hidden="true">Need help?</span>' +
-        '<button class="tf-bubble tf-help" data-tf-help aria-label="Need help?" aria-expanded="false" aria-controls="tf-pop" title="Need help? Contact the Tilli team · drag to move">' + ICON.help + '</button></div>' +
+        '<span class="tf-label" aria-hidden="true">' + A('help.need', 'Need help?') + '</span>' +
+        '<button class="tf-bubble tf-help" data-tf-help aria-label="' + A('help.need', 'Need help?') + '" aria-expanded="false" aria-controls="tf-pop" title="' + A('help.bubbleTitle', 'Need help? Contact the Tilli team · drag to move') + '">' + ICON.help + '</button></div>' +
       popHTML();
     // Re-apply the saved spot once laid out (also re-clamps for this viewport).
     requestAnimationFrame(function () { snapTo(corner, false); });

@@ -185,6 +185,12 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
+  // Screen text comes from the shared word list (i18n.js): T = plain text,
+  // H = safe HTML with {x} filled by markup the caller has already escaped.
+  const I18N = window.TilliI18n;
+  const T = (k, v) => I18N.t(k, v);
+  const H = (k, v) => I18N.html(k, v);
+  const B = (x) => '<b>' + esc(x) + '</b>';
 
   function set(patch) { Object.assign(state, patch); render(); }
 
@@ -405,11 +411,11 @@
     else if (s === 'signup') inner = loginView(true);
     else if (s === 'setpw') inner = setPwView();
 
-    return `<div class="dialog" role="dialog" aria-label="Get started with Tilli Measures">
-        ${showBack ? `<button class="btn-ghost dialog-back focus" data-act="back">&#8592; Back</button>` : ''}
-        <button class="dialog-close focus" data-act="close" aria-label="Close">&#215;</button>
+    return `<div class="dialog" role="dialog" aria-label="${esc(T('signin.dialog'))}">
+        ${showBack ? `<button class="btn-ghost dialog-back focus" data-act="back">&#8592; ${esc(T('signin.back'))}</button>` : ''}
+        <button class="dialog-close focus" data-act="close" aria-label="${esc(T('signin.close'))}">&#215;</button>
         <div class="dlg-logo"><img src="${LOGO}" alt="Tilli"></div>
-        ${state.sessionLink && s !== 'role' ? `<p class="text-center" style="margin:-4px 0 14px"><span class="pill-info">You&rsquo;re taking: ${esc(state.sessionLink.name)}${state.sessionLink.partLabel ? ' · ' + esc(state.sessionLink.partLabel) : ''}</span></p>` : ''}
+        ${state.sessionLink && s !== 'role' ? `<p class="text-center" style="margin:-4px 0 14px"><span class="pill-info">${H('signin.taking', { name: esc(state.sessionLink.name) })}${state.sessionLink.partLabel ? ' · ' + esc(state.sessionLink.partLabel) : ''}</span></p>` : ''}
         ${inner}
       </div>`;
   }
@@ -481,17 +487,17 @@
       <button class="ui-card outline lift role-card focus" data-role="${role}" style="border-color:${accent}">
         <span class="ic-circle" style="background:${accent}"><img src="${DS}icons/${icon}" alt="" aria-hidden="true"></span>
         <span>
-          <span class="lbl">${label}</span>
-          <span class="sub">${sub}</span>
+          <span class="lbl">${esc(label)}</span>
+          <span class="sub">${esc(sub)}</span>
         </span>
       </button>`;
     return `
-      <h2 class="dlg-title">Who are you?</h2>
-      <p class="dlg-sub">We'll set up the right garden for you.</p>
+      <h2 class="dlg-title">${esc(T('signin.whoTitle'))}</h2>
+      <p class="dlg-sub">${esc(T('signin.whoSub'))}</p>
       <div class="stack">
-        ${card('var(--yellow-500)', 'family.png', 'Parent / Home', "Follow your child's assessments", 'parent')}
-        ${card('var(--cyan-500)', 'graduation-cap.png', 'School', 'See your whole class garden', 'teacher')}
-        ${card('var(--green-500)', 'sparkle.png', 'Tilli Team', 'Internal view across the school', 'tilli')}
+        ${card('var(--yellow-500)', 'family.png', T('signin.roleParent'), T('signin.roleParentSub'), 'parent')}
+        ${card('var(--cyan-500)', 'graduation-cap.png', T('signin.roleSchool'), T('signin.roleSchoolSub'), 'teacher')}
+        ${card('var(--green-500)', 'sparkle.png', T('signin.roleTilli'), T('signin.roleTilliSub'), 'tilli')}
       </div>`;
   }
 
@@ -511,39 +517,39 @@
         <span class="ui-dot sm"></span>${esc(name)}
       </button>`).join('');
     const hint = !enoughChars
-      ? `<div class="dlg-hint">Type at least ${SCHOOL_MIN_CHARS} letters to search&#8230;</div>`
+      ? `<div class="dlg-hint">${esc(T('signin.typeMore', { n: SCHOOL_MIN_CHARS }))}</div>`
       : '';
     const noMatch = enoughChars && !exactish && matches.length === 0;
 
     // School path: we only get here for an email with no account yet.
     const sub = GL
-      ? `This link was shared by <b>${esc(GL.name)}</b>. Pick your school to continue.`
+      ? H('signin.groupLinkSub', { group: B(GL.name) })
       : state.role === 'teacher'
-        ? `No account yet for <b class="break-all">${esc(state.email)}</b>. Pick your school to join it.`
-        : 'Start typing to find it in the list.';
+        ? H('signin.noAccountSub', { email: `<b class="break-all">${esc(state.email)}</b>` })
+        : esc(T('signin.startTyping'));
     return `
-      <h2 class="dlg-title">${GL ? `Pick your school in ${esc(GL.name)}` : isTeacher ? 'Select your school' : 'Which school does your child go to?'}</h2>
+      <h2 class="dlg-title">${esc(GL ? T('signin.pickInGroup', { group: GL.name }) : isTeacher ? T('signin.selectSchool') : T('signin.whichSchool'))}</h2>
       <p class="dlg-sub">${sub}</p>
       <div>
         <span class="select-wrap">
-          <input id="school-input" class="input focus" value="${esc(state.schoolQuery)}" placeholder="Select school" aria-label="Search school" autocomplete="off" style="padding-right:40px" autofocus>
+          <input id="school-input" class="input focus" value="${esc(state.schoolQuery)}" placeholder="${esc(T('signin.schoolPh'))}" aria-label="${esc(T('signin.schoolAria'))}" autocomplete="off" style="padding-right:40px" autofocus>
         </span>
         ${state.schoolListOpen ? `
           <div role="listbox" class="ui-menu school-menu">
             ${hint}
             ${listItems}
-            ${noMatch ? `<div class="dlg-hint">No match &#8212; <span style="color:var(--green-500)">use &#8220;${esc(state.schoolQuery)}&#8221;</span></div>` : ''}
+            ${noMatch ? `<div class="dlg-hint" style="color:var(--green-500)">${esc(T('signin.noMatch', { q: state.schoolQuery }))}</div>` : ''}
           </div>` : ''}
       </div>
-      <button class="btn btn-primary block focus mt-4" data-act="school-continue" ${canContinue ? '' : 'disabled'}>Continue &#8594;</button>`;
+      <button class="btn btn-primary block focus mt-4" data-act="school-continue" ${canContinue ? '' : 'disabled'}>${esc(T('signin.continue'))} &#8594;</button>`;
   }
 
   function emailView() {
     const isTilli = state.role === 'tilli', isGroup = state.role === 'group';
     const pill = isTilli
-      ? `<span class="pill-info">Tilli Team &#183; internal</span>`
-      : isGroup ? `<span class="pill-info">School group</span>`
-      : state.role === 'teacher' ? `<span class="pill-info">School &#183; teachers, admins &amp; school groups</span>`
+      ? `<span class="pill-info">${esc(T('signin.pillTilli'))}</span>`
+      : isGroup ? `<span class="pill-info">${esc(T('signin.pillGroup'))}</span>`
+      : state.role === 'teacher' ? `<span class="pill-info">${esc(T('signin.pillSchool'))}</span>`
       : `<span class="pill-info">${esc(state.school)}</span>`;
     const hint = isTilli
       ? 'Demo: use team@tilli.org to sign in to the internal platform.'
@@ -552,11 +558,11 @@
         ? 'Demo: teacher@tilli.edu (teacher), meera.krishnan@littlesprouts.edu (school admin) or group@vidyatrust.org (school group) sign in. Any new email signs up — Little Sprouts school code: LSPR-2210.'
         : 'Demo: use parent@tilli.edu or teacher@tilli.edu to sign in, or any new email to sign up.';
     return `
-      <h2 class="dlg-title">Enter your email</h2>
+      <h2 class="dlg-title">${esc(T('signin.enterEmail'))}</h2>
       <p class="text-center" style="margin:0 0 20px">${pill}</p>
       <form id="email-form" class="dlg-form">
-        <input id="email-input" class="input focus" type="email" required value="${esc(state.email)}" placeholder="you@email.com" aria-label="Email address" autofocus>
-        <button type="submit" class="btn btn-primary block focus">Enter &#8594;</button>
+        <input id="email-input" class="input focus" type="email" required value="${esc(state.email)}" placeholder="you@email.com" aria-label="${esc(T('signin.emailAria'))}" autofocus>
+        <button type="submit" class="btn btn-primary block focus">${esc(T('signin.enter'))} &#8594;</button>
       </form>
       <p class="dlg-hint text-center" style="margin-top:14px">${hint}</p>`;
   }
@@ -565,28 +571,27 @@
     return `
       <div style="text-align:center;padding:24px 0 14px">
         <div class="spinner" style="margin:0 auto 18px"></div>
-        <p class="dlg-sub" style="font-weight:700;margin:0">Checking if your account exists&#8230;</p>
+        <p class="dlg-sub" style="font-weight:700;margin:0">${esc(T('signin.checking'))}</p>
         <p class="dlg-hint break-all" style="margin-top:6px">${esc(state.email)}</p>
       </div>`;
   }
 
   function loginView(isSignup) {
-    const verb = isSignup ? 'Create' : 'Enter';
     return `
-      <h2 class="dlg-title">${isSignup ? 'Create your Tilli account' : 'Enter your Tilli account'}</h2>
+      <h2 class="dlg-title">${esc(T(isSignup ? 'signin.createTitle' : 'signin.enterTitle'))}</h2>
       <p class="dlg-sub break-all">${esc(state.email)}</p>
-      ${state.role === 'teacher' && state.school ? `<p class="text-center" style="margin:-10px 0 18px"><span class="pill-info">${isSignup ? 'Joining ' : ''}${esc(state.school)}</span></p>` : ''}
-      <button class="btn-ghost md btn-google focus" data-act="google">${gIcon} ${verb} via Google</button>
-      <div class="or-rule">OR</div>
+      ${state.role === 'teacher' && state.school ? `<p class="text-center" style="margin:-10px 0 18px"><span class="pill-info">${esc(isSignup ? T('signin.joining', { school: state.school }) : state.school)}</span></p>` : ''}
+      <button class="btn-ghost md btn-google focus" data-act="google">${gIcon} ${esc(T(isSignup ? 'signin.googleCreate' : 'signin.googleEnter'))}</button>
+      <div class="or-rule">${esc(T('signin.or'))}</div>
       <form id="pw-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
         <div style="position:relative">
-          <input id="pw-input" class="input focus ${state.errs.pw ? 'err' : ''}" type="password" required placeholder="${isSignup ? 'Create a password' : 'Enter your password'}" aria-label="Password" value="${esc(state.password)}" style="padding-right:44px">
-          <button type="button" id="pw-toggle" class="focus" aria-label="Show password" aria-pressed="false" title="Show password" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:none;cursor:pointer;color:var(--ink-450);border-radius:var(--radius-sm)">${eyeIcon(false)}</button>
+          <input id="pw-input" class="input focus ${state.errs.pw ? 'err' : ''}" type="password" required placeholder="${esc(T(isSignup ? 'signin.pwCreate' : 'signin.pwEnter'))}" aria-label="${esc(T('signin.pwAria'))}" value="${esc(state.password)}" style="padding-right:44px">
+          <button type="button" id="pw-toggle" class="focus" aria-label="${esc(T('signin.showPw'))}" aria-pressed="false" title="${esc(T('signin.showPw'))}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:none;background:none;cursor:pointer;color:var(--ink-450);border-radius:var(--radius-sm)">${eyeIcon(false)}</button>
         </div>
-        ${state.errs.pw ? `<p class="err-text">That password doesn't match this account. Please try again.</p>` : ''}
-        ${isSignup ? '' : `<button type="button" data-act="forgot" class="btn-link muted focus" style="align-self:flex-end;margin-top:-4px">Forgot password?</button>`}
-        ${!isSignup && state.forgotSent ? `<p class="dlg-hint" style="color:var(--ink-600);line-height:1.5">To reset your password, contact your school admin — they can re-send an invite that lets you set a new one.</p>` : ''}
-        <button type="submit" class="btn btn-primary block focus">${verb} via password &#8594;</button>
+        ${state.errs.pw ? `<p class="err-text">${esc(T('signin.pwWrong'))}</p>` : ''}
+        ${isSignup ? '' : `<button type="button" data-act="forgot" class="btn-link muted focus" style="align-self:flex-end;margin-top:-4px">${esc(T('signin.forgot'))}</button>`}
+        ${!isSignup && state.forgotSent ? `<p class="dlg-hint" style="color:var(--ink-600);line-height:1.5">${esc(T('signin.forgotHelp'))}</p>` : ''}
+        <button type="submit" class="btn btn-primary block focus">${esc(T(isSignup ? 'signin.pwCreateBtn' : 'signin.pwEnterBtn'))} &#8594;</button>
       </form>`;
   }
 
@@ -595,12 +600,12 @@
   function schoolCodeView() {
     const e = state.errs.code;
     return `
-      <h2 class="dlg-title">Enter your school code</h2>
-      <p class="dlg-sub">Your school admin can share it with you. It tells us which school you&rsquo;re joining.</p>
+      <h2 class="dlg-title">${esc(T('signin.codeTitle'))}</h2>
+      <p class="dlg-sub">${esc(T('signin.codeSub'))}</p>
       <form id="code-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
-        <input id="code-input" class="input focus ${e ? 'err' : ''}" required value="${esc(state.schoolCode)}" placeholder="e.g. ABCD-1234" aria-label="School code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-align:center;letter-spacing:.12em;font-weight:700;text-transform:uppercase" autofocus>
+        <input id="code-input" class="input focus ${e ? 'err' : ''}" required value="${esc(state.schoolCode)}" placeholder="e.g. ABCD-1234" aria-label="${esc(T('signin.codeAria'))}" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-align:center;letter-spacing:.12em;font-weight:700;text-transform:uppercase" autofocus>
         ${e ? `<p class="err-text text-center">${esc(e)}</p>` : ''}
-        <button type="submit" class="btn btn-primary block focus">Verify &#8594;</button>
+        <button type="submit" class="btn btn-primary block focus">${esc(T('signin.verify'))} &#8594;</button>
       </form>`;
   }
   // "Is this your school?" — after the code, before the password. Name, place
@@ -610,15 +615,15 @@
     const place = [sc.city, sc.country].filter(Boolean).join(', ');
     const boards = (sc.boards && sc.boards.length ? sc.boards : [sc.board]).filter(Boolean).join(' · ');
     return `
-      <h2 class="dlg-title">Is this your school?</h2>
+      <h2 class="dlg-title">${esc(T('signin.isYourSchool'))}</h2>
       <div class="dlg-schoolcard">
         <b>${esc(sc.name || '')}</b>
         ${place ? `<span>${esc(place)}</span>` : ''}
         ${boards ? `<span>${esc(boards)}</span>` : ''}
       </div>
       <div class="dlg-form">
-        <button class="btn btn-primary block focus" data-act="confirm-school">Yes, that&rsquo;s my school &#8594;</button>
-        <button class="btn-link muted focus" data-act="not-my-school" style="align-self:center">Not my school</button>
+        <button class="btn btn-primary block focus" data-act="confirm-school">${esc(T('signin.yesMySchool'))} &#8594;</button>
+        <button class="btn-link muted focus" data-act="not-my-school" style="align-self:center">${esc(T('signin.notMySchool'))}</button>
       </div>`;
   }
   // First-login password reset — shown once, right after an invited account
@@ -632,25 +637,23 @@
       ? window.TilliAPI.resolveSchool(acct.school_id) : null;
     const roleLabel = acct && acct.role ? String(acct.role).replace(/\b\w/g, (c) => c.toUpperCase()) : '';
     const joinLine = roleLabel
-      ? `<p class="dlg-hint text-center" style="font-weight:700;color:var(--ink-450);margin:-14px 0 20px">Joining as <span style="color:var(--ink-700)">${esc(roleLabel)}</span>${sc && sc.name ? ` for <span style="color:var(--ink-700)">${esc(sc.name)}</span>` : ''}</p>`
+      ? `<p class="dlg-hint text-center" style="font-weight:700;color:var(--ink-450);margin:-14px 0 20px">${H(sc && sc.name ? 'signin.joiningAsFor' : 'signin.joiningAs', { role: `<span style="color:var(--ink-700)">${esc(roleLabel)}</span>`, school: `<span style="color:var(--ink-700)">${esc(sc && sc.name)}</span>` })}</p>`
       : '';
     return `
-      <h2 class="dlg-title">Set your password</h2>
+      <h2 class="dlg-title">${esc(T('signin.setPwTitle'))}</h2>
       <p class="dlg-sub break-all">${esc(state.email)}</p>
       ${joinLine}
       <form id="setpw-form" class="dlg-form ${state.shake ? 'tm-shake' : ''}">
-        <input id="np-input" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="New password (min 6 characters)" aria-label="New password" value="${esc(state.password)}">
-        <input id="np-confirm" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="Confirm new password" aria-label="Confirm new password">
+        <input id="np-input" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="${esc(T('signin.newPw'))}" aria-label="${esc(T('signin.newPwAria'))}" value="${esc(state.password)}">
+        <input id="np-confirm" class="input focus ${e.np ? 'err' : ''}" type="password" required placeholder="${esc(T('signin.confirmPw'))}" aria-label="${esc(T('signin.confirmPw'))}">
         ${e.np ? `<p class="err-text">${esc(e.np)}</p>` : ''}
-        <button type="submit" class="btn btn-primary block focus">Set password &amp; continue &#8594;</button>
+        <button type="submit" class="btn btn-primary block focus">${esc(T('signin.setPwBtn'))} &#8594;</button>
       </form>`;
   }
 
   // ===== CHILD SELECT (parent) =====
   function childSelectView() {
-    const sub = state.kids.length
-      ? 'Tap a child to see how their garden is growing.'
-      : 'Add your first child to get started.';
+    const sub = T(state.kids.length ? 'kids.tapChild' : 'kids.addFirst');
     const kids = state.kids.map((k, i) => {
       const done = k.status.indexOf('complete') >= 0;
       return `<button class="ui-card outline lift child-card focus${done ? ' done' : ''}" data-child-idx="${i}">
@@ -658,7 +661,7 @@
           <span class="ic-circle sm${done ? '' : ' yellow'}"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true"></span>
           <span class="nm">${esc(k.name)}</span>
         </span>
-        <span class="st">${esc(k.status)}</span>
+        <span class="st">${esc(T(done ? 'kids.statusDone' : 'kids.statusPending'))}</span>
       </button>`;
     }).join('');
 
@@ -668,11 +671,11 @@
           ${brandMark}
           <span class="pill-info ml-auto">${esc(state.school)}</span>
         </div>
-        <h1 class="sheet-title">Select the child you want to know more about</h1>
-        <p class="sheet-sub">${sub}</p>
+        <h1 class="sheet-title">${esc(T('kids.title'))}</h1>
+        <p class="sheet-sub">${esc(sub)}</p>
         <div style="display:flex;flex-wrap:wrap;gap:16px">
           ${kids}
-          <button class="ui-card outline lift add-child-tile focus" data-act="add-child">+ add child</button>
+          <button class="ui-card outline lift add-child-tile focus" data-act="add-child">${esc(T('kids.add'))}</button>
         </div>
       </div>
     </div>`;
@@ -693,7 +696,7 @@
     return `<div class="sheet">
       <div class="pencil-load-wrap">
         <div class="pencil-loader">${pics}</div>
-        <p class="pencil-load-msg">Getting our notepad to note down your child&#39;s details&hellip;</p>
+        <p class="pencil-load-msg">${esc(T('kids.loading'))}</p>
       </div>
     </div>`;
   }
@@ -743,17 +746,17 @@
       <div class="sheet-wrap">
         <div class="sheet-head">
           ${brandMark}
-          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; Back</button>
+          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; ${esc(T('signin.back'))}</button>
         </div>
-        <h1 class="sheet-title">Add your child</h1>
-        <p class="sheet-sub">Enter your child&#39;s admission number at ${esc(state.school || 'their school')}. You&#39;ll check it&#39;s the right child next.</p>
+        <h1 class="sheet-title">${esc(T('kids.addTitle'))}</h1>
+        <p class="sheet-sub">${esc(T('kids.addSub', { school: state.school || T('kids.theirSchool') }))}</p>
         <form id="child-form" class="ui-card roomy sheet-form ${state.shake ? 'tm-shake' : ''}">
-          <label class="field">Admission number *
-            <input id="cf-adm" class="input focus ${e.adm || e.notfound || e.locked ? 'err' : ''}" value="${esc(c.adm)}" placeholder="Enter admission number of your child" autofocus>
+          <label class="field">${esc(T('kids.admLabel'))} *
+            <input id="cf-adm" class="input focus ${e.adm || e.notfound || e.locked ? 'err' : ''}" value="${esc(c.adm)}" placeholder="${esc(T('kids.admPh'))}" autofocus>
           </label>
-          ${e.notfound ? `<p class="err-text">We can&#39;t find that admission number at ${esc(state.school)}. Check it on a school letter or ask the school office.</p>` : ''}
-          ${e.locked ? `<p class="err-text">Too many tries — please wait a few minutes, then try again.</p>` : ''}
-          <button type="submit" class="btn btn-primary block focus mt-1">Continue &#8594;</button>
+          ${e.notfound ? `<p class="err-text">${esc(T('kids.notFound', { school: state.school }))}</p>` : ''}
+          ${e.locked ? `<p class="err-text">${esc(T('kids.locked'))}</p>` : ''}
+          <button type="submit" class="btn btn-primary block focus mt-1">${esc(T('signin.continue'))} &#8594;</button>
         </form>
         <div id="cf-flowers" style="width:min(264px,70%);margin:clamp(28px,5vh,52px) auto 0"></div>
       </div>
@@ -799,7 +802,7 @@
   // with the fixed base in brackets: "Sunflowers Rose (Grade 1A)".
   function classMeta(m) {
     const A = window.TilliAPI;
-    const plain = [m.grade, m.section && 'Section ' + m.section].filter(Boolean).join(', ');
+    const plain = [m.grade, m.section && T('common.section', { s: m.section })].filter(Boolean).join(', ');
     const sc = A && A.sectionLabel && A.resolveSchool ? A.resolveSchool(state.school) : null;
     if (!sc || !m.grade) return plain;
     if (!m.section) return A.gradeLabel(sc.school_id, m.grade);
@@ -817,19 +820,19 @@
       <div class="sheet-wrap">
         <div class="sheet-head">
           ${brandMark}
-          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; Back</button>
+          <button class="btn-ghost focus ml-auto" data-act="child-back">&#8592; ${esc(T('signin.back'))}</button>
         </div>
-        <h1 class="sheet-title">We found your child</h1>
-        <p class="sheet-sub">Please confirm this is the right student.</p>
+        <h1 class="sheet-title">${esc(T('kids.found'))}</h1>
+        <p class="sheet-sub">${esc(T('kids.confirmSub'))}</p>
         <div class="ui-card outline roomy confirm-card">
           <span class="ic-circle" style="margin:0 0 14px"><img src="${DS}icons/smiley.png" alt="" aria-hidden="true"></span>
-          <p class="pill-info" style="display:inline-block;margin:0 0 14px">Admission number &middot; ${esc(m.student_id || m.adm)}</p>
+          <p class="pill-info" style="display:inline-block;margin:0 0 14px">${esc(T('kids.admNo', { adm: m.student_id || m.adm }))}</p>
           <p style="font-weight:700;font-size:var(--fs-xl);color:var(--ink-900);margin:0 0 4px">${esc(full)}</p>
           <p class="dlg-sub" style="margin:0">${esc(gradeSection)}</p>
-          <p class="dlg-hint" style="color:var(--green-700);margin-top:16px;line-height:1.5">Understand <b>${esc(full)}</b> with Tilli Measures.</p>
+          <p class="dlg-hint" style="color:var(--green-700);margin-top:16px;line-height:1.5">${H('kids.understand', { name: B(full) })}</p>
         </div>
-        <button class="btn btn-primary block focus" data-act="confirm-child" style="margin-top:18px">Yes, that's my child &#8594;</button>
-        <button class="btn-link muted link-center focus" data-act="not-child">Not your child? Click here</button>
+        <button class="btn btn-primary block focus" data-act="confirm-child" style="margin-top:18px">${esc(T('kids.yesMine'))} &#8594;</button>
+        <button class="btn-link muted link-center focus" data-act="not-child">${esc(T('kids.notMine'))}</button>
       </div>
     </div>`;
   }
@@ -861,7 +864,7 @@
 
     scope.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => handleAct(b.dataset.act, ev)));
     // Language switcher (consent sheet): re-render in place, no reload mid-flow.
-    if (window.TilliI18n) window.TilliI18n.wire(scope, () => render());
+    I18N.wire(scope, relang);
     // "I agree to all" ticks / unticks every item; each item still saves on its own.
     scope.querySelectorAll('[data-consentall]').forEach((cb) => cb.addEventListener('change', () => {
       const all = {}; window.TilliAPI.consentConfig().items.forEach((it) => { all[it.id] = cb.checked; });
@@ -924,9 +927,9 @@
         // The code alone finds the school. Never says which school a wrong code is for.
         const sc = window.TilliAPI && window.TilliAPI.resolveSchoolCode ? window.TilliAPI.resolveSchoolCode(code) : null;
         const GL = state.groupLink;
-        const msg = !sc ? 'We don’t recognise that code. Codes change sometimes — ask your school office for the current one.'
-          : GL && GL.schools.indexOf(sc.name) < 0 ? `That code isn’t for a school in ${GL.name}. Check it with your school office.`
-          : state.sessionLink && sc.school_id !== state.sessionLink.schoolId ? `This session is for ${state.sessionLink.schoolName}. Use that school’s code.` : '';
+        const msg = !sc ? T('signin.codeUnknown')
+          : GL && GL.schools.indexOf(sc.name) < 0 ? T('signin.codeNotInGroup', { group: GL.name })
+          : state.sessionLink && sc.school_id !== state.sessionLink.schoolId ? T('signin.codeWrongSession', { school: state.sessionLink.schoolName }) : '';
         if (msg) {
           set({ errs: { code: msg }, shake: true, schoolCode: code });
           clearTimeout(shakeTimer);
@@ -948,8 +951,8 @@
         pi.type = show ? 'text' : 'password';
         pt.innerHTML = eyeIcon(show);
         pt.setAttribute('aria-pressed', String(show));
-        pt.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-        pt.setAttribute('title', show ? 'Hide password' : 'Show password');
+        pt.setAttribute('aria-label', T(show ? 'signin.hidePw' : 'signin.showPw'));
+        pt.setAttribute('title', T(show ? 'signin.hidePw' : 'signin.showPw'));
         pi.focus();
       });
       pi.addEventListener('input', (ev) => {
@@ -992,10 +995,10 @@
           clearTimeout(shakeTimer);
           shakeTimer = setTimeout(() => set({ shake: false }), 450);
         };
-        if (pw.length < 6) return fail('Use at least 6 characters.');
-        if (pw !== cf) return fail("Those passwords don't match.");
+        if (pw.length < 6) return fail(T('signin.pwShort'));
+        if (pw !== cf) return fail(T('signin.pwMismatch'));
         const res = window.TilliAPI.setPassword(state.email, pw);
-        if (!res.ok) return fail('Could not set the password. Try again.');
+        if (!res.ok) return fail(T('signin.pwFail'));
         saveAccount(state.email);   // mark known for the loose-demo account map too
         enterFound();
         go();
@@ -1124,7 +1127,7 @@
         set({ step: 'signup', school: (state.codeSchool || {}).name || '', password: '', errs: {} });
         break;
       case 'not-my-school':
-        set({ step: 'schoolcode', codeSchool: null, schoolCode: '', errs: { code: 'That code is for a different school. Check it with your school office.' } });
+        set({ step: 'schoolcode', codeSchool: null, schoolCode: '', errs: { code: T('signin.codeDifferent') } });
         break;
       case 'pick-school-again':
         set({ step: 'school', school: '', schoolQuery: '', schoolListOpen: false, schoolCode: '', codeSchool: null, errs: {} });
@@ -1176,12 +1179,14 @@
   // ---- boot ----
   // Language switcher in the top bar — before sign-in it's saved on the device;
   // once signed in, on the account too.
-  (function langSlot() {
-    const slot = document.getElementById('lang-slot'), I = window.TilliI18n;
-    if (!slot || !I) return;
-    slot.innerHTML = I.switcherHTML();
-    I.wire(slot, () => render());
-  })();
+  // A language change redraws the page's own text, the slot's picker and the open step.
+  function relang() {
+    I18N.apply(document);
+    const slot = document.getElementById('lang-slot');
+    if (slot) { slot.innerHTML = I18N.switcherHTML(); I18N.wire(slot, relang); }
+    render();   // same step → the open card is swapped in place, no slide
+  }
+  relang();
   document.getElementById('get-started').addEventListener('click', () =>
     set({ step: 'role', role: null, school: '', schoolQuery: '', schoolListOpen: false, groupLink: null }));
 

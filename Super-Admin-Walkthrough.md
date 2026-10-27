@@ -414,6 +414,15 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 - [ ] The picker is also in the parent **profile**, the teacher **profile**, the school admin's **account menu** and the **student assessment** page (that one remembers its own language on the device — a child doesn't get the teacher's choice).
 - [ ] Only the consent screens are translated so far — the rest of each app comes in 6B–6D.
 
+## Mission 27 — Sign-in + parent app in other languages (Phase 6B, 10 min)
+
+- [ ] Tilli → **Assessments → Translations** → **Hindi** → **Draft … missing with Ask Tilli** (about 350 rows) → filter **Where it shows: Sign-in** → approve a handful (e.g. Welcome to Tilli Measures, Get started, Who are you?).
+- [ ] `index.html` → pick **हिन्दी** → the approved lines switch straight away (no reload); the rest stay English. Open **Get started** and switch language mid-flow → the open card redraws in place.
+- [ ] Approve some **Parent app** and **Parent snapshot** rows → sign in as a parent → the phases, home, profile and snapshot show them. Dates (created schools, consent "Agreed on") follow the language.
+- [ ] The **Need help?** bubble uses the word list too (Where it shows: Everywhere).
+- [ ] In a snapshot row, the English has `{subj}` / `{poss}` slots; the drafts use `{name}` instead. Keep it that way when editing.
+- [ ] Still English on purpose: assessment names, the demo sign-in hints, and the parent check-in screens (6C, after the redesign).
+
 ---
 
 ## Demo-only gaps (so they don't surprise you)

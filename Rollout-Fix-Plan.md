@@ -164,11 +164,20 @@ Decisions by Ishani, 27 Oct 2026: languages **English, Hindi, Tamil, Sinhala** (
 | 6.4 | **Shared word list** (`assets/i18n.js`): screen text by key with English; approved translations only; dates follow the language. | ✅ |
 | 6.5 | **Tilli → Translations**: every string per language with English alongside; status Missing / Needs review / Approved; edit, approve; **Draft with Ask Tilli** fills missing ones as drafts; CSV export / import. | ✅ |
 
-## Phase 6B — Parent-facing · ⬜
-Sign-in, consent wording (per language), parent app, session surveys.
+## Phase 6B — Sign-in + parent app · ✅ done 27 Oct 2026
 
-## Phase 6C — Teacher app + student assessments · ⬜
-Teacher app, student assessment page (own switcher — a shared device), teacher reflection questions, template question text; templates' language tabs gain Needs review / Approved; deploy warns when a template lacks a school's languages; responses record the language used.
+Trimmed 27 Oct: the parent assessment / survey screens are being redesigned first, so they move to 6C and are translated once.
+
+| # | Item | Status |
+|---|---|---|
+| 6.6 | **Sign-in page** (`index.html` + `landing.js`): hero, role cards, school search, email, password, school code, confirm school, set password, child list, add child, "Is this your child?". Switching language redraws the open step in place. | ✅ |
+| 6.7 | **Parent app** (`parent.html`): child switcher, phases, home (demo + created schools), new-year notice, last year, profile, consent card. Dates follow the language. | ✅ |
+| 6.8 | **Parent snapshot**: headings plus the copy for all 12 skills (strength, growth area, 3 try-at-home activities). Translations use `{name}`, not the English pronoun slots. | ✅ |
+| 6.9 | **Need help? button** (every app). | ✅ |
+| 6.10 | **Drafts** for all 370 strings in Hindi, Tamil and Sinhala, moved to `assets/i18n-drafts.js` (only the Tilli console loads them). | ✅ |
+
+## Phase 6C — Assessments + teacher app · ⬜ (after the assessment redesign)
+Teacher observation form, student assessment page (own switcher — a shared device), parent check-ins and session surveys, teacher app, teacher reflection questions, template question text; templates' language tabs gain Needs review / Approved; deploy warns when a template lacks a school's languages; responses record the language used.
 
 ## Phase 6D — School dashboard · ⬜
 

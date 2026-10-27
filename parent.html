@@ -330,8 +330,8 @@
 
 <script src="assets/school-data.js?v=20261020mx"></script>
 <script src="assets/tilli-api.js?v=20261027i6a"></script>
-<script src="assets/i18n.js?v=20261027i6a"></script>
-<script src="assets/float-help.js?v=20261016zx"></script>
+<script src="assets/i18n.js?v=20261027i6b"></script>
+<script src="assets/float-help.js?v=20261027i6b"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
 (function () {
@@ -369,6 +369,13 @@
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Screen text from the shared word list (i18n.js). T = plain text; H = safe
+  // HTML whose {x} are filled with markup already escaped here.
+  const I18N = window.TilliI18n;
+  const T = (k, v) => I18N.t(k, v);
+  const H = (k, v) => I18N.html(k, v);
+  const B = (x) => '<b>' + esc(x) + '</b>';
+  const phaseName = (p) => T('phase.' + String(p).toLowerCase());
 
   // ---- pronoun-aware copy filler (agreement-safe: verbs are phrased with be + complement) ----
   const PRON = {
@@ -378,6 +385,8 @@
   };
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   // Fill {name}/{Name}, {subj}/{Subj}, {obj}, {poss}/{Poss}, {be}, {have}, {reflex}, {teacher}.
+  // fillT: the same for a word-list entry (escaped first — translations are typed in).
+  const fillT = (key, c) => fill(esc(T(key)), c);
   function fill(tpl, c) {
     const pr = PRON[c.pronoun] || PRON.they;
     const name = esc(c.name);
@@ -386,7 +395,7 @@
       subj: pr.subj, Subj: cap(pr.subj),
       obj: pr.obj, poss: pr.poss, Poss: cap(pr.poss),
       be: pr.be, have: pr.have, reflex: pr.reflex,
-      teacher: esc(c.teacher || 'your teacher'),
+      teacher: esc(c.teacher || T('parent.yourTeacher')),
     };
     return tpl.replace(/\{(\w+)\}/g, (mm, k) => (k in m ? m[k] : mm));
   }
@@ -514,12 +523,12 @@
     children = links.map((lk, i) => {
       const full = (TS && TS.findByAdm) ? TS.findByAdm(lk.student_id) : null;
       return {
-        name: lk.first || lk.name || 'Your child', grade: lk.grade, section: lk.section, adm: lk.student_id,
+        name: lk.first || lk.name || T('parent.yourChild'), grade: lk.grade, section: lk.section, adm: lk.student_id,
         // Carry the backbone ids so a created-school child can key its REAL
         // deployments/completions (findByAdm misses these students — full===null).
         student_id: lk.student_id, school_id: lk.school_id, section_id: lk.section_id, status: lk.status || 'active',
         pronoun: (full && full.pronoun) || (lk.gender === 'm' ? 'he' : 'she'),
-        teacher: (full && full.teacherName) || 'your teacher', unlocked: i === 0,
+        teacher: (full && full.teacherName) || T('parent.yourTeacher'), unlocked: i === 0,
       };
     });
   } else {
@@ -529,7 +538,7 @@
       { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044', pronoun: 'she', teacher: 'Mr Silva', unlocked: false },
     ];
   }
-  const PARENT_NAME = (links[0] && links[0].parentName) || 'Your family';
+  const PARENT_NAME = (links[0] && links[0].parentName) || T('parent.yourFamily');
   const urlChild = (p.get('child') || '').trim();
   let selected = 0;
   if (urlChild) {
@@ -538,22 +547,22 @@
   }
 
   const ASSESSMENTS = [
-    { id: 'parent', title: 'Parent report',    sub: 'Parent survey · 10 questions' },
-    { id: 'hearts', title: 'Hearts & Flowers', sub: 'Child activity · about 5 min' },
-    { id: 'memory', title: 'Memory Game',       sub: 'Child activity · about 5 min' },
-    { id: 'emt1',   title: 'EMT 1',             sub: 'Child activity · about 4 min' },
-    { id: 'emt2',   title: 'EMT 2',             sub: 'Child activity · about 4 min' },
-    { id: 'emt3',   title: 'EMT 3',             sub: 'Child activity · about 4 min' },
+    { id: 'parent', title: T('parent.a.parent'), sub: T('parent.sub.survey10') },
+    { id: 'hearts', title: 'Hearts & Flowers', sub: T('parent.sub.activity5') },
+    { id: 'memory', title: 'Memory Game',       sub: T('parent.sub.activity5') },
+    { id: 'emt1',   title: 'EMT 1',             sub: T('parent.sub.activity4') },
+    { id: 'emt2',   title: 'EMT 2',             sub: T('parent.sub.activity4') },
+    { id: 'emt3',   title: 'EMT 3',             sub: T('parent.sub.activity4') },
   ];
   // ---- Assessment windows across the year ----
   // The parent can toggle between these to see each window's completion history
   // and its report. `milestone:false` marks the resting "In between" state, which
   // has no checklist of its own. Order is chronological.
   const WINDOWS = [
-    { id: 'baseline', label: 'Baseline',  sub: 'Start of year',       date: 'Apr 2',  milestone: true  },
-    { id: 'between',  label: 'In between', sub: 'Between assessments', date: '',       milestone: false },
-    { id: 'midline',  label: 'Midline',   sub: 'Mid year',            date: 'Jun 18', milestone: true  },
-    { id: 'endline',  label: 'Endline',   sub: 'End of year',         date: 'Sep 24', milestone: true  },
+    { id: 'baseline', label: T('phase.baseline'), date: 'Apr 2',  milestone: true  },
+    { id: 'between',  label: T('phase.between'),  date: '',       milestone: false },
+    { id: 'midline',  label: T('phase.midline'),  date: 'Jun 18', milestone: true  },
+    { id: 'endline',  label: T('phase.endline'),  date: 'Sep 24', milestone: true  },
   ];
   const WINDOW_ORDER = WINDOWS.map((w) => w.id);
   // Where "today" sits on the timeline: the open window. Everything before it is
@@ -636,21 +645,21 @@
         <span class="ui-avatar sm" style="background:${smileColor(i)}"><img src="${SMILEY}" alt=""></span>
         <span class="flex-1">
           <span class="nm">${esc(k.name)}</span>
-          <span class="mt">${esc(classMeta(k)) || 'No grade set'}</span>
+          <span class="mt">${esc(classMeta(k) || T('parent.noGrade'))}</span>
         </span>
         ${i === state.selected ? '<span class="ck">✓</span>' : ''}
       </button>`).join('');
     return `<div class="switcher">
       <button class="switch-btn focus" data-act="toggle-switch" aria-haspopup="menu" aria-expanded="${state.switcherOpen}">
-        ${esc(c.name)}'s parent
+        ${esc(T('parent.parentOf', { name: c.name }))}
         <span class="ui-avatar sm" style="background:${smileColor(state.selected)}"><img src="${SMILEY}" alt=""></span>
         <span class="caret" aria-hidden="true">▾</span>
       </button>
       ${state.switcherOpen ? `<div class="ui-menu switch-menu" role="menu">${items}
-        <a href="index.html" class="btn-dashed mt-1 focus">+ Add another child</a>
+        <a href="index.html" class="btn-dashed mt-1 focus">${esc(T('parent.addChild'))}</a>
         <div class="switch-sep" role="separator"></div>
-        <button class="ui-menu-item focus" data-act="open-profile" role="menuitem">${ICON_USER}<span>Profile</span></button>
-        <button class="ui-menu-item danger focus" data-act="logout" role="menuitem">${ICON_LOGOUT}<span>Log out</span></button>
+        <button class="ui-menu-item focus" data-act="open-profile" role="menuitem">${ICON_USER}<span>${esc(T('parent.profile'))}</span></button>
+        <button class="ui-menu-item danger focus" data-act="logout" role="menuitem">${ICON_LOGOUT}<span>${esc(T('parent.logout'))}</span></button>
       </div>` : ''}
     </div>`;
   }
@@ -670,7 +679,7 @@
   // Sits between child-select and home: pick a phase to open its
   // checklist (continue) or its report (view report). Locked = upcoming.
   // ============================================================
-  const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th'];
+  const ORDINALS = () => [T('parent.ord1'), T('parent.ord2'), T('parent.ord3')];
   function phasesView() {
     const c = child();
     const total = ASSESSMENTS.length;
@@ -681,27 +690,27 @@
       const done = ASSESSMENTS.filter((a) => st[a.id] === 'done').length;
       const complete = done === total;
       const dotCls = ph === 'past' ? 'done' : ph === 'current' ? 'progress' : 'pending';
-      const ord = ORDINALS[i] || (i + 1) + 'th';
+      const ord = ORDINALS()[i] || String(i + 1);
 
       const meta = complete
-        ? 'All assessments completed for ' + esc(c.name)
-        : '<b>' + done + '/' + total + '</b> assessments completed for ' + esc(c.name);
+        ? H('parent.allDone', { name: esc(c.name) })
+        : H('parent.someDone', { n: '<b>' + done + '/' + total + '</b>', name: esc(c.name) });
 
       // Future windows are locked; otherwise a finished window shows its report,
       // an unfinished one invites the parent to continue.
       const cta = ph === 'future'
-        ? '<span class="btn-locked">Locked</span>'
+        ? `<span class="btn-locked">${esc(T('parent.locked'))}</span>`
         : complete
         ? `<div class="phase-cta">
-             <button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">View details →</button>
-             <button class="btn btn-outline md focus" data-act="phase-report" data-win="${w.id}">View report</button>
+             <button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">${esc(T('parent.viewDetails'))} →</button>
+             <button class="btn btn-outline md focus" data-act="phase-report" data-win="${w.id}">${esc(T('parent.viewReport'))}</button>
            </div>`
-        : `<button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">Continue assessment →</button>`;
+        : `<button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">${esc(T('parent.continueAssess'))} →</button>`;
 
       return `<div class="phase-row">
         <span class="phase-dot ${dotCls}"></span>
         <div>
-          <b class="phase-title">${ord} phase · ${esc(w.label)}${ph === 'current' && w.date ? ' · <span class="ph-date">' + esc(w.date) + '</span>' : ''}</b>
+          <b class="phase-title">${esc(T('parent.phaseTitle', { ord, phase: w.label }))}${ph === 'current' && w.date ? ' · <span class="ph-date">' + esc(w.date) + '</span>' : ''}</b>
           <span class="phase-meta">${meta}</span>
           ${cta}
         </div>
@@ -711,9 +720,9 @@
     return `<div class="p-wrap">
       <div class="p-top">${lockup}${switcher()}</div>
       <div class="p-main phases-main" data-rise>
-        <h1 class="phase-head">Get a full view of <span>${esc(c.name)}</span></h1>
+        <h1 class="phase-head">${H('parent.fullView', { name: `<span>${esc(c.name)}</span>` })}</h1>
         <div class="phase-timeline">${rows}</div>
-        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>
+        <p class="footnote">${esc(T('parent.footnote', { name: c.name }))}</p>
       </div>
     </div>`;
   }
@@ -722,7 +731,7 @@
   // with the fixed base in brackets: "Sunflowers Rose (Grade 1A)".
   function classMeta(k) {
     const A = window.TilliAPI;
-    const plain = [k.grade, k.section && 'Section ' + k.section].filter(Boolean).join(' · ');
+    const plain = [k.grade, k.section && T('common.section', { s: k.section })].filter(Boolean).join(' · ');
     if (!A || !A.sectionLabel || !k.school_id || !k.grade) return plain;
     if (!k.section) return A.gradeLabel(k.school_id, k.grade);
     const label = k.section_id ? A.sectionLabel(k.school_id, k.section_id) : A.sectionLabel(k.school_id, k.grade, k.section);
@@ -736,7 +745,7 @@
     return [
       `<span class="pill-info"><span class="ui-dot sm dot-cyan"></span>${esc(schoolName)}</span>`,
       c.grade ? `<span class="ui-chip lg ok"><span class="ui-dot sm dot-green"></span>${esc(classMeta(c))}</span>` : '',
-      c.adm ? `<span class="ui-chip lg prog"><span class="ui-dot sm dot-yellow"></span>Admission ${esc(c.adm)}</span>` : '',
+      c.adm ? `<span class="ui-chip lg prog"><span class="ui-dot sm dot-yellow"></span>${esc(T('kids.admNo', { adm: c.adm }))}</span>` : '',
     ].filter(Boolean).join('');
   }
 
@@ -746,7 +755,7 @@
   function homeView() {
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost focus" data-act="back-phases">&#8592; All phases</button>
+        <button class="btn-ghost focus" data-act="back-phases">&#8592; ${esc(T('parent.allPhases'))}</button>
         ${switcher()}</div>
       <div class="p-main">${homeMainInner()}</div>
     </div>`;
@@ -769,7 +778,7 @@
           </div>
           <div>
             <p class="p-eyebrow">__EYEBROW__</p>
-            <h1 class="p-title">Watch <span>${esc(c.name)}</span> grow</h1>
+            <h1 class="p-title">${H('parent.watchGrow', { name: `<span>${esc(c.name)}</span>` })}</h1>
             <p class="p-sub">__SUB__</p>
             <div class="chips">${chips}</div>
           </div>
@@ -779,30 +788,31 @@
     if (!w.milestone) {
       const last = lastCompletedMilestone(c);
       const next = nextOpenMilestone();
-      const nextTxt = next ? esc(next.label) + (next.date ? ' opens ' + esc(next.date) : ' opens soon') : 'the next window opens soon';
+      const nextTxt = next ? T('parent.nextOpens', { phase: next.label, date: next.date || T('parent.soon') }) : T('parent.nextSoon');
       const restCta = last
         ? `<div class="report-cta ready">
              <span class="ico"><img src="${DS}icons/chart-up.png" alt=""></span>
-             <span class="rt"><b>${esc(c.name)}'s ${esc(last.label)} snapshot</b>
-               <span>Revisit the warm summary from ${esc(c.name)}'s last completed window.</span></span>
-             <button class="btn btn-primary flex-none focus" data-act="open-last-report" data-win="${last.id}">See snapshot →</button>
+             <span class="rt"><b>${esc(T('parent.snapshotOf', { name: c.name, phase: last.label }))}</b>
+               <span>${esc(T('parent.revisit', { name: c.name }))}</span></span>
+             <button class="btn btn-primary flex-none focus" data-act="open-last-report" data-win="${last.id}">${esc(T('parent.seeSnapshot'))} →</button>
            </div>`
         : `<div class="report-cta locked">
              <span class="ico"><img src="${DS}icons/clock.png" alt=""></span>
-             <span class="rt"><b>No snapshot yet</b><span>${esc(c.name)}'s first report appears once a window is complete.</span></span>
-             <button class="btn btn-primary flex-none focus" disabled>Locked</button>
+             <span class="rt"><b>${esc(T('parent.noSnapshot'))}</b><span>${esc(T('parent.firstReport', { name: c.name }))}</span></span>
+             <button class="btn btn-primary flex-none focus" disabled>${esc(T('parent.locked'))}</button>
            </div>`;
+      const resting = next ? T('parent.resting', { name: c.name, phase: next.label, date: next.date || T('parent.soon') }) : T('parent.restingSoon', { name: c.name });
       return heroTop
-        .replace('__EYEBROW__', 'Parent home · In between windows')
-        .replace('__SUB__', `No check-ins are open right now — ${esc(c.name)}'s garden is resting until ${nextTxt}.`)
+        .replace('__EYEBROW__', esc(T('parent.eyebrowBetween')))
+        .replace('__SUB__', esc(resting))
         + `
         <div class="ui-card md tint-cyan win-rest">
           <span class="ico">🌿</span>
-          <div class="rt"><b>Nothing to complete right now</b>
-            <span>${nextTxt.charAt(0).toUpperCase() + nextTxt.slice(1)}. You can revisit past reports any time.</span></div>
+          <div class="rt"><b>${esc(T('parent.nothingNow'))}</b>
+            <span>${esc(nextTxt.charAt(0).toUpperCase() + nextTxt.slice(1))}. ${esc(T('parent.revisitPast'))}</span></div>
         </div>
         ${restCta}
-        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+        <p class="footnote">${esc(T('parent.footnote', { name: c.name }))}</p>`;
     }
 
     // ---- MILESTONE window (baseline / midline / endline) ----
@@ -815,18 +825,17 @@
     const editable = phase === 'current';        // only the open window is tappable; history is read-only
     const locked = phase === 'future';
 
-    const eyebrow = phase === 'past' ? 'Completed window · ' + esc(w.label)
-      : phase === 'future' ? 'Upcoming window · ' + esc(w.label)
-      : 'Open now · ' + esc(w.label);
-    const sub = locked
-      ? esc(w.label) + ' opens ' + (w.date ? esc(w.date) : 'soon') + ' — nothing to do just yet.'
+    const when = w.date || T('parent.soon');
+    const eyebrow = esc(T(phase === 'past' ? 'parent.eyebrowPast' : phase === 'future' ? 'parent.eyebrowFuture' : 'parent.eyebrowNow', { phase: w.label }));
+    const sub = esc(locked
+      ? T('parent.subLocked', { phase: w.label, date: when })
       : done < total
-      ? done + ' of ' + total + " check-ins done — finish them to complete " + esc(c.name) + "'s garden."
-      : "Every check-in is complete — " + esc(c.name) + "'s " + esc(w.label) + ' report is ready below.';
+      ? T('parent.subProgress', { done, total, name: c.name })
+      : T('parent.subDone', { name: c.name, phase: w.label }));
 
     const rows = ASSESSMENTS.map((a) => {
       const s = locked ? 'pending' : st[a.id];
-      const badge = locked ? 'Upcoming' : s === 'done' ? 'Completed' : s === 'progress' ? 'In progress' : 'Start';
+      const badge = esc(T(locked ? 'parent.upcoming' : s === 'done' ? 'parent.completed' : s === 'progress' ? 'parent.inProgress' : 'parent.start'));
       const tag = editable ? 'button' : 'div';
       return `<${tag} class="t-row${editable ? ' focus' : ''}"${editable ? ` data-tap="${a.id}"` : ''}>
         <span class="t-dot ${s}"></span>
@@ -835,46 +844,47 @@
       </${tag}>`;
     }).join('');
 
-    const dueTag = locked ? `<span class="muted due">Opens <span class="accent">${esc(w.date || 'soon')}</span></span>`
-      : phase === 'past' ? `<span class="muted due">Completed <span class="accent">${esc(w.date || '')}</span></span>`
-      : `<span class="muted due">Due <span class="accent">15 August</span></span>`;
+    const acc = (d) => `<span class="accent">${esc(d)}</span>`;
+    const dueTag = locked ? `<span class="muted due">${H('parent.opens', { date: acc(when) })}</span>`
+      : phase === 'past' ? `<span class="muted due">${H('parent.completedOn', { date: acc(w.date || '') })}</span>`
+      : `<span class="muted due">${H('parent.due', { date: acc(I18N.fmtDate('2026-08-15', { day: 'numeric', month: 'long' })) })}</span>`;
 
-    const progHint = phase === 'current' ? 'Tap an assessment to start it, then tap again to mark it done.'
-      : phase === 'past' ? 'This window is complete — a look back at ' + esc(c.name) + "'s history."
-      : esc(w.label) + ' opens ' + (w.date ? esc(w.date) : 'soon') + '.';
+    const progHint = esc(phase === 'current' ? T('parent.hintNow')
+      : phase === 'past' ? T('parent.hintPast', { name: c.name })
+      : T('parent.hintFuture', { phase: w.label, date: when }));
     const progCard = `<button class="prog-card${editable ? ' focus' : ''}" ${editable ? ' data-act="progress-tap"' : ''}>
           ${donut(locked ? 0 : pct)}
-          <span class="txt"><b>${locked ? 'Not started yet' : done + ' of ' + total + ' completed'}</b>
+          <span class="txt"><b>${esc(locked ? T('parent.notStarted') : T('parent.nCompleted', { done, total }))}</b>
           <span>${progHint}</span></span>
         </button>`;
 
     const cta = locked
       ? `<div class="report-cta locked">
           <span class="ico"><img src="${DS}icons/clock.png" alt=""></span>
-          <span class="rt"><b>${esc(c.name)}'s ${esc(w.label)} snapshot</b>
-            <span>Opens ${w.date ? esc(w.date) : 'soon'} — complete the window to unlock it.</span></span>
-          <button class="btn btn-primary flex-none focus" disabled>Locked</button>
+          <span class="rt"><b>${esc(T('parent.snapshotOf', { name: c.name, phase: w.label }))}</b>
+            <span>${esc(T('parent.opensUnlock', { date: when }))}</span></span>
+          <button class="btn btn-primary flex-none focus" disabled>${esc(T('parent.locked'))}</button>
         </div>`
       : `<div class="report-cta ${reportReady ? 'ready' : 'locked'}">
           <span class="ico"><img src="${DS}icons/${reportReady ? 'chart-up.png' : 'clock.png'}" alt=""></span>
           <span class="rt">
-            <b>${reportReady ? esc(c.name) + "'s snapshot is ready" : esc(c.name) + "'s parent snapshot"}</b>
-            <span>${reportReady ? 'A warm summary of what you’re seeing at home, from your survey.' : 'Complete the Parent report to unlock your snapshot.'}</span>
+            <b>${esc(T(reportReady ? 'parent.snapReady' : 'parent.parentSnap', { name: c.name }))}</b>
+            <span>${esc(T(reportReady ? 'parent.snapReadySub' : 'parent.snapLockedSub'))}</span>
           </span>
           ${reportReady
             ? (allDone
-                ? `<button class="btn btn-primary flex-none focus" data-act="open-snapshot">See snapshot →</button>`
+                ? `<button class="btn btn-primary flex-none focus" data-act="open-snapshot">${esc(T('parent.seeSnapshot'))} →</button>`
                 : `<span class="snap-gate flex-none text-center">
-                     <button class="btn btn-primary flex-none focus" disabled>See snapshot →</button>
-                     <span class="snap-gate-note">Complete all assessments to access it</span>
+                     <button class="btn btn-primary flex-none focus" disabled>${esc(T('parent.seeSnapshot'))} →</button>
+                     <span class="snap-gate-note">${esc(T('parent.completeAll'))}</span>
                    </span>`)
-            : `<button class="btn btn-primary flex-none focus" disabled>Locked</button>`}
+            : `<button class="btn btn-primary flex-none focus" disabled>${esc(T('parent.locked'))}</button>`}
         </div>`;
 
     return heroTop.replace('__EYEBROW__', eyebrow).replace('__SUB__', sub) + `
 
         <div class="sec-head">
-          <h2>Assessments for ${esc(c.name)}</h2>
+          <h2>${esc(T('parent.assessFor', { name: c.name }))}</h2>
           ${dueTag}
         </div>
 
@@ -884,7 +894,7 @@
 
         ${cta}
 
-        <p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+        <p class="footnote">${esc(T('parent.footnote', { name: c.name }))}</p>`;
   }
 
   // ============================================================
@@ -904,8 +914,7 @@
   // re-animate (mirrors patchHome for the demo path).
   // 'YYYY-MM-DD' → '2 Nov 2026' (window dates on created-school lanes).
   function fmtDay(v) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
-    return m ? (+m[3]) + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + m[1] : (v || '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? I18N.fmtDate(v) : (v || '');
   }
   // ---- School years: after the Tilli team starts a new year the parent gets a
   // one-time notice, and last year's check-ins stay readable under "Last year".
@@ -918,41 +927,41 @@
     const cur = API.currentYear ? API.currentYear(schoolId) : null;
     if (!cur || !cur.rollover) return '';
     try { if (localStorage.getItem(YEAR_SEEN + PARENT_EMAIL + '.' + schoolId + '.' + cur.id)) return ''; } catch (e) { /* no storage → show it */ }
-    const now = c.status === 'graduated' ? `${esc(c.name)} has graduated — well done!` : `${esc(c.name)} is now in ${esc(classMeta(c))}.`;
+    const now = esc(c.status === 'graduated' ? T('parent.yearGraduated', { name: c.name }) : T('parent.yearNowIn', { name: c.name, cls: classMeta(c) }));
     return `<div class="ui-card md tint-cyan win-rest p-yearnote" data-rise>
         <span class="ico">🌱</span>
-        <div class="rt"><b>${esc(cur.label)} has started</b><span>${now} Last year's check-ins are under <b>Last year</b>.</span></div>
-        <button class="dialog-close focus" data-act="year-seen" data-year="${esc(cur.id)}" aria-label="Dismiss">×</button>
+        <div class="rt"><b>${esc(T('parent.yearStarted', { year: cur.label }))}</b><span>${now} ${H('parent.yearLastUnder', { last: B(T('parent.lastYear')) })}</span></div>
+        <button class="dialog-close focus" data-act="year-seen" data-year="${esc(cur.id)}" aria-label="${esc(T('parent.dismiss'))}">×</button>
       </div>`;
   }
   // Read-only: what was done in each phase last year, from the year's archive.
   function lastYearSections(c, schoolId, yr) {
     const arch = API.yearArchive ? API.yearArchive(schoolId, yr.id) : null;
-    if (!arch) return '<p class="footnote">Last year’s check-ins aren’t available.</p>';
+    if (!arch) return `<p class="footnote">${esc(T('parent.lastNA'))}</p>`;
     const deps = Object.keys(arch.deployments || {}).map((k) => arch.deployments[k]);
     const comps = arch.completions || {}, sid = String(c.student_id || '').toUpperCase();
     const enrol = (arch.enrolments || {})[c.student_id] || (arch.enrolments || {})[sid];
     const was = enrol ? ` · ${esc(enrol.grade)} ${esc(enrol.section || '')}` : '';
-    return `<p class="p-sub" style="margin:0 0 6px">${esc(yr.label)}${was} · read-only</p>` + PARENT_PHASES.map((phase) => {
+    return `<p class="p-sub" style="margin:0 0 6px">${esc(yr.label)}${was} · ${esc(T('parent.readOnly'))}</p>` + PARENT_PHASES.map((phase) => {
       const lanes = deps.filter((d) => d.phase === phase && (d.audience === 'Parent' || (d.audience === 'Direct Assessment' && (d.assessments || []).some((a) => a.mode === 'home'))));
       const items = [];
       lanes.forEach((d) => (d.assessments || []).filter((a) => d.audience === 'Parent' || a.mode === 'home').forEach((a) => items.push({ a, aud: d.audience, notRun: d.notRun })));
-      if (!items.length) return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Didn’t run</span></div>`;
+      if (!items.length) return `<div class="sec-head"><h2>${esc(phaseName(phase))}</h2><span class="muted due">${esc(T('parent.didntRun'))}</span></div>`;
       const done = items.filter((x) => comps[phase + '|' + x.aud + '|' + sid + '|' + x.a.id]).length;
       const rows = items.map((x) => {
         const ok = !!comps[phase + '|' + x.aud + '|' + sid + '|' + x.a.id];
         return `<div class="t-row"><span class="t-dot ${ok ? 'done' : 'pending'}"></span>
-          <span class="t-body"><b>${esc(x.a.name)}</b><span>${x.aud === 'Parent' ? 'Parent check-in' : 'Activity with your child'}</span></span>
-          <span class="ui-chip lg ${ok ? 'ok' : 'muted'}">${ok ? 'Completed' : x.notRun ? 'Didn’t run' : 'Not done'}</span></div>`;
+          <span class="t-body"><b>${esc(x.a.name)}</b><span>${esc(T(x.aud === 'Parent' ? 'parent.parentCheckin' : 'parent.activityWithChild'))}</span></span>
+          <span class="ui-chip lg ${ok ? 'ok' : 'muted'}">${esc(T(ok ? 'parent.completed' : x.notRun ? 'parent.didntRun' : 'parent.notDone'))}</span></div>`;
       }).join('');
-      return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due"><b>${done}</b> of <b>${items.length}</b> done</span></div><div class="timeline">${rows}</div>`;
+      return `<div class="sec-head"><h2>${esc(phaseName(phase))}</h2><span class="muted due">${H('parent.nDone', { done: '<b>' + done + '</b>', total: '<b>' + items.length + '</b>' })}</span></div><div class="timeline">${rows}</div>`;
     }).join('');
   }
   function yearTabsHTML(cur, last) {
     const on = state.yearView === 'last';
-    return `<div class="p-yeartabs" role="tablist" aria-label="School year">
-        <button class="ui-filterchip focus${on ? '' : ' on'}" role="tab" aria-selected="${!on}" data-act="year-view" data-yv="this">This year${cur ? ' · ' + esc(cur.label) : ''}</button>
-        <button class="ui-filterchip focus${on ? ' on' : ''}" role="tab" aria-selected="${on}" data-act="year-view" data-yv="last">Last year · ${esc(last.label)}</button>
+    return `<div class="p-yeartabs" role="tablist" aria-label="${esc(T('parent.yearAria'))}">
+        <button class="ui-filterchip focus${on ? '' : ' on'}" role="tab" aria-selected="${!on}" data-act="year-view" data-yv="this">${esc(T('parent.thisYear'))}${cur ? ' · ' + esc(cur.label) : ''}</button>
+        <button class="ui-filterchip focus${on ? ' on' : ''}" role="tab" aria-selected="${on}" data-act="year-view" data-yv="last">${esc(T('parent.lastYear'))} · ${esc(last.label)}</button>
       </div>`;
   }
 
@@ -962,18 +971,18 @@
     const schoolId = sc.school_id;
     const faceColor = smileColor(state.selected);
 
-    const chips = heroChips(c, sc.name) + (c.status === 'graduated' ? '<span class="ui-chip lg muted">Graduated</span>' : '');
+    const chips = heroChips(c, sc.name) + (c.status === 'graduated' ? `<span class="ui-chip lg muted">${esc(T('parent.graduated'))}</span>` : '');
     const curYear = API.currentYear ? API.currentYear(schoolId) : null, lastYear = lastYearOf(schoolId);
     const showLast = !!lastYear && (state.yearView === 'last' || c.status === 'graduated');
     const yearBits = yearNoticeHTML(c, schoolId) + (lastYear && c.status !== 'graduated' ? yearTabsHTML(curYear, lastYear) : '');
     if (showLast || c.status === 'graduated') {
       return `<div class="p-hero" data-rise>
           <div class="p-face" style="background:${faceColor};box-shadow:0 10px 26px ${faceColor}3a"><img src="${SMILEY}" alt=""></div>
-          <div><p class="p-eyebrow">Parent home · ${esc(sc.name)}</p>
-            <h1 class="p-title">${c.status === 'graduated' ? `<span>${esc(c.name)}</span> has graduated` : `<span>${esc(c.name)}</span>’s last year`}</h1>
-            <p class="p-sub">${c.status === 'graduated' ? `There are no new check-ins for ${esc(c.name)} here. Their past check-ins stay below.` : 'What you and ' + esc(c.name) + ' completed last year. Nothing here can be changed.'}</p>
+          <div><p class="p-eyebrow">${esc(T('parent.eyebrowHome', { school: sc.name }))}</p>
+            <h1 class="p-title">${H(c.status === 'graduated' ? 'parent.hasGraduated' : 'parent.lastYearOf', { name: `<span>${esc(c.name)}</span>` })}</h1>
+            <p class="p-sub">${esc(T(c.status === 'graduated' ? 'parent.gradSub' : 'parent.lastSub', { name: c.name }))}</p>
             <div class="chips">${chips}</div></div>
-        </div>` + yearBits + (lastYear ? lastYearSections(c, schoolId, lastYear) : '<p class="footnote">No past check-ins yet.</p>');
+        </div>` + yearBits + (lastYear ? lastYearSections(c, schoolId, lastYear) : `<p class="footnote">${esc(T('parent.noPast'))}</p>`);
     }
 
     // Deployed Parent lanes, plus student direct assessments set to run at home
@@ -992,11 +1001,9 @@
             <img src="${SMILEY}" alt="">
           </div>
           <div>
-            <p class="p-eyebrow">Parent home · ${esc(sc.name)}</p>
-            <h1 class="p-title">Watch <span>${esc(c.name)}</span> grow</h1>
-            <p class="p-sub">${anyLive
-              ? 'Complete each check-in your school has opened — your answers save right away.'
-              : 'No check-ins are open yet. They’ll appear here as your school deploys each window.'}</p>
+            <p class="p-eyebrow">${esc(T('parent.eyebrowHome', { school: sc.name }))}</p>
+            <h1 class="p-title">${H('parent.watchGrow', { name: `<span>${esc(c.name)}</span>` })}</h1>
+            <p class="p-sub">${esc(T(anyLive ? 'parent.liveSub' : 'parent.noneSub'))}</p>
             <div class="chips">${chips}</div>
           </div>
         </div>`;
@@ -1007,11 +1014,11 @@
 
       // Not deployed yet → muted resting card (appears once the admin deploys it).
       if (!lane) {
-        return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Not deployed yet</span></div>
+        return `<div class="sec-head"><h2>${esc(phaseName(phase))}</h2><span class="muted due">${esc(T('parent.notDeployed'))}</span></div>
           <div class="ui-card md tint-cyan win-rest">
             <span class="ico">🌿</span>
-            <div class="rt"><b>Not deployed yet</b>
-              <span>${esc(c.name)}'s ${esc(phase)} check-ins will show up here once your school opens this window.</span></div>
+            <div class="rt"><b>${esc(T('parent.notDeployed'))}</b>
+              <span>${esc(T('parent.notDeployedSub', { name: c.name, phase: phaseName(phase) }))}</span></div>
           </div>`;
       }
 
@@ -1024,11 +1031,11 @@
 
       // Scheduled → visible but closed until the start date.
       if (lane.status === 'Scheduled') {
-        return `<div class="sec-head"><h2>${esc(phase)}</h2><span class="muted due">Opens ${esc(fmtDay(lane.start))}</span></div>
+        return `<div class="sec-head"><h2>${esc(phaseName(phase))}</h2><span class="muted due">${esc(T('parent.opens', { date: fmtDay(lane.start) }))}</span></div>
           <div class="ui-card md tint-cyan win-rest">
             <span class="ico">🗓️</span>
-            <div class="rt"><b>Opens on ${esc(fmtDay(lane.start))}</b>
-              <span>${assessments.length} check-in${assessments.length === 1 ? '' : 's'} for ${esc(c.name)} — open ${esc(fmtDay(lane.start))} to ${esc(fmtDay(lane.end))}.</span></div>
+            <div class="rt"><b>${esc(T('parent.opensOn', { date: fmtDay(lane.start) }))}</b>
+              <span>${esc(T(assessments.length === 1 ? 'parent.scheduledOne' : 'parent.scheduledMany', { n: assessments.length, name: c.name, start: fmtDay(lane.start), end: fmtDay(lane.end) }))}</span></div>
           </div>`;
       }
       // In-order items open once the one before them is done; any-time items are always open.
@@ -1037,7 +1044,7 @@
         'Direct Assessment': API.chainFor ? API.chainFor(schoolId, phase, 'Direct Assessment', c.student_id) : [],
       };
       const chainState = (a) => chains[a.aud].find((y) => y.id === a.id) || { state: 'open' };
-      const kindLabel = (a) => a.aud === 'Parent' ? 'Parent check-in' : 'Activity to do with your child';
+      const kindLabel = (a) => T(a.aud === 'Parent' ? 'parent.parentCheckin' : 'parent.activityToDo');
 
       const rows = assessments.length ? assessments.map((a) => {
         const done = isDone(a);
@@ -1045,39 +1052,39 @@
         if (!done && !ended && link.state === 'locked') {
           return `<div class="t-row">
             <span class="t-dot pending"></span>
-            <span class="t-body"><b>${esc(a.name)}</b><span>Opens after “${esc(link.after)}”</span></span>
-            <span class="btn-locked">Locked</span>
+            <span class="t-body"><b>${esc(a.name)}</b><span>${esc(T('parent.opensAfter', { name: link.after }))}</span></span>
+            <span class="btn-locked">${esc(T('parent.locked'))}</span>
           </div>`;
         }
         if (done) {
           return `<div class="t-row">
             <span class="t-dot done"></span>
-            <span class="t-body"><b>${esc(a.name)}</b><span>${kindLabel(a)}</span></span>
-            <span class="ui-chip lg ok">Completed</span>
+            <span class="t-body"><b>${esc(a.name)}</b><span>${esc(kindLabel(a))}</span></span>
+            <span class="ui-chip lg ok">${esc(T('parent.completed'))}</span>
           </div>`;
         }
         // Ended-but-unfinished stays visible but read-only; live is tappable.
         return ended
           ? `<div class="t-row">
               <span class="t-dot pending"></span>
-              <span class="t-body"><b>${esc(a.name)}</b><span>Window ended · not completed</span></span>
-              <span class="ui-chip lg muted">Missed</span>
+              <span class="t-body"><b>${esc(a.name)}</b><span>${esc(T('parent.windowEnded'))}</span></span>
+              <span class="ui-chip lg muted">${esc(T('parent.missed'))}</span>
             </div>`
           : `<button class="t-row focus" data-act="mark-done" data-phase="${esc(phase)}" data-aud="${esc(a.aud)}" data-assess="${esc(a.id)}">
               <span class="t-dot pending"></span>
-              <span class="t-body"><b>${esc(a.name)}</b><span>${kindLabel(a)} · tap to mark done</span></span>
-              <span class="ui-chip lg muted">Mark done</span>
+              <span class="t-body"><b>${esc(a.name)}</b><span>${esc(T('parent.tapMark', { kind: kindLabel(a) }))}</span></span>
+              <span class="ui-chip lg muted">${esc(T('parent.markDone'))}</span>
             </button>`;
-      }).join('') : `<div class="t-row"><span class="t-body"><b>No assessments in this window yet</b></span></div>`;
+      }).join('') : `<div class="t-row"><span class="t-body"><b>${esc(T('parent.noAssess'))}</b></span></div>`;
 
       return `<div class="sec-head">
-          <h2>${esc(phase)}</h2>
-          <span class="muted due"><b>${stats.done}</b> of <b>${stats.expected}</b> done${ended ? ' · Ended' : (lane.end ? ' · open until ' + esc(fmtDay(lane.end)) : '')}</span>
+          <h2>${esc(phaseName(phase))}</h2>
+          <span class="muted due">${H('parent.nDone', { done: '<b>' + stats.done + '</b>', total: '<b>' + stats.expected + '</b>' })}${ended ? ' · ' + esc(T('parent.ended')) : (lane.end ? ' · ' + esc(T('parent.openUntil', { date: fmtDay(lane.end) })) : '')}</span>
         </div>
         <div class="timeline">${rows}</div>`;
     }).join('');
 
-    return heroTop + yearBits + sections + `<p class="footnote">Every check-in helps ${esc(c.name)}'s garden grow 🌱</p>`;
+    return heroTop + yearBits + sections + `<p class="footnote">${esc(T('parent.footnote', { name: c.name }))}</p>`;
   }
 
   // Targeted patch after a completion — rebuild just .p-main (no re-animate).
@@ -1089,7 +1096,8 @@
   }
 
   // ============================================================
-  // REPORT VIEW (garden payoff)
+  // REPORT VIEW (garden payoff) — no button opens it today (parents see the
+  // snapshot), so its own text isn't in the word list yet.
   // ============================================================
   function reportView() {
     const c = child();
@@ -1122,7 +1130,7 @@
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; Back to home</button>
+        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; ${esc(T('parent.backHome'))}</button>
       </div>
       <div class="p-main" data-rise>
 
@@ -1143,8 +1151,8 @@
         </div>
 
         <div class="report-actions">
-          <button class="btn btn-primary md focus" data-act="save-pdf">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF'}</button>
-          <button class="btn btn-outline md focus" data-act="save-png">${state.saved === 'png' ? 'Saved ✓' : 'Save image'}</button>
+          <button class="btn btn-primary md focus" data-act="save-pdf">${esc(T(state.saved === 'pdf' ? 'snap.downloaded' : 'snap.download'))}</button>
+          <button class="btn btn-outline md focus" data-act="save-png">${esc(T(state.saved === 'png' ? 'snap.saved' : 'snap.saveImage'))}</button>
           <button class="btn-ghost md focus" data-act="back-home">Back to home</button>
         </div>
 
@@ -1160,101 +1168,9 @@
   // strengths-first; exactly ONE growth area; UK spelling.
   // ============================================================
 
-  // Each strength → a concrete home behaviour (one sentence). Never a label.
-  const STRENGTH_BEHAVIOUR = {
-    emotion_awareness:      '{Subj} {be} good at putting feelings into words — you’ll often hear {name} say ‘I feel cross’ or ‘that made me happy’ without being asked.',
-    emotion_regulation:     'When something upsets {name}, {subj} {be} usually able to settle back down before long and get on with the day.',
-    empathy:                '{Name} tends to notice when someone else is sad or left out, and will often go over to comfort them.',
-    relationship_skills:    '{Name} plays warmly with others — sharing, taking turns and finding {poss} way back after a squabble.',
-    metacognition:          '{Name} likes to think out loud about {poss} own thinking — what was tricky, and what {subj} {be} going to try next.',
-    critical_thinking:      '{Name} asks plenty of ‘but why?’ questions and enjoys working out how things fit together.',
-    working_memory:         '{Name} can hold a few steps in mind at once — give {obj} a two-part instruction and {subj} {be} usually able to see it through.',
-    planning:               '{Name} likes things in order — {subj} {be} happy to line up a task and work through it step by step.',
-    cognitive_flexibility:  'When a plan changes, {name} tends to roll with it and try another way rather than getting stuck.',
-    inhibition_distraction: '{Name} can settle into something and keep going, even with a bit of noise and bustle around {obj}.',
-    inhibition_response:    '{Subj} {be} often able to stop and think for a moment before jumping straight in.',
-    attention:              '{Name} can stay with a game or a story for a good stretch without drifting off.',
-  };
-
-  // The single growth area → a plain-language behaviour heading + a warm, opportunity-framed description.
-  const GROWTH_FRAME = {
-    emotion_awareness:      { head: 'Putting feelings into words',   desc: 'Right now {name} sometimes shows big feelings through {poss} body or actions before {subj} can name them. A little help spotting and naming feelings gives {obj} the words to tell you what’s going on.' },
-    emotion_regulation:     { head: 'Settling big feelings',         desc: 'When something feels unfair or frustrating, it can take {name} a while to come back down. With a few calming tricks to reach for, those moments get shorter and gentler.' },
-    empathy:                { head: 'Tuning in to how others feel',  desc: '{Name} is still learning to read when a friend is upset or wants a turn. Gentle noticing games help {obj} see things from someone else’s side.' },
-    relationship_skills:    { head: 'Playing and sharing with others',desc: 'Taking turns and smoothing over little disagreements are still growing for {name}. Short, guided play gives {obj} a friendly place to practise.' },
-    metacognition:          { head: 'Noticing how they think',       desc: '{Name} is beginning to look back on what {subj} {be} doing and why. Simple ‘what worked, what was tricky’ chats help that reflecting habit take root.' },
-    critical_thinking:      { head: 'Thinking things through',       desc: '{Name} is still building the habit of weighing choices and asking why. Open questions instead of quick answers give {obj} room to reason it out.' },
-    working_memory:         { head: 'Holding steps in mind',         desc: 'Longer instructions can slip away before {name} finishes them. Breaking things into a couple of clear steps helps {obj} keep the whole plan in mind.' },
-    planning:               { head: 'Planning and organising',       desc: 'Getting started and keeping bits in order is still coming along for {name}. A simple picture checklist gives {obj} a way to see what comes next.' },
-    cognitive_flexibility:  { head: 'Adapting when things change',    desc: 'A sudden change to a plan can feel hard for {name} just now. Playful ‘let’s try it another way’ moments make switching feel safe and fun.' },
-    inhibition_distraction: { head: 'Staying focused',               desc: 'It’s easy for {name} to be pulled away by whatever is going on nearby. Short bursts of quiet focus, then a break, help that staying-power grow.' },
-    inhibition_response:    { head: 'Pausing before acting',         desc: '{Name} sometimes jumps straight in before stopping to think. Fun ‘wait for it’ games make that pause feel like play rather than a rule.' },
-    attention:              { head: 'Staying with one thing',        desc: '{Name}’s focus can drift after a little while. Slowly stretching cosy reading or building time helps {obj} stay with one thing for longer.' },
-  };
-
-  // Exactly three low-effort home actions, ALL tied to the single growth area. Numbers spelled out (no digits).
-  const GROWTH_ACTIONS = {
-    emotion_awareness: [
-      { t: 'Name it as you go', b: 'Say what you notice out loud: ‘you look frustrated with that puzzle.’ Hearing feelings named gives {name} the words to use next time.' },
-      { t: 'Feelings check-in', b: 'At dinner, each share one feeling from the day. Take a turn yourself so it feels normal.' },
-      { t: 'Story feelings',    b: 'While reading, pause and ask ‘how do you think they feel?’ Picture books are full of easy feelings to spot.' },
-    ],
-    emotion_regulation: [
-      { t: 'Practise calm when it’s calm', b: 'Try belly-breathing together when everyone is relaxed, so the trick is ready for the wobbly moments.' },
-      { t: 'A calm-down corner', b: 'Set up a cosy spot with a cushion or soft toy {name} can choose to go to when feelings get big — never as a punishment.' },
-      { t: 'Name the size',      b: 'Talk about feelings as small, medium or big. Spotting one early makes it easier to handle before it grows.' },
-    ],
-    empathy: [
-      { t: 'How do they feel?',  b: 'During stories or at the park, wonder aloud how someone else might be feeling, and why.' },
-      { t: 'Little helper jobs', b: 'Give {name} small caring jobs — carrying something for a sibling, checking on a friend — so kindness gets lots of practice.' },
-      { t: 'Feelings faces',     b: 'Play a quick game guessing feelings from faces in photos or books. It builds the habit of reading others.' },
-    ],
-    relationship_skills: [
-      { t: 'One-to-one play',   b: 'Set up a short playdate with a single friend. Fewer children makes taking turns easier to manage.' },
-      { t: 'Turn-taking games', b: 'Simple board games are gentle practice for waiting, winning and losing.' },
-      { t: 'Talk it back',      b: 'After a squabble, calmly help {name} name what happened and think of one thing to try next time.' },
-    ],
-    metacognition: [
-      { t: 'Look-back chats', b: 'After a task ask ‘what was tricky, and what would you try next time?’ Keep it curious, not a test.' },
-      { t: 'Think out loud',  b: 'Narrate your own thinking — ‘I’ll do the hard bit first’ — so {name} hears how planning sounds.' },
-      { t: 'Two ways',        b: 'When something is tricky, ask {name} to think of two ways to try it before picking one.' },
-    ],
-    critical_thinking: [
-      { t: 'Ask, don’t tell',  b: 'When {name} wonders about something, ask ‘why do you think that is?’ before giving the answer.' },
-      { t: 'What might happen?',b: 'During stories, pause and guess together what could come next, and why.' },
-      { t: 'Sorting games',    b: 'Sort toys or socks by colour, size or type. Grouping things builds reasoning in a playful way.' },
-    ],
-    working_memory: [
-      { t: 'Two-step errands', b: 'Give little two-part jobs — ‘put your cup in the sink and grab your shoes.’ Add a step as it gets easy.' },
-      { t: 'Quick memory games', b: 'Play a short round of ‘I packed my bag’ after dinner. Five minutes is plenty.' },
-      { t: 'Say it back',      b: 'Ask {name} to repeat the plan back to you before starting, so the steps stick.' },
-    ],
-    planning: [
-      { t: 'Picture checklist', b: 'Make a simple picture list for a routine like the morning bag, and let {name} tick things off.' },
-      { t: 'Plan it first',     b: 'Before an activity, ask ‘what do we need, and what comes first?’ Planning aloud makes it a habit.' },
-      { t: 'First, then',       b: 'Use ‘first we do this, then that’ language so the order of steps feels clear and doable.' },
-    ],
-    cognitive_flexibility: [
-      { t: 'Another way',   b: 'Play ‘let’s do it differently’ — brush teeth with the other hand, take a new route to the park.' },
-      { t: 'Gentle heads-up', b: 'Warn before a change: ‘five more minutes, then we tidy up.’ Knowing what’s coming makes switching easier.' },
-      { t: 'What else could it be?', b: 'Look at a cloud or a squiggle and take turns saying what else it could be. Silly is good.' },
-    ],
-    inhibition_distraction: [
-      { t: 'Quiet focus bursts', b: 'Try a few minutes of one task in a calm spot, then a movement break. Slowly stretch the time.' },
-      { t: 'Clear the deck',     b: 'Before something that needs focus, tidy away the other toys so there is less pulling {poss} attention.' },
-      { t: 'Beat the timer',     b: 'Set a short, fun timer and see how much of one job {name} can finish before it rings.' },
-    ],
-    inhibition_response: [
-      { t: 'Red light, green light', b: 'Play stop-and-go games. They make pausing before acting genuinely fun.' },
-      { t: 'Wait for the word',      b: 'Play games where {name} waits for a signal before moving — good practice for holding on a beat.' },
-      { t: 'Take a breath',          b: 'Coach one slow breath before answering or reacting. A tiny pause is a big skill.' },
-    ],
-    attention: [
-      { t: 'A little longer',    b: 'Read or build together and gently stretch the time by a minute or two each week.' },
-      { t: 'One thing at a time',b: 'Offer a single activity rather than several, so it is easier to stay with it to the end.' },
-      { t: 'Finish-it moments',  b: 'Pick a small task to see all the way through together, and celebrate reaching the end.' },
-    ],
-  };
+  // The copy per skill (strength line, growth heading + description, three
+  // try-at-home activities) lives in the word list: snap.shine.<skill>,
+  // snap.growHead.<skill>, snap.growDesc.<skill>, snap.act.<skill>.<0-2>.t|b.
 
   // Pick the strengths (top 2–3) and the single growth area from the child's standings.
   function snapshotStandings(c, winId) {
@@ -1267,9 +1183,7 @@
   }
 
   // Dummy metadata for the three try-at-home cards until real content is wired.
-  // Card i gets ACT_TYPE[i] / ACT_FREQ[i], a border colour and a placeholder link.
-  const ACT_TYPE = ['Playful game', 'Everyday chat', 'Daily routine'];
-  const ACT_FREQ = ['A few times a week', 'Once a day', 'Once a week'];
+  // Card i gets snap.type<i> / snap.freq<i>, a border colour and a placeholder link.
   const ACT_LINK = 'https://www.tillikids.com'; // TODO placeholder — real how-to link (YouTube / article / steps)
 
   // Decorative flower row — reuses flowerSVG() in a cool brand palette (ART.FLOWER_ROW).
@@ -1283,33 +1197,31 @@
     const w = curWindow();
     const winLabel = w.milestone ? w.label : TERM;
     const { strengths, growth } = snapshotStandings(c, w.id);
-    const gf = GROWTH_FRAME[growth.key];
-    const acts = GROWTH_ACTIONS[growth.key];
+    const g = growth.key;
 
     const shine = strengths.map((s) =>
-      `<li><span class="di">◆</span><p>${fill(STRENGTH_BEHAVIOUR[s.key], c)}</p></li>`).join('');
+      `<li><span class="di">◆</span><p>${fillT('snap.shine.' + s.key, c)}</p></li>`).join('');
 
-    const tryCards = acts.map((a, i) =>
+    const tryCards = [0, 1, 2].map((i) =>
       `<a class="try-card focus" href="${ACT_LINK}" target="_blank" rel="noopener"
           style="--c:${ART.TRY[i % ART.TRY.length]}">
-        <div class="tc-tags"><span class="tc-type">${esc(ACT_TYPE[i] || 'Activity')}</span>
-          <span class="tc-freq">${esc(ACT_FREQ[i] || '')}</span></div>
-        <div class="tc-topic">${esc(a.t)}</div>
-        <p class="tc-desc">${fill(a.b, c)}</p>
+        <div class="tc-tags"><span class="tc-type">${esc(T('snap.type' + i))}</span>
+          <span class="tc-freq">${esc(T('snap.freq' + i))}</span></div>
+        <div class="tc-topic">${esc(T('snap.act.' + g + '.' + i + '.t'))}</div>
+        <p class="tc-desc">${fillT('snap.act.' + g + '.' + i + '.b', c)}</p>
       </a>`).join('');
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; Back to home</button>
+        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; ${esc(T('parent.backHome'))}</button>
       </div>
       <div class="p-main" data-rise>
 
         <!-- 1 · a note for the family -->
         <div class="note-hero">
-          <p class="note-kicker">A note for</p>
-          <h1 class="p-title"><span>${esc(c.name)}</span>’s family</h1>
-          <p class="note-lead">Here is a brief analysis based on your observations and how ${esc(c.name)}
-            did in the ${esc(winLabel)} Tilli games.</p>
+          <p class="note-kicker">${esc(T('snap.noteFor'))}</p>
+          <h1 class="p-title">${H('snap.family', { name: `<span>${esc(c.name)}</span>` })}</h1>
+          <p class="note-lead">${esc(T('snap.lead', { name: c.name, phase: winLabel }))}</p>
         </div>
 
         <!-- grey band groups the graded report (shining → work with teacher) -->
@@ -1318,44 +1230,42 @@
 
         <!-- 2 · three places where {name} is shining -->
         <section class="ui-card md tint-green panel">
-          <h2 class="panel-title is-green">3 places where ${esc(c.name)} is shining</h2>
+          <h2 class="panel-title is-green">${esc(T('snap.shining', { name: c.name }))}</h2>
           <div class="panel-body"><ul class="shine-list">${shine}</ul></div>
         </section>
 
         <!-- 3 · where {name} needs support (single growth area) -->
         <section class="ui-card md tint-cyan panel">
-          <h2 class="panel-title is-cyan">Where ${esc(c.name)} needs support</h2>
+          <h2 class="panel-title is-cyan">${esc(T('snap.support', { name: c.name }))}</h2>
           <div class="panel-body support-body">
             <div class="support-text">
-              <h3>${esc(gf.head)}</h3>
-              <p>${fill(gf.desc, c)}</p>
+              <h3>${esc(T('snap.growHead.' + g))}</h3>
+              <p>${fillT('snap.growDesc.' + g, c)}</p>
             </div>
             <img class="support-ill" src="${DS}icons/people.png" alt="">
           </div>
         </section>
 
         <!-- 4 · three things you can try at home -->
-        <div class="sec-head"><h2>3 things you can try at home</h2></div>
-        <p class="try-sub">tap on each card to learn more</p>
+        <div class="sec-head"><h2>${esc(T('snap.tryHome'))}</h2></div>
+        <p class="try-sub">${esc(T('snap.tapCard'))}</p>
         <div class="try-list">${tryCards}</div>
 
         <!-- 5 · decorative flower row -->
         <div class="flower-row">${flowerRow()}</div>
 
         <!-- 6 · work with the teacher -->
-        <div class="sec-head"><h2 class="teach-head">Work with the teacher</h2></div>
-        <p class="teach-copy">When you’re ready, ask ${esc(c.teacher)} for ${esc(c.name)}’s fuller report. It brings
-          this survey together with ${esc(c.name)}’s own activities and what ${fill('{poss}', c)} teacher sees in
-          class — three angles on the same wonderful child.</p>
+        <div class="sec-head"><h2 class="teach-head">${esc(T('snap.workTeacher'))}</h2></div>
+        <p class="teach-copy">${fillT('snap.teacherCopy', c)}</p>
 
         </div><!-- /report-band-inner -->
         </div><!-- /report-band -->
 
         <!-- 7 · download + footer -->
         <div class="download-row">
-          <button class="btn btn-primary focus" data-act="save-pdf">${state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF'}</button>
+          <button class="btn btn-primary focus" data-act="save-pdf">${esc(T(state.saved === 'pdf' ? 'snap.downloaded' : 'snap.download'))}</button>
         </div>
-        <p class="footnote">For family use only · for enquiry / questions email info@tillikids.com · a fresh snapshot follows each assessment window.</p>
+        <p class="footnote">${esc(T('snap.footer'))}</p>
       </div>
     </div>`;
   }
@@ -1376,15 +1286,15 @@
       const remaining = total - done;
       const pct = Math.round((done / total) * 100);
       const col = smileColor(i);
-      const meta = classMeta(k) || 'No grade set';
+      const meta = classMeta(k) || T('parent.noGrade');
       return `<button class="ui-card sm link kid-card focus" data-select="${i}">
         <span class="ui-avatar lg" style="background:${col}"><img src="${SMILEY}" alt=""></span>
         <span class="kid-info"><b>${esc(k.name)}</b><span>${esc(meta)}</span></span>
         <span class="kid-prog">
           ${donut(pct)}
           <span class="kid-status">
-            <b style="color:${remaining ? 'var(--pink-600)' : 'var(--green-600)'}">${remaining ? remaining + ' to go' : 'All done ✓'}</b>
-            <span>${done}/${total} check-ins</span>
+            <b style="color:${remaining ? 'var(--pink-600)' : 'var(--green-600)'}">${esc(remaining ? T('parent.toGo', { n: remaining }) : T('parent.allDoneShort'))}</b>
+            <span>${esc(T('parent.checkinsN', { done, total }))}</span>
           </span>
         </span>
         <span class="chev" aria-hidden="true">›</span>
@@ -1393,28 +1303,28 @@
 
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; Back to home</button>
+        <button class="btn-ghost ml-auto focus" data-act="back-home">&#8592; ${esc(T('parent.backHome'))}</button>
       </div>
       <div class="p-main" data-rise>
         <div class="profile-head">
           <span class="profile-face"><img src="${SMILEY}" alt=""></span>
           <div>
-            <p class="p-eyebrow tight">Your profile</p>
+            <p class="p-eyebrow tight">${esc(T('consent.yourProfile'))}</p>
             <h1 class="p-title">${esc(PARENT_NAME)}</h1>
           </div>
         </div>
-        <p class="p-sub spaced">You're following ${children.length} ${children.length === 1 ? 'child' : 'children'} at ${esc(school)}. Tap a child to open their check-ins.</p>
+        <p class="p-sub spaced">${esc(T(children.length === 1 ? 'parent.followingOne' : 'parent.followingMany', { n: children.length, school }))}</p>
 
-        <div class="sec-head"><h2>Your children</h2><span class="muted">${children.length} linked</span></div>
+        <div class="sec-head"><h2>${esc(T('parent.yourChildren'))}</h2><span class="muted">${esc(T('parent.linked', { n: children.length }))}</span></div>
         <div class="kid-list">${kids}
-          <a href="index.html" class="btn-dashed lg focus">+ Add another child</a>
+          <a href="index.html" class="btn-dashed lg focus">${esc(T('parent.addChild'))}</a>
         </div>
 
         ${consentCardHTML()}
-        ${I18N ? `<div class="sec-head"><h2>${esc(T('lang.label', 'Language'))}</h2></div><div class="p-langrow">${I18N.switcherHTML()}</div>` : ''}
+        <div class="sec-head"><h2>${esc(T('lang.label'))}</h2></div><div class="p-langrow">${I18N.switcherHTML()}</div>
 
         <div class="report-actions profile-actions">
-          <button class="btn-ghost md logout focus" data-act="logout">Log out</button>
+          <button class="btn-ghost md logout focus" data-act="logout">${esc(T('parent.logout'))}</button>
         </div>
       </div>
     </div>`;
@@ -1430,15 +1340,12 @@
   function consentCardHTML() {
     if (!hasConsentAPI()) return '';
     const r = API.consentFor(PARENT_EMAIL);
-    const when = r ? new Date(r.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    return `<div class="sec-head"><h2>Consent &amp; privacy</h2><span class="muted">${r ? 'Agreed on ' + esc(when) : 'Not given yet'}</span></div>
+    return `<div class="sec-head"><h2>${esc(T('parent.consentHead'))}</h2><span class="muted">${esc(r ? T('parent.agreedOn', { date: I18N.fmtDate(r.at) }) : T('parent.notGiven'))}</span></div>
       <button class="ui-card sm link kid-card focus" data-act="open-consent">
-        <span class="kid-info"><b>What you agreed to</b><span>Read it again, or change the optional choices.</span></span>
+        <span class="kid-info"><b>${esc(T('parent.whatAgreed'))}</b><span>${esc(T('parent.readAgain'))}</span></span>
         <span class="chev" aria-hidden="true">›</span>
       </button>`;
   }
-  const I18N = window.TilliI18n;
-  const T = (k, en) => (I18N ? I18N.t(k, en) : en);
   function consentView(gate) {
     const cfg = API.consentConfig();
     if (!state.consentPick) { const r = API.consentFor(PARENT_EMAIL); state.consentPick = Object.assign({}, r && r.items); }
@@ -1452,7 +1359,7 @@
       : (ready ? T('consent.savesNow', 'Changes save straight away.') : T('consent.stopsApp', 'Without the required box, the parent app stops until you tick it again.'));
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
-        <span class="ml-auto">${I18N ? I18N.switcherHTML() : ''}</span>
+        <span class="ml-auto">${I18N.switcherHTML()}</span>
         ${gate ? `<button class="btn-ghost focus" data-act="logout">${esc(T('consent.notNowLogout', 'Not now — log out'))}</button>` : `<button class="btn-ghost focus" data-act="open-profile">&#8592; ${esc(T('consent.backProfile', 'Back to profile'))}</button>`}
       </div>
       <div class="p-main" data-rise>
@@ -1529,8 +1436,8 @@
   function patchSave() {
     const pdf = app.querySelector('[data-act="save-pdf"]');
     const png = app.querySelector('[data-act="save-png"]');
-    if (pdf) pdf.textContent = state.saved === 'pdf' ? 'Downloaded ✓' : 'Download PDF';
-    if (png) png.textContent = state.saved === 'png' ? 'Saved ✓' : 'Save image';
+    if (pdf) pdf.textContent = T(state.saved === 'pdf' ? 'snap.downloaded' : 'snap.download');
+    if (png) png.textContent = T(state.saved === 'png' ? 'snap.saved' : 'snap.saveImage');
   }
 
   let saveTimer;
@@ -1592,7 +1499,7 @@
       }
     }));
 
-    if (I18N) I18N.wire(root);   // language change → reload in the new language
+    I18N.wire(root);   // language change → reload in the new language
     root.querySelectorAll('[data-consentall]').forEach((cb) => cb.addEventListener('change', () => {
       const all = {}; API.consentConfig().items.forEach((it) => { all[it.id] = cb.checked; });
       state.consentPick = all; render();
