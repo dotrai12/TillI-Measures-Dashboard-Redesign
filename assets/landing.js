@@ -708,21 +708,26 @@
   // Continue; optional ones never do. Re-shown when the version changes.
   function consentView() {
     const cfg = window.TilliAPI.consentConfig(), pick = state.consentPick || {};
+    const I = window.TilliI18n, T = (k, en) => (I ? I.t(k, en) : en);
     const ready = cfg.items.every((it) => !it.required || pick[it.id]);
     const rows = cfg.items.map((it) => `<label class="consent-row${it.required ? ' req' : ''}">
         <input type="checkbox" data-consent="${esc(it.id)}"${pick[it.id] ? ' checked' : ''}>
-        <span>${esc(it.text)}${it.required ? ' <b class="consent-tag">Required</b>' : ' <span class="consent-tag opt">Optional</span>'}</span>
+        <span>${esc(T('consent.item.' + it.id, it.text))}${it.required ? ` <b class="consent-tag">${esc(T('consent.required', 'Required'))}</b>` : ` <span class="consent-tag opt">${esc(T('consent.optional', 'Optional'))}</span>`}</span>
       </label>`).join('');
     return `<div class="sheet">
       <div class="sheet-wrap">
-        <div class="sheet-head">${brandMark}<button class="btn-ghost focus ml-auto" data-act="consent-later">Not now</button></div>
-        <h1 class="sheet-title">${esc(cfg.title)}</h1>
-        <p class="sheet-sub">${esc(cfg.intro)}</p>
+        <div class="sheet-head">${brandMark}<span class="ml-auto">${I ? I.switcherHTML() : ''}</span><button class="btn-ghost focus" data-act="consent-later">${esc(T('consent.notNow', 'Not now'))}</button></div>
+        <h1 class="sheet-title">${esc(T('consent.title', cfg.title))}</h1>
+        <p class="sheet-sub">${esc(T('consent.intro', cfg.intro))}</p>
         <div class="ui-card roomy sheet-form">
+          <label class="consent-row consent-all">
+            <input type="checkbox" data-consentall${cfg.items.every((it) => pick[it.id]) ? ' checked' : ''}>
+            <span><b>${esc(T('consent.agreeAll', 'I agree to all of the above'))}</b></span>
+          </label>
           ${rows}
-          ${cfg.privacyUrl ? `<a class="btn-link" href="${esc(cfg.privacyUrl)}" target="_blank" rel="noopener">Read the full privacy notice</a>` : ''}
-          <p class="dlg-hint">${ready ? 'You can change this any time from your profile.' : 'Tick the required box to continue. You can come back and do it later.'}</p>
-          <button class="btn btn-primary block focus" data-act="consent-ok"${ready ? '' : ' disabled'}>Continue &#8594;</button>
+          ${cfg.privacyUrl ? `<a class="btn-link" href="${esc(cfg.privacyUrl)}" target="_blank" rel="noopener">${esc(T('consent.privacy', 'Read the full privacy notice'))}</a>` : ''}
+          <p class="dlg-hint">${esc(ready ? T('consent.changeLater', 'You can change this any time from your profile.') : T('consent.tickRequired', 'Tick the required box to continue. You can come back and do it later.'))}</p>
+          <button class="btn btn-primary block focus" data-act="consent-ok"${ready ? '' : ' disabled'}>${esc(T('consent.continue', 'Continue'))} &#8594;</button>
         </div>
       </div>
     </div>`;
@@ -855,6 +860,13 @@
       }));
 
     scope.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => handleAct(b.dataset.act, ev)));
+    // Language switcher (consent sheet): re-render in place, no reload mid-flow.
+    if (window.TilliI18n) window.TilliI18n.wire(scope, () => render());
+    // "I agree to all" ticks / unticks every item; each item still saves on its own.
+    scope.querySelectorAll('[data-consentall]').forEach((cb) => cb.addEventListener('change', () => {
+      const all = {}; window.TilliAPI.consentConfig().items.forEach((it) => { all[it.id] = cb.checked; });
+      state.consentPick = all; render();
+    }));
     scope.querySelectorAll('[data-consent]').forEach((cb) => cb.addEventListener('change', () => {
       state.consentPick = Object.assign({}, state.consentPick, { [cb.dataset.consent]: cb.checked });
       render();
@@ -1162,6 +1174,14 @@
   }
 
   // ---- boot ----
+  // Language switcher in the top bar — before sign-in it's saved on the device;
+  // once signed in, on the account too.
+  (function langSlot() {
+    const slot = document.getElementById('lang-slot'), I = window.TilliI18n;
+    if (!slot || !I) return;
+    slot.innerHTML = I.switcherHTML();
+    I.wire(slot, () => render());
+  })();
   document.getElementById('get-started').addEventListener('click', () =>
     set({ step: 'role', role: null, school: '', schoolQuery: '', schoolListOpen: false, groupLink: null }));
 

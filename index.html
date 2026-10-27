@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261026p5">
+<link rel="stylesheet" href="assets/tilli.css?v=20261027i6a">
 <style>
   .landing {
     position: relative;
@@ -259,11 +259,13 @@
     color: var(--ink-600); margin: 0 0 24px;
   }
   .sheet-form { display: flex; flex-direction: column; gap: 16px; }
+  .landing-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   /* Parent consent */
   .consent-row { display: flex; gap: 12px; align-items: flex-start; font-weight: 600; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-700); cursor: pointer; }
   .consent-row input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--green-600); }
   .consent-tag { display: inline-block; margin-left: 4px; font-size: var(--fs-xs); font-weight: 700; color: var(--pink-600); }
   .consent-tag.opt { color: var(--ink-450); font-weight: 600; }
+  .consent-all { padding-bottom: 14px; border-bottom: 1px solid var(--line-200); }
 
   /* Child picker */
   .child-card { padding: 20px 24px; min-width: 220px; text-align: left; }
@@ -313,10 +315,13 @@
   <div class="landing-inner">
 
     <!-- Top bar -->
-    <div class="lockup">
-      <img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli">
-      <span class="divider"></span>
-      <span class="measures">Measures</span>
+    <div class="landing-top">
+      <div class="lockup">
+        <img src="_ds/tilli/assets/logos/tilli-wordmark-crop.png" alt="Tilli">
+        <span class="divider"></span>
+        <span class="measures">Measures</span>
+      </div>
+      <div id="lang-slot"></div>
     </div>
 
     <!-- Hero -->
@@ -364,9 +369,10 @@
 <div id="flow-root"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261026pc"></script>
+<script src="assets/tilli-api.js?v=20261027i6a"></script>
+<script src="assets/i18n.js?v=20261027i6a"></script>
 <script src="assets/tilli-org-data.js?v=20261026p5d"></script>
 <script src="assets/flower-band.js?v=20261016zx"></script>
-<script src="assets/landing.js?v=20261026pc"></script>
+<script src="assets/landing.js?v=20261027i6a"></script>
 </body>
 </html>

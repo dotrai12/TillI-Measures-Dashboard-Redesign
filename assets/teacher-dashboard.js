@@ -3629,6 +3629,7 @@
       </div>
       <div class="ui-card td-rows mt-4">${rows}</div>
       ${mirrorCard()}
+      ${window.TilliI18n ? `<div class="td-langrow"><span>${esc(window.TilliI18n.t('lang.label'))}</span>${window.TilliI18n.switcherHTML()}</div>` : ''}
       <div class="td-btnrow">
         <button class="btn btn-ghost md focus" data-redo>Redo reflection</button>
         <a class="btn btn-danger-outline td-btn-md focus" href="index.html" data-signout>↩ Sign out</a>
@@ -3638,6 +3639,7 @@
 
   // ---------------- wiring ----------------
   function wire() {
+    if (window.TilliI18n) window.TilliI18n.wire(root);   // language change → reload in the new language
     // Sign out ends the saved session too, so the student-assessment link on a
     // shared device no longer opens as this teacher.
     root.querySelectorAll('[data-signout]').forEach((a) => a.addEventListener('click', () => {
@@ -4004,6 +4006,7 @@
   /* page-local helpers */
   .td-rows { padding: 8px 20px; }                                   /* ui-card holding .pf-row / .hist-row lists */
   .td-btnrow { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+  .td-langrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; font-weight: 700; color: var(--ink-700); }
   .td-btn-md { padding: 12px 20px; font-size: var(--fs-md); text-decoration: none; display: inline-block; }
   .td-btn-md.btn-danger-outline:hover { color: var(--danger-700); }   /* beat tilli.css a:hover on the sign-out link */
   .td-in { padding: 10px 12px; background: var(--surface-100); }    /* .input variant: compact, soft fill */

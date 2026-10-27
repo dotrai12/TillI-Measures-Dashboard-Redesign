@@ -150,6 +150,32 @@ For a separate parent or teacher session (e.g. a workshop): a pre and a post sur
 
 ---
 
+# Phase 6 — Translation (planned 27 Oct 2026)
+
+Decisions by Ishani, 27 Oct 2026: languages **English, Hindi, Tamil, Sinhala** (Arabic + right-to-left later) · the language **follows the browser** (English if it isn't one of ours) and anyone can **change it inside each dashboard** (remembered on their account and device) · translations are **drafted by machine, then a person approves** them · people **only ever see approved translations** — anything else shows in English · the Tilli platform stays English (it's where translations are edited).
+
+## Phase 6A — Groundwork · ✅ done 27 Oct 2026
+
+| # | Item | Status |
+|---|---|---|
+| 6.1 | **Consent: "I agree to all of the above"** — one box ticks every item; unticking any item unticks it. Each choice is still saved on its own. | ✅ |
+| 6.2 | **One language list** (English, Hindi, Tamil, Sinhala) shared by every app and the template builder. | ✅ |
+| 6.3 | **Language choice**: browser language → else English; a switcher on sign-in, parent profile, teacher profile, school admin account menu and the student assessment page; saved on the account and the device. | ✅ |
+| 6.4 | **Shared word list** (`assets/i18n.js`): screen text by key with English; approved translations only; dates follow the language. | ✅ |
+| 6.5 | **Tilli → Translations**: every string per language with English alongside; status Missing / Needs review / Approved; edit, approve; **Draft with Ask Tilli** fills missing ones as drafts; CSV export / import. | ✅ |
+
+## Phase 6B — Parent-facing · ⬜
+Sign-in, consent wording (per language), parent app, session surveys.
+
+## Phase 6C — Teacher app + student assessments · ⬜
+Teacher app, student assessment page (own switcher — a shared device), teacher reflection questions, template question text; templates' language tabs gain Needs review / Approved; deploy warns when a template lacks a school's languages; responses record the language used.
+
+## Phase 6D — School dashboard · ⬜
+
+## Phase 6E — Arabic + right-to-left · later
+
+---
+
 ## Risks to keep in mind
 
 - **One code means a parent link reveals the teacher code.** Anyone holding a parent or student link could sign up as a teacher. *Mitigation available later:* teachers who self-join land as "waiting for the school admin to confirm".

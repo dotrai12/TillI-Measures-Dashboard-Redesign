@@ -131,6 +131,7 @@
     { icon: 'assessments', title: 'Assessments', items: [
       { key: 'templates', label: 'Templates' },
       { key: 'deployments', label: 'Deployments' },
+      { key: 'translations', label: 'Translations' },
     ] },
     { icon: 'people', title: 'People', items: [
       // Users + Invitations are one page with tabs; #/invitations is the second tab.
@@ -4325,7 +4326,9 @@
   var TB_SCORING = { map: 'Option Score Mapping', correct: 'Correct Answer', none: 'Not Scored' };
   var TB_SCORING_TIP = { map: 'Each option carries its own score; the answer’s score counts toward the skills below.',
     correct: 'Options scored 1 are correct, everything else 0.', none: 'Collected but never scored (e.g. feedback on the school).' };
-  var TB_LANGS = ['Hindi', 'Tamil', 'Telugu', 'Kannada', 'Marathi', 'Bengali', 'Sinhala'];
+  // The shared language list (assets/i18n.js), minus English — templates already
+  // carrying another language keep it.
+  var TB_LANGS = window.TilliI18n ? window.TilliI18n.LANGS.filter(function (l) { return l.code !== 'en'; }).map(function (l) { return l.name; }) : ['Hindi', 'Tamil', 'Sinhala'];
   var TB_OPEN_FIRST = 0;   // cards open by default on first visit (0 = all start collapsed)
   var tbState = { id: null, phase: null, tab: 'questions', lang: null, open: {} };
   var TB_IC = {
@@ -6079,6 +6082,115 @@
     var link = document.createElement('a'); link.href = url; link.download = 'ask-tilli-' + new Date().toISOString().slice(0, 10) + '.txt';
     document.body.appendChild(link); link.click(); link.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
+  // ============================================================
+  //  TRANSLATIONS — every screen string per language (assets/i18n.js), edited
+  //  here. Apps show a translation only once it's Approved and its English
+  //  hasn't changed since; everything else shows in English.
+  // ============================================================
+  var trState = { status: 'all', area: 'all', q: '' };
+  function trStatus(rec, en) { return !rec ? 'missing' : rec.src !== en ? 'stale' : rec.status === 'approved' ? 'approved' : 'draft'; }
+  var TR_LABEL = { missing: 'Missing', draft: 'Needs review', stale: 'Needs review · English changed', approved: 'Approved' };
+  function parseCsvRows(text) {
+    var rows = [], row = [], cur = '', q = false, t = String(text || '').replace(/^﻿/, '');
+    for (var i = 0; i < t.length; i++) {
+      var ch = t[i];
+      if (q) { if (ch === '"' && t[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+      else cur += ch;
+    }
+    if (cur || row.length) { row.push(cur); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (c) { return String(c).trim(); }); });
+  }
+  SCREEN.translations = function (params, body) {
+    var I = window.TilliI18n, A = window.TilliAPI;
+    if (!I || !A) { body.innerHTML = '<div class="ui-empty">Translations aren’t available here.</div>'; return; }
+    var langs = I.LANGS.filter(function (l) { return l.code !== 'en'; });
+    var lang = langs.some(function (l) { return l.code === params.lang; }) ? params.lang : langs[0].code, L = langs.filter(function (l) { return l.code === lang; })[0];
+    var cat = I.catalog(), recs = A.translationsFor(lang);
+    var rows = cat.map(function (c) { var r = recs[c.key]; return { key: c.key, area: c.area, en: c.en, rec: r || null, st: trStatus(r, c.en) }; });
+    var count = function (st) { return rows.filter(function (r) { return st === 'draft' ? r.st === 'draft' || r.st === 'stale' : r.st === st; }).length; };
+    var areas = []; rows.forEach(function (r) { if (areas.indexOf(r.area) < 0) areas.push(r.area); });
+    var q = trState.q.trim().toLowerCase();
+    var shown = rows.filter(function (r) {
+      if (trState.status !== 'all' && !(trState.status === 'draft' ? r.st === 'draft' || r.st === 'stale' : r.st === trState.status)) return false;
+      if (trState.area !== 'all' && r.area !== trState.area) return false;
+      return !q || (r.en + ' ' + (r.rec ? r.rec.text : '') + ' ' + r.key).toLowerCase().indexOf(q) >= 0;
+    });
+    var tone = { missing: 'warn', draft: 'warn', stale: 'warn', approved: 'ok' };
+    body.innerHTML = '<h1 class="ui-screen-title">Translations</h1>' +
+      '<p class="ui-screen-sub">Every piece of screen text, in each language. Parents, teachers and schools only ever see <b>Approved</b> translations — anything else shows in English. If the English changes, its translation goes back to needing review.</p>' +
+      '<div class="ui-tabs mt-3">' + langs.map(function (l) { return '<button class="ui-tab' + (l.code === lang ? ' on' : '') + '" data-trlang="' + l.code + '">' + esc(l.name) + ' · ' + esc(l.native) + '</button>'; }).join('') + '</div>' +
+      '<div class="tl-kpis four mt-3">' + kpi(count('approved'), 'Approved') + kpi(count('draft'), 'Needs review') + kpi(count('missing'), 'Missing') + kpi(rows.length, 'Strings') + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div class="tl-inline-actions">' +
+          '<input class="input sm" id="tr-q" type="search" placeholder="Search English or ' + esc(L.name) + '…" value="' + esc(trState.q) + '" aria-label="Search strings">' +
+          '<label class="select-wrap"><select class="select sm" id="tr-status" aria-label="Status">' + [['all', 'All'], ['missing', 'Missing'], ['draft', 'Needs review'], ['approved', 'Approved']].map(function (o) { return '<option value="' + o[0] + '"' + (trState.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+          '<label class="select-wrap"><select class="select sm" id="tr-area" aria-label="Where it shows"><option value="all">Everywhere</option>' + areas.map(function (a) { return '<option' + (trState.area === a ? ' selected' : '') + '>' + esc(a) + '</option>'; }).join('') + '</select></label></div>' +
+        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-trdraft' + (count('missing') ? '' : ' disabled') + '>Draft ' + count('missing') + ' missing with Ask Tilli</button>' +
+          '<button class="btn btn-outline btn-sm" data-trcsv>Download CSV</button><label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">Upload CSV<input type="file" id="tr-file" accept=".csv,text/csv" hidden></label></div></div>' +
+        (shown.length ? '<div class="ui-tablewrap"><table class="ui-table mw-760 tl-trtable"><thead><tr><th>English</th><th>' + esc(L.name) + '</th><th>Status</th><th></th></tr></thead><tbody>' +
+          shown.map(function (r) {
+            return '<tr><td class="tl-tr-en">' + esc(r.en) + '<small>' + esc(r.area) + ' · ' + esc(r.key) + '</small></td>' +
+              '<td><textarea class="input sm tl-tr-in" rows="2" lang="' + lang + '" data-trkey="' + esc(r.key) + '" aria-label="' + esc(L.name) + ' for: ' + esc(r.en) + '">' + esc(r.rec ? r.rec.text : '') + '</textarea></td>' +
+              '<td>' + statusPill(TR_LABEL[r.st], tone[r.st]) + (r.rec ? '<small class="tl-muted" style="display:block">' + esc(fmtMs(r.rec.at)) + '</small>' : '') + '</td>' +
+              '<td class="r nowrap"><button class="btn-link" data-trsave="' + esc(r.key) + '">Save</button> <button class="btn btn-outline btn-sm" data-trok="' + esc(r.key) + '">Approve</button></td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="ui-empty">Nothing matches.</div>') + '</div>';
+
+    var enOf = {}; cat.forEach(function (c) { enOf[c.key] = c.en; });
+    var redraw = function () { SCREEN.translations({ lang: lang }, body); };
+    body.querySelectorAll('[data-trlang]').forEach(function (b) { b.addEventListener('click', function () { go('translations', { lang: b.dataset.trlang }); }); });
+    var qi = body.querySelector('#tr-q');
+    qi.addEventListener('input', function () { trState.q = qi.value; clearTimeout(qi._t); qi._t = setTimeout(function () { redraw(); var n = body.querySelector('#tr-q'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); });
+    body.querySelector('#tr-status').addEventListener('change', function (e) { trState.status = e.target.value; redraw(); });
+    body.querySelector('#tr-area').addEventListener('change', function (e) { trState.area = e.target.value; redraw(); });
+    var save = function (key, approve) {
+      var ta = body.querySelector('[data-trkey="' + CSS.escape(key) + '"]'), text = ta ? ta.value.trim() : '';
+      if (approve && !text) { toast('Type the ' + L.name + ' first.'); return; }
+      var r = A.setTranslation(me.email, lang, key, text, approve ? 'approved' : 'draft', enOf[key]);
+      if (!r.ok) { toast('Couldn’t save.'); return; }
+      I.refresh(); ORG.server.logAudit(me.name, 'translation.' + (approve ? 'approve' : 'save'), L.name + ': ' + key, 'platform');
+      toast(r.removed ? 'Cleared — shows in English.' : approve ? 'Approved — people now see it.' : 'Saved — needs review before anyone sees it.'); redraw();
+    };
+    body.querySelectorAll('[data-trsave]').forEach(function (b) { b.addEventListener('click', function () { save(b.dataset.trsave, false); }); });
+    body.querySelectorAll('[data-trok]').forEach(function (b) { b.addEventListener('click', function () { save(b.dataset.trok, true); }); });
+    var dr = body.querySelector('[data-trdraft]');
+    if (dr) dr.addEventListener('click', function () {
+      // Ask Tilli's draft: the bundled machine drafts where we have one, else a
+      // marked placeholder (a developer connects a real translation service).
+      var drafts = (I.drafts || {})[lang] || {}, n = 0, ph = 0;
+      rows.filter(function (r) { return r.st === 'missing'; }).forEach(function (r) {
+        var text = drafts[r.key] || ('[' + L.name + ' draft] ' + r.en); if (!drafts[r.key]) ph++;
+        if (A.setTranslation(me.email, lang, r.key, text, 'draft', r.en).ok) n++;
+      });
+      I.refresh(); ORG.server.logAudit(me.name, 'translation.draft', L.name + ': ' + n + ' drafted', 'platform');
+      toast(n + ' drafted — each needs a person to check and approve it.' + (ph ? ' ' + ph + ' are placeholders (no draft yet).' : '')); redraw();
+    });
+    body.querySelector('[data-trcsv]').addEventListener('click', function () {
+      downloadCsv('tilli-translations-' + lang + '.csv', ['key', 'where', 'english', L.name.toLowerCase(), 'status'],
+        rows.map(function (r) { return [r.key, r.area, r.en, r.rec ? r.rec.text : '', r.st === 'approved' ? 'approved' : r.st === 'missing' ? '' : 'needs review']; }));
+    });
+    body.querySelector('#tr-file').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        var data = parseCsvRows(rd.result), head = (data.shift() || []).map(function (h) { return String(h).trim().toLowerCase(); });
+        var ki = head.indexOf('key'), ei = head.indexOf('english'), ti = head.indexOf(L.name.toLowerCase()), si = head.indexOf('status');
+        if (ki < 0 || ti < 0) { toast('The CSV needs a “key” and a “' + L.name.toLowerCase() + '” column — download one here to start from.'); return; }
+        var n = 0, ok = 0, skipped = 0;
+        data.forEach(function (row) {
+          var key = String(row[ki] || '').trim(), text = String(row[ti] || '').trim(); if (!key || !enOf[key] || !text) { if (key && !enOf[key]) skipped++; return; }
+          // "approved" in the file counts only if it was translated from today's English.
+          var appr = si >= 0 && /^approved$/i.test(String(row[si] || '').trim()) && (ei < 0 || String(row[ei] || '') === enOf[key]);
+          if (A.setTranslation(me.email, lang, key, text, appr ? 'approved' : 'draft', enOf[key]).ok) { n++; if (appr) ok++; }
+        });
+        I.refresh(); ORG.server.logAudit(me.name, 'translation.import', L.name + ': ' + n + ' rows', 'platform');
+        toast(n + ' imported (' + ok + ' approved, ' + (n - ok) + ' need review).' + (skipped ? ' ' + skipped + ' unknown keys skipped.' : '')); redraw();
+      };
+      rd.readAsText(f);
+    });
+  };
+
   SCREEN['ask-tilli'] = function (params, body) {
     var c = curPchat(), weekAgo = Date.now() - 7 * 864e5;
     if (c) askp.scope = c.scope || askp.scope;

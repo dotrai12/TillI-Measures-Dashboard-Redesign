@@ -403,6 +403,19 @@ Each section has an **expected size**. Teachers add up to it; past it (or with n
 
 ---
 
+## Mission 26 — Languages (Phase 6A, 10 min)
+
+- [ ] `index.html`: the top bar has a 🌐 language picker (English · हिन्दी · தமிழ் · සිංහල). It starts on the browser's language, else English.
+- [ ] Parent consent (Mission 25) now has **I agree to all of the above** at the top — one tap ticks every box; unticking any box unticks it.
+- [ ] Pick **தமிழ்** on the consent screen → it stays in English: nothing is approved yet.
+- [ ] Tilli → **Assessments → Translations** → **Tamil** tab → **Draft 21 missing with Ask Tilli** → every row says **Needs review**. Still English for parents.
+- [ ] **Approve** a few rows (e.g. Continue, I agree to all…) → reload the consent screen in Tamil: those show in Tamil, the rest stay English.
+- [ ] Change a row's text → **Save** → it needs review again. **Download CSV** / **Upload CSV** round-trips (status "approved" in the file only counts if the English matches).
+- [ ] The picker is also in the parent **profile**, the teacher **profile**, the school admin's **account menu** and the **student assessment** page (that one remembers its own language on the device — a child doesn't get the teacher's choice).
+- [ ] Only the consent screens are translated so far — the rest of each app comes in 6B–6D.
+
+---
+
 ## Demo-only gaps (so they don't surprise you)
 
 - Grid-view school cards: **Edit** and **Archive** just open the school — use the buttons on the school page.

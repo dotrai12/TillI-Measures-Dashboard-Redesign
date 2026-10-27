@@ -311,6 +311,13 @@ Open issues that came out of those changes:
 - **The school admin can't rename or remove classes.** Rename / auto-remove stay on the Tilli side (Settings → Grades & sections).
 - **CSV import still reads UTF-8 only** and English column headers; quoted commas (`"Sharma, Aarav"`) now work.
 
+**Translation — Phase 6A** (27 Oct 2026)
+- **Only the consent screens use the word list so far.** The language picker shows everywhere, but other screens stay English until 6B (parent), 6C (teacher + student) and 6D (school dashboard). A parent who picks Tamil will see English almost everywhere until then.
+- **The machine drafts are Claude's (bundled in `assets/i18n.js`)** for the 21 strings that exist today; "Draft with Ask Tilli" uses them, or a marked `[Tamil draft] …` placeholder for anything without one. A developer connects a real translation service for new strings.
+- **The consent wording's translations follow its English.** Publishing new consent wording (new `version`) sends every translated item back to "Needs review", so parents see the new English until it's re-approved.
+- **The student assessment page keeps its own language per device.** It never follows the teacher's account, so set it once on each shared tablet.
+- **Template languages now offer Hindi, Tamil, Sinhala only.** Templates that already had Telugu / Kannada / Marathi / Bengali keep those tabs.
+
 **Parent consent** (26 Oct 2026)
 - **The wording is a placeholder** (`DEFAULT_CONSENT` in `tilli-api.js`): a title, an intro, one required box (collect + use) and two optional ones (research with names removed; email / WhatsApp contact). Final text replaces it; bump `version` so every parent is asked again.
 - **Consent is per parent, not per child.** One agreement covers every child they link. *If needed later:* a short "I'm this child's parent or guardian" box on the "Is this your child?" screen.

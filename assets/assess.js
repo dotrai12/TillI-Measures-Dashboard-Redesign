@@ -80,7 +80,8 @@
   function topBar() {
     var who = S.school ? esc(S.school.name) + (S.email ? '<br>' + esc(S.email) : '') : '';
     var fin = S.step !== 'code' && S.step !== 'email' && S.step !== 'done' ? ' <button class="btn btn-outline btn-sm" data-finish title="End this session on this device">Finish</button>' : '';
-    return '<header class="as-top"><span class="lockup">Tilli Measures · Student assessments</span><span class="as-who">' + who + '</span>' + fin + '</header>';
+    return '<header class="as-top"><span class="lockup">Tilli Measures · Student assessments</span><span class="as-who">' + who + '</span>' +
+      (window.TilliI18n ? window.TilliI18n.switcherHTML() : '') + fin + '</header>';
   }
   function codeView() {
     return '<div class="as-card narrow"><h1 class="as-h1">Enter your school code</h1>' +
@@ -206,7 +207,11 @@
     if (t.hasAttribute('data-restart')) { S = { step: 'code', school: null, email: '', viaDashboard: false, phase: null, sectionId: null, studentId: null, itemId: null, err: '', code: '' }; boot(); }
   });
 
-  if (!new URLSearchParams(location.search).get('session')) boot();
+  if (!new URLSearchParams(location.search).get('session')) {
+    // A shared device: the language is this device's own, not the teacher's account choice.
+    if (window.TilliI18n) { window.TilliI18n.deviceOnly('assess'); app.addEventListener('change', function (e) { if (e.target.matches('[data-langswitch]')) { window.TilliI18n.setLang(e.target.value); window.TilliI18n.refresh(); render(); } }); }
+    boot();
+  }
 })();
 
 /* ============================================================
@@ -237,7 +242,8 @@
   var fmt = function (iso) { try { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } };
 
   function shell(inner) {
-    app.innerHTML = '<header class="as-top"><span class="lockup">Tilli Measures</span><span class="as-who">' + esc(label) + (email ? '<br>' + esc(email) : '') + '</span></header>' +
+    app.innerHTML = '<header class="as-top"><span class="lockup">Tilli Measures</span><span class="as-who">' + esc(label) + (email ? '<br>' + esc(email) : '') + '</span>' +
+      (window.TilliI18n ? window.TilliI18n.switcherHTML() : '') + '</header>' +
       '<main class="as-wrap">' + inner + '</main>';
   }
   function card(title, sub) { return '<div class="as-card narrow"><h1 class="as-h1">' + title + '</h1>' + (sub ? '<p class="as-sub">' + sub + '</p>' : '') + '</div>'; }
@@ -276,7 +282,9 @@
     if (t.dataset.sestext) V.answers[t.dataset.sestext] = t.value;
   });
   app.addEventListener('change', function (e) {
-    var t = e.target; if (!t.dataset.sesq) return;
+    var t = e.target;
+    if (t.matches('[data-langswitch]')) { window.TilliI18n.setLang(t.value); window.TilliI18n.refresh(); render(); return; }
+    if (!t.dataset.sesq) return;
     V.answers[t.dataset.sesq] = +t.value;
     t.closest('.as-ses-opts').querySelectorAll('.as-ses-opt').forEach(function (l) { l.classList.toggle('on', l.contains(t)); });
   });

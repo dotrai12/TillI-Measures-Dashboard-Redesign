@@ -2927,6 +2927,29 @@
     });
   }
 
+  /* ---------- TRANSLATIONS (screen text + content) ----------
+     translations[lang][key] = { text, status:'draft'|'approved', src, by, at }
+       src = the English it was written from: if the English changes later, an
+       approved translation stops showing (back to English) until re-checked.
+     userLangs[email] = 'en'|'hi'|'ta'|'si' — the language a person picked.
+     Only the Tilli team writes translations. Apps show approved ones only. */
+  function translationsFor(lang){ var m = ((getDB().translations || {})[lang]) || {}; return clone(m); }
+  function setTranslation(actorEmail, lang, key, text, status, src){
+    var db = getDB();
+    if (!isTilliActor(db, actorEmail)) return { ok:false, reason:'not-authorized' };
+    var byL = ((db.translations = db.translations || {})[lang] = db.translations[lang] || {});
+    if (!norm(text)){ delete byL[key]; write(db); return { ok:true, removed:true }; }
+    byL[key] = { text: String(text), status: status === 'approved' ? 'approved' : 'draft', src: String(src == null ? '' : src), by: low(actorEmail), at: Date.now() };
+    write(db);
+    return { ok:true };
+  }
+  function userLang(email){ var e = low(email); return e ? ((getDB().userLangs || {})[e] || null) : null; }
+  function setUserLang(email, lang){
+    var e = low(email); if (!e) return { ok:false };
+    var db = getDB(); (db.userLangs = db.userLangs || {})[e] = lang; write(db);
+    return { ok:true };
+  }
+
   /* ---------- reflection question bank (Platform Admin editable) ---------- */
   function getReflectionConfig(){ return clone(getDB().config.reflection); }
   // Replaces the whole bank. Keeps the 5 fixed categories; drops questions with
@@ -3301,6 +3324,7 @@
     updateStudent: updateStudent,
     makeUid: makeUid,
     getReflectionConfig: getReflectionConfig,
+    translationsFor: translationsFor, setTranslation: setTranslation, userLang: userLang, setUserLang: setUserLang,
     consentConfig: consentConfig, consentFor: consentFor, needsConsent: needsConsent,
     saveConsent: saveConsent, consentForSchool: consentForSchool,
     setReflectionConfig: setReflectionConfig,

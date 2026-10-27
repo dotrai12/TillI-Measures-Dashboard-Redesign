@@ -619,9 +619,13 @@
       (fromTilli ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
       (fromGroup ? '<button class="ui-menu-item" data-am="group">← Group view</button>' : '') +
       yearItems +
+      (window.TilliI18n ? '<div class="ad-acct-sec">' + esc(window.TilliI18n.t('lang.label')) + '</div><div class="ad-acct-lang">' + window.TilliI18n.switcherHTML() + '</div>' : '') +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
     document.body.appendChild(m);
     placeAcctMenu(m, anchor);
+    // Language: picking one reloads the dashboard; clicks on the select mustn't close the menu first.
+    var ls = m.querySelector('.lang-switch');
+    if (ls) { ls.addEventListener('click', function (e) { e.stopPropagation(); }); window.TilliI18n.wire(m); }
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     if (fromGroup) m.querySelector('[data-am="group"]').addEventListener('click', function () { location.href = 'tilli.html?group=' + encodeURIComponent(qp.get('group')); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); localStorage.removeItem('tilliMeasures.assessSession'); } catch (e) {} location.href = 'index.html'; });
