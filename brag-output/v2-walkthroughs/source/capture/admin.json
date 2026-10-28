@@ -1,0 +1,353 @@
+{
+ "viewport": [
+  1440,
+  900
+ ],
+ "hide": "#ad-dev-slot,.ui-devpanel{display:none!important} .tm-shake{animation:none!important}",
+ "steps": [
+  {
+   "goto": "index.html"
+  },
+  {
+   "wait": 1800
+  },
+  {
+   "shot": "01-landing"
+  },
+  {
+   "rect": "getstarted",
+   "sel": "#get-started"
+  },
+  {
+   "js": "document.querySelector('#get-started').click()"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "shot": "02-role"
+  },
+  {
+   "rect": "roleSchool",
+   "sel": "[data-role=\"teacher\"]"
+  },
+  {
+   "js": "document.querySelector('[data-role=\"teacher\"]').click()"
+  },
+  {
+   "wait": 900
+  },
+  {
+   "shot": "03-email"
+  },
+  {
+   "rect": "emailInput",
+   "sel": "#email-input"
+  },
+  {
+   "js": "var i=document.querySelector('#email-input');i.focus();i.value='suresh.r';i.dispatchEvent(new Event('input',{bubbles:true}))"
+  },
+  {
+   "wait": 150
+  },
+  {
+   "shot": "04-email-a"
+  },
+  {
+   "js": "var i=document.querySelector('#email-input');i.value='suresh.r@banyan';i.dispatchEvent(new Event('input',{bubbles:true}))"
+  },
+  {
+   "wait": 150
+  },
+  {
+   "shot": "05-email-b"
+  },
+  {
+   "js": "var i=document.querySelector('#email-input');i.value='suresh.r@banyantree.edu';i.dispatchEvent(new Event('input',{bubbles:true}))"
+  },
+  {
+   "wait": 150
+  },
+  {
+   "shot": "06-email-c"
+  },
+  {
+   "rect": "emailGo",
+   "sel": "#email-form button[type=submit]"
+  },
+  {
+   "js": "document.querySelector('#email-form').requestSubmit()"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "shot": "07-checking"
+  },
+  {
+   "wait": 1600
+  },
+  {
+   "shot": "08-password"
+  },
+  {
+   "rect": "pwInput",
+   "sel": "#pw-input"
+  },
+  {
+   "js": "var i=document.querySelector('#pw-input');i.focus();i.value='tilli2026';i.dispatchEvent(new Event('input',{bubbles:true}))"
+  },
+  {
+   "wait": 150
+  },
+  {
+   "shot": "09-password-typed"
+  },
+  {
+   "rect": "pwGo",
+   "sel": "#pw-form button[type=submit]"
+  },
+  {
+   "js": "document.querySelector('#pw-form').requestSubmit()"
+  },
+  {
+   "wait": 4500
+  },
+  {
+   "js": "var d=document.querySelector('[data-ruledismiss]'); if(d) d.click();"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "shot": "10-overview"
+  },
+  {
+   "js": "window.__tag=function(re,minH,maxH,id){var best=null;[].forEach.call(document.querySelectorAll('body *'),function(e){if(e.children.length>60)return;var r=e.getBoundingClientRect();if(r.height<minH||r.height>maxH||r.width<40)return;if(!re.test(e.textContent))return;if(!best||r.height*r.width<best.r.height*best.r.width)best={e:e,r:r};});if(best)best.e.id=id;return !!best;};__tag(/NEEDS ATTENTION[\\s\\S]*still to start/i,300,900,'tgt-ovleft');__tag(/Needs attention/i,120,320,'tgt-attn2');"
+  },
+  {
+   "rect": "ovLeft",
+   "sel": "#tgt-ovleft"
+  },
+  {
+   "rect": "attnCard",
+   "sel": "#tgt-attn2"
+  },
+  {
+   "log": "location.href"
+  },
+  {
+   "js": "var c=[].find.call(document.querySelectorAll('.dl-pt, [class*=dl-]'),function(e){return /Needs attention/i.test(e.textContent)&&e.getBoundingClientRect().height<300}); if(c) c.id='tgt-attn'; var lab=[].find.call(document.querySelectorAll('text.dl-name'),function(e){return e.textContent.trim()==='Grade 3'}); if(lab){var h=document.querySelector('g.dl-hub[data-dl-i=\"'+lab.dataset.dlI+'\"]'); if(h) h.id='tgt-g3';}"
+  },
+  {
+   "rect": "attention",
+   "sel": "#tgt-attn"
+  },
+  {
+   "rect": "g3hub",
+   "sel": "#tgt-g3"
+  },
+  {
+   "rect": "graph",
+   "sel": "#tgt-g3"
+  },
+  {
+   "js": "location.hash='#/overview?grade=Grade%203'"
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "shot": "11-grade3"
+  },
+  {
+   "js": "var sv=[].slice.call(document.querySelectorAll('svg')).sort(function(a,b){var x=a.getBoundingClientRect(),y=b.getBoundingClientRect();return y.width*y.height-x.width*x.height})[0]; if(sv) sv.id='tgt-graph';"
+  },
+  {
+   "rect": "graphArea",
+   "sel": "#tgt-graph"
+  },
+  {
+   "rect": "resultsTab",
+   "sel": "[data-dl-mode=\"results\"]"
+  },
+  {
+   "js": "document.querySelector('[data-dl-mode=\"results\"]').click()"
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "shot": "12-grade3-results"
+  },
+  {
+   "goto": "admin.html?school=banyan-tree&email=suresh.r%40banyantree.edu#/overview?view=results"
+  },
+  {
+   "wait": 7000
+  },
+  {
+   "shot": "13-school-results"
+  },
+  {
+   "rect": "navOutcomes",
+   "sel": "[data-nav=\"outcomes\"]"
+  },
+  {
+   "js": "document.querySelector('[data-nav=\"outcomes\"]').click()"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "shot": "14-outcomes"
+  },
+  {
+   "js": "window.__tag=function(re,minH,maxH,id){var best=null;[].forEach.call(document.querySelectorAll('body *'),function(e){if(e.children.length>60)return;var r=e.getBoundingClientRect();if(r.height<minH||r.height>maxH||r.width<40)return;if(!re.test(e.textContent))return;if(!best||r.height*r.width<best.r.height*best.r.width)best={e:e,r:r};});if(best)best.e.id=id;return !!best;};__tag(/Where to help next/i,60,260,'tgt-help');__tag(/What.s going well/i,60,260,'tgt-well');"
+  },
+  {
+   "rect": "outHelp",
+   "sel": "#tgt-help"
+  },
+  {
+   "rect": "outWell",
+   "sel": "#tgt-well"
+  },
+  {
+   "js": "var h=[].find.call(document.querySelectorAll('h2,h3,.ui-mod-title'),function(e){return /Progress over time/i.test(e.textContent)}); if(h) h.scrollIntoView({block:'start'});"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "15-outcomes-progress"
+  },
+  {
+   "rect": "navRoster",
+   "sel": "[data-nav=\"roster\"]"
+  },
+  {
+   "js": "document.querySelector('[data-nav=\"roster\"]').click()"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "shot": "16-roster"
+  },
+  {
+   "rect": "tabClasses",
+   "sel": "[data-rostertab=\"classes\"]"
+  },
+  {
+   "js": "document.querySelector('[data-rostertab=\"classes\"]').click()"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "shot": "17-classes"
+  },
+  {
+   "js": "window.__tag=function(re,minH,maxH,id){var best=null;[].forEach.call(document.querySelectorAll('body *'),function(e){if(e.children.length>60)return;var r=e.getBoundingClientRect();if(r.height<minH||r.height>maxH||r.width<40)return;if(!re.test(e.textContent))return;if(!best||r.height*r.width<best.r.height*best.r.width)best={e:e,r:r};});if(best)best.e.id=id;return !!best;};__tag(/Grade 1[\\s\\S]*Kavitha Sharma[\\s\\S]*Geetha Perera/,150,420,'tgt-cls');"
+  },
+  {
+   "rect": "clsTable",
+   "sel": "#tgt-cls"
+  },
+  {
+   "rect": "addStudents",
+   "sel": "[data-clsstudents]"
+  },
+  {
+   "js": "document.querySelector('[data-clsstudents]').click()"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "shot": "18-addstudents"
+  },
+  {
+   "js": "var c=document.querySelector('[data-mclose]'); if(c) c.click();"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "rect": "navReports",
+   "sel": "[data-nav=\"reports\"]"
+  },
+  {
+   "js": "document.querySelector('[data-nav=\"reports\"]').click()"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "shot": "19-reports"
+  },
+  {
+   "js": "window.__tag=function(re,minH,maxH,id){var best=null;[].forEach.call(document.querySelectorAll('body *'),function(e){if(e.children.length>60)return;var r=e.getBoundingClientRect();if(r.height<minH||r.height>maxH||r.width<40)return;if(!re.test(e.textContent))return;if(!best||r.height*r.width<best.r.height*best.r.width)best={e:e,r:r};});if(best)best.e.id=id;return !!best;};__tag(/paragraph for your newsletter[\\s\\S]*Copy to clipboard/i,150,500,'tgt-news');"
+  },
+  {
+   "rect": "newsCard",
+   "sel": "#tgt-news"
+  },
+  {
+   "rect": "copyNews",
+   "sel": "[data-copynews]"
+  },
+  {
+   "js": "document.querySelector('[data-copynews]').click()"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "20-reports-copied"
+  },
+  {
+   "rect": "navAsk",
+   "sel": "[data-nav=\"asktilli\"]"
+  },
+  {
+   "js": "document.querySelector('[data-nav=\"asktilli\"]').click()"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "shot": "21-ask"
+  },
+  {
+   "rect": "askSugg",
+   "sel": "[data-askx-try]"
+  },
+  {
+   "log": "document.querySelector('[data-askx-try]').dataset.askxTry"
+  },
+  {
+   "js": "document.querySelector('[data-askx-try]').click()"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "22-ask-sent"
+  },
+  {
+   "wait": 2600
+  },
+  {
+   "shot": "23-ask-answer"
+  },
+  {
+   "js": "window.__tag=function(re,minH,maxH,id){var best=null;[].forEach.call(document.querySelectorAll('body *'),function(e){if(e.children.length>60)return;var r=e.getBoundingClientRect();if(r.height<minH||r.height>maxH||r.width<40)return;if(!re.test(e.textContent))return;if(!best||r.height*r.width<best.r.height*best.r.width)best={e:e,r:r};});if(best)best.e.id=id;return !!best;};__tag(/skill ratings are Blooming/i,40,260,'tgt-ans');"
+  },
+  {
+   "rect": "askAnswer",
+   "sel": "#tgt-ans"
+  }
+ ]
+}

@@ -1,0 +1,60 @@
+// School admin walkthrough — Banyan Tree School, Suresh Raman (demo data).
+// shots:    [time, shot name, crossfade seconds (0 = cut), address-bar text]
+// cursor:   [time, rect name | {name, fx, fy, dx, dy} | [x, y]] — app CSS px; eased between keyframes
+// clicks:   times; zoom: [time, scale, focus rect | [x, y], seconds]
+// captions: [time, title, line (HTML, <b> = green)]
+window.TIMELINE = {
+  who: 'For principals & school admins',
+  title: 'School admin walkthrough',
+  intro: 3.75, outro: 59.375, total: 65, poster: 2.5,
+  captions: [
+    [3.75, 'Sign in', 'One link for every school — just your <b>school email</b>.'],
+    [11.875, 'Overview', 'See who’s <b>done</b>, who’s <b>behind</b>, and why — at a glance.'],
+    [18.125, 'Any class, up close', 'Tap a grade to see <b>every child</b> and who still needs assessing.'],
+    [24.375, 'Results', 'Switch to <b>Results</b> to see how children are growing.'],
+    [30.0, 'Outcomes', 'Every skill across the school — <b>always as groups</b>.'],
+    [36.875, 'Roster & classes', 'Set <b>class sizes</b>, give each class its <b>teacher</b>, add students.'],
+    [43.75, 'Reports', 'A <b>newsletter paragraph</b> for families, written for you.'],
+    [50.625, 'Ask Tilli', 'Ask in plain words — answers come from <b>your school’s data</b>.'],
+  ],
+  shots: [
+    [0, '01-landing', 0, 'measures.tilli.app'],
+    [5.1, '02-role', 0.25], [6.35, '03-email', 0.25],
+    [7.5, '04-email-a', 0], [7.95, '05-email-b', 0], [8.4, '06-email-c', 0],
+    [9.16, '07-checking', 0.2], [10.0, '08-password', 0.3], [10.7, '09-password-typed', 0],
+    [11.56, '10-overview', 0.45, 'measures.tilli.app/school/banyan-tree'],
+    [17.9, '11-grade3', 0.35], [23.85, '12-grade3-results', 0.35], [26.6, '13-school-results', 0.5],
+    [29.5, '14-outcomes', 0.35], [34.4, '15-outcomes-progress', 0.5],
+    [36.66, '16-roster', 0.3], [38.2, '17-classes', 0.3], [42.3, '18-addstudents', 0.3],
+    [44.2, '19-reports', 0.35], [49.4, '20-reports-copied', 0.2],
+    [51.3, '21-ask', 0.35], [53.0, '22-ask-sent', 0.25], [54.4, '23-ask-answer', 0.35],
+  ],
+  cursor: [
+    [3.75, [760, 820]], [4.69, 'getstarted'], [5.0, 'getstarted'],
+    [5.94, 'roleSchool'], [6.25, 'roleSchool'],
+    [6.9, { name: 'emailInput', fx: 0.25 }], [8.3, { name: 'emailInput', fx: 0.25 }],
+    [8.9, 'emailGo'], [9.06, 'emailGo'], [9.9, 'emailGo'],
+    [10.3, { name: 'pwInput', fx: 0.25 }], [10.6, { name: 'pwInput', fx: 0.25 }],
+    [11.0, 'pwGo'], [11.25, 'pwGo'],
+    [12.4, [900, 760]], [16.5, [900, 760]],
+    [17.5, 'g3hub'], [17.81, 'g3hub'], [22.6, 'g3hub'],
+    [23.4, 'resultsTab'], [23.75, 'resultsTab'], [28.2, 'resultsTab'],
+    [29.0, 'navOutcomes'], [29.38, 'navOutcomes'], [30.4, [1420, 860]], [35.4, [1420, 860]],
+    [36.25, 'navRoster'], [36.56, 'navRoster'],
+    [37.8, 'tabClasses'], [38.1, 'tabClasses'], [38.9, [1400, 700]], [41.3, [1400, 700]],
+    [42.0, 'addStudents'], [42.2, 'addStudents'], [43.3, [500, 520]],
+    [43.9, 'navReports'], [44.1, 'navReports'], [44.9, [1420, 820]], [48.4, [1420, 820]],
+    [49.0, 'copyNews'], [49.3, 'copyNews'], [50.3, [600, 600]],
+    [50.9, 'navAsk'], [51.2, 'navAsk'],
+    [52.6, { name: 'askSugg', fx: 0.2 }], [52.9, { name: 'askSugg', fx: 0.2 }], [53.8, [1380, 800]], [58.8, [1380, 800]],
+  ],
+  clicks: [5.0, 6.25, 7.0, 9.06, 10.45, 11.25, 17.81, 23.75, 29.38, 36.56, 38.1, 42.2, 44.1, 49.3, 51.2, 52.9],
+  zoom: [
+    [12.5, 1.55, 'ovLeft', 0.9], [16.25, 1, [720, 450], 0.8],
+    [18.75, 1.4, 'graphArea', 0.9], [22.2, 1, [720, 450], 0.8],
+    [30.6, 1.6, [827, 420], 0.9], [33.6, 1, [720, 450], 0.8],
+    [38.75, 1.3, 'clsTable', 0.8], [41.2, 1, [720, 450], 0.7],
+    [44.9, 1.35, 'newsCard', 0.9], [48.3, 1, [720, 450], 0.7],
+    [54.9, 1.6, 'askAnswer', 0.9], [58.2, 1, [720, 450], 0.8],
+  ],
+};
