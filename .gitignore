@@ -1,3 +1,3 @@
-# Rendered brag videos stay out of git (too large); rebuild with brag-output/*/source/build.sh
-brag-output/**/*.mp4
+# Promo videos and the scripts that make them: local only, not part of the dashboard
+brag-output/
 .DS_Store
