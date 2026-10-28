@@ -61,7 +61,7 @@
     function wire() {
       el.querySelectorAll('[data-cal]').forEach(function (inp) {
         inp.addEventListener('input', function () { st[inp.dataset.cal][+inp.dataset.i][inp.dataset.f] = inp.value; });
-        inp.addEventListener('change', function () { st[inp.dataset.cal][+inp.dataset.i][inp.dataset.f] = inp.value; if (inp.type === 'date') render(); if (opts.onChange) opts.onChange(); });
+        inp.addEventListener('change', function () { st[inp.dataset.cal][+inp.dataset.i][inp.dataset.f] = inp.value; if (inp.dataset.dmy) render(); if (opts.onChange) opts.onChange(); });
       });
       el.querySelectorAll('[data-caladd]').forEach(function (b) { b.addEventListener('click', function () { st[b.dataset.caladd].push(blank()); render(); }); });
       el.querySelectorAll('[data-calx]').forEach(function (b) { b.addEventListener('click', function () { st[b.dataset.calx].splice(+b.dataset.i, 1); if (!st.terms.length) st.terms.push(blank()); render(); if (opts.onChange) opts.onChange(); }); });

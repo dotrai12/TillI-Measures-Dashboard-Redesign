@@ -1164,17 +1164,31 @@
   function draftStudentTotal(d) { return d.grades.reduce(function (a, g) { return a + gradeStudents(g); }, 0); }
   function draftSectionTotal(d) { return d.grades.reduce(function (a, g) { return a + g.sections.length; }, 0); }
 
-  function openAddSchool() {
-    var d = {
-      name: '', boards: [], boardPick: { checked: [], other: '' }, city: '', country: 'India',
-      groupId: 'g-none', joined: todayISO(), yearStart: '', yearEnd: '', yearTouched: false,
-      grades: [], admin: { name: '', email: '' },
-    };
-    var step = 0;
-    var root = document.getElementById('tl-modal-root');
-    var sy0 = suggestYear(d.country, d.joined); d.yearStart = sy0.start; d.yearEnd = sy0.end;
+  // Add School draft: everything typed survives a reload or closing the wizard
+  // (localStorage, per Tilli user) until the school is created or "Start over".
+  // `open` = the wizard was on screen, so a reload brings it straight back.
+  function wizDraftKey() { return 'tilliMeasures.admin.addSchoolDraft.' + (me.email || 'team'); }
+  function wizDraft() { try { return JSON.parse(localStorage.getItem(wizDraftKey()) || 'null'); } catch (e) { return null; } }
+  function saveWizDraft(v) { try { if (v) localStorage.setItem(wizDraftKey(), JSON.stringify(v)); else localStorage.removeItem(wizDraftKey()); } catch (e) { /* private mode — the draft won't survive a reload */ } }
 
-    function close() { root.innerHTML = ''; }
+  function openAddSchool() {
+    function freshDraft() {
+      var f = {
+        name: '', boards: [], boardPick: { checked: [], other: '' }, city: '', country: 'India',
+        groupId: 'g-none', joined: todayISO(), yearStart: '', yearEnd: '', yearTouched: false,
+        grades: [], admin: { name: '', email: '' },
+      };
+      var sy0 = suggestYear(f.country, f.joined); f.yearStart = sy0.start; f.yearEnd = sy0.end;
+      return f;
+    }
+    var saved = wizDraft();
+    var d = saved && saved.d ? saved.d : freshDraft();
+    var step = saved && saved.d ? Math.max(0, Math.min(saved.step || 0, WIZ_STEPS.length - 1)) : 0;
+    var root = document.getElementById('tl-modal-root');
+
+    function persist(open) { saveWizDraft({ d: d, step: step, open: open !== false }); }
+    function hasInput() { return !!(d.name || d.boards.length || d.city || d.grades.length || d.admin.name || d.admin.email || d.calFileName); }
+    function close() { persist(false); root.innerHTML = ''; }
 
     // Pull the current step's inputs into the draft before we move/re-render.
     function commit() {
@@ -1184,7 +1198,7 @@
         if (document.getElementById('ws-boards')) { d.boardPick = readBoardPicker('ws'); d.boards = boardNames(d.boardPick); }
         if (g('ws-country')) d.country = g('ws-country').value;
         if (g('ws-city')) d.city = g('ws-city').value === CITY_OTHER ? (g('ws-cityother').value || '').trim() : g('ws-city').value;
-        if (g('ws-group')) d.groupId = g('ws-group').value;
+        if (g('ws-group') && g('ws-group').value !== '__new') d.groupId = g('ws-group').value;   // '＋ New group…' isn't a group
         if (g('ws-joined')) d.joined = g('ws-joined').value.trim() || d.joined;
         if (g('ws-ystart')) d.yearStart = g('ws-ystart').value;
         if (g('ws-yend')) d.yearEnd = g('ws-yend').value;
@@ -1346,7 +1360,10 @@
         stepper() +
         '<div id="ws-body">' + BODIES[step]() + '</div>' +
         '<div class="ui-modal-foot" style="justify-content:space-between">' +
-          '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
+          '<div class="tl-inline-actions">' +
+            '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
+            (hasInput() ? '<button class="btn-link" id="ws-reset" type="button" title="Clear everything typed in this form and start again">Start over</button>' : '') +
+          '</div>' +
           '<button class="btn btn-primary btn-sm" id="ws-next" type="button"' + (stepBlocked() ? ' disabled title="' + esc(blockReason()) + '"' : '') + '>' + (last ? 'Create school' : 'Next') + '</button>' +
         '</div></div></div>';
 
@@ -1355,7 +1372,16 @@
       document.getElementById('tl-mx').addEventListener('click', close);
       document.getElementById('ws-back').addEventListener('click', function () { commit(); step = Math.max(0, step - 1); render(); });
       document.getElementById('ws-next').addEventListener('click', onNext);
+      var rs = document.getElementById('ws-reset');
+      if (rs) rs.addEventListener('click', function () {
+        if (!window.confirm('Clear everything typed in this form?')) return;
+        d = freshDraft(); step = 0; render(); toast('Form cleared.');
+      });
+      // Save the draft on every keystroke / pick, after the field's own handler ran.
+      ov.addEventListener('input', function () { commit(); persist(); });
+      ov.addEventListener('change', function () { commit(); persist(); });
       wireStep();
+      persist();
     }
 
     function wireStep() {
@@ -1488,7 +1514,7 @@
       sortGrades(d.grades);
       rerenderStructure();
     }
-    function rerenderStructure() { document.getElementById('ws-body').innerHTML = bodyStructure(); wireStep(); syncNext(); }
+    function rerenderStructure() { document.getElementById('ws-body').innerHTML = bodyStructure(); wireStep(); syncNext(); persist(); }
 
     function onNext() {
       commit();
@@ -1510,7 +1536,7 @@
         // Calendar uploaded in Profile: read it into the new school, waiting for review.
         var calRead = d.calFileName && window.TilliAPI ? window.TilliAPI.readCalendarFile(s.id, d.calFileName) : null;
         if (calRead) window.TilliAPI.saveCalendar(s.id, calRead, me.email, { status: 'submitted', source: 'upload', fileName: d.calFileName });
-        close();
+        close(); saveWizDraft(null);
         toast(s.name + ' created' + (draftSectionTotal(d) ? ' with ' + draftSectionTotal(d) + ' sections.' : '.') + (calRead ? ' Calendar read — check it in Assessments → Plan from calendar.' : ''));
         go('school', { id: s.id });
       }, 1100);
@@ -2380,15 +2406,19 @@
     q[i] = q[j]; q[j] = id; tlSaved(s, phase);
   }
   // Student direct: ask where it runs (and so who runs it), then do(mode).
+  // The cards only select (At home pre-selected); Turn on confirms.
   function askDirectWhere(name, cur, done) {
+    var pick = 'home';
     openModal('Where should “' + name + '” run?', '<p class="tl-muted">Student direct assessments can run in either place. Choose one — you can change it later from its ⋯ menu.</p>' +
-      '<div class="dep-where-pick">' + ['school', 'home'].map(function (m) {
-        return '<button type="button" class="dep-where-opt' + (m === cur ? ' on' : '') + '" data-pick="' + m + '"><span class="dep-where md-' + m + '">' + TL_WHERE_LABEL[m] + '</span>' +
+      '<div class="dep-where-pick" role="radiogroup">' + ['home', 'school'].map(function (m) {
+        return '<button type="button" role="radio" aria-checked="' + (m === pick) + '" class="dep-where-opt' + (m === pick ? ' on' : '') + '" data-pick="' + m + '"><span class="dep-where md-' + m + '">' + TL_WHERE_LABEL[m] + '</span>' +
           '<b>' + (m === 'school' ? 'Teacher runs it' : 'Parent does it with the child') + '</b><span>' + (m === 'school' ? 'Shows up for the class teacher during the school day.' : 'Shows up in the parent app as an activity to do at home.') + '</span></button>';
-      }).join('') + '</div>', function (close) { close(); return true; }, 'Cancel');
-    setTimeout(function () {
-      document.querySelectorAll('[data-pick]').forEach(function (b) { b.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; done(b.dataset.pick); }); });
-    }, 0);
+      }).join('') + '</div>', function (close) { close(); done(pick); }, 'Turn on');
+    var opts = document.querySelectorAll('#tl-modal-root [data-pick]');
+    opts.forEach(function (b) { b.addEventListener('click', function () {
+      pick = b.dataset.pick;
+      opts.forEach(function (o) { var on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-checked', String(on)); });
+    }); });
   }
 
   // What would stop a phase running well once deployed: classes with no teacher,
@@ -6678,4 +6708,6 @@
   if (!GROUP) { wireTips(); wireHelp(); }
   if (!location.hash) location.replace('#/' + HOME);
   render();
+  // The Add School wizard was open before the reload → bring it back where it was.
+  var wd0 = wizDraft(); if (wd0 && wd0.open) openAddSchool();
 })();

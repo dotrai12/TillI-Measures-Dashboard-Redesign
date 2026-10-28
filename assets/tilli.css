@@ -1394,7 +1394,7 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 .cal-kind { margin-bottom: var(--space-4); }
 .cal-kind-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 /* name · start → end · × on one line; board (multi-board exams) underneath. Phones: name + × on top, dates below. */
-.cal-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(112px, 136px) 12px minmax(112px, 136px) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cal-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(150px, 160px) 12px minmax(150px, 160px) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
 .cal-row .input, .cal-row .select { width: 100%; min-width: 0; }
 .cal-n { grid-column: 1; grid-row: 1; } .cal-s { grid-column: 2; grid-row: 1; } .cal-to { grid-column: 3; grid-row: 1; }
 .cal-e { grid-column: 4; grid-row: 1; } .cal-x { grid-column: 5; grid-row: 1; } .cal-b { grid-column: 1 / 5; grid-row: 2; }
@@ -1404,7 +1404,7 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
   .cal-s { grid-column: 1; grid-row: 2; } .cal-to { grid-column: 2; grid-row: 2; } .cal-e { grid-column: 3; grid-row: 2; }
   .cal-b { grid-column: 1 / 4; grid-row: 3; }
 }
-.cal-row.bad .input[type="date"] { border-color: var(--danger-line); }
+.cal-row.bad .input[data-dmy] { border-color: var(--danger-line); }
 .cal-to { color: var(--ink-450); font-weight: 700; }
 .cal-x { background: none; border: 0; cursor: pointer; font-size: var(--fs-lg); line-height: 1; color: var(--ink-450); padding: 2px 6px; }
 .cal-x:hover { color: var(--danger-700); }
@@ -1429,3 +1429,29 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
   background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
 }
 .lang-switch select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Date fields (date-dmy.js): DD/MM/YYYY text + calendar icon; a click opens the .dmy-cal
+   pop-up below. input.input[...] outranks .input.sm's padding. */
+input[data-dmy], input.input[data-dmy] {
+  padding-right: 32px; cursor: pointer; font-variant-numeric: tabular-nums;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6170' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 15px;
+}
+input[data-dmy].dmy-bad { border-color: var(--danger-700); }
+.dmy-cal { position: fixed; z-index: 80; width: 260px; padding: 10px; background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); font-family: var(--font-body); }
+.dmy-cal[hidden] { display: none; }
+.dmy-cal button { font: inherit; border: 0; background: none; cursor: pointer; border-radius: var(--radius-sm); color: var(--ink-900); }
+.dmy-cal button:disabled { color: var(--ink-300); cursor: default; }
+.dmy-cal-h { display: flex; align-items: center; gap: 2px; margin-bottom: 6px; }
+.dmy-cal-h b { flex: 1; text-align: center; font-size: var(--fs-sm); font-weight: 700; }
+.dmy-cal-h button { width: 28px; height: 28px; font-size: var(--fs-md); font-weight: 700; color: var(--ink-450); }
+.dmy-cal-h button:hover { background: var(--surface-100); color: var(--ink-900); }
+.dmy-cal-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dmy-cal-g i { font-style: normal; text-align: center; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); padding: 4px 0; }
+.dmy-cal-g button { height: 32px; font-size: var(--fs-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dmy-cal-g button:not(:disabled):hover { background: var(--wash-cyan); }
+.dmy-cal-g button.today { box-shadow: inset 0 0 0 1px var(--focus); }
+.dmy-cal-g button.sel { background: var(--focus); color: var(--white); }
+.dmy-cal-f { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line-200); }
+.dmy-cal-f button { padding: 4px 8px; font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); }
+.dmy-cal-f button:hover:not(:disabled) { background: var(--wash-green); }
