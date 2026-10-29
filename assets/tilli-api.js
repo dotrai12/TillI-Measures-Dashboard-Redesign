@@ -2425,6 +2425,13 @@
     var db = getDB();
     return childStatusFrom(phaseItems(db.deployments[schoolId] || {}, phase, filter), db.completions[schoolId] || {}, phase, up(studentId));
   }
+  // Many children in one read of the store → { studentId: 'done' | 'draft' | 'none' | null }.
+  // Per-child childStatus() re-reads the whole store each call; a class of 30 = 30 reads.
+  function childStatuses(schoolId, phase, studentIds, filter){
+    var db = getDB(), items = phaseItems(db.deployments[schoolId] || {}, phase, filter), comp = db.completions[schoolId] || {}, out = {};
+    (studentIds || []).forEach(function(sid){ out[sid] = childStatusFrom(items, comp, phase, up(sid)); });
+    return out;
+  }
 
   /* ======================================================================
      ACADEMIC YEARS — a school runs Baseline → Midline → Endline once per year.
@@ -3431,7 +3438,7 @@
     sectionsInScope: sectionsInScope,
     // Completion = children fully done (one rule for every app)
     childrenDone: childrenDone,
-    childStatus: childStatus,
+    childStatus: childStatus, childStatuses: childStatuses,
     // Expected class size — teachers add up to it; past it, admins approve
     sectionRoom: sectionRoom,
     schoolRooms: schoolRooms,

@@ -566,16 +566,16 @@
         return { g: g, n: inG.length, nc: withC.length, students: sum(inG, function (s) { return s.students; }),
           avg: withC.length ? Math.round(sum(withC, function (s) { return s.completion; }) / withC.length) : null, low: low };
       }).filter(function (x) { return x.n; }).sort(function (a, b) { return (b.avg == null ? -1 : b.avg) - (a.avg == null ? -1 : a.avg); });
-      rankHead = '<tr><th>School group</th><th>Schools</th><th>Students</th><th>Avg completion</th><th>Lowest school</th></tr>';
+      rankHead = '<tr><th>School group</th><th>Avg completion</th><th>Schools</th><th>Students</th><th>Lowest school</th></tr>';
       rankRows = gRows.map(function (x) {
-        return '<tr class="clickable" data-open-group="' + x.g.id + '"><td class="name">' + esc(x.g.name) + '</td><td class="tl-num">' + x.n + (x.nc < x.n ? '<small>' + x.nc + ' with results</small>' : '') + '</td>' +
-          '<td class="tl-num">' + x.students.toLocaleString() + '</td><td class="tl-num">' + (x.avg == null ? '—' : x.avg + '%') + '</td>' +
+        return '<tr class="clickable" data-open-group="' + x.g.id + '"><td class="name">' + esc(x.g.name) + '</td><td class="tl-num">' + (x.avg == null ? '—' : x.avg + '%') + '</td><td class="tl-num">' + x.n + (x.nc < x.n ? '<small>' + x.nc + ' with results</small>' : '') + '</td>' +
+          '<td class="tl-num">' + x.students.toLocaleString() + '</td>' +
           '<td>' + (x.low ? esc(x.low.name) + ' <small>' + x.low.completion + '%</small>' : '—') + '</td></tr>';
       }).join('') || '<tr><td colspan="5"><div class="ui-empty">No school groups yet.</div></td></tr>';
     } else {
-      rankHead = '<tr><th>School</th><th>Group</th><th>Region</th><th>Completion</th><th>Engagement</th></tr>';
+      rankHead = '<tr><th>School</th><th>Completion</th><th>Group</th><th>Region</th><th>Engagement</th></tr>';
       rankRows = ranked.map(function (s) {
-        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '</td><td>' + (s.groupId === 'g-none' ? '<span class="text-muted">—</span>' : esc(s.groupName)) + '</td><td>' + esc(s.region) + '</td><td class="tl-num">' + (s.completion ? s.completion + '%' : '—') + '</td><td>' + statusChip(s.status) + '</td></tr>';
+        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + '</td><td class="tl-num">' + (s.completion ? s.completion + '%' : '—') + '</td><td>' + (s.groupId === 'g-none' ? '<span class="text-muted">—</span>' : esc(s.groupName)) + '</td><td>' + esc(s.region) + '</td><td>' + statusChip(s.status) + '</td></tr>';
       }).join('');
     }
     var rankSeg = '<div class="ui-seg" role="group" aria-label="Rank by">' +
@@ -599,7 +599,8 @@
   // ============================================================
   //  3) ALL SCHOOLS  (spec §4.1)
   // ============================================================
-  var schState = { tab: 'active', view: 'list', q: '', flag: '', country: '' };
+  // Phones open on cards (the list's table scrolls sideways there); the toggle still switches.
+  var schState = { tab: 'active', view: window.matchMedia && matchMedia('(max-width: 767px)').matches ? 'grid' : 'list', q: '', flag: '', country: '' };
   SCREEN.schools = function (params, body) {
     if (params.flag != null) { schState.flag = params.flag; schState.tab = 'active'; }
     var tabActive = schState.tab === 'active';
@@ -1161,13 +1162,13 @@
           var all = scoped.filter(function (r) { return (r.sec ? r.sec.section_id : '-') === g.id; });
           var cnt = function (fn) { return all.filter(fn).length; };
           var nd = cnt(function (r) { return r.finished; }), np = cnt(function (r) { return r.overall.tone === 'warn'; }), nt = cnt(function (r) { return r.overall.tone === 'todo'; }), nm = cnt(function (r) { return r.overall.tone === 'danger'; });
-          var head = '<tr class="grp"><td colspan="' + nCols + '">' + esc(g.sec ? g.sec.label : 'No class') + (multiBoard && g.sec && g.sec.board ? ' · ' + esc(g.sec.board) : '') +
+          var head = '<tr class="grp"><td colspan="' + nCols + '"><div class="tl-lg-stick">' + esc(g.sec ? g.sec.label : 'No class') + (multiBoard && g.sec && g.sec.board ? ' · ' + esc(g.sec.board) : '') +
             ' <span>· ' + esc(g.sec && g.sec.teacher ? g.sec.teacher : 'No teacher yet') + ' · ' + nd + ' of ' + all.length + ' done' +
-            (np ? ' · ' + np + ' in progress' : '') + (nm ? ' · ' + nm + ' missed parts' : '') + (nt ? ' · ' + nt + ' yet to complete' : '') + '</span></td></tr>';
+            (np ? ' · ' + np + ' in progress' : '') + (nm ? ' · ' + nm + ' missed parts' : '') + (nt ? ' · ' + nt + ' yet to complete' : '') + '</span></div></td></tr>';
           var open = st.open[g.id], cut = !open && g.rows.length > LOG_ROWS;
           var list = cut ? g.rows.slice(0, LOG_ROWS) : g.rows;
-          var more = g.rows.length > LOG_ROWS ? '<tr class="more"><td colspan="' + nCols + '"><span>Showing <b>1–' + list.length + '</b> of ' + g.rows.length + ' in ' + esc(g.sec ? g.sec.label : 'this group') + '</span>' +
-            '<button type="button" class="btn btn-outline btn-sm" data-lg-open="' + esc(g.id) + '">' + (cut ? 'Show all ' + g.rows.length : 'Show fewer') + '</button></td></tr>' : '';
+          var more = g.rows.length > LOG_ROWS ? '<tr class="more"><td colspan="' + nCols + '"><div class="tl-lg-stick"><span>Showing <b>1–' + list.length + '</b> of ' + g.rows.length + ' in ' + esc(g.sec ? g.sec.label : 'this group') + '</span>' +
+            '<button type="button" class="btn btn-outline btn-sm" data-lg-open="' + esc(g.id) + '">' + (cut ? 'Show all ' + g.rows.length : 'Show fewer') + '</button></div></td></tr>' : '';
           return head + list.map(function (r) { return rowHtml(r, r.adm + ' · ' + r.line); }).join('') + more;
         }).join('');
       }
@@ -3997,7 +3998,7 @@
       body.innerHTML = (s ? crumbs([{ label: 'All Schools', screen: 'schools' }, { label: s.name, screen: 'school', params: { id: s.id, tab: 'students' } }, { label: 'Student' }]) : '') +
         '<div class="ui-card"><div class="ui-empty"><span class="big">Reports for this school aren’t available here yet.</span>' +
           'You can still see this child in the Student Directory, and their teacher sees their progress in the teacher app.<br>' +
-          '<a class="btn btn-outline btn-sm mt-3" href="' + back + '">← Back to ' + (s ? esc(s.name) + '’s students' : 'All Schools') + '</a></div></div>';
+          '<a class="btn btn-outline btn-sm mt-3" href="' + back + '">← Back to ' + (s ? 'students' : 'All Schools') + '</a></div></div>';
       if (s) wireCrumbs(body);
       return;
     }
@@ -5566,7 +5567,9 @@
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + phaseProgressHtml(d) + '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3><p class="ui-mod-note">Who changed what at this school, newest first.</p></div>' +
         '<a class="btn-link" href="' + href('history', { school: s.id }) + '">Filter &amp; search →</a></div>' +
-        histList(ORG.server.history([s.id], { limit: 30 }), { showSchool: false, empty: 'No changes recorded for this school yet.' }) + '</div>';
+        // The latest 10 (30 ran ~4,700px tall on a tablet); the full list is one tap away.
+        histList(ORG.server.history([s.id], { limit: 10 }), { showSchool: false, empty: 'No changes recorded for this school yet.' }) +
+        '<p class="mt-3"><a class="btn-link" href="' + href('history', { school: s.id }) + '">See all changes →</a></p></div>';
     wireCrumbs(body);
   };
 

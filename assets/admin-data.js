@@ -224,7 +224,12 @@
   // section is done (same count the section rows show), a seeded share of the
   // rest are in progress.
   var DRAFT_SHARE = 0.35;
-  var CHECKIN_CACHE = {};   // demo school only: seeded, so stable per section × window (900 children → called a lot)
+  var CHECKIN_CACHE = {};   // demo school: seeded, so stable per section × window (900 children → called a lot)
+  // Real schools change as people finish things, so their cache only lives for one
+  // draw (cleared on the next tick). checkinStatus() is asked once per child, and
+  // without this each ask recomputed the child's whole class — 12,000 store reads
+  // per Overview draw (≈33 s).
+  var LIVE_CK = {}, liveCkTimer = null;
   function sectionCheckins(secDef) {
     var students = studentsInSection(secDef), out = {};
     if (!OPEN_POINT) return out;
@@ -232,8 +237,12 @@
     if (!window.TILLI_CREATED && CHECKIN_CACHE[ck]) return CHECKIN_CACHE[ck];
     var API = window.TilliAPI;
     if (window.TILLI_CREATED && API && API.childStatus) {
-      students.forEach(function (s) { out[s.adm] = API.childStatus(SCHOOL_ID, OPEN_POINT.label, s.adm) || 'none'; });
-      return out;
+      if (LIVE_CK[ck]) return LIVE_CK[ck];
+      if (!liveCkTimer) liveCkTimer = setTimeout(function () { LIVE_CK = {}; liveCkTimer = null; }, 0);
+      var ids = students.map(function (s) { return s.adm; });
+      var st = API.childStatuses ? API.childStatuses(SCHOOL_ID, OPEN_POINT.label, ids) : null;
+      students.forEach(function (s) { out[s.adm] = (st ? st[s.adm] : API.childStatus(SCHOOL_ID, OPEN_POINT.label, s.adm)) || 'none'; });
+      return (LIVE_CK[ck] = out);
     }
     var rnd = mulberry32(hashStr(secDef.id + ':' + OPEN_POINT.key + ':progress'));
     // Demo: Baseline sections spread 30–100% done (shows a lagging section); Midline sections

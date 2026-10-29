@@ -896,7 +896,8 @@
   }
   // Collapsed/expanded is shared with the school-admin panel (same key).
   const DEV_COLLAPSED_KEY = 'tilliMeasures.devPanelCollapsed';
-  function devCollapsed() { try { return localStorage.getItem(DEV_COLLAPSED_KEY) === '1'; } catch (e) { return false; } }
+  // Phones and tablets start it folded (it covered the page there); your own open/close is remembered.
+  function devCollapsed() { try { var v = localStorage.getItem(DEV_COLLAPSED_KEY); return v == null ? window.innerWidth < 1024 : v === '1'; } catch (e) { return window.innerWidth < 1024; } }
 
   // ---------------- change history ----------------
   // Reads go through TilliAPI.historyFor, which scopes to this teacher's
@@ -4207,7 +4208,10 @@
   .dash-side.narrow .dash-navbtn { justify-content: center; padding: 11px; }
   .dash-side.narrow .dash-profilebtn { justify-content: center; padding: 12px 0 4px; }
   /* Teacher identity colour for every .ui-avatar on this page (tilli.css default is green wash). */
-  :root { --avatar-bg: var(--pink-400); --avatar-fg: var(--white); }
+  :root { --avatar-bg: var(--pink-400); --avatar-fg: var(--white);
+    --rr-indent: 60px;      /* phone student list: how far the stage badges sit in from the left (lines them up under the name) */
+    --gr-min-w: 560px;      /* phone Insights growth chart: narrowest it draws before scrolling sideways */
+  }
   .dash-col { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
   /* Header bar look comes from .ui-header (tilli.css) — same height/border as the admin header. */
   .dash-header:empty { display: none; }
@@ -4353,6 +4357,11 @@
   .roster-sort > span { font-size: var(--fs-sm); color: var(--text-meta); font-weight: 600; }
   .roster-list { display: flex; flex-direction: column; gap: 9px; }
   .ui-card.roster-row { display: flex; align-items: center; gap: 14px; padding: 10px 16px 10px 10px; cursor: pointer; text-align: left; font-family: var(--font-body); transition: box-shadow .15s; }   /* .ui-card.sm */
+  /* Phones: the stage badges go under the name, so the name keeps the row's width. */
+  @media (max-width: 640px) {
+    .ui-card.roster-row { flex-wrap: wrap; row-gap: 6px; }
+    .roster-row .rr-chips { flex: 1 1 100%; justify-content: flex-start; padding-left: var(--rr-indent); }
+  }
   .roster-row:hover { box-shadow: var(--shadow-hover); }
   .rr-plant { flex: none; }
   .rr-info { flex: 1; min-width: 0; }
@@ -4432,7 +4441,7 @@
   .pf-row .v { font-size: var(--fs-md); color: var(--ink-900); font-weight: 600; text-align: right; }
 
   /* observations */
-  .obs-vine { --obs-chip-gap: 6px; position: relative; max-width: 640px; }
+  .obs-vine { --obs-chip-gap: 6px; --obs-row-gap: 16px; position: relative; max-width: 640px; }
   .obs-vine-svg { position: absolute; left: 0; top: 0; pointer-events: none; }
   .obs-nodes { position: relative; z-index: 1; }
   .obs-row { display: flex; gap: 16px; min-height: 152px; }
@@ -4454,6 +4463,13 @@
   .obs-card.sa { cursor: default; }
   .obs-card.sa a.obs-cta { display: inline-block; text-decoration: none; }
   .obs-count { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); white-space: nowrap; }
+  @media (max-width: 640px) {
+    .obs-row { min-height: 0; padding-bottom: var(--obs-row-gap); }
+    .obs-card-top { flex-wrap: wrap; }
+    .obs-card-top .obs-card-title { flex: 1 1 calc(100% - 96px); }
+    .obs-count { order: 3; flex: 1 1 100%; margin-left: 0; white-space: normal; }
+    .obs-cta { display: block; text-align: center; }
+  }
   .obs-count + .ui-badge { margin-left: 0; }
   .obs-chips { display: flex; flex-wrap: wrap; gap: var(--obs-chip-gap); margin-top: 8px; }
   .obs-meta { margin-top: 3px; }   /* .ui-meta */
@@ -4826,7 +4842,7 @@
   /* Slot 8 — who could use you (tend cards) */
   .mg-tend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
   /* heading = .ui-title, note = .ui-meta */
-  .mg-tend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .mg-tend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }   /* 3 across on desktop; fewer on tablets so the buttons don't wrap */
   .mg-tend-card { display: flex; flex-direction: column; gap: 9px; }   /* .ui-card.sm */
   .mg-tend-top { display: flex; align-items: center; gap: 10px; }
   .mg-tend-pl { line-height: 0; flex: none; }
@@ -4852,7 +4868,14 @@
   /* ---- teacher feedback build: UID, students actions, PDFs, completed rate, mirror ---- */
   .uid-chip { vertical-align: middle; font-family: var(--font-heading); font-size: var(--fs-sm); }   /* .ui-tag.green */
   .uid-chip.sm { font-size: var(--fs-xs); margin-left: 6px; }
-  .stu-uid { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .stu-uid { display: flex; align-items: center; gap: 2px 6px; margin-top: 2px; flex-wrap: wrap; }
+  .stu-uid > * { white-space: nowrap; }
+  /* Phones: name block takes the row beside the flower; the History / Edit buttons drop below. */
+  @media (max-width: 640px) {
+    .stu-head { align-items: flex-start; }
+    .stu-meta { flex: 1 1 calc(100% - 100px); min-width: 0; }
+    .stu-headbtns { order: 3; }
+  }
   .stu-uidcode { color: var(--ink-450); cursor: help; }
   .stu-editbtn { align-self: flex-start; }
   .stu-edit-grid { display: grid; grid-template-columns: 1fr 1fr 0.9fr; gap: 10px; }
@@ -4910,6 +4933,11 @@
   .gr-wrap { position: relative; outline: none; border-radius: var(--radius-md); }
   .gr-wrap:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
   .gr-svg { display: block; overflow: visible; }
+  /* Phones: the chart keeps a readable size and scrolls sideways in its card (scaled to fit, its text was ~5px). */
+  @media (max-width: 640px) {
+    .gr-wrap { overflow-x: auto; overscroll-behavior-x: contain; }
+    .gr-svg { min-width: var(--gr-min-w); }
+  }
   .gr-tip { position: absolute; z-index: 3; min-width: 170px; max-width: 260px; padding: 9px 12px; pointer-events: none; }
   .gr-tip-h { margin-bottom: 5px; }
   .gr-tip-r { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); padding: 2px 0; }

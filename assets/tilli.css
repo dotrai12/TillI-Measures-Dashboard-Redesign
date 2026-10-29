@@ -1496,3 +1496,32 @@ input[data-dmy].dmy-bad { border-color: var(--danger-700); }
 .dmy-cal-f { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line-200); }
 .dmy-cal-f button { padding: 4px 8px; font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); }
 .dmy-cal-f button:hover:not(:disabled) { background: var(--wash-green); }
+
+/* ============================================================
+   Responsive check fixes (29 Oct) — shared by every page
+   ============================================================ */
+:root {
+  --tf-gutter: 76px;       /* space kept clear on the right of a page's content for the floating bubbles (tablet + desktop) */
+  --tap-min: 40px;         /* smallest tap area for icon-only controls on touch screens */
+}
+/* R4 — a pop-up is the only thing in front: the floating bubbles and the dev
+   Preview stage step back while one is open (they used to cover its buttons). */
+body:has(.overlay) .tf-stack, body:has(.ui-scrim) .tf-stack,
+body:has(.overlay) .ui-devpanel, body:has(.ui-scrim) .ui-devpanel { display: none; }
+/* R5 — smaller bubbles on phones, so they hide less of the row underneath. */
+@media (max-width: 767px) {
+  :root { --tf-ask-size: 50px; --tf-help-size: 42px; --tf-gap: 10px; }
+}
+/* R10 — the pop-up × is a 40px target on touch screens (same look). */
+@media (pointer: coarse), (max-width: 1023px) {
+  .dialog-close { min-width: var(--tap-min); min-height: var(--tap-min); display: grid; place-items: center; top: 6px; right: 8px; }
+}
+/* R21 — nothing under 12px on phones (eyebrows, meta lines, table heads). */
+@media (max-width: 767px) {
+  :root { --fs-xs: 12px; }
+}
+/* R10 — the ⓘ buttons keep their size but get a 40px invisible tap area on touch screens. */
+@media (pointer: coarse), (max-width: 1023px) {
+  button.ui-info { position: relative; }
+  button.ui-info::after { content: ''; position: absolute; inset: calc((var(--tap-min) - 100%) / -2); }
+}

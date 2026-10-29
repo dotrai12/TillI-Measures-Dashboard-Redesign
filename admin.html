@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261029p6">
+<link rel="stylesheet" href="assets/tilli.css?v=20261029p11">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -52,6 +52,15 @@
 
   /* ---- Main ---- */
   .ad-main { padding: var(--page-pad-y) var(--page-pad-x) 96px; }
+  @media (min-width: 861px) { .ad-app:not(.ov-mode):not(.ask-mode) .ad-main { padding-right: calc(var(--page-pad-x) + var(--tf-gutter)); } }   /* keep the floating bubbles' column clear */
+  /* Reports: the CSV buttons stack their label over their note on phones instead of wrapping mid-sentence. */
+  @media (max-width: 640px) {
+    .ad-main [data-csv] { flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; white-space: normal; height: auto; padding-top: 8px; padding-bottom: 8px; }
+    /* Overview on phones: section names only on tap (they piled on top of each other); the completion note in two lines, tap for the rest. */
+    .dl-name.d2 { display: none; }
+    .ad-rulenote { cursor: pointer; }
+    .ad-rulenote:not(.open) .ad-rulenote-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  }
   .ad-wrap { max-width: var(--content-max); margin: 0 auto; }
 
   /* ---- Layout grids ---- */
@@ -591,15 +600,15 @@
 
 <script src="assets/school-data.js?v=20261020mx"></script>
 <script src="assets/keep-open.js?v=20261029p10"></script>
-<script src="assets/tilli-api.js?v=20261029p9"></script>
+<script src="assets/tilli-api.js?v=20261029p11"></script>
 <script src="assets/i18n.js?v=20261029p4"></script>
 <script src="assets/tilli-history.js?v=20261029p1"></script>
 <script src="assets/date-dmy.js?v=20261029p3"></script>
 <script src="assets/calendar-form.js?v=20261029p6"></script>
 <script src="assets/created-school-bridge.js?v=20261026p5"></script>
-<script src="assets/admin-data.js?v=20261029p1"></script>
+<script src="assets/admin-data.js?v=20261029p11"></script>
 <script src="assets/float-help.js?v=20261027i6b"></script>
-<script src="assets/admin.js?v=20261029p6"></script>
+<script src="assets/admin.js?v=20261029p11"></script>
 <!-- Page translator: approved translations replace matching screen text; new text is listed on Tilli → Translations. -->
 <script>TilliI18n.autoTranslate({ area: 'School dashboard' });</script>
 </body>

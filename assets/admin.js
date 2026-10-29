@@ -1431,7 +1431,8 @@
   function dlMissed(studs, pt) {
     var A = window.TilliAPI;
     if (!window.TILLI_CREATED || !A || !A.childStatus) return [];
-    return studs.filter(function (s) { var st = A.childStatus(currentSchoolId(), pt.label, s.adm); return st && st !== 'done'; });
+    var all = A.childStatuses ? A.childStatuses(currentSchoolId(), pt.label, studs.map(function (s) { return s.adm; })) : null;   // one store read for the lot
+    return studs.filter(function (s) { var st = all ? all[s.adm] : A.childStatus(currentSchoolId(), pt.label, s.adm); return st && st !== 'done'; });
   }
 
   // Priority 1 — warnings for the whole school, most urgent first.
@@ -1919,17 +1920,19 @@
       el.addEventListener('pointerdown', function (e) {
         if (e.button !== 0) return;
         var n = dlSim.g.nodes[el.dataset.dlI], p = toSvg(e);
-        drag = { el: el, n: n, ox: n.x - p.x, oy: n.y - p.y, moved: false, sx: e.clientX, sy: e.clientY };
-        el.setPointerCapture(e.pointerId);
+        drag = { el: el, n: n, ox: n.x - p.x, oy: n.y - p.y, moved: false, sx: e.clientX, sy: e.clientY, touch: e.pointerType === 'touch' };
+        // A finger only taps a dot (a swipe scrolls the page); a mouse can also drag it.
+        if (!drag.touch) el.setPointerCapture(e.pointerId);
       });
       el.addEventListener('pointermove', function (e) {
-        if (!drag || drag.el !== el) return;
+        if (!drag || drag.el !== el || drag.touch) return;
         if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
         drag.moved = true; unpin(); hideTip(); stage.classList.add('dragging');
         var p = toSvg(e); drag.n.fixed = true; drag.n.x = p.x + drag.ox; drag.n.y = p.y + drag.oy; dlWake();
       });
-      function end() {
+      function end(e) {
         if (!drag || drag.el !== el) return;
+        if (e && e.type === 'pointercancel') { drag = null; stage.classList.remove('dragging'); return; }   // the page scrolled instead
         var d = drag; drag = null; d.n.fixed = false; stage.classList.remove('dragging'); dlWake();
         if (!d.moved && el.dataset.dlNav) { unpin(); navigate(el); }
         else if (!d.moved && el.classList.contains('dl-kid')) pinKid(el);
@@ -1959,6 +1962,9 @@
     body.querySelectorAll('[data-yearsee]').forEach(function (b) { b.addEventListener('click', showYearMigration); });
     var rd = body.querySelector('[data-ruledismiss]');
     if (rd) rd.addEventListener('click', function () { try { localStorage.setItem(RULE_KEY + '.' + currentSchoolId() + '.' + email, '1'); } catch (e) {} render(); });
+    // Phones show the note in two lines; a tap opens the rest.
+    var rn = rd && rd.closest('.ad-rulenote');
+    if (rn) rn.addEventListener('click', function (e) { if (!e.target.closest('[data-ruledismiss]')) rn.classList.toggle('open'); });
     body.querySelectorAll('[data-relink]').forEach(function (b) { b.addEventListener('click', function () { try { navigator.clipboard.writeText(b.dataset.relink); } catch (e) {} toast('Link copied.'); }); });
     body.querySelectorAll('.ui-note [data-goroster]').forEach(function (b) { b.addEventListener('click', function () { go('roster', { tab: 'team' }); }); });
     var yd = body.querySelector('[data-yeardismiss]');
@@ -4143,7 +4149,7 @@
     if (AD.pastYear || !AD.openPoint) return '';
     var who = deployedForText(AD.openPoint.label); if (!who) return '';
     try { if (localStorage.getItem(RULE_KEY + '.' + currentSchoolId() + '.' + email)) return ''; } catch (e) { /* no storage → show it */ }
-    return '<div class="ui-note info mb-3 ad-yearnotice"><span aria-hidden="true">ℹ️</span><span><b>How completion is counted:</b> a child is complete once they’ve finished every assessment deployed to your school — for ' +
+    return '<div class="ui-note info mb-3 ad-yearnotice ad-rulenote"><span aria-hidden="true">ℹ️</span><span class="ad-rulenote-t"><b>How completion is counted:</b> a child is complete once they’ve finished every assessment deployed to your school — for ' +
       esc(AD.openPoint.label) + ' that’s the ' + esc(who) + ' assessment' + (who.indexOf(' and ') >= 0 ? 's' : '') + '. Children with only some done show as in progress, so the number can read lower than per-assessment counts.</span>' +
       '<button class="dialog-close" data-ruledismiss aria-label="Dismiss">×</button></div>';
   }
@@ -4194,7 +4200,8 @@
   // sidebar slot it docks into), so the node is re-placed after every paint.
   var statePanel = null;
   var DEV_COLLAPSED_KEY = 'tilliMeasures.devPanelCollapsed';   // shared with the teacher dashboard
-  function devCollapsed() { try { return localStorage.getItem(DEV_COLLAPSED_KEY) === '1'; } catch (e) { return false; } }
+  // Phones and tablets start it folded (it covered the page there); your own open/close is remembered.
+  function devCollapsed() { try { var v = localStorage.getItem(DEV_COLLAPSED_KEY); return v == null ? window.innerWidth < 1024 : v === '1'; } catch (e) { return window.innerWidth < 1024; } }
   function buildStatePanel() {
     if (statePanel) return;
     statePanel = document.createElement('div');

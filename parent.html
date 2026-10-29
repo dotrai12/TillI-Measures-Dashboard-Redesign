@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261029p6">
+<link rel="stylesheet" href="assets/tilli.css?v=20261029p11">
 <style>
   /* ---- Parent-flow layout ---- */
   .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
@@ -302,8 +302,8 @@
     .p-top { gap: 10px; }
     .switch-menu { min-width: min(250px, calc(100vw - 40px)); }
 
-    .p-hero { gap: 16px; margin-top: 12px; }
-    .p-face { width: 72px; height: 72px; }
+    .p-hero { gap: 12px; margin-top: 12px; grid-template-columns: 1fr; }   /* phones: the face sits above the title, so the heading gets the full width */
+    .p-face { width: 64px; height: 64px; }
 
     .sec-head { margin: 26px 0 12px; }
     .prog-card { padding: 16px 18px; gap: 14px; }
@@ -341,7 +341,7 @@
 
 <script src="assets/school-data.js?v=20261020mx"></script>
 <script src="assets/keep-open.js?v=20261029p10"></script>
-<script src="assets/tilli-api.js?v=20261029p9"></script>
+<script src="assets/tilli-api.js?v=20261029p11"></script>
 <script src="assets/i18n.js?v=20261029p4"></script>
 <script src="assets/float-help.js?v=20261027i6b"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
