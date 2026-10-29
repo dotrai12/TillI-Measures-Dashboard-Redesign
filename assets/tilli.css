@@ -228,6 +228,10 @@ b, strong { font-weight: 700; }
 .btn-primary.md { padding: 12px 22px; font-size: var(--fs-md); }   /* in-card primary action */
 .btn-primary.sm { padding: 9px 16px; font-size: var(--fs-sm); }    /* compact primary action */
 .btn-primary:disabled { background: var(--line-200); color: var(--ink-300); cursor: not-allowed; }
+/* Every other button looks switched off too (an outline button used to look clickable). */
+.btn:disabled, .btn-outline:disabled, .btn-cyan:disabled, .btn-ghost:disabled, .btn-line:disabled { background: var(--surface-100); border-color: var(--line-200); color: var(--ink-300); cursor: not-allowed; box-shadow: none; }
+.btn:disabled:hover, .btn-outline:disabled:hover, .btn-cyan:disabled:hover, .btn-ghost:disabled:hover, .btn-line:disabled:hover { background: var(--surface-100); border-color: var(--line-200); color: var(--ink-300); }
+.btn-primary:disabled, .btn-primary:disabled:hover { background: var(--line-200); border-color: transparent; }   /* primary keeps its own grey */
 
 .btn-ghost {
   /* Same look as .btn.btn-outline (the one pill secondary button) — kept as a
@@ -1390,26 +1394,61 @@ a.btn, a.btn-ghost, a.btn-dashed, a.btn-line, a.btn-soft { text-decoration: none
 /* ---- School calendar form (assets/calendar-form.js) — Tilli admin + school admin ---- */
 .cal-upload { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: var(--space-3); }
 .cal-muted { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
-.cal-readnote { margin-bottom: var(--space-3); }
-.cal-kind { margin-bottom: var(--space-4); }
+.cal-pill { padding: 4px 10px; border-radius: var(--radius-pill); background: var(--wash-cyan); color: #0B5F75; font-size: var(--fs-xs); font-weight: 700; }
+.cal-file { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+.cal-replace { cursor: pointer; font-size: var(--fs-sm); }
+/* Calendar redesign (approved 29 Oct): colour per kind, shared by the year bar, the key and the section squares. */
+.cal-kinds, .cal-yb, .cal-kind { --cal-terms: #BDE8A8; --cal-terms-ink: var(--green-500); --cal-exams: #E0901C; --cal-holidays: var(--cyan-500); --cal-win: #6D5BD0; --cal-name-w: 260px; --cal-date-w: 156px; --cal-board-w: 140px; }
+.cal-kind { margin-bottom: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line-200); }
 .cal-kind-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-/* name · start → end · × on one line; board (multi-board exams) underneath. Phones: name + × on top, dates below. */
-.cal-row { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(150px, 160px) 12px minmax(150px, 160px) 24px; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cal-kind-h b { font-size: var(--fs-md); }
+.cal-sq { display: inline-block; width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.cal-sq.k-terms { background: var(--cal-terms-ink); } .cal-sq.k-exams { background: var(--cal-exams); } .cal-sq.k-holidays { background: var(--cal-holidays); }
+.cal-count { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
+/* name · starts → ends · length · (board) · × — one line. Phones: name on top, then the dates, then length + board. */
+.cal-row { display: grid; grid-template-columns: minmax(120px, var(--cal-name-w)) var(--cal-date-w) 14px var(--cal-date-w) 64px 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
+.cal-row.has-board { grid-template-columns: minmax(120px, var(--cal-name-w)) var(--cal-date-w) 14px var(--cal-date-w) 64px var(--cal-board-w) 32px; }
 .cal-row .input, .cal-row .select { width: 100%; min-width: 0; }
-.cal-n { grid-column: 1; grid-row: 1; } .cal-s { grid-column: 2; grid-row: 1; } .cal-to { grid-column: 3; grid-row: 1; }
-.cal-e { grid-column: 4; grid-row: 1; } .cal-x { grid-column: 5; grid-row: 1; } .cal-b { grid-column: 1 / 5; grid-row: 2; }
-@media (max-width: 560px) {
-  .cal-row { grid-template-columns: 1fr 12px 1fr 24px; }
-  .cal-n { grid-column: 1 / 4; } .cal-x { grid-column: 4; }
+.cal-head { margin-bottom: 4px; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); text-transform: uppercase; letter-spacing: .04em; }
+.cal-len { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); white-space: nowrap; }
+.cal-bw .select { border-radius: var(--radius-pill); background-color: var(--surface-100); font-weight: 700; }
+.cal-add { margin-top: 4px; border: 1px dashed #D5DAE1; background: var(--white); border-radius: var(--radius-pill); padding: 7px 14px; font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 700; color: var(--green-700); cursor: pointer; }
+.cal-add:hover { border-color: var(--green-500); }
+.cal-foot { align-items: center; padding-top: var(--space-3); border-top: 1px solid var(--line-200); }
+.cal-foot-status { flex: 1 1 260px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-450); }
+@media (max-width: 760px) {
+  .cal-head { display: none; }
+  .cal-row, .cal-row.has-board { grid-template-columns: 1fr 14px 1fr 32px; }
+  .cal-n { grid-column: 1 / 4; grid-row: 1; } .cal-x { grid-column: 4; grid-row: 1; }
   .cal-s { grid-column: 1; grid-row: 2; } .cal-to { grid-column: 2; grid-row: 2; } .cal-e { grid-column: 3; grid-row: 2; }
-  .cal-b { grid-column: 1 / 4; grid-row: 3; }
+  .cal-len { grid-column: 1; grid-row: 3; } .cal-bw { grid-column: 3; grid-row: 3; }
 }
+/* Year at a glance */
+.cal-yb { margin: 0 0 var(--space-4); }
+.cal-yb-track { position: relative; height: 34px; border-radius: var(--radius-sm); background: var(--surface-100); border: 1px solid var(--line-200); overflow: hidden; }
+.cal-yb-track span { position: absolute; border-radius: 4px; }
+.cal-yb-terms { top: 4px; height: 24px; background: var(--cal-terms); }
+.cal-yb-holidays { top: 10px; height: 12px; background: var(--cal-holidays); }
+.cal-yb-exams { top: 10px; height: 12px; background: var(--cal-exams); }
+.cal-yb-lane { position: relative; height: 22px; margin-top: 4px; }
+.cal-yb-win { position: absolute; top: 0; height: 20px; border-radius: 6px; background: color-mix(in srgb, var(--cal-win) 14%, var(--white)); border: 1px solid var(--cal-win); color: var(--cal-win); font-size: 10px; font-weight: 700; line-height: 18px; padding: 0 4px; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cal-yb-months { position: relative; height: 16px; margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--ink-450); }
+.cal-yb-months span { position: absolute; top: 0; }
+.cal-yb-key { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+.cal-yb-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.cal-yb-key .k-terms { background: var(--cal-terms); } .cal-yb-key .k-exams { background: var(--cal-exams); } .cal-yb-key .k-holidays { background: var(--cal-holidays); } .cal-yb-key .k-win { background: color-mix(in srgb, var(--cal-win) 14%, var(--white)); border: 1px solid var(--cal-win); }
 .cal-row.bad .input[data-dmy] { border-color: var(--danger-line); }
+.cal-choose-h { margin: 0 0 8px; }
+.cal-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.cal-opt { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px; border: 1px solid var(--line-200); border-radius: var(--radius-md); background: var(--white); cursor: pointer; font-family: var(--font-body); }
+.cal-opt b { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-900); }
+.cal-opt span { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+.cal-opt:hover { border-color: var(--green-500); background: var(--wash-green); }
+@media (max-width: 560px) { .cal-opts { grid-template-columns: 1fr; } }
 .cal-to { color: var(--ink-450); font-weight: 700; }
 .cal-x { background: none; border: 0; cursor: pointer; font-size: var(--fs-lg); line-height: 1; color: var(--ink-450); padding: 2px 6px; }
 .cal-x:hover { color: var(--danger-700); }
 .cal-err { grid-column: 1 / -1; font-size: var(--fs-xs); font-weight: 600; color: var(--danger-700); }
-.cal-add { font-size: var(--fs-sm); }
 /* Suggested windows (Plan from calendar) */
 .cal-sugg { display: grid; gap: 8px; }
 .cal-sugg-row { display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px; padding: 10px 12px; border: 1px solid var(--line-200); border-radius: var(--radius-sm); }
@@ -1450,6 +1489,8 @@ input[data-dmy].dmy-bad { border-color: var(--danger-700); }
 .dmy-cal-g i { font-style: normal; text-align: center; font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); padding: 4px 0; }
 .dmy-cal-g button { height: 32px; font-size: var(--fs-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
 .dmy-cal-g button:not(:disabled):hover { background: var(--wash-cyan); }
+.dmy-cal-g button.other { color: var(--ink-300); font-weight: 500; }
+.dmy-cal-g button:disabled { opacity: .4; }   /* out of range — fainter than the other month's days */
 .dmy-cal-g button.today { box-shadow: inset 0 0 0 1px var(--focus); }
 .dmy-cal-g button.sel { background: var(--focus); color: var(--white); }
 .dmy-cal-f { display: flex; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line-200); }

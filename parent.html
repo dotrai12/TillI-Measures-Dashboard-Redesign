@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261027i6a">
+<link rel="stylesheet" href="assets/tilli.css?v=20261029p6">
 <style>
   /* ---- Parent-flow layout ---- */
   .p-wrap { min-height: 100svh; display: flex; flex-direction: column;
@@ -321,6 +321,17 @@
   @media (max-width: 380px) {
     .garden .bed { grid-template-columns: repeat(3, 1fr); }
   }
+  /* Consent: * for required, (optional) in brackets, "Why we ask" folds the long intro. */
+  .consent-req { color: var(--danger-700); font-weight: 700; }
+  .consent-opt { color: var(--ink-450); font-weight: 600; }
+  .consent-reqnote { margin: 4px 0 0; font-size: var(--fs-xs); }
+  .consent-why { margin: 0 0 16px; }
+  .consent-why summary { cursor: pointer; font-weight: 700; color: var(--green-700); font-size: var(--fs-sm); }
+  .consent-why p { margin: 8px 0 0; color: var(--ink-450); font-size: var(--fs-sm); line-height: 1.5; }
+  .consent-note.saved { color: var(--green-700); font-weight: 700; }
+  .p-toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); max-width: min(92vw, 440px); background: var(--ink-900); color: var(--white);
+    font-weight: 600; font-size: var(--fs-sm); padding: 12px 18px; border-radius: var(--radius-md); box-shadow: var(--shadow-pop); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 90; }
+  .p-toast.on { opacity: 1; transform: translate(-50%, 0); }
 </style>
 </head>
 <body>
@@ -329,8 +340,9 @@
 <div id="app"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261027i6c"></script>
-<script src="assets/i18n.js?v=20261027i6c"></script>
+<script src="assets/keep-open.js?v=20261029p10"></script>
+<script src="assets/tilli-api.js?v=20261029p9"></script>
+<script src="assets/i18n.js?v=20261029p4"></script>
 <script src="assets/float-help.js?v=20261027i6b"></script>
 <script>TilliFloat.mount({ role: 'Parent' });   // Need help only — no Ask Tilli for families</script>
 <script>
@@ -531,8 +543,13 @@
         teacher: (full && full.teacherName) || T('parent.yourTeacher'), unlocked: i === 0,
       };
     });
+  } else if (readSession().email && !/^parent@tilli\.edu$/i.test(PARENT_EMAIL)) {
+    // A signed-in parent with no child linked yet: never show made-up children —
+    // send them back to "Add your first child".
+    location.replace('index.html');
+    children = [];
   } else {
-    // Legacy demo fallback (generic parent@tilli.edu / no links yet).
+    // Legacy demo fallback (generic parent@tilli.edu, or no sign-in at all).
     children = [
       { name: 'Aarav', grade: 'Grade 1', section: 'A', adm: 'ADM-2041', pronoun: 'he',  teacher: 'Ms Rao',   unlocked: true },
       { name: 'Meera', grade: 'Grade 3', section: 'B', adm: 'ADM-2044', pronoun: 'she', teacher: 'Mr Silva', unlocked: false },
@@ -699,7 +716,7 @@
       // Future windows are locked; otherwise a finished window shows its report,
       // an unfinished one invites the parent to continue.
       const cta = ph === 'future'
-        ? `<span class="btn-locked">${esc(T('parent.locked'))}</span>`
+        ? `<button type="button" class="btn-locked focus" data-locked="${esc(T('parent.notOpenYet'))}" title="${esc(T('parent.notOpenYet'))}">🔒 ${esc(T('parent.locked'))}</button>`
         : complete
         ? `<div class="phase-cta">
              <button class="btn btn-primary focus" data-act="phase-open" data-win="${w.id}">${esc(T('parent.viewDetails'))} →</button>
@@ -1053,7 +1070,7 @@
           return `<div class="t-row">
             <span class="t-dot pending"></span>
             <span class="t-body"><b>${esc(a.name)}</b><span>${esc(T('parent.opensAfter', { name: link.after }))}</span></span>
-            <span class="btn-locked">${esc(T('parent.locked'))}</span>
+            <button type="button" class="btn-locked focus" data-locked="${esc(T('parent.finishFirst', { name: link.after }))}" title="${esc(T('parent.finishFirst', { name: link.after }))}">🔒 ${esc(T('parent.locked'))}</button>
           </div>`;
         }
         if (done) {
@@ -1346,17 +1363,38 @@
         <span class="chev" aria-hidden="true">›</span>
       </button>`;
   }
+  // Small toast at the bottom of the screen (one at a time).
+  let toastTimer = null;
+  function showToast(msg) {
+    let t = document.getElementById('p-toast');
+    if (!t) { t = document.createElement('div'); t.id = 'p-toast'; t.className = 'p-toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
+  }
+  // Consent text may carry links written as [label](https://…) — e.g. "Privacy notice".
+  // Escaped first, so only that one pattern becomes HTML.
+  function consentText(t) {
+    return esc(t).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => `<a class="btn-link" href="${url}" target="_blank" rel="noopener">${label}</a>`);
+  }
+  // Unsaved ticks on the profile version (saving only happens on Save).
+  function consentDirty() {
+    if (!state.consentPick || !hasConsentAPI()) return false;
+    const r = API.consentFor(PARENT_EMAIL), was = (r && r.items) || {};
+    return API.consentConfig().items.some((it) => !!state.consentPick[it.id] !== !!was[it.id]);
+  }
   function consentView(gate) {
     const cfg = API.consentConfig();
     if (!state.consentPick) { const r = API.consentFor(PARENT_EMAIL); state.consentPick = Object.assign({}, r && r.items); }
     const pick = state.consentPick, ready = cfg.items.every((it) => !it.required || pick[it.id]);
+    // Required = a * (with a "* required" note below); optional = "(optional)".
     const rows = cfg.items.map((it) => `<label class="consent-row">
         <input type="checkbox" data-consent="${esc(it.id)}"${pick[it.id] ? ' checked' : ''}>
-        <span>${esc(T('consent.item.' + it.id, it.text))} ${it.required ? `<b class="consent-tag">${esc(T('consent.required', 'Required'))}</b>` : `<span class="consent-tag opt">${esc(T('consent.optional', 'Optional'))}</span>`}</span>
+        <span>${consentText(T('consent.item.' + it.id, it.text))}${it.required ? ' <b class="consent-req" aria-label="required">*</b>' : ` <span class="consent-opt">(${esc(T('consent.optional', 'Optional').toLowerCase())})</span>`}</span>
       </label>`).join('');
-    const note = gate
+    const note = state.consentSaved && !gate ? T('consent.saved', 'Saved ✓')
+      : gate
       ? (ready ? T('consent.changeLater', 'You can change this any time from your profile.') : T('consent.tickRequired', 'Tick the required box to continue. You can come back and do it later.'))
-      : (ready ? T('consent.savesNow', 'Changes save straight away.') : T('consent.stopsApp', 'Without the required box, the parent app stops until you tick it again.'));
+      : (ready ? T('consent.savesNow', 'Press Save to keep your changes.') : T('consent.stopsApp', 'Without the required box, the parent app stops until you tick it again.'));
     return `<div class="p-wrap">
       <div class="p-top">${lockup}
         <span class="ml-auto">${I18N.switcherHTML()}</span>
@@ -1364,13 +1402,15 @@
       </div>
       <div class="p-main" data-rise>
         <p class="p-eyebrow tight">${esc(gate ? T('consent.oneThing', 'One thing first') : T('consent.yourProfile', 'Your profile'))}</p>
-        <h1 class="p-title">${esc(T('consent.title', cfg.title))}</h1>
-        <p class="p-sub spaced">${esc(T('consent.intro', cfg.intro))}</p>
+        <h1 class="p-title">${esc(gate ? T('consent.title', cfg.title) : T('consent.profileTitle', 'Consent & privacy'))}</h1>
+        <p class="p-sub">${esc(T('consent.short', 'Choose what you’re happy to share.'))}</p>
+        <details class="consent-why"><summary>${esc(T('consent.whyAsk', 'Why we ask'))}</summary><p>${consentText(T('consent.intro', cfg.intro))}</p></details>
         <div class="ui-card md consent-card">
           <label class="consent-row consent-all"><input type="checkbox" data-consentall${cfg.items.every((it) => pick[it.id]) ? ' checked' : ''}> <span><b>${esc(T('consent.agreeAll', 'I agree to all of the above'))}</b></span></label>
           ${rows}
           ${cfg.privacyUrl ? `<a class="btn-link" href="${esc(cfg.privacyUrl)}" target="_blank" rel="noopener">${esc(T('consent.privacy', 'Read the full privacy notice'))}</a>` : ''}
-          <p class="muted consent-note">${esc(note)}</p>
+          ${cfg.items.some((it) => it.required) ? `<p class="muted consent-reqnote">${esc(T('consent.requiredNote', '* required'))}</p>` : ''}
+          <p class="muted consent-note${state.consentSaved && !gate ? ' saved' : ''}">${esc(note)}</p>
           <button class="btn btn-primary focus" data-act="consent-save"${gate && !ready ? ' disabled' : ''}>${esc(gate ? T('consent.continue', 'Continue') : T('consent.save', 'Save'))}${gate ? ' &#8594;' : ''}</button>
         </div>
       </div>
@@ -1442,6 +1482,8 @@
 
   let saveTimer;
   function wire(root) {
+    // A locked step says why on tap (hover shows the same line as a tooltip).
+    root.querySelectorAll('[data-locked]').forEach((b) => b.addEventListener('click', () => showToast(b.dataset.locked)));
     root.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       switch (b.dataset.act) {
@@ -1468,7 +1510,11 @@
           if (open) { st[open.id] = 'done'; patchHome(); }
           break;
         }
-        case 'open-profile': set({ view: 'profile', switcherOpen: false }); window.scrollTo(0, 0); break;
+        case 'open-profile':
+          // Leaving Consent & privacy with ticks not saved → ask first.
+          if (state.view === 'consent' && consentDirty() && !window.confirm(T('consent.leaveUnsaved', 'Leave without saving your changes?'))) break;
+          state.consentPick = null; state.consentSaved = false;
+          set({ view: 'profile', switcherOpen: false }); window.scrollTo(0, 0); break;
         case 'open-consent': state.consentPick = null; set({ view: 'consent', switcherOpen: false }); window.scrollTo(0, 0); break;
         case 'consent-save': {
           const cfg = API.consentConfig(), pick = state.consentPick || {};
@@ -1476,6 +1522,8 @@
           if (gated && !cfg.items.every((it) => !it.required || pick[it.id])) return;
           API.saveConsent(PARENT_EMAIL, pick);
           state.consentPick = null;
+          // From the profile: stay put and say "Saved ✓" (it used to jump away silently).
+          if (!gated && state.view === 'consent') { state.consentSaved = true; set({ switcherOpen: false }); break; }
           set({ view: gated || state.view !== 'consent' ? 'phases' : 'profile', switcherOpen: false });
           window.scrollTo(0, 0);
           break;
@@ -1502,11 +1550,11 @@
     I18N.wire(root);   // language change → reload in the new language
     root.querySelectorAll('[data-consentall]').forEach((cb) => cb.addEventListener('change', () => {
       const all = {}; API.consentConfig().items.forEach((it) => { all[it.id] = cb.checked; });
-      state.consentPick = all; render();
+      state.consentPick = all; state.consentSaved = false; render();
     }));
     root.querySelectorAll('[data-consent]').forEach((cb) => cb.addEventListener('change', () => {
       state.consentPick = Object.assign({}, state.consentPick, { [cb.dataset.consent]: cb.checked });
-      render();
+      state.consentSaved = false; render();
     }));
 
     // assessment cards cycle pending → progress → done → pending

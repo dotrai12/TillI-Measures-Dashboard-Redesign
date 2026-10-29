@@ -32,12 +32,16 @@
   // ---------- boot: who's already signed in on this device? ----------
   function boot() {
     if (!A) { app.innerHTML = '<div class="as-wrap"><div class="as-card narrow"><p>Assessments are unavailable right now.</p></div></div>'; return; }
-    var own = readJSON(ASSESS_KEY);
+    var own = readJSON(ASSESS_KEY), dash = readJSON(SESSION_KEY);
+    // Opened from a teacher's dashboard (?via=dashboard) → that teacher, even if
+    // another teacher's sign-in to this page is still left on the device.
+    var fromDash = /[?&]via=dashboard(&|$)/.test(location.search) && dash && dash.email;
+    if (fromDash && own && String(own.email || '').toLowerCase() !== String(dash.email).toLowerCase()) { writeJSON(ASSESS_KEY, null); own = null; }
+    if (fromDash) { var mine = A.teacherSchools(dash.email); if (mine.length === 1) return signedIn(mine[0], dash.email, true); }
     if (own && own.email && own.school_id && A.isTeacherAt(own.email, own.school_id)) return signedIn(own.school_id, own.email, false);
     // A teacher dashboard already open on this device → skip the code + email.
     // Teaching at more than one school → ask for the code (it says which
     // school they're at), but still skip the email.
-    var dash = readJSON(SESSION_KEY);
     if (dash && dash.email) {
       var ids = A.teacherSchools(dash.email);
       if (ids.length === 1) return signedIn(ids[0], dash.email, true);
@@ -133,7 +137,10 @@
           : x.state === 'locked' ? 'Opens once “' + x.after + '” is done' : x.state === 'done' ? 'Done' : x.startedMode ? 'Started — finish it here' : 'Ready';
         return '<span class="ui-chip ' + cls + '" title="' + esc(tip) + '">' + (flag ? '⚑ ' : x.state === 'done' ? '✓ ' : '') + esc(x.name) + '</span>';
       }).join('');
-      var btn = next ? '<button class="btn btn-primary sm" data-start="' + esc(st.student_id) + '" data-item="' + esc(next.id) + '">' + (next.startedMode ? 'Continue ' : 'Start ') + esc(next.name) + '</button>'
+      // "Continue" says who started it and when, so an unfinished run isn't a mystery.
+      var startedLine = next && next.startedMode && next.startedAt
+        ? '<small class="as-started">Started by ' + esc(next.startedBy === S.email ? 'you' : (A.displayName ? A.displayName(next.startedBy, S.school.school_id) : next.startedBy)) + ' · ' + esc(new Date(next.startedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })) + '</small>' : '';
+      var btn = next ? '<span class="as-go"><button class="btn btn-primary sm" data-start="' + esc(st.student_id) + '" data-item="' + esc(next.id) + '">' + (next.startedMode ? 'Continue ' : 'Start ') + esc(next.name) + '</button>' + startedLine + '</span>'
         : (steps.length && steps.every(function (x) { return x.state === 'done'; }) ? '<span class="ui-chip ok">All done</span>' : '<span class="ui-chip muted">Waiting</span>');
       return '<div class="as-kid"><span class="as-kid-name">' + esc(st.name) + '<small>' + esc(st.student_id) + '</small></span><span class="as-steps">' + chips + '</span>' + btn + '</div>';
     }).join('') || '<p class="as-sub">No children in this class.</p>';
@@ -239,7 +246,7 @@
   var acct = A && A.getAccount && email ? A.getAccount(email) : null;
   var V = { answers: {}, name: (acct && acct.name) || '', err: '', done: false, again: false };
   var label = ss ? (ss.prePost ? A.SESSION_PART_LABEL[part] + ' · ' : '') + ss.name : '';
-  var fmt = function (iso) { try { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } };
+  var fmt = function (iso) { try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return iso; } };
 
   function shell(inner) {
     app.innerHTML = '<header class="as-top"><span class="lockup">Tilli Measures</span><span class="as-who">' + esc(label) + (email ? '<br>' + esc(email) : '') + '</span>' +

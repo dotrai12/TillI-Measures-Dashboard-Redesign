@@ -90,6 +90,13 @@
     { id: 'g-metro',      name: 'Metro Public Schools',   code: 'metro' },
   ];
   GROUPS.forEach(function (g) { g.archived = false; g.archivedAt = null; });
+  // Groups made with "＋ New group…" are kept in this browser so they (and the
+  // schools placed in them) survive a reload. SERVER-SIDE: a real groups table.
+  var GROUPS_KEY = 'tilliMeasures.org.groups';
+  try { (JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]') || []).forEach(function (g) { if (g && g.id && !GROUPS.some(function (x) { return x.id === g.id; })) GROUPS.push(g); }); } catch (e) { /* storage blocked — seed groups only */ }
+  function saveCreatedGroups() {
+    try { localStorage.setItem(GROUPS_KEY, JSON.stringify(GROUPS.filter(function (g) { return g.created; }))); } catch (e) { /* storage blocked */ }
+  }
 
   // Build a plausible grades/sections tree for a school of `n` students.
   function makeStructure(r, n) {
@@ -396,11 +403,14 @@
     var local = String(acct.email || '').split('@')[0].replace(/[._-]+/g, ' ').trim();
     var created = acct.createdAt ? new Date(acct.createdAt) : TODAY;
     var expires = new Date(created.getTime() + 14 * DAY);
+    // The invited person's own name (from the invite), not one made from the email;
+    // "Activated" once they've set their own password (mustReset cleared).
     return {
       id: 'inv-acct-' + String(acct.email || '').toLowerCase(),
-      name: TITLES(local) || acct.email, email: acct.email, role: acct.role || 'School Admin',
+      name: acct.name || TITLES(local) || acct.email, email: acct.email, role: acct.role || 'School Admin',
       schoolId: acct.school_id || null, groupId: acct.group_id || null,
-      status: acct.status === 'active' ? 'Activated' : 'Account Created',
+      grade: acct.grade || '', section: acct.section || '',
+      status: acct.status === 'active' || acct.mustReset === false ? 'Activated' : 'Account Created',
       delivery: 'Email sent', created: iso(created), expires: iso(expires), real: !!acct.createdAt,
     };
   }
@@ -951,6 +961,19 @@
       return { name: u.name, email: u.email, role: u.role === 'coordinator' ? 'School Admin' : 'Teacher',
         schoolId: id, sections: u.section_id ? [secName(u.section_id)].filter(Boolean) : [] };
     });
+    // Plus teachers who joined with the code (no staff row yet) and people invited
+    // who haven't signed in — so nobody working at the school is missing here.
+    var seenStaff = {}; staff_users.forEach(function (u) { seenStaff[String(u.email || '').toLowerCase()] = 1; });
+    (API.teachersFor ? API.teachersFor(id) : []).forEach(function (t) {
+      var e = String(t.email || '').toLowerCase(); if (!e || seenStaff[e]) return; seenStaff[e] = 1;
+      staff_users.push({ name: t.name, email: t.email, role: 'Teacher', schoolId: id, sections: t.section_ids.map(secName).filter(Boolean) });
+    });
+    (API.listAccounts ? API.listAccounts() : []).forEach(function (a) {
+      var e = String(a.email || '').toLowerCase(); if (!e || seenStaff[e] || a.school_id !== id || !a.mustReset || !/teacher|admin/i.test(a.role || '')) return;
+      seenStaff[e] = 1;
+      staff_users.push({ name: a.name || a.email, email: a.email, role: /admin/i.test(a.role) ? 'School Admin' : 'Teacher', schoolId: id, invited: true,
+        sections: [[a.grade, a.section].filter(Boolean).join(' ')].filter(Boolean) });
+    });
     return {
       school: s, structure: s.structure, assessment_progress: phaseState,
       flags: schoolFlags(s),
@@ -1013,8 +1036,8 @@
     var id = 'g-' + normName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + GROUPS.length;
     var base = normName(name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'group', code = base, n = 1;
     while (GROUPS.some(function (x) { return x.code === code; })) code = base + '-' + (++n);
-    var g = { id: id, name: name, code: code, archived: false, archivedAt: null };
-    GROUPS.push(g);
+    var g = { id: id, name: name, code: code, archived: false, archivedAt: null, created: true };
+    GROUPS.push(g); saveCreatedGroups();
     return g;
   }
   // Real "POST /schools" for the Add-School wizard. Builds a live SCHOOLS

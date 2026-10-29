@@ -103,6 +103,7 @@
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><line x1="10" y1="11" x2="10" y2="16"/><line x1="14" y1="11" x2="14" y2="16"/></svg>',
     resend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/></svg>',
+    layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="m2 13 10 5 10-5"/><path d="m2 18 10 5 10-5"/></svg>',
     revoke: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     controlroom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><line x1="12" y1="12" x2="16" y2="10"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>',
     analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="10" width="3" height="8"/><rect x="10.5" y="5" width="3" height="13"/><rect x="16" y="13" width="3" height="5"/></svg>',
@@ -238,9 +239,27 @@
   // Small live counts on nav items (open issues, expiring invites).
   function navBadge(key) {
     if (key === 'issues') { var n = ORG.issues.filter(function (i) { return i.status === 'open'; }).length; return n || ''; }
-    // Children a teacher added past their class size, waiting for approval (any school).
-    if (key === 'schools' && !GROUP && window.TilliAPI && window.TilliAPI.pendingStudents) return window.TilliAPI.pendingStudents().length || '';
+    // Everything waiting on the Tilli team at any school: children past their class size,
+    // calendars to review, teachers waiting for a class (the first dot on the trail).
+    if (key === 'schools' && !GROUP) return needsYou().total || '';
     return '';
+  }
+  // "Needs you" dot trail: sidebar Schools → the school's row → its tab → the card.
+  // schoolId omitted = every school. Each part clears once it's handled.
+  function needsYou(schoolId) {
+    var A = window.TilliAPI, out = { students: 0, calendar: 0, classes: 0, total: 0 };
+    if (!A || GROUP) return out;
+    out.students = A.pendingStudents ? A.pendingStudents(schoolId).length : 0;
+    out.calendar = A.calendarQueue ? A.calendarQueue().filter(function (c) { return !schoolId || c.school_id === schoolId; }).length : 0;
+    out.classes = A.classRequests ? A.classRequests(schoolId).length : 0;
+    out.total = out.students + out.calendar + out.classes;
+    return out;
+  }
+  var NEEDS_TAB = { students: 'students', calendar: 'assessments', classes: 'staff' };
+  function needsDot(title) { return '<span class="tl-needs-dot" title="' + esc(title) + '" aria-label="' + esc(title) + '"></span>'; }
+  function needsTitle(n) {
+    return [n.calendar ? 'calendar to review' : '', n.students ? n.students + ' ' + (n.students === 1 ? 'child' : 'children') + ' to approve' : '', n.classes ? n.classes + ' ' + (n.classes === 1 ? 'teacher' : 'teachers') + ' waiting for a class' : '']
+      .filter(Boolean).join(' · ');
   }
 
   // Group-admin console for an archived group: nothing to manage, just say so.
@@ -687,7 +706,8 @@
     if (view === 'grid') return '<div class="tl-school-grid">' + rows.map(schoolCard).join('') + '</div>';
     return '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Location</th><th>Grades</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
       rows.map(function (s) {
-        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + esc(s.name) + ' ' + issueChip(s.id, ORG.server.openIssueCount(s.id)) + '<small>' + esc(s.type) + ' · ' + esc(s.code) + '</small></td>' +
+        var nd = needsYou(s.id);
+        return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + (nd.total ? needsDot('Needs you: ' + needsTitle(nd)) : '') + esc(s.name) + ' ' + issueChip(s.id, ORG.server.openIssueCount(s.id)) + '<small>' + esc(s.type) + ' · ' + esc(s.code) + '</small></td>' +
           '<td>' + esc(s.groupName) + '</td><td>' + esc([s.city, s.country].filter(Boolean).join(', ') || '—') + '</td><td class="tl-num">' + s.gradeCount + '</td><td class="tl-num">' + s.students.toLocaleString() + '</td>' +
           '<td class="tl-num">' + s.staff + '</td><td class="r text-muted">›</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -840,10 +860,10 @@
   // cell follows the check-in rule: Completed = every student in the teacher's
   // sections rated; In progress = at least one; Not started = none.
   var TEACHER_FIRSTS = ['Anita', 'Deepa', 'Farah', 'Kavitha', 'Lakshmi', 'Meena', 'Nalini', 'Priya', 'Revathi', 'Sunita', 'Tharushi', 'Nadeesha', 'Ishara', 'Rekha', 'Shalini', 'Geetha'];
-  var TEACHERLOG_TONE = { 'Completed': 'ok', 'In progress': 'warn', 'Not started': 'danger', 'No students': 'muted' };
+  var TEACHERLOG_TONE = { 'Completed': 'ok', 'In progress': 'warn', 'Not started': 'danger', 'Waiting for a class': 'muted', 'Not open yet': 'muted' };
   var TL_PHASE_ORDER = ['Baseline', 'Midline', 'Endline'];
   function teacherCell(done, expected) {
-    var st = !expected ? 'No students' : done >= expected ? 'Completed' : done > 0 ? 'In progress' : 'Not started';
+    var st = !expected ? 'Waiting for a class' : done >= expected ? 'Completed' : done > 0 ? 'In progress' : 'Not started';
     return { status: st, done: done, expected: expected };
   }
   // → { cols:[{label, phase}], teachers:[{name, email, sections[], students, cells[]}], live:bool }
@@ -891,8 +911,9 @@
       teachers.forEach(function (t) {
         var r = reps[String(t.email || '').toLowerCase()] || {};
         t.cells = selfCols.map(function (c) {
-          var at = /post/i.test(c.item.name) ? r.post : r.pre;
-          return at ? { status: 'Completed', done: 1, expected: 1, at: at } : { status: 'Not started', done: 0, expected: 1 };
+          var post = /post/i.test(c.item.name), at = post ? r.post : r.pre;
+          // Post-training opens once the pre-training survey is done.
+          return at ? { status: 'Completed', done: 1, expected: 1, at: at } : { status: post && !r.pre ? 'Not open yet' : 'Not started', done: 0, expected: 1 };
         }).concat(apiDeps.filter(function (x) { return (x.assessments || []).some(function (a) { return !a.perTeacher; }); }).map(function (x) {
           var c = API.completionStats(s.id, x.phase, 'Teacher', t.ids || []); return teacherCell(c.done, c.expected);
         }));
@@ -916,20 +937,21 @@
     if (!tr.cols.length) { mount.innerHTML = '<div class="ui-card mt-gap"><div class="ui-empty">No teacher assessments deployed for this school yet.</div></div>'; return; }
     if (!tr.teachers.length) { mount.innerHTML = '<div class="ui-card mt-gap"><div class="ui-empty">No teachers on record for this school yet.</div></div>'; return; }
     var summary = tr.cols.map(function (c, ci) {
-      var counted = tr.teachers.filter(function (t) { return t.cells[ci].status !== 'No students'; });
+      var counted = tr.teachers.filter(function (t) { return t.cells[ci].status !== 'Waiting for a class'; });
       var done = counted.filter(function (t) { return t.cells[ci].status === 'Completed'; }).length;
-      return '<span class="tl-tlog-sum"><b>' + done + '</b> of ' + counted.length + ' teachers done with ' + esc(c.label) + '</span>';
+      return '<span class="tl-tlog-sum"><b>' + done + '</b> of ' + counted.length + ' ' + (counted.length === 1 ? 'teacher' : 'teachers') + ' done with ' + esc(c.label) + '</span>';
     }).join('');
     var head = '<tr><th>Teacher</th><th>Sections</th>' + tr.cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr>';
     var rows = tr.teachers.map(function (t) {
-      return '<tr><td class="name">' + esc(t.name) + '<small>' + esc(t.email) + '</small></td><td>' + esc(t.sections.join(', ') || '—') + '<small>' + t.students + ' students</small></td>' +
+      var nm = t.name && t.name.indexOf('@') < 0 ? t.name : 'Name not given yet';
+      return '<tr><td class="name">' + esc(nm) + '<small>' + esc(t.email) + '</small></td><td>' + esc(t.sections.join(', ') || 'Waiting for a class') + '<small> · ' + t.students + ' ' + (t.students === 1 ? 'student' : 'students') + '</small></td>' +
         t.cells.map(function (c) {
           return '<td>' + statusPill(c.status === 'In progress' ? 'In progress · ' + c.done + '/' + c.expected : c.status, TEACHERLOG_TONE[c.status]) +
             (c.at ? '<small>' + esc(fmtJoined(ORG.iso(c.at))) + '</small>' : '') + '</td>';
         }).join('') + '</tr>';
     }).join('');
     mount.innerHTML = '<div class="ui-card mt-gap">' +
-      '<div class="ui-mod-h"><div><h3 class="ui-mod-title">Teacher assessment log</h3><p class="ui-mod-note">' + tr.teachers.length + ' teachers · ' +
+      '<div class="ui-mod-h"><div><h3 class="ui-mod-title">Teacher assessment log</h3><p class="ui-mod-note">' + tr.teachers.length + ' ' + (tr.teachers.length === 1 ? 'teacher' : 'teachers') + ' · ' +
         (tr.live ? 'live completion from the teacher app' : 'demo data') + ' · Completed = every student in their sections rated.</p></div>' +
         '<button class="btn btn-outline btn-sm" data-tlog-csv>↓ CSV</button></div>' +
       '<div class="tl-tlog-sums">' + summary + '</div>' +
@@ -974,6 +996,365 @@
     mount.innerHTML = '<div class="ui-card mt-gap">' +
       '<div class="ui-mod-h"><div><h3 class="ui-mod-title">Student assessment log</h3><p class="ui-mod-note">' + roster.length + ' students · ' + cols.length + ' student-facing assessment' + (cols.length === 1 ? '' : 's') + ' · <span class="ui-chip ok">Completed</span> <span class="ui-chip warn">In Progress</span> <span class="ui-chip danger">Not Started</span></p></div></div>' +
       '<div class="ui-tablewrap"><table class="ui-table" style="min-width:' + (420 + cols.length * 190) + 'px"><thead>' + head + '</thead><tbody>' + bodyRows + '</tbody></table></div></div>';
+  }
+
+  // ---- Assessment log (school hub → Assessments → Logs) — live / created schools ----
+  // One card: Phase tabs (each says its state) · Show Teachers | Children · All /
+  // Still to finish · CSV, then search, Class and (multi-board schools) Board filters.
+  // Cells say only ✓ Done / In progress / Missed / Yet to complete; the date is in the
+  // hover / tap tip and in the CSV. Midline and Endline show only the phase just
+  // before them. Search looks in every class and board, whatever is picked.
+  var LOG_PHASES = ['Baseline', 'Midline', 'Endline'];
+  var LOG_STATE = {};       // school id -> { phase, view, only, q, cls, board, open }
+  var LOG_ROWS = 12;        // children shown per class before "Show all"
+  var LOG_SEARCH_CAP = 30;  // search results shown at once
+  var LOG_COPY_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>';
+  function logDay(v, year) {
+    if (!v) return '';
+    var d = typeof v === 'number' ? new Date(v) : new Date(String(v).slice(0, 10) + 'T00:00:00');
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + (year ? ' ' + d.getFullYear() : '');
+  }
+  function kidsWord(n) { return n + (n === 1 ? ' child' : ' children'); }
+  function joinAnd(list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1]; }
+  // "Pre-training" → "Pre-training survey"; other items keep their name.
+  function logItemLabel(name) { return /training$/i.test(name) ? name + ' survey' : name; }
+  function logPhaseInfo(sid, phase) {
+    var deps = window.TilliAPI.getDeployments(sid).filter(function (x) { return x.phase === phase && x.deployed !== false && !x.notRun; });
+    if (!deps.length) return { state: 'none', label: 'not yet', lead: phase + ' · not deployed yet' };
+    var latest = function (list) { return list.map(function (x) { return x.end; }).filter(Boolean).sort().pop() || ''; };
+    var live = deps.filter(function (x) { return x.status === 'Live'; });
+    if (live.length) { var e = latest(live); return { state: 'live', label: '● live' + (e ? ' · closes ' + logDay(e) : ''), end: e, lead: phase + ' · live' + (e ? ', closes ' + logDay(e) : '') }; }
+    var sch = deps.filter(function (x) { return x.status === 'Scheduled'; });
+    if (sch.length) { var s0 = sch.map(function (x) { return x.start; }).filter(Boolean).sort()[0] || ''; return { state: 'scheduled', label: s0 ? 'opens ' + logDay(s0) : 'scheduled', start: s0, lead: phase + ' · opens ' + logDay(s0) }; }
+    var e2 = latest(deps);
+    return { state: 'ended', label: '✓ done', end: e2, lead: phase + ' · closed' + (e2 ? ' ' + logDay(e2) : '') };
+  }
+  function logCellHtml(c) {
+    var tip = esc(c.tip || '');
+    return '<span class="tl-lg-s ' + c.tone + '" tabindex="0" title="' + tip + '" data-tip="' + tip + '">' + esc(c.word) + '</span>' +
+      (c.pct != null ? '<span class="tl-lg-prog" aria-hidden="true"><i style="width:' + c.pct + '%"></i></span>' : '');
+  }
+  function logCsvWord(c) { return c ? String(c.word).replace(/^✓\s*/, '') : ''; }
+
+  function renderAssessLog(s, mount) {
+    var API = window.TilliAPI, sid = s.id;
+    var info = {}; LOG_PHASES.forEach(function (p) { info[p] = logPhaseInfo(sid, p); });
+    var st = LOG_STATE[sid];
+    // A reload keeps the phase, view, search and filters (per tab).
+    if (!st) { try { st = LOG_STATE[sid] = JSON.parse(sessionStorage.getItem('tl-log-' + sid) || 'null'); } catch (e) { st = null; } }
+    if (st && LOG_PHASES.indexOf(st.phase) < 0) st = null;
+    if (!st) {
+      // Open on the live phase, else the latest closed one.
+      var pick = LOG_PHASES.filter(function (p) { return info[p].state === 'live'; })[0] ||
+        LOG_PHASES.slice().reverse().filter(function (p) { return info[p].state === 'ended'; })[0] || 'Baseline';
+      st = LOG_STATE[sid] = { phase: pick, view: 'teachers', only: false, q: '', cls: 'all', board: 'all', open: {} };
+    }
+    var phase = st.phase, pi = info[phase], log = API.phaseLog(sid, phase);
+    // Only the phase just before this one (Endline shows Midline, never Baseline).
+    var prev = null;
+    for (var k = LOG_PHASES.indexOf(phase) - 1; k >= 0 && !prev; k--) if (info[LOG_PHASES[k]].state !== 'none') prev = LOG_PHASES[k];
+    var prevLog = prev ? API.phaseLog(sid, prev) : null;
+
+    var boards = API.boardsForSchool(sid), multiBoard = boards.length > 1;
+    if (!multiBoard) st.board = 'all';
+    var names = {}, whoName = function (email) { return email ? (names[email] || (names[email] = API.displayName(email, sid))) : ''; };
+    var logName = function (t) { return t.name && t.name.indexOf('@') < 0 ? t.name : 'Name not given yet'; };
+    var teachers = API.teachersFor(sid), secTeacher = {};
+    teachers.forEach(function (t) { t.section_ids.forEach(function (id) { (secTeacher[id] = secTeacher[id] || []).push(logName(t)); }); });
+    var baseIdx = function (sec) { var i = API.BASE_GRADES.indexOf(sec.base_grade || API.inferBaseGrade(sec.grade)); return i < 0 ? 999 : i; };
+    var secs = API.sectionsForSchool(sid).map(function (sec) {
+      return Object.assign(sec, { board: API.boardOfSection(sid, sec.section_id), label: sec.grade + (sec.section ? ' · ' + sec.section : ''), teacher: (secTeacher[sec.section_id] || []).join(', ') });
+    }).sort(function (a, b) { return baseIdx(a) - baseIdx(b) || String(a.grade).localeCompare(String(b.grade)) || String(a.section).localeCompare(String(b.section), undefined, { numeric: true }); });
+    var secById = {}, secPos = {};
+    secs.forEach(function (x, i) { secById[x.section_id] = x; secPos[x.section_id] = i; });
+    var studs = API.studentsForSchool(sid), nKids = {};
+    studs.forEach(function (x) { nKids[x.section_id] = (nKids[x.section_id] || 0) + 1; });
+
+    // Filters: Board narrows the Class list; a class the board no longer covers resets to All.
+    var boardOk = function (sec) { return st.board === 'all' || (st.board === 'none' ? !sec.board : sec.board === st.board); };
+    var clsOk = function (sec) { return st.cls === 'all' || (st.cls.indexOf('g:') === 0 ? sec.grade === st.cls.slice(2) : sec.section_id === st.cls.slice(2)); };
+    if (st.cls !== 'all' && !secs.some(function (sec) { return boardOk(sec) && clsOk(sec); })) st.cls = 'all';
+    var inScope = function (sec) { return sec ? boardOk(sec) && clsOk(sec) : st.cls === 'all' && st.board === 'all'; };
+    var q = st.q.trim().toLowerCase(), searching = !!q;
+    var vis = secs.filter(boardOk), grades = [];
+    vis.forEach(function (sec) { var g = grades.filter(function (x) { return x.grade === sec.grade; })[0]; if (!g) grades.push(g = { grade: sec.grade, secs: [] }); g.secs.push(sec); });
+    var sumKids = function (list) { return list.reduce(function (n, sec) { return n + (nKids[sec.section_id] || 0); }, 0); };
+    var opt = function (v, txt, on) { return '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(txt) + '</option>'; };
+    var clsLabel = 'All grades';
+    var clsOpts = opt('all', 'All grades · ' + kidsWord(sumKids(vis)), st.cls === 'all') + grades.map(function (g) {
+      if (st.cls === 'g:' + g.grade) clsLabel = g.grade + ' · all sections';
+      // "Whole grade" only where a grade has more than one section.
+      return (g.secs.length > 1 ? opt('g:' + g.grade, g.grade + ' · all sections · ' + kidsWord(sumKids(g.secs)), st.cls === 'g:' + g.grade) : '') +
+        g.secs.map(function (sec) {
+          if (st.cls === 's:' + sec.section_id) clsLabel = sec.label;
+          return opt('s:' + sec.section_id, (g.secs.length > 1 ? '\u2003' : '') + sec.label + ' · ' + kidsWord(nKids[sec.section_id] || 0) + (sec.teacher ? ' · ' + sec.teacher : ''), st.cls === 's:' + sec.section_id);
+        }).join('');
+    }).join('');
+    var boardOpts = multiBoard ? opt('all', 'All boards', st.board === 'all') + boards.map(function (b) { return opt('b:' + b, b, st.board === b); }).join('') +
+      (secs.some(function (sec) { return !sec.board; }) ? opt('none', 'No board yet', st.board === 'none') : '') : '';
+    var scopeName = st.cls !== 'all' ? clsLabel : st.board !== 'all' ? (st.board === 'none' ? 'grades with no board yet' : st.board) : '';
+    var searchBanner = function (n, capped) {
+      return '<div class="tl-lg-search" role="status">Searching every class' + (multiBoard ? ' and board' : '') + ' for “' + esc(st.q.trim()) + '” · ' + n + ' found' +
+        (capped ? ' · showing the first ' + LOG_SEARCH_CAP + ', type more of the name' : '') + '<span class="tl-lg-grow"></span>' +
+        '<button type="button" class="btn-link" data-lg-clear>Clear search' + (scopeName ? ' · back to ' + esc(scopeName) : '') + '</button></div>';
+    };
+
+    // ---------- Children: every per-child part of the phase, at school then at home ----------
+    function childrenView() {
+      if (!log.items.length) return { empty: 'Nothing for children is deployed in ' + phase + (pi.state === 'none' ? ' yet.' : '.') };
+      if (!studs.length) return { empty: 'No children on record at ' + s.name + ' yet.' };
+      var order = log.items.map(function (it, i) { return i; }).sort(function (a, b) {
+        var A = log.items[a], B = log.items[b]; return ((A.mode === 'home') - (B.mode === 'home')) || A.pos - B.pos;
+      });
+      var items = order.map(function (i) { return log.items[i]; });
+      var linked = {}; API.parentLinkedIds(sid).forEach(function (id) { linked[id] = 1; });
+      var prevEnd = prev ? info[prev].end : '', prevEnded = prev && info[prev].state === 'ended';
+      function kidCell(e, it) {
+        var lane = log.lanes[it.audience] || {};
+        if (e.state === 'done') { var by = whoName(e.by); return { k: 'done', word: '✓ Done', tone: 'ok', tip: 'Done on ' + logDay(e.at) + (by ? ' · ' + by : ''), at: e.at }; }
+        if (lane.status === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(lane.start) };
+        if (lane.status === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: 'Not done before ' + phase + ' closed on ' + logDay(lane.end) };
+        if (e.state === 'started') return { k: 'started', word: 'In progress', tone: 'warn', tip: 'Started on ' + logDay(e.at) + ', not finished yet', at: e.at };
+        if (e.state === 'locked') return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Opens after ' + e.after };
+        return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Not started yet' };
+      }
+      var rows = studs.map(function (stu) {
+        var ent = log.students[stu.student_id] || [];
+        var cells = order.map(function (i) { return kidCell(ent[i] || { state: 'open' }, log.items[i]); });
+        var nOf = function (kk) { return cells.filter(function (c) { return c.k === kk; }).length; };
+        var nDone = nOf('done'), nMiss = nOf('missed');
+        var overall = nDone === cells.length ? { word: 'All done', tone: 'ok' }
+          : nMiss ? { word: nMiss + (nMiss === 1 ? ' part missed' : ' parts missed'), tone: 'danger' }
+          : nOf('notopen') === cells.length ? { word: 'Not open yet', tone: 'muted' }
+          : (nDone || nOf('started')) ? { word: 'In progress', tone: 'warn' } : { word: 'Yet to complete', tone: 'todo' };
+        var line = '';
+        if (prevLog && prevLog.items.length) {
+          var pe = prevLog.students[stu.student_id] || [], pd = pe.filter(function (e) { return e.state === 'done'; }).length, left = prevLog.items.length - pd;
+          line = !left ? prev + ' ✓'
+            : (!pd && stu.createdAt && prevEnd && stu.createdAt > new Date(prevEnd + 'T23:59:59').getTime()) ? 'Joined after ' + prev
+            : prev + ': ' + left + (prevEnded ? ' missed' : ' to finish');
+        } else line = linked[String(stu.student_id).toUpperCase()] ? 'Parent linked' : 'No parent linked yet';
+        return { stu: stu, sec: secById[stu.section_id] || null, name: stu.name || ((stu.first || '') + ' ' + (stu.last || '')).trim(), adm: stu.student_id,
+          cells: cells, overall: overall, line: line, finished: nDone === cells.length };
+      }).sort(function (a, b) {
+        var pa = a.sec ? secPos[a.sec.section_id] : 9999, pb = b.sec ? secPos[b.sec.section_id] : 9999;
+        return pa - pb || a.name.localeCompare(b.name);
+      });
+      var scoped = rows.filter(function (r) {
+        return searching ? (r.name.toLowerCase().indexOf(q) >= 0 || String(r.adm).toLowerCase().indexOf(q) >= 0) : inScope(r.sec);
+      });
+      var unfinished = scoped.filter(function (r) { return !r.finished; }).length;
+      var shown = st.only ? scoped.filter(function (r) { return !r.finished; }) : scoped;
+      var nCols = items.length + 2, nSchool = items.filter(function (it) { return it.mode !== 'home'; }).length, nHome = items.length - nSchool;
+      var rowHtml = function (r, sub) {
+        return '<tr><td class="who"><b>' + esc(r.name) + '</b><small>' + esc(sub) + '</small></td>' + r.cells.map(function (c) { return '<td>' + logCellHtml(c) + '</td>'; }).join('') +
+          '<td><span class="tl-lg-pill ' + r.overall.tone + '">' + esc(r.overall.word) + '</span></td></tr>';
+      };
+      var body = '';
+      if (searching) {
+        body = shown.slice(0, LOG_SEARCH_CAP).map(function (r) { return rowHtml(r, (r.sec ? r.sec.label + ' · ' : '') + r.adm + ' · ' + r.line); }).join('');
+      } else {
+        var groups = [];
+        shown.forEach(function (r) { var id = r.sec ? r.sec.section_id : '-'; var g = groups[groups.length - 1]; if (!g || g.id !== id) groups.push(g = { id: id, sec: r.sec, rows: [] }); g.rows.push(r); });
+        body = groups.map(function (g) {
+          var all = scoped.filter(function (r) { return (r.sec ? r.sec.section_id : '-') === g.id; });
+          var cnt = function (fn) { return all.filter(fn).length; };
+          var nd = cnt(function (r) { return r.finished; }), np = cnt(function (r) { return r.overall.tone === 'warn'; }), nt = cnt(function (r) { return r.overall.tone === 'todo'; }), nm = cnt(function (r) { return r.overall.tone === 'danger'; });
+          var head = '<tr class="grp"><td colspan="' + nCols + '">' + esc(g.sec ? g.sec.label : 'No class') + (multiBoard && g.sec && g.sec.board ? ' · ' + esc(g.sec.board) : '') +
+            ' <span>· ' + esc(g.sec && g.sec.teacher ? g.sec.teacher : 'No teacher yet') + ' · ' + nd + ' of ' + all.length + ' done' +
+            (np ? ' · ' + np + ' in progress' : '') + (nm ? ' · ' + nm + ' missed parts' : '') + (nt ? ' · ' + nt + ' yet to complete' : '') + '</span></td></tr>';
+          var open = st.open[g.id], cut = !open && g.rows.length > LOG_ROWS;
+          var list = cut ? g.rows.slice(0, LOG_ROWS) : g.rows;
+          var more = g.rows.length > LOG_ROWS ? '<tr class="more"><td colspan="' + nCols + '"><span>Showing <b>1–' + list.length + '</b> of ' + g.rows.length + ' in ' + esc(g.sec ? g.sec.label : 'this group') + '</span>' +
+            '<button type="button" class="btn btn-outline btn-sm" data-lg-open="' + esc(g.id) + '">' + (cut ? 'Show all ' + g.rows.length : 'Show fewer') + '</button></td></tr>' : '';
+          return head + list.map(function (r) { return rowHtml(r, r.adm + ' · ' + r.line); }).join('') + more;
+        }).join('');
+      }
+      var table = shown.length ? '<div class="tl-lg-wrap">' + (searching ? searchBanner(shown.length, shown.length > LOG_SEARCH_CAP) : '') +
+        '<table class="tl-lg-t"><thead><tr class="place"><th></th>' +
+          (nSchool ? '<th colspan="' + nSchool + '" class="span"><span>At school</span></th>' : '') + (nHome ? '<th colspan="' + nHome + '" class="span"><span>At home</span></th>' : '') + '<th></th></tr>' +
+          '<tr><th>Child</th>' + items.map(function (it) { return '<th>' + esc(logItemLabel(it.name)) + '</th>'; }).join('') + '<th>Overall</th></tr></thead><tbody>' + body + '</tbody></table></div>'
+        : (searching ? '<div class="tl-lg-wrap">' + searchBanner(0) + '</div>' : '') + '<div class="ui-empty">' + (st.only && scoped.length ? 'Everyone here has finished every part.' : searching ? 'No child matches “' + esc(st.q.trim()) + '”.' : 'No children in this class yet.') + '</div>';
+      var doneN = scoped.length - unfinished;
+      return {
+        total: studs.length, unfinished: unfinished, body: table,
+        sub: pi.lead + ' · ' + (searching ? 'search results across every class.' : doneN + ' of ' + kidsWord(scoped.length) + (scopeName ? ' in ' + scopeName : '') + ' finished every part' + (pi.state === 'live' ? ' so far.' : '.')),
+        csv: {
+          headers: ['Class'].concat(multiBoard ? ['Board'] : []).concat(['Child', 'Admission #']).concat(prev ? [prev] : [])
+            .concat([].concat.apply([], items.map(function (it) { var l = logItemLabel(it.name) + ' (' + (it.mode === 'home' ? 'at home' : 'at school') + ')'; return [l, l + ' · date']; }))).concat(['Overall']),
+          rows: shown.map(function (r) {
+            return [r.sec ? r.sec.label : ''].concat(multiBoard ? [r.sec && r.sec.board || ''] : []).concat([r.name, r.adm]).concat(prev ? [r.line] : [])
+              .concat([].concat.apply([], r.cells.map(function (c) { return [logCsvWord(c), c.at ? logDay(c.at, true) : '']; }))).concat([r.overall.word]);
+          })
+        }
+      };
+    }
+
+    // ---------- Teachers: their own surveys, then observations for their class ----------
+    function teachersView() {
+      if (!teachers.length) return { empty: 'No teachers have joined ' + s.name + ' yet.' };
+      var lane = API.getDeployments(sid).filter(function (x) { return x.phase === phase && x.audience === 'Teacher'; })[0];
+      var laneSt = lane ? lane.status : 'Not deployed';
+      var selfItems = ((lane && lane.assessments) || []).filter(function (a) { return a.perTeacher; });
+      var obsIdx = log.items.map(function (it, i) { return it.audience === 'Teacher' ? i : -1; }).filter(function (i) { return i >= 0; });
+      var prevIdx = prevLog ? prevLog.items.map(function (it, i) { return it.audience === 'Teacher' ? i : -1; }).filter(function (i) { return i >= 0; }) : [];
+      var cols = selfItems.map(function (a) { return { label: logItemLabel(a.name), self: a }; }).concat(obsIdx.length ? [{ label: phase + ' observations', obs: true }] : []);
+      if (!cols.length) return { empty: 'Nothing for teachers is deployed in ' + phase + (pi.state === 'none' ? ' yet.' : '.') };
+      var reps = API.selfReportsFor(sid), reqs = {};
+      API.classRequests(sid).forEach(function (r) { reqs[String(r.email).toLowerCase()] = (r.grade + ' · ' + r.section).replace(/^ · | · $/g, '').trim(); });
+      function selfCell(t, a) {
+        var r = reps[String(t.email).toLowerCase()] || {}, post = /post/i.test(a.name), at = post ? r.post : r.pre;
+        if (at) return { k: 'done', word: '✓ Done', tone: 'ok', tip: 'Done on ' + logDay(at), at: at };
+        if (laneSt === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(lane.start) };
+        if (laneSt === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: 'Not done before ' + phase + ' closed on ' + logDay(lane.end) };
+        if (post && !r.pre) return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Opens once the Pre-training survey is done' };
+        return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Not started yet' };
+      }
+      function obsCell(t, lg, idx, ph) {
+        var ln = lg.lanes.Teacher || {};
+        if (!t.section_ids.length) { var ask = reqs[String(t.email).toLowerCase()]; return { k: 'wait', word: 'Waiting for a class', tone: 'muted', tip: ask ? 'Asked for ' + ask : 'Not placed in a class yet' }; }
+        var kids = studs.filter(function (x) { return t.section_ids.indexOf(x.section_id) >= 0; });
+        if (!kids.length) return { k: 'wait', word: 'No children yet', tone: 'muted', tip: 'Their class has no children on record' };
+        var done = 0, any = 0, last = 0;
+        kids.forEach(function (x) {
+          var e = lg.students[x.student_id] || [], mine = idx.map(function (i) { return e[i] || { state: 'open' }; });
+          var d = mine.filter(function (m) { return m.state === 'done'; });
+          if (d.length === mine.length) done++;
+          if (d.length || mine.some(function (m) { return m.state === 'started'; })) any++;
+          d.forEach(function (m) { if (m.at > last) last = m.at; });
+        });
+        var n = kids.length, of = done + ' of ' + n + ' observed';
+        if (done === n) return { k: 'done', word: '✓ Done', tone: 'ok', tip: 'All ' + n + ' observed · finished ' + logDay(last), at: last };
+        if (ln.status === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(ln.start) };
+        if (ln.status === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: of + ' before ' + ph + ' closed on ' + logDay(ln.end), at: last || null };
+        if (any) return { k: 'started', word: 'In progress', tone: 'warn', tip: of + (last ? ' · last on ' + logDay(last) : ''), pct: Math.round(done * 100 / n), left: n - done, at: last || null };
+        return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Not started yet', left: n };
+      }
+      // Copy-a-reminder text, live phases only: "Hi Ritu, a gentle reminder: your Post-training survey is still to do for Baseline. — Tilli team"
+      function remindText(name, cells) {
+        if (laneSt !== 'Live') return '';
+        var parts = [];
+        cells.forEach(function (c, i) {
+          if (cols[i].self && c.k === 'todo') parts.push('your ' + cols[i].label);
+          if (cols[i].obs && (c.k === 'todo' || c.k === 'started')) parts.push('observations for ' + kidsWord(c.left));
+        });
+        if (!parts.length) return '';
+        var first = name === 'Name not given yet' ? 'there' : name.split(' ')[0];
+        return 'Hi ' + first + ', a gentle reminder: ' + joinAnd(parts) + (parts.length === 1 && /^your /.test(parts[0]) ? ' is' : ' are') + ' still to do for ' + phase + '. — Tilli team';
+      }
+      var rows = teachers.map(function (t) {
+        var name = logName(t), mySecs = t.section_ids.map(function (id) { return secById[id]; }).filter(Boolean);
+        var cells = cols.map(function (c) { return c.obs ? obsCell(t, log, obsIdx, phase) : selfCell(t, c.self); });
+        var ask = reqs[String(t.email).toLowerCase()];
+        return { t: t, name: name, secs: mySecs, cells: cells, prevCell: prevIdx.length ? obsCell(t, prevLog, prevIdx, prev) : null,
+          finished: !cells.some(function (c) { return c.k === 'todo' || c.k === 'started' || c.k === 'missed'; }),
+          cls: mySecs.length ? mySecs.map(function (x) { return x.label + ' · ' + kidsWord(nKids[x.section_id] || 0); }).join(', ') : 'Waiting for a class' + (ask ? ' (' + ask + ')' : ''),
+          remind: remindText(name, cells) };
+      }).sort(function (a, b) {
+        var pa = a.secs.length ? secPos[a.secs[0].section_id] : 9999, pb = b.secs.length ? secPos[b.secs[0].section_id] : 9999;
+        return pa - pb || a.name.localeCompare(b.name);
+      });
+      var scoped = rows.filter(function (r) {
+        if (searching) return r.name.toLowerCase().indexOf(q) >= 0 || String(r.t.email).toLowerCase().indexOf(q) >= 0;
+        return (st.cls === 'all' && st.board === 'all') || r.secs.some(inScope);
+      });
+      var unfinished = scoped.filter(function (r) { return !r.finished; }).length;
+      var shown = st.only ? scoped.filter(function (r) { return !r.finished; }) : scoped;
+      // Tiles: one per column, plus days left while the phase is live.
+      var tiles = cols.map(function (c, i) {
+        var counted = scoped.filter(function (r) { return r.cells[i].k !== 'wait'; }), n = counted.length;
+        var done = counted.filter(function (r) { return r.cells[i].k === 'done'; }).length;
+        var wait = scoped.length - n, part = counted.filter(function (r) { return r.cells[i].k === 'started'; }).length;
+        var note = n && done === n ? 'Everyone’s done' : c.obs ? (wait ? (wait === 1 ? '1 teacher is' : wait + ' teachers are') + ' waiting for a class' : part ? part + ' part-way through' : '')
+          : /post/i.test(c.label) ? 'Opens any time after pre-training' : '';
+        return { label: c.label, big: done, of: 'of ' + n + (n === 1 ? ' teacher' : ' teachers'), pct: n ? Math.round(done * 100 / n) : 0, note: note, tone: 'ok' };
+      });
+      if (pi.state === 'live' && pi.end && lane) {
+        var dayMs = 86400000, today = new Date(localISO(new Date()) + 'T00:00:00').getTime(), end = new Date(pi.end + 'T00:00:00').getTime();
+        var start = lane.start ? new Date(lane.start + 'T00:00:00').getTime() : today, left = Math.max(0, Math.round((end - today) / dayMs));
+        tiles.push({ label: 'Days left', big: left, of: 'until ' + logDay(pi.end), pct: end > start ? Math.round((end - today) * 100 / (end - start)) : 0, note: 'A nudge now saves a scramble at the end', tone: 'time' });
+      }
+      var tilesHtml = '<div class="tl-lg-tiles">' + tiles.map(function (t) {
+        return '<div class="tl-lg-tile"><span class="l">' + esc(t.label) + '</span><span class="n">' + t.big + ' <small>' + esc(t.of) + '</small></span>' +
+          '<span class="bar ' + t.tone + '"><i style="width:' + t.pct + '%"></i></span>' + (t.note ? '<span class="note">' + esc(t.note) + '</span>' : '') + '</div>';
+      }).join('') + '</div>';
+      var list = searching ? shown.slice(0, LOG_SEARCH_CAP) : shown;
+      var table = shown.length ? '<div class="tl-lg-wrap">' + (searching ? searchBanner(shown.length, shown.length > LOG_SEARCH_CAP) : '') +
+        '<table class="tl-lg-t"><thead><tr><th>Teacher</th><th>Class</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') +
+          (prevIdx.length ? '<th>' + esc(prev) + '</th>' : '') + '<th><span class="sr-only">Reminder</span></th></tr></thead><tbody>' +
+        list.map(function (r) {
+          var first = r.name === 'Name not given yet' ? 'this teacher' : r.name.split(' ')[0];
+          return '<tr data-lg-row="' + esc(r.t.email) + '"><td class="who"><b>' + esc(r.name) + '</b><small>' + esc(r.t.email) + '</small></td>' +
+            '<td class="cls' + (r.secs.length ? '' : ' muted') + '">' + esc(r.cls) + '</td>' +
+            r.cells.map(function (c) { return '<td>' + logCellHtml(c) + '</td>'; }).join('') +
+            (prevIdx.length ? '<td>' + (r.prevCell ? logCellHtml(r.prevCell) : '') + '</td>' : '') +
+            '<td class="act">' + (r.remind ? '<button type="button" class="tl-lg-remind" data-lg-remind="' + esc(r.t.email) + '" title="Copy a reminder for ' + esc(first) + '" aria-label="Copy a reminder for ' + esc(first) + '">' + LOG_COPY_ICON + '</button>'
+              : '<span class="tl-lg-remind off" title="Nothing to remind ' + esc(first) + ' about" aria-hidden="true">' + LOG_COPY_ICON + '</span>') + '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+        : (searching ? '<div class="tl-lg-wrap">' + searchBanner(0) + '</div>' : '') + '<div class="ui-empty">' + (st.only && scoped.length ? 'Every teacher here is done.' : searching ? 'No teacher matches “' + esc(st.q.trim()) + '”.' : 'No teachers in this class yet.') + '</div>';
+      return {
+        total: teachers.length, unfinished: unfinished, tiles: tilesHtml, body: table, rows: rows,
+        sub: pi.lead + ' · what each teacher has done, live from the teacher app.',
+        csv: {
+          headers: ['Teacher', 'Email', 'Class'].concat([].concat.apply([], cols.map(function (c) { return [c.label, c.label + ' · date']; }))).concat(prevIdx.length ? [prev + ' observations'] : []),
+          rows: shown.map(function (r) {
+            return [r.name, r.t.email, r.cls].concat([].concat.apply([], r.cells.map(function (c) { return [logCsvWord(c), c.at ? logDay(c.at, true) : '']; })))
+              .concat(prevIdx.length ? [logCsvWord(r.prevCell)] : []);
+          })
+        }
+      };
+    }
+
+    var V = st.view === 'children' ? childrenView() : teachersView();
+    var tabs = '<div class="tl-lg-phases" role="tablist" aria-label="Phase">' + LOG_PHASES.map(function (p) {
+      var x = info[p];
+      return '<button type="button" role="tab" aria-selected="' + (p === phase) + '" class="' + (p === phase ? 'on' : '') + '" data-lg-phase="' + p + '">' + p +
+        ' <span class="tl-lg-ph ' + x.state + '">' + esc(x.label) + '</span></button>';
+    }).join('') + '</div>';
+    var showBtn = function (v, txt) { return '<button type="button" role="tab" aria-selected="' + (st.view === v) + '" class="' + (st.view === v ? 'on' : '') + '" data-lg-view="' + v + '">' + txt + '</button>'; };
+    var bar = '<div class="tl-lg-bar"><span class="tl-lg-lbl">Show</span><div class="tl-lg-show" role="tablist" aria-label="Show">' +
+      showBtn('teachers', 'Teachers · ' + teachers.length) + showBtn('children', 'Children · ' + studs.length) + '</div><span class="tl-lg-grow"></span>' +
+      (V.empty ? '' : '<div class="ui-seg tl-lg-only"><button type="button" class="' + (st.only ? '' : 'on') + '" data-lg-only="0">All</button>' +
+        '<button type="button" class="' + (st.only ? 'on' : '') + '" data-lg-only="1">Still to finish · ' + V.unfinished + '</button></div>' +
+        '<button type="button" class="btn btn-outline btn-sm" data-lg-csv title="Download what’s shown, with dates">↓ CSV</button>') + '</div>';
+    var filters = V.empty ? '' : '<div class="tl-lg-filters">' +
+      '<label class="q">' + (st.view === 'children' ? 'Find a child' : 'Find a teacher') + '<input type="search" class="input" data-lg-q value="' + esc(st.q) + '" placeholder="' + (st.view === 'children' ? 'Name or admission #' : 'Name or email') + '"></label>' +
+      '<label' + (searching ? ' class="paused"' : '') + '>Class' + (searching ? ' (paused while searching)' : '') + '<select class="select" data-lg-cls' + (searching ? ' disabled' : '') + '>' + clsOpts + '</select></label>' +
+      (multiBoard ? '<label' + (searching ? ' class="paused"' : '') + '>Board' + (searching ? ' (paused)' : '') + '<select class="select" data-lg-board' + (searching ? ' disabled' : '') + '>' + boardOpts + '</select></label>' : '') +
+      '<span class="tl-lg-grow"></span><span class="tl-lg-hint">Hover or tap a status for its date · dates are in the CSV</span></div>';
+    mount.innerHTML = '<div class="ui-card tl-lg">' + tabs + bar +
+      (V.empty ? '<div class="ui-empty">' + esc(V.empty) + (pi.state === 'none' ? ' Plan it in Plan &amp; deploy.' : '') + '</div>'
+        : '<p class="tl-lg-sub">' + esc(V.sub) + '</p>' + filters + (V.tiles || '') + V.body) + '</div>';
+
+    // ---------- Wiring: every change re-renders the card ----------
+    function again(keepSearch) {
+      try { sessionStorage.setItem('tl-log-' + sid, JSON.stringify(st)); } catch (e) { /* private mode: filters just won't survive a reload */ }
+      renderAssessLog(s, mount);
+      if (!keepSearch) return;
+      var qi = mount.querySelector('[data-lg-q]');
+      if (qi) { qi.focus(); try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (e) { /* not supported on this input */ } }
+    }
+    var on = function (sel, ev, fn) { mount.querySelectorAll(sel).forEach(function (b) { b.addEventListener(ev, function (e) { fn(b, e); }); }); };
+    on('[data-lg-phase]', 'click', function (b) { st.phase = b.dataset.lgPhase; st.open = {}; again(); });
+    on('[data-lg-view]', 'click', function (b) { st.view = b.dataset.lgView; again(); });
+    on('[data-lg-only]', 'click', function (b) { st.only = b.dataset.lgOnly === '1'; again(); });
+    on('[data-lg-q]', 'input', function (b) { st.q = b.value; again(true); });
+    on('[data-lg-clear]', 'click', function () { st.q = ''; again(true); });
+    on('[data-lg-cls]', 'change', function (b) { st.cls = b.value; st.open = {}; again(); });
+    on('[data-lg-board]', 'change', function (b) { st.board = b.value === 'all' || b.value === 'none' ? b.value : b.value.replace(/^b:/, ''); st.open = {}; again(); });
+    on('[data-lg-open]', 'click', function (b) { st.open[b.dataset.lgOpen] = !st.open[b.dataset.lgOpen]; again(); });
+    on('[data-lg-remind]', 'click', function (b) {
+      var r = (V.rows || []).filter(function (x) { return x.t.email === b.dataset.lgRemind; })[0];
+      if (r && r.remind) copy(r.remind, 'Reminder for ' + (r.name === 'Name not given yet' ? r.t.email : r.name.split(' ')[0]) + ' copied — paste it into WhatsApp or email.');
+    });
+    // Phones have no hover: a tap (or Enter) shows the date as a toast.
+    on('[data-tip]', 'click', function (b) { if (b.dataset.tip) toast(b.dataset.tip); });
+    on('[data-tip]', 'keydown', function (b, e) { if (e.key === 'Enter' && b.dataset.tip) toast(b.dataset.tip); });
+    on('[data-lg-csv]', 'click', function () {
+      if (!V.csv || !V.csv.rows.length) { toast('Nothing to download for this view.'); return; }
+      downloadCsv(s.code.toLowerCase() + '-' + phase.toLowerCase() + '-' + st.view + '-log.csv', V.csv.headers, V.csv.rows);
+    });
   }
 
   function schoolCard(s) {
@@ -1214,7 +1595,7 @@
     function stepper() {
       return '<div class="tl-steps" style="margin-bottom:18px">' + WIZ_STEPS.map(function (s, i) {
         var cls = i < step ? 'done' : (i === step ? 'cur' : '');
-        var optTag = s.optional ? '<span class="ui-tag plain ws-opt-tag">optional</span>' : '';
+        var optTag = '';   // "Skip this step →" already says it's optional — no tag here too
         return '<div class="tl-step ' + cls + '"><div class="dot">' + (i < step ? '✓' : (i + 1)) + '</div><div class="slabel">' + esc(s.label) + optTag + '</div></div>';
       }).join('') + '</div>';
     }
@@ -1251,15 +1632,36 @@
             '<button class="btn btn-outline btn-sm" id="ws-newgroup-add" type="button">Create</button>' +
           '</div>' +
           '<label class="field">Joined <span class="tl-muted" style="font-weight:400">(defaults to today)</span><input class="input" type="date" id="ws-joined" value="' + esc(d.joined) + '" max="' + todayISO() + '"></label>' +
-          '<div class="tl-fieldrow" title="This academic year at the school. Suggested from the country — change it to the school’s own dates. Assessment windows and the year-end rollover follow these dates.">' +
-            '<label class="field flex-1">This academic year starts *<input class="input" type="date" id="ws-ystart" value="' + esc(d.yearStart) + '"></label>' +
-            '<label class="field flex-1">and ends *<input class="input" type="date" id="ws-yend" value="' + esc(d.yearEnd) + '"></label>' +
-          '</div>' +
-          '<p class="tl-muted m-0" id="ws-yearhint">' + esc(yearHint()) + '</p>' +
-          '<div class="field"><span>School calendar <span class="tl-muted" style="font-weight:400">(optional)</span></span>' +
-            '<div class="tl-inline-actions"><label class="btn btn-outline btn-sm">Upload a PDF or photo<input type="file" accept=".pdf,image/*" class="hidden" id="ws-calfile"></label>' +
-            '<span class="tl-muted" id="ws-calname">' + (d.calFileName ? esc(d.calFileName) + ' — we’ll read the dates after the school is created' : 'Or add it later: Assessments → Plan from calendar.') + '</span></div></div>' +
+          calBlock() +
         '</div>';
+    }
+    // Academic year + school calendar: one required step, three ways to do it.
+    // Manual → the start / end fields. PDF or photo → the file is read and the year,
+    // terms, exams and holidays are shown to check (all editable later).
+    function calBlock() {
+      var yearFields = '<div class="tl-fieldrow" title="This academic year at the school. Assessment windows and the year-end rollover follow these dates.">' +
+          '<label class="field flex-1">This academic year starts *<input class="input" type="date" id="ws-ystart" value="' + esc(d.yearStart) + '"></label>' +
+          '<label class="field flex-1">and ends *<input class="input" type="date" id="ws-yend" value="' + esc(d.yearEnd) + '"></label>' +
+        '</div>' +
+        '<p class="tl-muted m-0" id="ws-yearhint">' + esc(d.calRead ? 'Read from ' + (d.calFileName || 'the calendar') + ' — first day of the first term to the last day of the last one.' : yearHint()) + '</p>';
+      var opt = function (m, label, sub) {
+        return '<button type="button" class="ws-calopt' + (d.calMode === m ? ' on' : '') + '" data-calmode="' + m + '" aria-pressed="' + (d.calMode === m) + '"><b>' + label + '</b><span>' + sub + '</span></button>';
+      };
+      var up = d.calMode === 'pdf' || d.calMode === 'photo', body = '';
+      if (d.calMode === 'manual') body = yearFields;
+      else if (up) {
+        var r = d.calRead, list = function (title, arr) {
+          return arr && arr.length ? '<div class="ws-calread-k"><b>' + title + '</b>' + arr.map(function (x) { return '<span>' + esc(x.name) + ' · ' + esc(fmtJoined(x.start)) + ' → ' + esc(fmtJoined(x.end)) + '</span>'; }).join('') + '</div>' : '';
+        };
+        body = '<div class="tl-inline-actions"><label class="btn btn-outline btn-sm">' + (d.calFileName ? 'Choose another file' : d.calMode === 'pdf' ? 'Choose the PDF' : 'Choose the photo') +
+            '<input type="file" accept="' + (d.calMode === 'pdf' ? '.pdf,application/pdf' : 'image/*') + '" class="hidden" id="ws-calfile"></label>' +
+            (d.calFileName ? '<span class="tl-muted">' + esc(d.calFileName) + '</span>' : '') + '</div>' +
+          (r ? '<div class="ui-note info mt-2"><span aria-hidden="true">🔍</span><span>We read these dates from the file — check them against the real calendar. You can change any of them later.</span></div>' +
+            yearFields + '<div class="ws-calread">' + list('Terms', r.terms) + list('Exams', r.exams) + list('Holidays', r.holidays) + '</div>' : '');
+      }
+      return '<div class="field"><span>Academic year &amp; school calendar *</span><span class="tl-muted" style="font-weight:400">Add it one way — you can change the dates later.</span>' +
+        '<div class="ws-calopts">' + opt('manual', 'Enter dates manually', 'Type the year’s start and end') + opt('pdf', 'Upload a PDF', 'We read the dates for you to check') + opt('photo', 'Upload a photo', 'A clear photo of the calendar') + '</div>' +
+        body + '</div>';
     }
 
     function bodyStructure() {
@@ -1276,9 +1678,11 @@
           '<label class="ws-gradenum-wrap">Students' +
             '<input class="ws-gradenum" type="number" min="0" data-gi="' + gi + '" value="' + (parseInt(g.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade) + '"></label>';
         // Multi-board school: each grade runs one board (its sections inherit it).
-        if (d.boards.length > 1 && d.boards.indexOf(g.board) < 0) g.board = d.boards[0];
-        var boardSel = d.boards.length > 1 ? '<select class="select sm ws-gradeboard" data-gboard="' + gi + '" aria-label="Board for ' + esc(g.grade) + '" title="Which board this grade follows. A school admin limited to one board only sees that board’s grades.">' +
-          d.boards.map(function (b) { return '<option' + (b === g.board ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select>' : '';
+        // Default = the first board in the picker's own order (CBSE before IB), not the first one ticked.
+        if (d.boards.length > 1 && d.boards.indexOf(g.board) < 0) g.board = d.boards.slice().sort(function (a, b) { return ADD_BOARDS.indexOf(a) - ADD_BOARDS.indexOf(b); })[0];
+        // Wrapped in .select-wrap so it shows a chevron — on its own it read as a text box.
+        var boardSel = d.boards.length > 1 ? '<label class="select-wrap ws-gradeboard-wrap" title="Which board this grade follows. A school admin limited to one board only sees that board’s grades."><select class="select sm ws-gradeboard" data-gboard="' + gi + '" aria-label="Board for ' + esc(g.grade) + '">' +
+          d.boards.map(function (b) { return '<option' + (b === g.board ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></label>' : '';
         return '<div class="ws-grade-card">' +
           '<div class="ws-gradeid"><input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. Base stays ' + esc(g.base) + '.">' + baseTag(g.grade, g.base) + boardSel + '</div>' +
           '<div class="ws-secs">' + secs + '</div>' +
@@ -1300,8 +1704,7 @@
     }
 
     function bodyAdmin() {
-      return '<div class="ui-note ws-optional-note"><span class="ui-tag green">Optional</span><span>Invite the first admin now, or skip and add people later from the school hub.</span></div>' +
-        '<p class="tl-muted">If you invite them, they\'ll get an activation email and can add teachers and students themselves. Teachers can also self-join later with the school code from the Staff tab.</p>' +
+      return '<p class="tl-muted">If you invite them, they\'ll get an activation email and can add teachers and students themselves. Teachers can also self-join later with the school code from the Staff tab.</p>' +
         '<div class="tl-stack">' +
           '<label class="field">Admin name<input class="input" id="ws-admin-name" placeholder="e.g. Meera Krishnan" value="' + esc(d.admin.name) + '"></label>' +
           '<label class="field">Admin email<input class="input" id="ws-admin-email" type="email" placeholder="name@school.edu" value="' + esc(d.admin.email) + '"></label>' +
@@ -1342,6 +1745,8 @@
         if (!d.name) return 'Add the school name';
         if (boardError(d.boardPick)) return boardError(d.boardPick);
         if (!d.country || !d.city) return 'Pick a country and a city';
+        if (!d.calMode) return 'Choose how to add the academic year';
+        if (d.calMode !== 'manual' && !d.calRead) return 'Upload the school calendar';
         if (!d.yearStart || !d.yearEnd) return 'Add this academic year’s start and end dates';
         if (d.yearEnd <= d.yearStart) return 'The academic year must end after it starts';
       }
@@ -1355,7 +1760,7 @@
 
     function render() {
       var last = step === WIZ_STEPS.length - 1;
-      root.innerHTML = '<div class="overlay" id="tl-ov"><div class="ui-modal-card">' +
+      root.innerHTML = '<div class="overlay" id="tl-ov" data-keep="own"><div class="ui-modal-card">' +
         '<div class="ui-modal-h"><h3>Add a partner school</h3><button class="dialog-close" id="tl-mx" aria-label="Close">×</button></div>' +
         stepper() +
         '<div id="ws-body">' + BODIES[step]() + '</div>' +
@@ -1402,11 +1807,17 @@
           d.country = country.value; d.city = '';
           cityEl.innerHTML = cityOptions(); cityOther.hidden = true; cityOther.value = '';
           // Re-suggest the year for the new country unless it was typed in by hand.
-          if (!d.yearTouched) { var sy = suggestYear(d.country, d.joined); d.yearStart = ys.value = sy.start; d.yearEnd = ye.value = sy.end; }
-          yh.textContent = yearHint();
+          if (!d.yearTouched) { var sy = suggestYear(d.country, d.joined); d.yearStart = sy.start; d.yearEnd = sy.end; if (ys) { ys.value = sy.start; ye.value = sy.end; } }
+          if (yh) yh.textContent = yearHint();
           syncNext();
         });
-        [ys, ye].forEach(function (x) { x.addEventListener('change', function () { d.yearStart = ys.value; d.yearEnd = ye.value; d.yearTouched = true; yh.textContent = yearHint(); syncNext(); }); });
+        // The year fields only exist once "Enter dates manually" or an upload is chosen.
+        [ys, ye].forEach(function (x) { if (x) x.addEventListener('change', function () { d.yearStart = ys.value; d.yearEnd = ye.value; d.yearTouched = true; if (yh && !d.calRead) yh.textContent = yearHint(); syncNext(); }); });
+        document.querySelectorAll('[data-calmode]').forEach(function (b) { b.addEventListener('click', function () {
+          commit();
+          if (d.calMode !== b.dataset.calmode) { d.calMode = b.dataset.calmode; d.calRead = null; d.calFileName = ''; if (!d.yearTouched) { var sy = suggestYear(d.country, d.joined); d.yearStart = sy.start; d.yearEnd = sy.end; } }
+          render();
+        }); });
         // "Other…" opens a text box; the typed city joins the list once the school is saved.
         var cityOther = document.getElementById('ws-cityother');
         cityEl.addEventListener('change', function () {
@@ -1416,9 +1827,17 @@
           syncNext();
         });
         cityOther.addEventListener('input', function () { d.city = cityOther.value.trim(); syncNext(); });
-        document.getElementById('ws-calfile').addEventListener('change', function (e) {
+        var calfile = document.getElementById('ws-calfile');
+        if (calfile) calfile.addEventListener('change', function (e) {
           var f = e.target.files && e.target.files[0]; if (!f) return;
-          d.calFileName = f.name; document.getElementById('ws-calname').textContent = f.name + ' — we’ll read the dates after the school is created';
+          commit();
+          // "Read" the file against the year it should cover, then propose that year from
+          // it (first term's first day → last term's last day) for the user to check.
+          var sy = suggestYear(d.country, d.joined), r = window.TilliAPI && window.TilliAPI.readCalendarFor ? window.TilliAPI.readCalendarFor(d.country, sy.start, sy.end, f.name) : null;
+          if (!r) { toast('Couldn’t read that file — try another, or enter the dates manually.'); return; }
+          d.calFileName = f.name; d.calRead = r;
+          d.yearStart = r.terms[0].start; d.yearEnd = r.terms[r.terms.length - 1].end; d.yearTouched = true;
+          render();
         });
         var sel = document.getElementById('ws-group');
         var row = document.getElementById('ws-newgroup-row');
@@ -1510,7 +1929,7 @@
       if (d.grades.some(function (g) { return g.grade.toLowerCase() === name.toLowerCase(); })) { toast('A grade called “' + name + '” already exists.'); return; }
       // Grades start with no sections — a school may run a grade as a single
       // ungrouped cohort. Sections are added explicitly via "+ Section".
-      d.grades.push({ grade: name, base: base, sections: [], students: 0 });
+      d.grades.push({ grade: name, base: base, sections: [], students: WIZ_SECTION_SIZE });   // 30 to start, like a new section
       sortGrades(d.grades);
       rerenderStructure();
     }
@@ -1534,17 +1953,19 @@
         ORG.server.logAudit(me.name, 'school.add', s.name, 'school', s.id);
         if (d.admin.email) ORG.server.logAudit(me.name, 'invitation.send', d.admin.email, 'invitation', s.id);
         // Calendar uploaded in Profile: read it into the new school, waiting for review.
-        var calRead = d.calFileName && window.TilliAPI ? window.TilliAPI.readCalendarFile(s.id, d.calFileName) : null;
-        if (calRead) window.TilliAPI.saveCalendar(s.id, calRead, me.email, { status: 'submitted', source: 'upload', fileName: d.calFileName });
+        // The calendar the Tilli team just checked in the wizard — saved as reviewed, so it
+        // doesn't land in their own review queue, and the school sees "Added by the Tilli team".
+        var calRead = d.calMode !== 'manual' && d.calRead && window.TilliAPI ? d.calRead : null;
+        if (calRead) window.TilliAPI.saveCalendar(s.id, calRead, me.email, { source: 'upload', fileName: d.calFileName });
         close(); saveWizDraft(null);
-        toast(s.name + ' created' + (draftSectionTotal(d) ? ' with ' + draftSectionTotal(d) + ' sections.' : '.') + (calRead ? ' Calendar read — check it in Assessments → Plan from calendar.' : ''));
+        toast(s.name + ' created' + (draftSectionTotal(d) ? ' with ' + draftSectionTotal(d) + (draftSectionTotal(d) === 1 ? ' section.' : ' sections.') : '.') + (calRead ? ' Calendar read — check it in Assessments → Plan from calendar.' : ''));
         go('school', { id: s.id });
       }, 1100);
     }
 
     // Full-modal "creating…" state shown between Create and landing on the hub.
     function renderCreating() {
-      root.innerHTML = '<div class="overlay" id="tl-ov"><div class="ui-modal-card tl-creating">' +
+      root.innerHTML = '<div class="overlay" id="tl-ov" data-keep="own"><div class="ui-modal-card tl-creating">' +
         '<div class="spinner tl-creating-spin" aria-hidden="true"></div>' +
         '<h3>Creating the school…</h3>' +
         '<p class="tl-muted">Setting up <b>' + esc(d.name) + '</b> and its structure.</p>' +
@@ -1585,7 +2006,8 @@
         kpi(s.gradeCount, 'Grades') + kpi(s.sectionCount, 'Sections') + kpi(s.students.toLocaleString(), 'Students') +
         kpi(s.staff, 'Staff') + kpi(sum0.counts.openIssues, 'Open issues') + '</div>' +
       '<div class="ui-tabs hub">' + HUB_TABS.map(function (t) {
-        return '<button class="ui-tab' + (t.key === tab ? ' on' : '') + '" data-hubtab="' + t.key + '">' + esc(t.label) + '</button>';
+        var nd = needsYou(s.id), part = Object.keys(NEEDS_TAB).filter(function (k) { return NEEDS_TAB[k] === t.key && nd[k]; })[0];
+        return '<button class="ui-tab' + (t.key === tab ? ' on' : '') + '" data-hubtab="' + t.key + '">' + esc(t.label) + (part ? needsDot('Needs you: ' + needsTitle({ students: part === 'students' ? nd.students : 0, calendar: part === 'calendar' ? nd.calendar : 0, classes: part === 'classes' ? nd.classes : 0 })) : '') + '</button>';
       }).join('') + '</div>';
 
     body.innerHTML = header + '<div id="hub-tab"></div>';
@@ -1662,19 +2084,30 @@
   // The count on a section chip: "12/14" plus a short tag for what's missing.
   function roomChipHtml(room, fallback) {
     if (!room) return ' <i>' + fallback + '</i>';
-    var html = ' <i>' + room.added + (room.expected != null ? '/' + room.expected : '') + '</i>';
+    // "B 0/2" says it all: muted until the class is full, ✓ once it is (the "2 to add"
+    // tag and its tooltip repeated the same thing — the card's ⓘ explains it once).
+    var full = room.expected != null && room.added >= room.expected;
+    var html = ' <i class="' + (full ? 'full' : 'short') + '">' + room.added + (room.expected != null ? '/' + room.expected : '') + (full ? ' ✓' : '') + '</i>';
     if (room.expected == null) html += '<em class="tl-room-tag warn" title="No expected class size set — teachers can’t add students here without an admin’s approval.">no size set</em>';
     else if (!room.confirmed) html += '<em class="tl-room-tag warn" title="Set automatically from the headcount — confirm it in Settings → Grades & sections.">not confirmed</em>';
-    else if (room.left) html += '<em class="tl-room-tag" title="' + room.left + ' still to add before this class is complete.">' + room.left + ' to add</em>';
     if (room.pending) html += '<em class="tl-room-tag pend" title="New students a teacher added past the expected size — waiting for approval.">+' + room.pending + ' pending</em>';
     return html;
   }
   // Approve / turn down a child a teacher added past the class size.
+  // "Zoya Khan was already approved by Asha Kumar · 29 Oct, 10:42" (decided on either dashboard).
+  function handledMsg(nm, dec) {
+    if (!dec) return 'That request was already handled.';
+    var who = dec.by === String(me.email || '').toLowerCase() ? 'you' : (dec.byName || dec.by);
+    var at = new Date(dec.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return nm + ' was already ' + (dec.approved ? 'approved' : 'turned down') + ' by ' + who + ' · ' + at + '.';
+  }
   function decideNewStudent(st, approve, after) {
     var nm = st.name || st.student_id;
+    var prior = window.TilliAPI.studentDecision && window.TilliAPI.studentDecision(st.school_id, st.student_id);
+    if (prior) { toast(handledMsg(nm, prior)); after(); return; }
     if (approve) {
       var r = window.TilliAPI.decideStudent(st.school_id, st.student_id, true, me.email);
-      if (!r.ok) { toast('That request was already handled.'); after(); return; }
+      if (!r.ok) { toast(handledMsg(nm, r.decision)); after(); return; }
       ORG.server.logAudit(me.name, 'student.approve', nm, 'student', st.school_id);
       toast(nm + ' approved' + (r.room && r.room.expected ? ' — ' + r.room.name + ' now expects ' + r.room.expected + '.' : '.'));
       after(); return;
@@ -1682,20 +2115,40 @@
     gated({ title: 'Turn down new student', danger: true,
       body: '<p>Remove <b>' + esc(nm) + '</b> (' + esc(st.student_id) + ') from <b>' + esc(st.section_name) + '</b>? Do this when the child is a duplicate or isn’t at this school. Anything already recorded for them is removed too.</p>',
       confirmLabel: 'Turn down', audit: { action: 'student.reject', entity: nm, entityType: 'student', schoolId: st.school_id },
-      onConfirm: function () { window.TilliAPI.decideStudent(st.school_id, st.student_id, false, me.email); toast(nm + ' turned down and removed.'); after(); } });
+      onConfirm: function () {
+        var r = window.TilliAPI.decideStudent(st.school_id, st.student_id, false, me.email);
+        toast(r.ok ? nm + ' turned down and removed.' : handledMsg(nm, r.decision)); after();
+      } });
   }
   // Table of waiting children with Approve / Turn down. showSchool for the cross-school page.
+  // Grouped by class: one child → its own row; several in one class → "Zoya Khan + 5 more"
+  // with Approve all / Review ▸ (the per-child rows stay hidden until opened).
   function pendingTableHtml(list, showSchool) {
+    var groups = [], byKey = {};
+    list.forEach(function (st, i) {
+      var k = st.school_id + '|' + st.grade + '|' + st.section;
+      if (!byKey[k]) { byKey[k] = { st: st, idx: [] }; groups.push(byKey[k]); }
+      byKey[k].idx.push(i);
+    });
+    var sizeTd = function (rm) { return '<td title="Students added / expected size">' + (rm ? (rm.expected == null ? 'Not set' : rm.added + ' of ' + rm.expected) : '—') + '</td>'; };
+    var schoolTd = function (st) { return showSchool ? '<td><a class="btn-link" href="' + href('school', { id: st.school_id, tab: 'students' }) + '">' + esc(st.school_name) + '</a></td>' : ''; };
+    var kidRow = function (i, grp) {
+      var st = list[i];
+      return '<tr' + (grp != null ? ' data-pendgrp="' + grp + '" hidden class="tl-pendsub"' : '') + '><td class="name">' + esc(st.name) + ' <span class="mono tl-muted">' + esc(st.student_id) + '</span></td>' + schoolTd(st) +
+        '<td>' + esc(secLbl(st.school_id, st.grade, st.section)) + '</td>' +
+        '<td>' + esc(st.requestedByName) + ' <span class="tl-muted">· ' + esc(timeAgo(st.requestedAt)) + '</span></td>' + sizeTd(st.room) +
+        '<td class="r nowrap"><button class="btn btn-primary btn-sm" data-approve="' + i + '">Approve</button> <button class="btn-link danger" data-turndown="' + i + '">Turn down</button></td></tr>';
+    };
     return '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Student</th>' + (showSchool ? '<th>School</th>' : '') +
       '<th>Class</th><th>Added by</th><th>Class size</th><th></th></tr></thead><tbody>' +
-      list.map(function (st, i) {
-        var rm = st.room;
-        return '<tr><td class="name">' + esc(st.name) + ' <span class="mono tl-muted">' + esc(st.student_id) + '</span></td>' +
-          (showSchool ? '<td><a class="btn-link" href="' + href('school', { id: st.school_id, tab: 'students' }) + '">' + esc(st.school_name) + '</a></td>' : '') +
-          '<td>' + esc(secLbl(st.school_id, st.grade, st.section)) + '</td>' +
-          '<td>' + esc(st.requestedByName) + ' <span class="tl-muted">· ' + esc(timeAgo(st.requestedAt)) + '</span></td>' +
-          '<td title="Students added / expected size">' + (rm ? (rm.expected == null ? 'Not set' : rm.added + ' of ' + rm.expected) : '—') + '</td>' +
-          '<td class="r nowrap"><button class="btn btn-primary btn-sm" data-approve="' + i + '">Approve</button> <button class="btn-link danger" data-turndown="' + i + '">Turn down</button></td></tr>';
+      groups.map(function (g, gi) {
+        if (g.idx.length === 1) return kidRow(g.idx[0], null);
+        var st = g.st, by = [];
+        g.idx.forEach(function (i) { var n = list[i].requestedByName; if (n && by.indexOf(n) < 0) by.push(n); });
+        return '<tr class="tl-pendgrp"><td class="name">' + esc(st.name) + ' <b>+ ' + (g.idx.length - 1) + ' more</b></td>' + schoolTd(st) +
+          '<td>' + esc(secLbl(st.school_id, st.grade, st.section)) + '</td><td>' + esc(by.join(', ')) + '</td>' + sizeTd(st.room) +
+          '<td class="r nowrap"><button class="btn btn-primary btn-sm" data-approveall="' + g.idx.join(',') + '">Approve all ' + g.idx.length + '</button> <button class="btn-link" data-pendreview="' + gi + '" aria-expanded="false">Review ▸</button></td></tr>' +
+          g.idx.map(function (i) { return kidRow(i, gi); }).join('');
       }).join('') + '</tbody></table></div>';
   }
   function wirePendingTable(root, list, after) {
@@ -1703,6 +2156,16 @@
     var done = function (st) { return function () { ORG.refreshApiSchool(st.school_id); after(); }; };
     root.querySelectorAll('[data-approve]').forEach(function (b) { b.addEventListener('click', function () { var st = list[+b.dataset.approve]; decideNewStudent(st, true, done(st)); }); });
     root.querySelectorAll('[data-turndown]').forEach(function (b) { b.addEventListener('click', function () { var st = list[+b.dataset.turndown]; decideNewStudent(st, false, done(st)); }); });
+    root.querySelectorAll('[data-approveall]').forEach(function (b) { b.addEventListener('click', function () {
+      var ids = b.dataset.approveall.split(',').map(Number), ok = 0;
+      ids.forEach(function (i) { var st = list[i]; if (window.TilliAPI.decideStudent(st.school_id, st.student_id, true, me.email).ok) { ok++; ORG.server.logAudit(me.name, 'student.approve', st.name, 'student', st.school_id); } });
+      toast(ok + (ok === 1 ? ' child' : ' children') + ' approved.'); done(list[ids[0]])();
+    }); });
+    root.querySelectorAll('[data-pendreview]').forEach(function (b) { b.addEventListener('click', function () {
+      var open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', String(open)); b.textContent = open ? 'Review ▾' : 'Review ▸';
+      root.querySelectorAll('[data-pendgrp="' + b.dataset.pendreview + '"]').forEach(function (tr) { tr.hidden = !open; });
+    }); });
   }
 
   // ---- Hub tabs ----
@@ -1741,7 +2204,7 @@
     var yoy = yrs && yrs.length > 1 ? yearOverYearHtml(s, yrs).replace('<div class="ui-card mt-gap">', '<div class="ui-card span2">')
       .replace('<h3 class="ui-mod-title">Year over year</h3>', '<h3 class="ui-mod-title">Year ' + yrs.length + ' with Tilli</h3>') : '';
     el.innerHTML = '<div class="tl-grid two">' +
-      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Structure</h3></div>' + structure + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title" title="Each section shows children added / expected class size, e.g. B 0/2. Grey until the class is full, ✓ once every child is on the roster.">Structure</h3></div>' + structure + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Onboarding</h3></div>' + flags + '</div>' +
       '<div class="ui-card span2"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + progress + '</div>' +
       yoy + outcomes +
@@ -1758,12 +2221,24 @@
     }) : (s.created && window.TilliAPI) ? window.TilliAPI.studentsForSchool(s.id).map(function (st) {
       return { name: st.name, admission: st.student_id, gradeSection: secLbl(s.id, st.grade, st.section), status: st.approval === 'pending' ? 'Pending' : 'Active' };
     }) : [];
+    // Consent per child (Tilli-only): the linked parent's answer, straight in the directory.
+    var hasConsent = tlUsesApi(s) && window.TilliAPI.consentForSchool;
+    var cCfg = hasConsent ? window.TilliAPI.consentConfig() : null, cOpt = cCfg ? cCfg.items.filter(function (it) { return !it.required; }) : [];
+    var cByEmail = {}; if (hasConsent) window.TilliAPI.consentForSchool(s.id).forEach(function (r) { cByEmail[String(r.email).toLowerCase()] = r; });
+    function consentCells(adm) {
+      var emails = window.TilliAPI.parentsForStudent ? window.TilliAPI.parentsForStudent(s.id, adm) : [];
+      if (!emails.length) return '<td><span class="tl-muted">No parent linked</span></td>' + cOpt.map(function () { return '<td>—</td>'; }).join('');
+      var r = emails.map(function (e) { return cByEmail[e]; }).filter(Boolean).sort(function (a, b) { return (b.current ? 1 : 0) - (a.current ? 1 : 0); })[0];
+      var c = r && r.consent;
+      var st = r && r.current ? statusPill('Given', 'ok') : c ? statusPill(c.version !== cCfg.version ? 'Old version' : 'Withdrawn', 'warn') : statusPill('Not yet', 'warn');
+      return '<td>' + st + '</td>' + cOpt.map(function (it) { return '<td>' + (c ? (c.items[it.id] ? 'Yes' : 'No') : '—') + '</td>'; }).join('');
+    }
     var waiting = window.TilliAPI && window.TilliAPI.pendingStudents ? window.TilliAPI.pendingStudents(s.id) : [];
     el.innerHTML = (waiting.length ? '<div class="ui-card tl-pendcard"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for approval</h3>' +
         '<p class="ui-mod-note">' + waiting.length + ' new student' + (waiting.length === 1 ? '' : 's') + ' added past the class size. They can already be assessed.</p></div></div>' +
         '<div id="stu-pending">' + pendingTableHtml(waiting, false) + '</div></div>' : '') +
       '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
-        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button><button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
+        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button>' + (hasConsent ? '<button class="btn btn-outline btn-sm" data-consent-open title="Who agreed to the parent consent, when, and to which wording — Tilli team only">Parent consent</button>' : '') + '<button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
           '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div></div>' +
       (roster.length ? '<div class="tl-filters"><input class="input grow tl-filter-q" id="stu-q" type="search" placeholder="Search by name, admission # or grade/section…" aria-label="Search students" value="' + esc(stuPager.schoolId === s.id ? stuPager.q : '') + '"></div><div id="stu-page"></div>'
         : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
@@ -1782,11 +2257,14 @@
       stuPager.page = Math.min(Math.max(1, stuPager.page), pages);
       var start = (stuPager.page - 1) * stuPager.size;
       var rows = list.slice(start, start + stuPager.size).map(function (r) {
-        return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button></td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td><td>' + statusPill(r.status, r.status === 'Pending' ? 'warn' : 'ok') + '</td>' +
-          '<td class="r"><button class="btn-link" data-edit-st="' + esc(r.admission) + '">Edit</button> <button class="btn-link danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '">Delete</button></td></tr>';
+        // No Status column (it only ever said Active) — a child waiting for approval gets a tag instead.
+        return '<tr><td class="name"><button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button>' + (r.status === 'Pending' ? ' <span class="ui-chip warn">Waiting for approval</span>' : '') + '</td><td class="mono">' + esc(r.admission) + '</td><td>' + esc(r.gradeSection) + '</td>' +
+          (hasConsent ? consentCells(r.admission) : '') +
+          '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-edit-st="' + esc(r.admission) + '" title="Edit ' + esc(r.name) + '" aria-label="Edit ' + esc(r.name) + '">' + ICONS.edit + '</button>' +
+          '<button class="tl-rowact danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '" title="Delete ' + esc(r.name) + '" aria-label="Delete ' + esc(r.name) + '">' + ICONS.trash + '</button></div></td></tr>';
       }).join('');
       if (!list.length) { mount.innerHTML = '<div class="ui-empty">No students match “' + esc(stuPager.q.trim()) + '”.</div>'; return; }
-      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th>' + (hasConsent ? '<th>Parent consent</th>' + cOpt.map(function (it) { return '<th>' + esc(it.id.charAt(0).toUpperCase() + it.id.slice(1)) + '</th>'; }).join('') : '') + '<th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
         pagerHtml(list.length, stuPager.page, stuPager.size, words.length ? 'matching students' : 'students');
       wirePager(mount, function (page, size) {
         if (size !== stuPager.size) { stuPager.size = size; stuPager.page = 1; try { localStorage.setItem(STU_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
@@ -1803,16 +2281,18 @@
     var sq = el.querySelector('#stu-q');
     if (sq) sq.addEventListener('input', function () { stuPager.q = sq.value; stuPager.page = 1; drawPage(); });
     if (mount) drawPage();
-    // Parent consent — Tilli team only (the school never sees it).
-    if (tlUsesApi(s) && window.TilliAPI.consentForSchool) {
-      el.insertAdjacentHTML('beforeend', consentCardHtml(s));
-      var cc = el.querySelector('[data-consentcsv]');
+    // Parent consent detail (parent email, wording version, date, CSV) — Tilli team only,
+    // in a pop-up from the directory header instead of a second card on the page.
+    var co = el.querySelector('[data-consent-open]');
+    if (co) co.addEventListener('click', function () {
+      openModal('Parent consent', consentCardHtml(s), null);
+      var cc = document.querySelector('#tl-modal-root [data-consentcsv]');
       if (cc) cc.addEventListener('click', function () {
         var cfg = window.TilliAPI.consentConfig(), rows = window.TilliAPI.consentForSchool(s.id);
         downloadCsv(s.code.toLowerCase() + '-parent-consent.csv', ['Parent email', 'Children', 'Consent', 'Version', 'Agreed on'].concat(cfg.items.map(function (it) { return it.id + (it.required ? ' (required)' : ''); })),
           rows.map(function (r) { var c = r.consent; return [r.email, r.children.join('; '), r.current ? 'Given' : c ? 'Out of date / withdrawn' : 'Not yet', c ? c.version : '', c ? fmtMs(c.at) : ''].concat(cfg.items.map(function (it) { return c ? (c.items[it.id] ? 'Yes' : 'No') : ''; })); }));
       });
-    }
+    });
   };
   // Who has agreed to the parent consent (current version), per linked parent.
   function consentCardHtml(s) {
@@ -1825,9 +2305,8 @@
         return '<tr><td class="name">' + esc(r.email) + '<small>' + esc(r.children.join(', ')) + '</small></td><td>' + st + '</td>' +
           opt.map(function (it) { return '<td>' + (c ? (c.items[it.id] ? 'Yes' : 'No') : '—') + '</td>'; }).join('') + '<td>' + (c ? esc(fmtMs(c.at)) : '—') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="ui-empty">No parents have linked to a child yet.</div>';
-    return '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Parent consent</h3>' +
-        '<p class="ui-mod-note">' + (rows.length ? given + ' of ' + rows.length + ' linked parents have agreed to the current wording (' + esc(cfg.version) + '). ' : '') + 'Only the Tilli team sees this — not the school.</p></div>' +
-        (rows.length ? '<button class="btn btn-outline btn-sm" data-consentcsv>Download CSV</button>' : '') + '</div>' + body + '</div>';
+    return '<div class="ui-mod-h"><p class="ui-mod-note">' + (rows.length ? given + ' of ' + rows.length + ' linked parents have agreed to the current wording (' + esc(cfg.version) + '). ' : '') + 'Only the Tilli team sees this — not the school.</p>' +
+        (rows.length ? '<button class="btn btn-outline btn-sm" data-consentcsv>Download CSV</button>' : '') + '</div>' + body;
   }
 
   // ---------- pager (Students + Staff tabs; reusable for any long table) ----------
@@ -1851,6 +2330,7 @@
     return out;
   }
   function pagerHtml(total, page, size, noun) {
+    if (total <= PAGE_SIZES[0]) return '';   // one short page — "Showing 1–1 · Per page" is just noise
     var pages = Math.max(1, Math.ceil(total / size)), from = total ? (page - 1) * size + 1 : 0, to = Math.min(total, page * size);
     return '<div class="tl-pager"><span class="tl-pager-info">Showing <b>' + from + '–' + to + '</b> of ' + total.toLocaleString() + ' ' + esc(noun) + '</span>' +
       '<label class="tl-pager-size">Per page <select class="select" data-pg-size aria-label="Rows per page">' +
@@ -1863,81 +2343,34 @@
   }
   // onChange(page, size) — size changes reset to page 1 in the caller.
   function wirePager(root, onChange) {
-    var sel = root.querySelector('[data-pg-size]'), cur = +sel.value;
+    var sel = root.querySelector('[data-pg-size]'); if (!sel) return;   // no pager drawn (short list)
+    var cur = +sel.value;
     root.querySelectorAll('[data-pg]').forEach(function (b) { b.addEventListener('click', function () { if (!b.disabled) onChange(+b.dataset.pg, cur); }); });
     sel.addEventListener('change', function () { onChange(1, +sel.value); });
   }
 
+  // Staff & Access: one People list (staff, teachers who joined with the code, and
+  // invitations — one row per person) with an All / School admins / Teachers / Invited
+  // filter, the school code as one strip beside Invite, and icon row actions with labels
+  // on hover. "Waiting for a class" sits above it (it needs action); the prototype-only
+  // Demo access card sits below.
+  var STAFF_VIEW = {};   // school id -> { f: 'all'|'admin'|'teacher'|'invited', q }
+  var STAFF_SEARCH_AT = 10;   // the search box shows once a school has more people than this
   HUB.staff = function (d, el) {
-    var s = d.school;
-    // A school admin limited to some boards says so ("School Admin · CBSE only").
-    function boardScopeTag(u) {
-      var b = /school admin/i.test(u.role || '') && tlUsesApi(s) && schoolBoardList(s).length > 1 ? window.TilliAPI.adminBoards(s.id, u.email) : null;
-      return b ? ' <span class="ui-tag" title="Sees only these boards’ grades, children and results">' + esc(b.join(' + ')) + ' only</span>' : '';
-    }
+    var s = d.school, API = window.TilliAPI, apiS = tlUsesApi(s) && API;
     var multiBoard = tlUsesApi(s) && schoolBoardList(s).length > 1;
-    function staffRowHtml(u) {
-      var boardsBtn = multiBoard && /school admin/i.test(u.role || '') ? '<button class="tl-rowact" data-boards="' + esc(u.email) + '" data-boards-name="' + esc(u.name) + '" title="Edit board access" aria-label="Edit board access for ' + esc(u.name) + '">' + ICONS.edit + '</button>' : '';
-      return '<tr><td class="name">' + esc(u.name) + '<small>' + esc(u.email) + '</small></td><td>' + esc(u.role) + boardScopeTag(u) + '</td>' +
-        '<td>' + (u.sections && u.sections.length ? esc(u.sections.join(', ')) : '—') + '</td>' +
-        '<td class="r"><div class="tl-rowacts">' + boardsBtn + '<button class="tl-rowact" data-role="' + esc(u.email) + '" title="Change role" aria-label="Change role for ' + esc(u.name) + '">' + ICONS.role + '</button>' +
-        '<button class="tl-rowact danger" data-remove="' + esc(u.name) + '" title="Remove from school" aria-label="Remove ' + esc(u.name) + ' from this school">' + ICONS.trash + '</button></div></td></tr>';
-    }
-
-    var invRows = d.invitations.length ? d.invitations.map(function (i) {
-      return '<tr><td class="name">' + esc(i.name) + '<small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + boardScopeTag(i) + '</td><td>' + invStatusPill(i) + '</td><td>' + esc(i.expires) + '</td>' +
-        '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-resend="' + esc(i.email) + '" title="Resend invitation" aria-label="Resend invitation to ' + esc(i.email) + '">' + ICONS.resend + '</button>' +
-          '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
-    }).join('') : '<tr><td colspan="5"><div class="ui-empty">No invitations.</div></td></tr>';
-
-    // One school code: teachers enter it to join (no per-teacher invite needed),
-    // and it's part of every link the school shares. The explicit invite below
-    // stays available for named onboarding.
-    var teacherJoin = s.code;
-    var joinCode = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">School code</h3>' +
-        '<p class="ui-mod-note">Teachers enter this to join ' + esc(s.name) + ' as a Teacher — no invite needed. It’s in the teacher and student-assessment links (keep those inside the school); the parents’ link doesn’t contain it.</p></div></div>' +
-      '<div class="tl-linkrow"><div><b>School code</b><span class="mono">' + esc(teacherJoin) + '</span></div>' +
-        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-copy="' + esc(teacherJoin) + '">Copy code</button>' +
-        (tlUsesApi(s) && !GROUP ? '<button class="btn-link danger" data-regen-code title="Use this if the code was shared outside the school.">Regenerate</button>' : '') + '</div></div></div>';
-
-    // Demo access panel — the exact logins + codes needed to click through the
-    // whole flow (coordinator → teacher → parent) for a created school.
-    var codesCard = '';
-    if (s.created && window.TilliAPI) {
-      var teachers = (d.staff_users || []).filter(function (u) { return u.role === 'Teacher'; });
-      var tRows = teachers.map(function (u) {
-        return '<div class="ws-rev-row"><span>Teacher · ' + esc((u.sections || []).join(', ') || '—') + '</span><b class="mono">' + esc(u.email) + '</b></div>';
-      }).join('');
-      // Always read the live roster — the samples stashed at creation are empty
-      // (new schools start with no students), so they'd hide every later child.
-      // Parents add a child with the admission number alone (no code).
-      var cRows = window.TilliAPI.studentsForSchool(s.id).slice(0, 6).map(function (st) {
-        return '<div class="ws-rev-row"><span>' + esc(st.name) + ' · ' + esc(secLbl(s.id, st.grade, st.section)) + '</span><b class="mono">' + esc(st.student_id) + '</b></div>';
-      }).join('');
-      codesCard = '<div class="ui-card mb-gap"><div class="ui-mod-h"><div>' +
-          '<h3 class="ui-mod-title">Demo access & codes</h3>' +
-          '<p class="ui-mod-note">Everything you need to log in as each role for this school (all mock / localStorage).</p></div></div>' +
-        '<div class="ws-review">' +
-          '<div class="ws-rev-row"><span><b>Coordinator login</b> (School dashboard)</span><b class="mono">' + esc(s.coordinator ? s.coordinator.email : '—') + '</b></div>' +
-          '<div class="ws-rev-row"><span><b>School code</b> (teacher sign-up, student assessments)</span><span class="tl-coderow"><b class="mono">' + esc(teacherJoin) + '</b>' +
-            '<button class="tl-rowact" data-copy="' + esc(teacherJoin) + '" title="Copy school code" aria-label="Copy school code">' + ICONS.copy + '</button></span></div>' +
-          tRows +
-          '<div class="ws-rev-row" style="border-top:1px solid var(--line-200);margin-top:6px;padding-top:10px"><span><b>Admission numbers</b> (a parent picks this school, then types one — no code)</span><b></b></div>' +
-          (cRows || '<div class="ws-rev-row"><span class="tl-muted">Add students first — a parent links to a child with their admission number.</span></div>') +
-        '</div></div>';
-    }
+    var view = STAFF_VIEW[s.id] || (STAFF_VIEW[s.id] = { f: 'all', q: '' });
 
     // Teachers who said "My class isn't here" at sign-up, and — after a code
     // regenerate — everyone who joined with the old code in the 30 days before.
-    var API = window.TilliAPI, apiS = tlUsesApi(s) && API;
     var asks = apiS ? API.classRequests(s.id) : [];
-    var asksCard = !asks.length ? '' : '<div class="ui-card mb-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Teachers waiting for a class</h3>' +
-        '<p class="ui-mod-note">They signed up but their class isn’t on the platform. Add it in Grades &amp; sections and give it this teacher — the request closes on its own. Or mark it done.</p></div>' +
+    var asksCard = !asks.length ? '' : '<div class="ui-card mb-gap tl-needs"><div class="ui-mod-h"><div><h3 class="ui-mod-title"><span class="tl-needs-dot" aria-hidden="true"></span>Waiting for a class · ' + asks.length + '</h3>' +
+        '<p class="ui-mod-note">They signed up but their class isn’t on the platform. <b>Add class</b> opens Grades &amp; sections — give the new class to this teacher and the request closes on its own. Or dismiss it and say why.</p></div>' +
         '<button class="btn btn-outline btn-sm" data-grades>Grades &amp; sections</button></div>' +
       '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Teacher</th><th>Class they teach</th><th>Note</th><th>Asked</th><th></th></tr></thead><tbody>' +
       asks.map(function (r) {
-        return '<tr><td class="name">' + esc(r.name) + '<small>' + esc(r.email) + '</small></td><td>' + esc((r.grade + ' ' + r.section).trim() || '—') + '</td><td>' + esc(r.note || '—') + '</td><td>' + esc(fmtMs(r.at)) + '</td>' +
-          '<td class="r"><button class="btn-link" data-askdone="' + esc(r.id) + '">Mark done</button></td></tr>';
+        return '<tr><td class="name">' + esc(r.name) + '<small>' + esc(r.email) + '</small></td><td>' + esc((r.grade + ' · ' + r.section).replace(/^ · | · $/g, '').trim() || '—') + '</td><td>' + esc(r.note ? '“' + r.note + '”' : '—') + '</td><td>' + esc(fmtMs(r.at)) + '</td>' +
+          '<td class="r nowrap"><button class="btn btn-primary btn-sm" data-grades>Add class</button> <button class="btn-link" data-askdone="' + esc(r.id) + '" data-askname="' + esc(r.name) + '">Dismiss</button></td></tr>';
       }).join('') + '</tbody></table></div></div>';
     var changedAt = apiS && s.codeChangedAt ? s.codeChangedAt : (apiS ? (API.resolveSchool(s.id) || {}).codeChangedAt : null);
     var joiners = changedAt && Date.now() - changedAt <= 30 * 864e5 ? API.recentCodeJoiners(s.id, 30, changedAt) : [];
@@ -1948,21 +2381,86 @@
         return '<tr><td class="name">' + esc(j.name) + '<small>' + esc(j.email) + '</small></td><td>' + esc(j.classes.join(', ') || '—') + '</td><td>' + esc(fmtMs(j.joinedAt)) + '</td>' +
           '<td class="r"><button class="btn-link danger" data-unjoin="' + esc(j.email) + '" data-unjoin-name="' + esc(j.name) + '">Remove</button></td></tr>';
       }).join('') + '</tbody></table></div></div>';
-
     var untagged = multiBoard ? API.untaggedGrades(s.id) : [];
     var untaggedNote = untagged.length ? untaggedNoteHtml(untagged) : '';
-    el.innerHTML = asksCard + joinCard + untaggedNote + codesCard + joinCode +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Staff at this school</h3>' + (d.staff_users.length ? '<p class="ui-mod-note">' + d.staff_users.length + ' staff</p>' : '') + '</div><button class="btn btn-outline btn-sm" data-invite>+ Invite to this school</button></div>' +
-        (d.staff_users.length ? '<div id="staff-page"></div>' : '<div class="ui-empty">No staff yet — invite a school admin or teacher.</div>') + '</div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Invitations</h3></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Recipient</th><th>Role</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody>' + invRows + '</tbody></table></div></div>';
+
+    // ---- People: one row per email ----
+    var low = function (x) { return String(x || '').toLowerCase(); };
+    var tMap = {}, askBy = {}, invBy = {};
+    (apiS ? API.teachersFor(s.id) : []).forEach(function (t) { tMap[low(t.email)] = t; });
+    asks.forEach(function (r) { askBy[low(r.email)] = r; });
+    d.invitations.forEach(function (i) { invBy[low(i.email)] = i; });
+    var people = [], seen = {};
+    function addPerson(u) {
+      var e = low(u.email); if (!e || seen[e]) return; seen[e] = 1;
+      var inv = invBy[e] || null, t = tMap[e], ask = askBy[e];
+      var isAdmin = /admin/i.test(u.role || ''), secs = (u.sections || []).filter(Boolean);
+      var pending = inv && inv.status !== 'Activated' && !t;
+      var expired = pending && (inv.status === 'Expired' || ORG.inviteDaysLeft(inv) < 0);
+      var state = expired ? 'expired' : (u.invited || pending) ? 'invited' : (!isAdmin && !secs.length && ask) ? 'waiting' : 'active';
+      var boards = isAdmin && multiBoard ? API.adminBoards(s.id, u.email) : null;
+      var roleSub = isAdmin ? (multiBoard ? (boards ? boards.join(' + ') + ' only' : 'All boards') : '')
+        : (multiBoard && t ? t.section_ids.map(function (id) { return API.boardOfSection(s.id, id); }).filter(function (b, i, a) { return b && a.indexOf(b) === i; }).join(' + ') : '');
+      var invCls = inv ? [inv.grade, inv.section].filter(Boolean).join(' · ') : '';
+      var cls = isAdmin ? (boards ? boards.join(' + ') + ' classes' : 'Every class') : secs.length ? secs.join(', ') : (state === 'invited' || state === 'expired') && invCls ? invCls : 'No class yet';
+      var st = state === 'expired' ? { txt: 'Invite expired', tone: 'danger', sub: 'Expired ' + fmtJoined(inv.expires) + ' · never signed in' }
+        : state === 'invited' ? { txt: 'Invited — not joined yet', tone: 'info', sub: inv ? 'Sent ' + fmtJoined(inv.created) + ' · expires ' + fmtJoined(inv.expires) : '' }
+        : state === 'waiting' ? { txt: 'Waiting for a class', tone: 'warn', sub: 'Asked for ' + ((ask.grade + ' · ' + ask.section).replace(/^ · | · $/g, '').trim() || 'a class') }
+        : { txt: '● Active', tone: 'ok', sub: t && t.via === 'code' ? 'Joined with the school code' + (t.joinedAt ? ' · ' + fmtMs(t.joinedAt) : '') : inv ? 'Joined from an invite' : '' };
+      people.push({ name: u.name && String(u.name).indexOf('@') < 0 ? u.name : 'Name not given yet', email: u.email, role: isAdmin ? 'School admin' : (u.role || 'Teacher'), isAdmin: isAdmin,
+        roleSub: roleSub, cls: cls, clsMuted: isAdmin || !secs.length, state: state, st: st, raw: u });
+    }
+    (d.staff_users || []).forEach(addPerson);
+    d.invitations.forEach(function (i) { addPerson({ name: i.name, email: i.email, role: i.role, sections: [], invited: i.status !== 'Activated' }); });
+    var rank = { active: 0, waiting: 0, invited: 1, expired: 2 };
+    people.sort(function (a, b) { return rank[a.state] - rank[b.state] || (b.isAdmin - a.isAdmin) || a.name.localeCompare(b.name); });
+    var isInv = function (p) { return p.state === 'invited' || p.state === 'expired'; };
+    var FILTERS = [['all', 'All', function () { return true; }], ['admin', 'School admins', function (p) { return p.isAdmin && !isInv(p); }],
+      ['teacher', 'Teachers', function (p) { return !p.isAdmin && !isInv(p); }], ['invited', 'Invited', isInv]];
+    var fn = (FILTERS.filter(function (x) { return x[0] === view.f; })[0] || FILTERS[0])[2];
+    var nOf = function (st) { return people.filter(function (p) { return p.state === st; }).length; };
+    var countLine = [people.length + (people.length === 1 ? ' person' : ' people'), nOf('active') ? nOf('active') + ' active' : '', nOf('invited') ? nOf('invited') + ' invited' : '',
+      nOf('expired') ? nOf('expired') + ' invite' + (nOf('expired') === 1 ? '' : 's') + ' expired' : '', nOf('waiting') ? nOf('waiting') + ' waiting for a class' : ''].filter(Boolean).join(' · ');
+
+    var codeStrip = '<div class="tl-codestrip"><span>Teachers can also join on their own with the school code</span><b class="mono" title="It’s also inside the teacher and student-assessment links, so keep those within the school. The parents’ link doesn’t contain it.">' + esc(s.code) + '</b>' +
+      '<button class="btn btn-outline btn-sm" data-copy="' + esc(s.code) + '">Copy</button><span class="tl-grow"></span>' +
+      (tlUsesApi(s) && !GROUP ? '<button class="btn-link danger" data-regen-code title="Use this if the code was shared outside the school.">Regenerate</button>' : '') + '</div>';
+    var filterBar = '<div class="tl-people-bar"><div class="tl-lg-show" role="tablist" aria-label="Show">' + FILTERS.map(function (x) {
+        return '<button type="button" role="tab" aria-selected="' + (view.f === x[0]) + '" class="' + (view.f === x[0] ? 'on' : '') + '" data-pf="' + x[0] + '">' + x[1] + ' · ' + people.filter(x[2]).length + '</button>';
+      }).join('') + '</div><span class="tl-grow"></span>' +
+      (people.length > STAFF_SEARCH_AT ? '<label class="tl-people-q">Find a person<input type="search" class="input" data-pq value="' + esc(view.q) + '" placeholder="Name or email"></label>' : '') + '</div>';
+    var peopleCard = '<div class="ui-card mt-gap tl-people"><div class="ui-mod-h"><div><h3 class="ui-mod-title">People at ' + esc(s.name) + '</h3><p class="ui-mod-note">' + esc(countLine || 'No one yet') + '</p></div>' +
+        '<button class="btn btn-primary btn-sm" data-invite>＋ Invite someone</button></div>' + codeStrip + filterBar + '<div id="staff-page"></div></div>';
+
+    // Demo access panel — the exact logins needed to click through the whole flow
+    // (coordinator → teacher → parent) for a created school. Prototype only.
+    var codesCard = '';
+    if (s.created && API) {
+      var tRows = (d.staff_users || []).filter(function (u) { return u.role === 'Teacher'; }).map(function (u) {
+        return '<div class="ws-rev-row"><span>Teacher · ' + esc((u.sections || []).join(', ') || '—') + '</span><b class="mono">' + esc(u.email) + '</b></div>';
+      }).join('');
+      codesCard = '<div class="ui-card mt-gap tl-democard"><div class="ui-mod-h"><div>' +
+          '<h3 class="ui-mod-title">Demo access &amp; codes <span class="tl-proto-tag">Prototype only</span></h3>' +
+          '<p class="ui-mod-note">Everything you need to log in as each role for this school (all mock / localStorage). Parents link with a child’s admission number — see Students.</p></div></div>' +
+        '<div class="ws-review">' +
+          '<div class="ws-rev-row"><span><b>Coordinator login</b> (School dashboard)</span><b class="mono">' + esc(s.coordinator ? s.coordinator.email : '—') + '</b></div>' +
+          tRows + '</div></div>';
+    }
+    el.innerHTML = asksCard + joinCard + untaggedNote + peopleCard + codesCard;
+
     el.querySelector('[data-invite]').addEventListener('click', function () { openInvite(s.id); });
     el.querySelectorAll('[data-grades]').forEach(function (b) { b.addEventListener('click', function () { openStructureEditor(s); }); });
+    el.querySelectorAll('[data-pf]').forEach(function (b) { b.addEventListener('click', function () { view.f = b.dataset.pf; staffPager.page = 1; HUB.staff(d, el); }); });
+    var pq = el.querySelector('[data-pq]');
+    if (pq) pq.addEventListener('input', function () { view.q = pq.value; staffPager.page = 1; drawStaff(); });
     el.querySelectorAll('[data-askdone]').forEach(function (b) { b.addEventListener('click', function () {
-      var r = API.resolveClassRequest(b.dataset.askdone, me.email);
+      // Dismiss with a reason the teacher sees on their garden.
+      var why = (window.prompt('Why dismiss ' + (b.dataset.askname || 'this') + '’s request? They’ll see this.', '') || '').trim();
+      if (!why) return;
+      var r = API.resolveClassRequest(b.dataset.askdone, me.email, why);
       if (!r.ok) { toast('Couldn’t update that request.'); return; }
-      ORG.server.logAudit(me.name, 'class.request', 'marked done', 'school', s.id);
-      toast('Request marked done.'); go('school', { id: s.id, tab: 'staff' });
+      ORG.server.logAudit(me.name, 'class.request', 'dismissed — ' + why, 'school', s.id);
+      toast('Request dismissed.'); go('school', { id: s.id, tab: 'staff' });
     }); });
     el.querySelectorAll('[data-unjoin]').forEach(function (b) { b.addEventListener('click', function () {
       gated({ title: 'Remove teacher', danger: true, confirmLabel: 'Remove',
@@ -1989,17 +2487,36 @@
         } });
     });
     el.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copy(b.dataset.copy, 'School code copied.'); }); });
-    el.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation', s.id); toast('Invitation resent to ' + b.dataset.resend + '.'); }); });
-    el.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation', schoolId: s.id }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
-    // Staff table — same pager as the Students tab (20 / 50 / 100 per page).
+
+    // People table — same pager as the Students tab (20 / 50 / 100 per page); hidden while it fits one page.
     if (staffPager.schoolId !== s.id) { staffPager.schoolId = s.id; staffPager.page = 1; }
     var mount = el.querySelector('#staff-page');
+    var act = function (attr, p, label, icon, extra) {
+      return '<button type="button" class="tl-pact' + (extra || '') + '" ' + attr + '="' + esc(p.email) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '">' + icon + '</button>';
+    };
+    function rowHtml(p) {
+      var first = p.name === 'Name not given yet' ? p.email : p.name.split(' ')[0];
+      var acts = isInv(p)
+        ? act('data-resend', p, p.state === 'expired' ? 'Send ' + first + ' a new invitation' : 'Resend the invitation to ' + first, ICONS.resend, p.state === 'expired' ? ' go' : '') +
+          act('data-revoke', p, 'Revoke ' + first + '’s invitation', ICONS.revoke, ' danger')
+        : (p.isAdmin && multiBoard ? act('data-boards', p, 'Board access for ' + first, ICONS.layers) : '') +
+          act('data-role', p, 'Change ' + first + '’s role', ICONS.role) +
+          act('data-remove', p, 'Remove ' + first + ' from ' + s.name, ICONS.trash, ' danger');
+      return '<tr><td class="name">' + esc(p.name) + '<small>' + esc(p.email) + '</small></td>' +
+        '<td>' + esc(p.role) + (p.roleSub ? '<small>' + esc(p.roleSub) + '</small>' : '') + '</td>' +
+        '<td class="' + (p.clsMuted ? 'tl-muted' : '') + '">' + esc(p.cls) + '</td>' +
+        '<td><span class="tl-pst ' + p.st.tone + '">' + esc(p.st.txt) + '</span>' + (p.st.sub ? '<small>' + esc(p.st.sub) + '</small>' : '') + '</td>' +
+        '<td class="r"><div class="tl-pacts">' + acts + '</div></td></tr>';
+    }
     function drawStaff() {
-      var list = d.staff_users, pages = Math.max(1, Math.ceil(list.length / staffPager.size));
+      var q = low(view.q).trim();
+      var list = people.filter(fn).filter(function (p) { return !q || low(p.name).indexOf(q) >= 0 || low(p.email).indexOf(q) >= 0; });
+      if (!list.length) { mount.innerHTML = '<div class="ui-empty">' + (q ? 'No one matches “' + esc(view.q.trim()) + '”.' : view.f === 'invited' ? 'No open invitations.' : people.length ? 'No one here yet.' : 'No staff yet — invite a school admin or teacher.') + '</div>'; return; }
+      var pages = Math.max(1, Math.ceil(list.length / staffPager.size));
       staffPager.page = Math.min(Math.max(1, staffPager.page), pages);
       var start = (staffPager.page - 1) * staffPager.size;
-      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>Sections</th><th></th></tr></thead><tbody>' +
-        list.slice(start, start + staffPager.size).map(staffRowHtml).join('') + '</tbody></table></div>' +
+      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640 tl-people-t"><thead><tr><th>Person</th><th>Role</th><th>Classes</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
+        list.slice(start, start + staffPager.size).map(rowHtml).join('') + '</tbody></table></div>' +
         pagerHtml(list.length, staffPager.page, staffPager.size, 'staff');
       wirePager(mount, function (page, size) {
         if (size !== staffPager.size) { staffPager.size = size; staffPager.page = 1; try { localStorage.setItem(STAFF_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
@@ -2007,11 +2524,31 @@
         drawStaff();
         mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
-      mount.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () { openRoleEditor(ORG.users.find(function (u) { return u.email === b.dataset.role; }), function () { go('school', { id: s.id, tab: 'staff' }); }); }); });
-      mount.querySelectorAll('[data-boards]').forEach(function (b) { b.addEventListener('click', function () { openBoardAccess(s, b.dataset.boards, b.dataset.boardsName); }); });
-      mount.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Remove from school', danger: true, body: '<p>Remove <b>' + esc(b.dataset.remove) + '</b> from ' + esc(s.name) + '?</p>', confirmLabel: 'Remove', audit: { action: 'user.remove', entity: b.dataset.remove, entityType: 'user', schoolId: s.id }, onConfirm: function () { toast('Removed from school.'); } }); }); });
+      var byEmail = function (e) { return people.filter(function (p) { return p.email === e; })[0]; };
+      mount.querySelectorAll('[data-role]').forEach(function (b) { b.addEventListener('click', function () {
+        var p = byEmail(b.dataset.role);
+        var u = ORG.users.find(function (x) { return x.email === b.dataset.role; }) || { name: p.name, email: p.email, role: p.isAdmin ? 'School Admin' : 'Teacher', schoolId: s.id };
+        openRoleEditor(u, function () { go('school', { id: s.id, tab: 'staff' }); });
+      }); });
+      mount.querySelectorAll('[data-boards]').forEach(function (b) { b.addEventListener('click', function () { var p = byEmail(b.dataset.boards); openBoardAccess(s, p.email, p.name); }); });
+      mount.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () {
+        var p = byEmail(b.dataset.remove);
+        gated({ title: 'Remove from school', danger: true, confirmLabel: 'Remove',
+          body: '<p>Remove <b>' + esc(p.name) + '</b> from ' + esc(s.name) + '? ' + (p.isAdmin ? 'They lose access to the school dashboard at once.' : 'They lose access to the school’s classes and children at once.') + '</p>',
+          audit: { action: 'user.remove', entity: p.email, entityType: 'user', schoolId: s.id },
+          onConfirm: function () {
+            if (!apiS) { toast('Removed from school.'); return; }
+            var r = p.isAdmin ? API.removeAdminAccess(s.id, p.email, me.email) : API.removeTeacherAccess(s.id, p.email, me.email);
+            if (!r.ok) { toast(r.reason === 'last_admin' ? 'Add another school admin first — a school always needs one.' : 'Couldn’t remove them.'); return; }
+            toast(p.name + ' removed from ' + s.name + '.');
+            ORG.refreshApiSchool(s.id);
+            go('school', { id: s.id, tab: 'staff' });
+          } });
+      }); });
+      mount.querySelectorAll('[data-resend]').forEach(function (b) { b.addEventListener('click', function () { ORG.server.logAudit(me.name, 'invitation.resend', b.dataset.resend, 'invitation', s.id); toast('Invitation resent to ' + b.dataset.resend + '.'); }); });
+      mount.querySelectorAll('[data-revoke]').forEach(function (b) { b.addEventListener('click', function () { gated({ title: 'Revoke invitation', danger: true, body: '<p>Revoke the invitation to <b>' + esc(b.dataset.revoke) + '</b>?</p>', confirmLabel: 'Revoke', audit: { action: 'invitation.revoke', entity: b.dataset.revoke, entityType: 'invitation', schoolId: s.id }, onConfirm: function () { toast('Invitation revoked.'); } }); }); });
     }
-    if (mount) drawStaff();
+    drawStaff();
   };
 
   // Multi-board schools: grades with no board are invisible to a board-limited admin.
@@ -2214,6 +2751,8 @@
         var deps = window.TilliAPI.getDeployments(s.id).filter(function (x) { return x.phase === phase; });
         if (deps.length) {
           rec.deployed = true; rec.start = deps[0].start || ''; rec.end = deps[0].end || '';
+          // Ended with "End now" before its end date → stays Ended after a reload.
+          rec.endedEarly = deps.every(function (x) { return x.status === 'Ended'; }) && rec.end >= tlToday(s);
           // Everything in use goes back to the catalogue first…
           ['school', 'home'].forEach(function (m) { ord[m].concat(any[m]).forEach(function (id) { off.push(id); }); ord[m] = []; any[m] = []; });
           // …then exactly what's deployed comes back, in each place's sequence.
@@ -2421,25 +2960,37 @@
     }); });
   }
 
-  // What would stop a phase running well once deployed: classes with no teacher,
-  // no students at all, and items whose template has no live version for this
-  // phase. Warnings only — the Tilli team can still deploy (e.g. to schedule ahead).
+  // What would stop a phase running well once deployed. `block` = children will
+  // miss out (no students, a class with children but no teacher); `heads` = worth
+  // knowing (a teacher invited but not signed in yet, no live template version).
+  // Warnings only — the Tilli team can still deploy (e.g. to schedule ahead).
+  // Classes with no children are left out: there's nobody to assess there.
   function deployChecks(s, phase, p) {
     var out = [], A = window.TilliAPI;
     var ids = TL_AUD.reduce(function (acc, a) { return acc.concat(tlRunning(p, a.key)); }, []);
+    var staffHref = href('school', { id: s.id, tab: 'staff' });
     if (tlUsesApi(s)) {
-      if (!A.studentsForSchool(s.id).length)
-        out.push({ text: 'This school has <b>no students</b> yet.', fix: 'Add students', href: href('add-students', { school: s.id }) });
+      var kids = A.studentsForSchool(s.id), perSec = {};
+      kids.forEach(function (st) { perSec[st.section_id] = (perSec[st.section_id] || 0) + 1; });
+      if (!kids.length)
+        out.push({ level: 'block', text: 'This school has <b>no students</b> yet.', fix: 'Add students', href: href('add-students', { school: s.id }) });
       var taught = {}; A.teachersFor(s.id).forEach(function (t) { t.section_ids.forEach(function (x) { taught[x] = 1; }); });
       var teacherRuns = ids.some(function (id) { var it = p.byId[id]; return it.aud === 'teacher' || (it.aud === 'direct' && it.mode === 'school'); });
-      var bare = A.sectionsForSchool(s.id).filter(function (x) { return !taught[x.section_id]; });
-      if (teacherRuns && bare.length)
-        out.push({ text: '<b>' + bare.length + ' class' + (bare.length === 1 ? '' : 'es') + ' with no teacher</b> (' + esc(bare.slice(0, 4).map(function (x) { return x.name; }).join(', ') + (bare.length > 4 ? '…' : '')) + ') — nobody can run the at-school assessments there.', fix: 'Staff & Access', href: href('school', { id: s.id, tab: 'staff' }) });
+      // An invite names its class by grade + section; match it to the class.
+      var norm = function (v) { return String(v || '').toLowerCase().replace(/\s+/g, ''); };
+      var invites = (A.listAccounts ? A.listAccounts() : []).filter(function (a) { return a.school_id === s.id && a.mustReset && /teacher/i.test(a.role || 'Teacher'); });
+      var bare = A.sectionsForSchool(s.id).filter(function (x) { return !taught[x.section_id] && perSec[x.section_id]; });
+      if (teacherRuns) bare.forEach(function (x) {
+        var inv = invites.filter(function (a) { return norm(a.grade) === norm(x.grade) && norm(a.section) === norm(x.section); })[0];
+        out.push(inv
+          ? { level: 'heads', text: '<b>' + esc(x.name) + '</b> — ' + esc(inv.name || inv.email) + ' is invited but hasn’t signed in yet.', fix: 'Staff & Access', href: staffHref }
+          : { level: 'block', text: '<b>' + esc(x.name) + '</b> has no teacher — nobody can run the at-school assessments there.', fix: 'Give it a teacher', href: staffHref });
+      });
     }
     // Teachers' own Pre / Post-training surveys aren't template-based, so they're skipped.
     var noLive = ids.filter(function (id) { var it = p.byId[id], tpl = tlTemplateFor(it); return TL_PER_TEACHER.indexOf(it.name) < 0 && !it.version && !(tpl && tplLive(tpl, phase)); }).map(function (id) { return p.byId[id].name; });
     if (noLive.length)
-      out.push({ text: '<b>' + esc(noLive.join(', ')) + '</b> ' + (noLive.length === 1 ? 'has' : 'have') + ' no live ' + esc(phase) + ' version — there may be nothing to answer.', fix: 'Templates', href: href('templates', {}) });
+      out.push({ level: 'heads', text: '<b>' + esc(noLive.join(', ')) + '</b> ' + (noLive.length === 1 ? 'has' : 'have') + ' no live ' + esc(phase) + ' version — there may be nothing to answer.', fix: 'Templates', href: href('templates', {}) });
     return out;
   }
 
@@ -2451,7 +3002,8 @@
     var badDates = !!(p.start && p.end && p.end < p.start);
     var ready = !missing.length && !badDates && !p.deployed;
     var deployBtn = p.deployed
-      ? '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '" title="Take this phase back to draft — teachers and parents lose access">Undeploy</button>'
+      ? (tlWindowStatus(s, p) === 'live' ? '<button class="btn btn-outline btn-sm" data-endnow="' + esc(phase) + '" title="Close this window today — nothing more can be completed, and results are worked out">End now</button> ' : '') +
+        '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '" title="Take this phase back to draft — teachers and parents lose access">Undeploy</button>'
       : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' + (ready ? '' : ' disabled') + '>Deploy phase</button>';
     var statusPill = '<span class="ui-chip ' + TL_ST_CHIP[ps.st] + '">' + (ps.st === 'live' ? '● ' : ps.st === 'completed' ? '✓ ' : '') + TL_ST_LABEL[ps.st] + '</span>';
     var head = '<div class="dep-phase-head">' +
@@ -2649,10 +3201,12 @@
           return pl.label + ': ' + [o ? o + ' in order' : '', f ? f + ' any time' : ''].filter(Boolean).join(', ');
         }).join(' · ');
         var checks = deployChecks(s, phase, p);
-        gated({ title: 'Deploy ' + phase, confirmLabel: checks.length ? 'Deploy anyway' : 'Deploy phase',
-          body: (checks.length ? '<div class="ui-note warn mb-3 dep-checks"><span aria-hidden="true">⚠️</span><div><b>Before this can run smoothly:</b><ul>' +
-                  checks.map(function (c) { return '<li>' + c.text + ' <a class="btn-link" href="' + c.href + '" data-fixlink>' + esc(c.fix) + ' →</a></li>'; }).join('') +
-                  '</ul><span class="tl-muted">You can still deploy now — e.g. to schedule it ahead.</span></div></div>' : '') +
+        var blocks = checks.filter(function (c) { return c.level === 'block'; }), heads = checks.filter(function (c) { return c.level !== 'block'; });
+        var checkList = function (list) { return '<ul>' + list.map(function (c) { return '<li>' + c.text + ' <a class="btn-link" href="' + c.href + '" data-fixlink>' + esc(c.fix) + ' →</a></li>'; }).join('') + '</ul>'; };
+        gated({ title: 'Deploy ' + phase, confirmLabel: blocks.length ? 'Deploy anyway' : 'Deploy phase',
+          body: (blocks.length ? '<div class="ui-note warn mb-3 dep-checks"><span aria-hidden="true">⚠️</span><div><b>Some children will miss out:</b>' + checkList(blocks) +
+                  '<span class="tl-muted">You can still deploy now — e.g. to schedule it ahead.</span></div></div>' : '') +
+                (heads.length ? '<div class="ui-note mb-3 dep-checks"><span aria-hidden="true">ℹ️</span><div><b>Good to know:</b>' + checkList(heads) + '</div></div>' : '') +
                 '<p>Deploy <b>' + n + '</b> assessment' + (n === 1 ? '' : 's') + ' for <b>' + esc(phase) + '</b>.</p>' +
                 '<p>' + (future ? 'It’s <b>Scheduled</b>: it goes live on <b>' + esc(fmtJoined(p.start)) + '</b>' : 'It goes live <b>now</b>') + ' and closes after <b>' + esc(fmtJoined(p.end)) + '</b>.</p>' +
                 '<p class="tl-muted">' + esc(orderLine) + '. You can change the dates and order later.</p>',
@@ -2664,6 +3218,19 @@
           } });
         // A fix link leaves the dialog for the page that fixes it.
         document.querySelectorAll('#tl-modal-root [data-fixlink]').forEach(function (a) { a.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; }); });
+      });
+    });
+    // End a live window today (it used to need the end date moved to yesterday).
+    mount.querySelectorAll('[data-endnow]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var phase = b.dataset.endnow, p = tlPlan(s, phase);
+        gated({ title: 'End ' + phase + ' now', danger: true, confirmLabel: 'End now',
+          body: '<p>Close <b>' + esc(phase) + '</b> today? Teachers and parents can’t complete anything more for it. What’s already recorded is kept, and results are worked out from it.</p>',
+          audit: { action: 'phase.end', entity: phase, entityType: 'phase', schoolId: s.id },
+          onConfirm: function () {
+            if (tlUsesApi(s)) Object.keys(TL_AUD_LABEL).forEach(function (k) { window.TilliAPI.endPhase(s.id, phase, TL_AUD_LABEL[k]); });
+            p.endedEarly = true; refreshPlanner(d); toast(phase + ' ended.');
+          } });
       });
     });
     mount.querySelectorAll('[data-undeploy]').forEach(function (b) {
@@ -2764,6 +3331,7 @@
   // The current year lives in the planner as before; past years are archived
   // read-only (TilliAPI.yearSummary). Only the Tilli team starts a new year.
   var HUB_YEAR = {};   // sid -> year id being viewed on the Assessments tab
+  var HUB_SUB = {};    // sid -> Assessments sub-tab ('plan' | 'logs' | 'sessions')
   var PH_ORDER = ['Baseline', 'Midline', 'Endline'];
   function schoolYears(s) {
     var API = window.TilliAPI;
@@ -2785,7 +3353,7 @@
       ? '<button class="btn btn-outline btn-sm" data-yearnew data-tipnext title="Close ' + esc(cur.label) + ' (it becomes read-only), move students up a grade and start the next year with an empty planner. Tilli team only.">Start new year</button>'
       : '<button class="btn-link tl-yearearly" data-yearnew data-early="1" data-tipnext title="Start new year appears once every assessment window in ' + esc(cur.label) + ' has ended. Use this only if the school has asked to close the year early.">Close the year early…</button>';
     var cal = rd && window.TilliAPI.calendarFor(s.id);
-    var calNote = cal && cal.status === 'submitted' ? '<div class="ui-note info mt-2"><span aria-hidden="true">📅</span><span><b>' + esc(cal.submittedByName || 'The school') + '</b> sent the school calendar on ' + esc(fmtJoined(localISO(new Date(cal.submittedAt)))) + ' — <button class="btn-link" data-yearcal>review it and apply the dates</button>.</span></div>' : '';
+    var calNote = cal && cal.status === 'submitted' ? '<div class="ui-note info mt-2">' + needsDot('Needs you: review this calendar') + '<span aria-hidden="true">📅</span><span><b>' + esc(cal.submittedByName || 'The school') + '</b> sent the school calendar on ' + esc(fmtJoined(localISO(new Date(cal.submittedAt)))) + ' — <button class="btn-link" data-yearcal>review it and apply the dates</button>.</span></div>' : '';
     var calBtn = rd ? '<button class="btn btn-outline btn-sm" data-yearcal title="Suggest Baseline / Midline / Endline dates from the school’s terms, exams and holidays.">Plan from calendar</button>' : '';
     var ask = rd && window.TilliAPI.yearRequest(s.id), askNote = ask && ask.status === 'open'
       ? '<div class="ui-note warn mt-2"><span aria-hidden="true">↻</span><span><b>' + esc(ask.byName || ask.by) + '</b> asked on ' + esc(fmtJoined(localISO(new Date(ask.at)))) + ' to start the next academic year.</span></div>' : '';
@@ -3091,54 +3659,60 @@
       return;
     }
 
-    // What to send the school: who each link is for, and where it lands.
+    // Sub-tabs instead of one long scroll: Plan & deploy · Logs · Sessions. The open
+    // one is in the URL (?sub=) so a reload or a shared link lands on it.
+    var SUBS = [['plan', 'Plan & deploy'], ['logs', 'Logs']].concat(tlUsesApi(s) ? [['sessions', 'Sessions']] : []);
+    var sub = currentRoute().params.sub || HUB_SUB[s.id] || 'plan';
+    if (!SUBS.some(function (x) { return x[0] === sub; })) sub = 'plan';
+    HUB_SUB[s.id] = sub;
+    var subBar = '<div class="ui-seg tl-subtabs mb-gap" role="tablist">' + SUBS.map(function (x) {
+      return '<button class="' + (x[0] === sub ? 'on' : '') + '" role="tab" aria-selected="' + (x[0] === sub) + '" data-asub="' + x[0] + '">' + esc(x[1]) + '</button>';
+    }).join('') + '</div>';
+
+    // What to send the school. Only the parents' link: staff come in with the school code
+    // or their invite, and the student-assessment link lives on the teacher's dashboard.
     var SHARE = [
       { slug: 'parent', label: 'Parents', note: 'Parents sign in and find their child at this school. Safe to send home — it doesn’t contain the school code.' },
-      { slug: 'teacher', label: 'Teachers & school admins', note: 'Staff sign in straight into this school.' },
-      { slug: 'direct', label: 'Student assessments', note: 'Opened on each child’s device — a teacher signs in with the school code, picks a class and runs the assessments.', preview: 'assess.html' },
     ];
     var links = SHARE.map(function (k) {
       var url = ORG.masterLinkUrl(s, k.slug);
-      var preview = k.preview ? '<a class="btn btn-outline btn-sm" href="' + k.preview + '" target="_blank" rel="noopener" title="Open the student assessment page (local prototype)">Preview</a>' : '';
-      return '<div class="tl-linkrow"><div><b>' + esc(k.label) + '</b><span class="tl-linknote">' + esc(k.note) + '</span><span class="mono">' + esc(url) + '</span></div><span class="tl-inline-actions">' + preview + '<button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
+      return '<div class="tl-linkrow"><div><b>' + esc(k.label) + '</b><span class="tl-linknote">' + esc(k.note) + '</span><span class="mono">' + esc(url) + '</span></div><span class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-copy="' + esc(url) + '">Copy Link</button></span></div>';
     }).join('');
     var grp = s.groupId && s.groupId !== 'g-none' ? ORG.groupById(s.groupId) : null;
     var grpNote = grp && !grp.archived ? '<p class="ui-mod-note mt-3">' + esc(s.name) + ' is part of <b>' + esc(grp.name) + '</b>. To reach every school in it with one link, use the <button class="btn-link" data-grouplinks="' + esc(grp.id) + '">group links</button>.</p>' : '';
 
-    el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Deployments</h3></div>' +
-        '<div class="tl-inline-actions">' +
-          '<button class="btn btn-outline btn-sm" data-teacherlog title="Per-teacher status for every teacher assessment deployed to this school — Completed when every student in their sections is rated.">Teacher assessment log</button>' +
-          '<button class="btn btn-outline btn-sm" data-dlcsv title="Download this school’s assessment results as a CSV">Results CSV</button>' +
-          '<button class="btn btn-outline btn-sm" data-studentlog title="Per-student status (Completed / In Progress / Not Started) for every student-facing assessment deployed to this school — one row per student, one column per assessment.">Student assessment log</button>' +
-          '<button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
-        '<div class="dep-chains" id="dep-planner"></div></div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Links to share</h3><p class="ui-mod-note">Send these to ' + esc(s.name) + '. Each one opens straight into this school.</p></div></div>' + links + grpNote + '</div>' +
-      (tlUsesApi(s) ? sessionsCardHtml(s) : '') +
-      '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>' + (yrs ? yearOverYearHtml(s, yrs) : '');
-    if (yearBar) { el.insertAdjacentHTML('afterbegin', calendarClashHtml(s)); el.insertAdjacentHTML('afterbegin', yearBar); wireYearBar(s, d, el); }
-    el.querySelector('[data-addassess]').addEventListener('click', function () { openAddAssessment(d); });
+    var bodyHtml = sub === 'logs' && tlUsesApi(s) ? '<div id="hub-log"></div>'
+      : sub === 'logs'
+      ? '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Assessment logs</h3><p class="ui-mod-note">Who has completed what, and when — teachers first, then each child.</p></div>' +
+          '<button class="btn btn-outline btn-sm" data-dlcsv title="Download this school’s assessment results as a CSV">Results CSV</button></div></div>' +
+        '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>'
+      : sub === 'sessions' ? sessionsCardHtml(s)
+      : '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Deployments</h3></div>' +
+          '<div class="tl-inline-actions"><button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
+          '<div class="dep-chains" id="dep-planner"></div></div>' +
+        '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Link to share</h3><p class="ui-mod-note">Send this to ' + esc(s.name) + '’s parents. Staff join with the school code or their invite; the student-assessment link is on each teacher’s dashboard.</p></div></div>' + links + grpNote + '</div>' +
+        (yrs ? yearOverYearHtml(s, yrs) : '');
+    el.innerHTML = subBar + bodyHtml;
+    if (yearBar && sub === 'plan') { el.querySelector('.tl-subtabs').insertAdjacentHTML('afterend', calendarClashHtml(s) ); el.querySelector('.tl-subtabs').insertAdjacentHTML('afterend', yearBar); wireYearBar(s, d, el); }
+    el.querySelectorAll('[data-asub]').forEach(function (b) { b.addEventListener('click', function () {
+      HUB_SUB[s.id] = b.dataset.asub;
+      history.replaceState(null, '', buildHash('school', { id: s.id, tab: 'assessments', sub: b.dataset.asub }));
+      HUB.assessments(d, el);
+    }); });
+    var aa = el.querySelector('[data-addassess]'); if (aa) aa.addEventListener('click', function () { openAddAssessment(d); });
     var ns = el.querySelector('[data-newsession]'); if (ns) ns.addEventListener('click', function () { openNewSession(s); });
     el.querySelectorAll('[data-session]').forEach(function (b) {
       b.addEventListener('click', function () { go('session', { id: b.dataset.session }); });
       b.addEventListener('keydown', function (e) { if (e.key === 'Enter') go('session', { id: b.dataset.session }); });
     });
     var gl = el.querySelector('[data-grouplinks]'); if (gl) gl.addEventListener('click', function () { go('group', { id: gl.dataset.grouplinks }); });
-    renderPlanner(d, el.querySelector('#dep-planner'));
-    var slBtn = el.querySelector('[data-studentlog]'), slMount = el.querySelector('#hub-studentlog');
-    slBtn.addEventListener('click', function () {
-      if (slMount.innerHTML) { slMount.innerHTML = ''; slBtn.textContent = 'Student assessment log'; slBtn.classList.remove('on'); return; }
-      renderStudentAssessmentLog(d, slMount);
-      slBtn.textContent = 'Hide student assessment log'; slBtn.classList.add('on');
-      slMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
-    var tlBtn = el.querySelector('[data-teacherlog]'), tlMount = el.querySelector('#hub-teacherlog');
-    tlBtn.addEventListener('click', function () {
-      if (tlMount.innerHTML) { tlMount.innerHTML = ''; tlBtn.textContent = 'Teacher assessment log'; tlBtn.classList.remove('on'); return; }
-      renderTeacherAssessmentLog(d, tlMount);
-      tlBtn.textContent = 'Hide teacher assessment log'; tlBtn.classList.add('on');
-      tlMount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
-    el.querySelector('[data-dlcsv]').addEventListener('click', function () {
+    var planner = el.querySelector('#dep-planner'); if (planner) renderPlanner(d, planner);
+    var tlMount = el.querySelector('#hub-teacherlog'), slMount = el.querySelector('#hub-studentlog');
+    var logMount = el.querySelector('#hub-log'); if (logMount) renderAssessLog(s, logMount);
+    if (tlMount) renderTeacherAssessmentLog(d, tlMount);
+    if (slMount) renderStudentAssessmentLog(d, slMount);
+    var csvBtn = el.querySelector('[data-dlcsv]');
+    if (csvBtn) csvBtn.addEventListener('click', function () {
       var rows = ORG.results.filter(function (r) { return r.schoolId === s.id; });
       downloadCsv(s.code.toLowerCase() + '-results.csv', ['Assessment', 'Phase', 'Audience', 'Responses', 'Expected', 'Completion %', 'Status', 'Updated'],
         rows.map(function (r) { return [r.assessment, r.phase, r.audience, r.responses, r.expected, r.completion, r.status, r.updated]; }));
@@ -3807,7 +4381,9 @@
   };
 
   // Invitations (spec §7.2)
-  function invStatusPill(i) { var m = { 'Activated': 'ok', 'Account Created': 'sched', 'Expired': 'danger' }; return statusPill(i.status, m[i.status] || ''); }
+  // Plain words on the pill: "Account Created" read as if they'd joined.
+  var INV_LABEL = { 'Activated': 'Joined', 'Account Created': 'Invited — not joined yet' };
+  function invStatusPill(i) { var m = { 'Activated': 'ok', 'Account Created': 'sched', 'Expired': 'danger' }; return statusPill(INV_LABEL[i.status] || i.status, m[i.status] || ''); }
   SCREEN.invitations = function (params, body) {
     var f = peopleFilters(params);
     var attn = params.filter === 'attention';
@@ -3824,7 +4400,7 @@
     var rows = list.map(function (i) {
       var s = i.schoolId ? ORG.byId(i.schoolId) : null;
       return '<tr><td class="name"><button class="btn-link text-strong" data-inv-detail="' + esc(i.email) + '">' + esc(i.name) + '</button><small>' + esc(i.email) + '</small></td><td>' + esc(i.role) + '</td><td>' + (s ? esc(s.name) : '—') + '</td>' +
-        '<td>' + invStatusPill(i) + '</td><td>' + esc(i.delivery) + '</td><td>' + esc(i.created) + '</td><td>' + esc(i.expires) + '</td>' +
+        '<td>' + invStatusPill(i) + '</td><td>' + esc(i.delivery) + '</td><td>' + esc(fmtJoined(i.created)) + '</td><td>' + esc(fmtJoined(i.expires)) + '</td>' +
         '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-resend="' + esc(i.email) + '" title="Resend invitation" aria-label="Resend invitation to ' + esc(i.email) + '">' + ICONS.resend + '</button>' +
           '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
     }).join('') || '<tr><td colspan="8"><div class="ui-empty">No invitations.</div></td></tr>';
@@ -3842,13 +4418,16 @@
   function openInvite(schoolId) {
     var schoolOpts = '<option value="">— Select school —</option>' + ORG.activeSchools().map(function (s) { return '<option value="' + s.id + '"' + (s.id === schoolId ? ' selected' : '') + '>' + esc(s.name) + '</option>'; }).join('');
     var invRoles = ORG.roles.filter(function (r) { return r !== 'none'; });
-    var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '">' + esc(r) + '</option>'; }).join('');
+    // Starts on Teacher — the most common invite, and it always comes with a school
+    // (it used to start on Super Admin, which gives the person no school).
+    var defRole = invRoles.indexOf('Teacher') >= 0 ? 'Teacher' : invRoles[0];
+    var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '"' + (r === defRole ? ' selected' : '') + '>' + esc(r) + '</option>'; }).join('');
     var groupOpts = '<option value="">— Select group —</option>' + ORG.activeGroups().filter(function (g) { return g.id !== 'g-none'; })
       .map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('');
     openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
       '<label class="field">Recipient email<input class="input" id="iv-email" type="email" placeholder="name@school.edu"></label>' +
       '<label class="field">Role<select class="select" id="iv-role">' + roleOpts + '</select>' +
-        '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(invRoles[0])) + '</span></label>' +
+        '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(defRole)) + '</span></label>' +
       '<label class="field" id="iv-school-f">School<select class="select" id="iv-school">' + schoolOpts + '</select></label>' +
       '<label class="field" id="iv-group-f" style="display:none">School group<select class="select" id="iv-group">' + groupOpts + '</select></label>' +
       '<div class="field" id="iv-boards-f" style="display:none"><span>Board access</span><div id="iv-boards"></div></div>' +

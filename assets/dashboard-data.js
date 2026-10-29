@@ -212,7 +212,7 @@ function buildFreshStudent(section, r) {
     adm: (r.adm && String(r.adm).trim()) || null,
     first, last, name, initials, dispFirst: first,
     uid: r.uid || null,
-    parentEmail: r.parentEmail || (first + "." + last + "@parent.tilli.co").toLowerCase(),
+    parentEmail: r.parentEmail || null,   // real school: never invent one (the student page looks up linked parents)
     section: section.name, grade: section.grade,
     band: "Sprouting", overallPct: 0, overallPre: 0, growth: 0,
     chips: { beginner: 0, learner: 0, expert: 0 }, maxGap: 0,

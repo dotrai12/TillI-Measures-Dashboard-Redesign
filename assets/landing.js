@@ -344,7 +344,8 @@
         status: i === 0 ? 'assessment complete' : 'assessment pending',
         meta: { grade: s.grade, section: s.section, adm: s.student_id || s.adm },
       }));
-    } else if (isNew) {
+    } else if (isNew || !/^parent@tilli\.edu$/i.test(state.email || '')) {
+      // A real parent with no child linked yet → the empty "Add your first child" list.
       kids = [];
     } else {
       // Fallback demo children (used by the generic parent@tilli.edu account).
@@ -363,6 +364,20 @@
       if (meta.adm) url += '&adm=' + encodeURIComponent(meta.adm);
     }
     window.location.href = url;
+  }
+
+  // After sign-up: verify the email before going in. SERVER-SIDE: send the email with a
+  // one-time link (Mayur); the demo link below stands in for clicking it.
+  function verifyView() {
+    return `<h2 class="dlg-title">${esc(T('signin.verifyTitle'))}</h2>
+      <p class="text-center">${H('signin.verifyBody', { email: '<b>' + esc(state.email) + '</b>' })}</p>
+      <p class="text-center muted">${esc(T('signin.verifySpam'))}</p>
+      ${state.resent ? `<p class="text-center muted"><b>${esc(T('signin.verifyResent'))}</b></p>` : ''}
+      <div class="verify-acts">
+        <button class="btn btn-outline focus" data-act="verify-resend"${state.resent ? ' disabled' : ''}>${esc(T('signin.verifyResend'))}</button>
+        <button class="btn-link focus" data-act="verify-other">${esc(T('signin.verifyOther'))}</button>
+      </div>
+      <p class="text-center"><button class="btn-link verify-demo focus" data-act="verify-demo">${esc(T('signin.verifyDemo'))}</button></p>`;
   }
 
   // ---- render ----
@@ -398,7 +413,7 @@
   function dialogCard() {
     const s = state.step;
     // No Back on the forced first-login reset — the temp password is spent.
-    const showBack = s !== 'role' && s !== 'checking' && s !== 'setpw';
+    const showBack = s !== 'role' && s !== 'checking' && s !== 'setpw' && s !== 'verify';
     let inner = '';
 
     if (s === 'role') inner = roleView();
@@ -410,6 +425,7 @@
     else if (s === 'confirmschool') inner = confirmSchoolView();
     else if (s === 'signup') inner = loginView(true);
     else if (s === 'setpw') inner = setPwView();
+    else if (s === 'verify') inner = verifyView();
 
     return `<div class="dialog" role="dialog" aria-label="${esc(T('signin.dialog'))}">
         ${showBack ? `<button class="btn-ghost dialog-back focus" data-act="back">&#8592; ${esc(T('signin.back'))}</button>` : ''}
@@ -974,7 +990,9 @@
         // own password before continuing.
         const acct = state.step === 'login' ? invitedAccount(state.email) : null;
         if (acct && acct.mustReset) { set({ step: 'setpw', password: '', errs: {} }); return; }
-        if (state.step === 'signup') saveAccount(state.email, state.role === 'teacher' ? { role: 'teacher', school: state.school } : null);
+        // New account → "Check your email" first (the real email + link are Mayur's);
+        // the demo carries on from there.
+        if (state.step === 'signup') { saveAccount(state.email, state.role === 'teacher' ? { role: 'teacher', school: state.school } : null); set({ step: 'verify', resent: false }); return; }
         enterFound();
         go();
       });
@@ -1103,6 +1121,10 @@
         else set({ step: 'email', school: sVal, schoolListOpen: false, email: '', password: '' });
         break;
       }
+      case 'verify-resend': set({ resent: true }); break;
+      case 'verify-other': set({ step: 'email', email: '', password: '', resent: false, errs: {} }); break;
+      // Back to 'signup' for one tick so go() still treats this as a new account (&new=1).
+      case 'verify-demo': state.step = 'signup'; enterFound(); go(); break;
       case 'google':
         if (state.step === 'signup') saveAccount(state.email, state.role === 'teacher' ? { role: 'teacher', school: state.school } : null);
         enterFound();

@@ -94,7 +94,7 @@
     school: ctx.school, country: '', city: '', countryOpen: false, cityOpen: false,
     gradesSel: {}, secs: {}, subjects: {}, resSuff: '', resources: {},
     // "My class isn't here": the open form + what was sent to the school admin.
-    askOpen: false, askGrade: '', askSection: '', askNote: '', classAsked: false,
+    askOpen: false, askGrade: '', askOther: false, askSection: '', askNote: '', classAsked: false,
   });
   // `students` holds structured records { first, last, adm, grade, section, uid }
   // (not display strings) so each add can run through the dedupe guard — the
@@ -378,7 +378,7 @@
   function render() {
     const p = state.phase;
     if (p === 'intro') root.innerHTML = card(introView(), { back: false });
-    else if (p === 'demo') root.innerHTML = card(demoView(), { back: true });
+    else if (p === 'demo') root.innerHTML = card(demoView(), { back: false }) + askPopupHTML();
     else if (p === 'greet') root.innerHTML = card(greetView(), { back: false });
     else if (p === 'assess') root.innerHTML = card(assessView(), { back: true });
     else if (p === 'done') root.innerHTML = card(doneView(), { back: false });
@@ -512,7 +512,8 @@
       <div class="ui-meter mt-3 mb-3"><span style="width:${(d.step / 4) * 100}%"></span></div>
       <p class="onb-help">This one-time setup unlocks your dashboard. All fields are required.</p>
       ${d.step === 1 ? demoStep1() : d.step === 2 ? demoStep2() : d.step === 3 ? demoStep3() : demoStep4()}
-      <div class="onb-actions">
+      ${d.step === 3 && !demoValid() ? `<p class="onb-nexthint">${Object.keys(d.gradesSel).length ? 'Pick at least one section in each grade you picked.' : 'Pick the grades you teach, or ask for your class if it isn&rsquo;t listed.'}</p>` : ''}
+      <div class="onb-actions${d.step === 3 && !demoValid() ? ' hinted' : ''}">
         <button class="btn btn-ghost focus" data-act="onb-back" style="padding:13px">Back</button>
         <button class="btn btn-primary grow focus" data-act="demo-next"${demoValid() ? '' : ' disabled'}>${d.step === 4 ? 'Finish &amp; Continue' : 'Next'}</button>
       </div>`;
@@ -601,7 +602,7 @@
     return `<div class="onb-fields loose">
       ${noClasses ? `<div class="ui-note warn">Your school hasn&rsquo;t added its classes yet. Ask your school admin to add yours &mdash; you can finish setting up meanwhile.</div>` : `<div>
         <label class="onb-label spaced">Grades you teach *</label>
-        <div class="onb-pills">${gradePills}</div>
+        <div class="onb-pills">${gradePills}${INVITE && INVITE.school && !d.classAsked ? `<button type="button" class="ui-filterchip solid onb-askchip focus" data-act="ask-open" title="Your grade or section isn't listed? Ask your school admin to add it">＋ My class isn&rsquo;t here</button>` : ''}</div>
       </div>
       ${hasGrades ? `<div>
         <label class="onb-label spaced">Sections you teach in each grade *</label>
@@ -613,29 +614,62 @@
 
   // "My class isn't here" — the teacher can't create a class; this asks the
   // school admin (and the Tilli team sees it too). Not shown for a standalone demo.
-  function classAskHTML(open) {
+  // The form is a small pop-up (askPopupHTML); the step only shows what was sent.
+  function classAskHTML(noClasses) {
     const d = state.demo;
     if (!INVITE || !INVITE.school) return '';
-    if (d.classAsked) return `<div class="ui-note ok">Sent &mdash; your school admin and the Tilli team have been told${d.askGrade ? ` you teach <b>${esc((d.askGrade + ' ' + d.askSection).trim())}</b>` : ''}. You can add students once they&rsquo;ve placed you in your class.</div>`;
-    if (!d.askOpen && !open) return `<button type="button" class="onb-quiet focus" data-act="ask-open">My class isn&rsquo;t here &mdash; ask my school admin</button>`;
-    return `<div class="ui-card sm subtle">
-      <label class="onb-label">Which class do you teach?</label>
-      <div class="onb-grid2">
-        <input class="input focus" data-demo="askGrade" value="${esc(d.askGrade)}" placeholder="Grade (e.g. Grade 3)">
-        <input class="input focus" data-demo="askSection" value="${esc(d.askSection)}" placeholder="Section (e.g. B)">
-      </div>
-      <input class="input focus mt-2" data-demo="askNote" value="${esc(d.askNote)}" placeholder="Anything else your admin should know (optional)">
-      <div class="onb-actions tight">
-        <button type="button" class="btn btn-primary focus" data-act="ask-send">Ask my school admin</button>
-        ${open ? '' : '<button type="button" class="btn btn-ghost focus" data-act="ask-cancel">Cancel</button>'}
+    if (d.classAsked) return `<div>
+      <div class="ui-note ok onb-asked" role="status"><span aria-hidden="true">✓</span><span class="grow">Asked your school admin for <b>${esc(askedClass() || 'your class')}</b></span><button type="button" class="onb-undo focus" data-act="ask-undo">Undo</button></div>
+      <p class="onb-askedsub">You can finish setting up now. You&rsquo;ll add your students once they&rsquo;ve placed you in your class.</p>
+    </div>`;
+    if (noClasses) return `<div class="ui-note warn"><span>Your school hasn&rsquo;t added its classes yet. Ask your school admin to add yours &mdash; you can finish setting up meanwhile.</span></div>
+      <div><button type="button" class="ui-filterchip solid onb-askchip focus" data-act="ask-open">＋ Ask for your class</button></div>`;
+    return '';   // the "＋ My class isn't here" chip sits at the end of the grade chips
+  }
+  function askedClass() { const d = state.demo; return [d.askGrade.trim(), d.askSection.trim()].filter(Boolean).join(' · '); }
+  // Grade = the school's grades + "Another grade…" (typed), so "Grade 7" / "Gr 7" / "7"
+  // don't reach the admin as three different classes.
+  function askPopupHTML() {
+    const d = state.demo;
+    if (!d.askOpen || state.phase !== 'demo' || d.step !== 3) return '';
+    const other = d.askOther || !GRADES.length;
+    const opts = `<option value=""${!other && !d.askGrade ? ' selected' : ''} disabled>Pick a grade</option>` +
+      GRADES.map((g) => `<option value="${esc(g)}"${!other && d.askGrade === g ? ' selected' : ''}>${esc(gradeShown(g))}</option>`).join('') +
+      `<option value="__other"${other ? ' selected' : ''}>Another grade…</option>`;
+    return `<div class="overlay onb-askovl" data-ask-ovl data-keep="own">
+      <div class="ui-modal-card onb-askcard" role="dialog" aria-modal="true" aria-labelledby="onb-ask-t">
+        <h3 class="ui-title md" id="onb-ask-t">Ask for your class</h3>
+        <p class="onb-help">Your school admin adds it and places you in it. The Tilli team sees it too.</p>
+        <div class="onb-grid2">
+          <div><label class="onb-label" for="onb-ask-grade">Grade *</label>
+            ${GRADES.length ? `<select class="select focus" id="onb-ask-grade" data-ask-grade>${opts}</select>` : ''}
+            ${other ? `<input class="input focus${GRADES.length ? ' mt-2' : ''}" ${GRADES.length ? '' : 'id="onb-ask-grade" '}data-demo="askGrade" value="${esc(d.askGrade)}" placeholder="e.g. Grade 7" aria-label="Grade">` : ''}</div>
+          <div><label class="onb-label" for="onb-ask-sec">Section</label>
+            <input class="input focus" id="onb-ask-sec" data-demo="askSection" value="${esc(d.askSection)}" placeholder="e.g. B"></div>
+        </div>
+        <label class="onb-label mt-3" for="onb-ask-note">Note for your admin (optional)</label>
+        <textarea class="input focus onb-asknote" id="onb-ask-note" rows="2" data-demo="askNote" placeholder="e.g. I take this class for English">${esc(d.askNote)}</textarea>
+        <div class="onb-ovl-acts">
+          <button type="button" class="btn btn-outline focus" data-act="ask-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary onb-asksend focus" data-act="ask-send">Send to admin</button>
+        </div>
       </div>
     </div>`;
   }
   function sendClassRequest() {
     const d = state.demo, A = window.TilliAPI;
-    if (!d.askGrade.trim()) { setDemo({ askOpen: true }); const g = root.querySelector('[data-demo="askGrade"]'); if (g) g.focus(); return; }
-    try { if (A && A.requestClass) A.requestClass({ email: ctx.email, school_id: INVITE.school.school_id, name: d.name, grade: d.askGrade, section: d.askSection, note: d.askNote }); } catch (e) {}
+    if (!d.askGrade.trim()) {
+      const g = document.getElementById('onb-ask-grade');
+      if (g) { g.classList.add('err'); g.focus(); }
+      return;
+    }
+    try { if (A && A.requestClass) A.requestClass({ email: ctx.email, school_id: INVITE.school.school_id, name: d.name, grade: d.askGrade.trim(), section: d.askSection.trim(), note: d.askNote.trim() }); } catch (e) {}
     setDemo({ classAsked: true, askOpen: false });
+  }
+  function undoClassRequest() {
+    const A = window.TilliAPI;
+    try { if (A && A.withdrawClassRequest) A.withdrawClassRequest(ctx.email, INVITE.school.school_id); } catch (e) {}
+    setDemo({ classAsked: false });   // the form keeps what they typed, for a quick re-send
   }
 
   function demoStep4() {
@@ -951,9 +985,43 @@
         students.push({ first, last, adm, grade, section, uid });
       });
     });
-    if (Object.keys(issues).length) { setRoster({ issues }); return; }
+    // Only children past the class size are holding things up → one pop-up decides
+    // for all of them (it used to need a small "Send for approval" per row, then
+    // Enter my garden again, with nothing saying so).
+    const keys = Object.keys(issues);
+    if (keys.length && keys.every((k) => issues[k].kind === 'over_limit')) { askOverLimit(keys, issues); return; }
+    if (keys.length) { setRoster({ issues }); return; }
     state.roster = Object.assign({}, state.roster, { students, issues: {} });
     finishOnboard();
+  }
+  function askOverLimit(keys, issues) {
+    const pair = (v) => String(v).split('-').map(Number);   // "gi-i" issue key → [group, row]
+    const rowOf = (k) => { const [gi, i] = pair(k); const g = state.roster.groups[gi]; return g && g.rows[i]; };
+    const names = keys.map((k) => { const r = rowOf(k); return r ? (r.first + ' ' + r.last).trim() : ''; }).filter(Boolean);
+    const who = names.length === 1 ? `<b>${esc(names[0])}</b> is` : `<b>${names.length} children</b> (${esc(names.join(', '))}) are`;
+    const close = () => { const o = document.getElementById('onb-ovl'); if (o) o.remove(); };
+    close();
+    const ov = document.createElement('div');
+    ov.className = 'overlay'; ov.id = 'onb-ovl'; ov.dataset.keep = 'no';
+    ov.innerHTML = `<div class="ui-modal-card" role="dialog" aria-modal="true" aria-label="Over your class size">
+      <h3 class="ui-title md">Over your class size</h3>
+      <p>${who} past your class size. Send ${names.length === 1 ? 'them' : 'them all'} to your school admin for approval? You can still assess ${names.length === 1 ? 'them' : 'them'} meanwhile.</p>
+      <div class="onb-ovl-acts">
+        <button class="btn btn-outline focus" data-ovl="cancel">Cancel</button>
+        <button class="btn btn-outline focus" data-ovl="remove">Remove ${names.length === 1 ? esc(names[0].split(' ')[0]) : 'them'}</button>
+        <button class="btn btn-primary focus" data-ovl="send">Send &amp; enter my garden</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => {
+      const act = e.target.dataset && e.target.dataset.ovl;
+      if (e.target === ov || act === 'cancel') { close(); setRoster({ issues }); return; }
+      if (act === 'send') { keys.forEach((k) => { const r = rowOf(k); if (r) r.request = true; }); close(); commitSheet(); }
+      if (act === 'remove') {
+        // Remove from the end so earlier indexes stay right.
+        keys.map(pair).sort((a, b) => a[0] - b[0] || b[1] - a[1]).forEach(([gi, i]) => { const g = state.roster.groups[gi]; if (g) g.rows.splice(i, 1); });
+        close(); commitSheet();
+      }
+    });
   }
 
   // Expected class size for a "Grade · Section" pick — set by the school admin or
@@ -1087,6 +1155,18 @@
   function wire() {
     // generic actions
     root.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => handleAct(b.dataset.act)));
+    // Ask-for-your-class pop-up: grade dropdown (or typed), backdrop / Escape cancel, focus inside.
+    const askOvl = root.querySelector('[data-ask-ovl]');
+    if (askOvl) {
+      const gs = askOvl.querySelector('[data-ask-grade]');
+      if (gs) gs.addEventListener('change', () => setDemo(gs.value === '__other' ? { askOther: true, askGrade: '' } : { askOther: false, askGrade: gs.value }));
+      askOvl.addEventListener('click', (e) => { if (e.target === askOvl) setDemo({ askOpen: false }); });
+      askOvl.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDemo({ askOpen: false }); });
+      if (!askOvl.contains(document.activeElement)) {
+        const first = state.demo.askOther ? askOvl.querySelector('[data-demo="askGrade"]') : (askOvl.querySelector('[data-ask-grade]') || askOvl.querySelector('[data-demo="askGrade"]'));
+        if (first) { if (first.tagName === 'INPUT') focusEnd(first); else first.focus(); }
+      }
+    }
 
     // demo text inputs (gender / education are custom dropdowns — see [data-sel-*] below).
     // Patched in place (no re-render) so the caret is preserved while typing.
@@ -1309,6 +1389,7 @@
       case 'ask-open': setDemo({ askOpen: true }); break;
       case 'ask-cancel': setDemo({ askOpen: false }); break;
       case 'ask-send': sendClassRequest(); break;
+      case 'ask-undo': undoClassRequest(); break;
       case 'roster-add': {
         const r = state.roster;
         if (!rosterAddValid()) return;   // all fields (first, last, admission #) required
@@ -1380,6 +1461,10 @@
       if (sc && A.saveSelfReport) A.saveSelfReport(sc.school_id, ctx.email, kind, state.selfAnswers);
     } catch (e) {}
   }
+  // The name typed in "About yourself" becomes the teacher's name everywhere (Tilli + school dashboards).
+  function shareName() {
+    try { const A = window.TilliAPI, nm = state.demo && state.demo.name; if (A && A.setDisplayName && nm) A.setDisplayName(ctx.email, nm); } catch (e) {}
+  }
   function finishReflectionOnly() {
     const ro = state.reflectOnly;
     state.reflections = state.reflections.concat([snapshot(ro.kind, state.selfAnswers)]);
@@ -1399,6 +1484,7 @@
       state.reflections = state.reflections.concat([snapshot(kind, state.selfAnswers, now)]);
       shareSelfReport(kind);
     }
+    shareName();
     if (state.replaying) state.startNav = 'profile';
     state.replaying = false;
     persist({ completedAt: now });

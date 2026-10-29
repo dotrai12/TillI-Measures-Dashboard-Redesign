@@ -38,7 +38,7 @@
     var h = Math.floor(m / 60); if (h < 24) return h + ' h ago';
     var d = Math.floor(h / 24); if (d === 1) return 'yesterday';
     if (d < 7) return d + ' days ago';
-    return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
   function fullDate(ms) {
     return new Date(ms).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -49,7 +49,7 @@
     var diff = Math.round((start(t) - start(d)) / 86400000);
     if (diff === 0) return 'Today';
     if (diff === 1) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   }
 
   // "Kavya Rao" or "You" when the viewer made the change.

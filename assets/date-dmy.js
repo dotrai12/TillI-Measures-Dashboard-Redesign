@@ -7,7 +7,8 @@
    fields doesn't change.
      · Typing: the slashes fill in. Incomplete or impossible date → value ''.
      · Calendar: a click anywhere in the field (or Alt+↓ / F4) opens a small
-       DD/MM calendar pop-up (Monday first); min / max days are greyed out.
+       DD/MM calendar pop-up (Monday first); min / max days are greyed out, and
+       the months either side fill the empty cells in a lighter tone.
      · Fields added later (innerHTML re-renders) convert themselves.
    Converted fields carry data-dmy; styles live in tilli.css (input[data-dmy]).
    ============================================================ */
@@ -71,11 +72,15 @@
 
   function drawCal() {
     var sel = calFor.value, today = todayIso(), lead = (new Date(calY, calM, 1).getDay() + 6) % 7, days = new Date(calY, calM + 1, 0).getDate(), cells = '';
-    for (var i = 0; i < lead; i++) cells += '<span></span>';
-    for (var d = 1; d <= days; d++) {
-      var v = isoOf(calY, calM, d);
-      cells += '<button type="button" tabindex="-1" data-day="' + v + '" class="' + (v === sel ? 'sel' : '') + (v === today ? ' today' : '') + '"' + (outOfRange(v, calFor) ? ' disabled' : '') + '>' + d + '</button>';
-    }
+    // Days from the months either side fill the empty cells, lighter but still pickable.
+    var cell = function (y, m, d, other) {
+      var t = new Date(y, m, d), v = isoOf(t.getFullYear(), t.getMonth(), t.getDate());
+      return '<button type="button" tabindex="-1" data-day="' + v + '" class="' + (other ? 'other' : '') + (v === sel ? ' sel' : '') + (v === today ? ' today' : '') + '"' + (outOfRange(v, calFor) ? ' disabled' : '') + '>' + t.getDate() + '</button>';
+    };
+    for (var i = lead; i > 0; i--) cells += cell(calY, calM, 1 - i, true);
+    for (var d = 1; d <= days; d++) cells += cell(calY, calM, d, false);
+    var trail = (7 - (lead + days) % 7) % 7;
+    for (var j = 1; j <= trail; j++) cells += cell(calY, calM, days + j, true);
     var nav = function (step, label, sym) { return '<button type="button" tabindex="-1" data-nav="' + step + '" aria-label="' + label + '" title="' + label + '">' + sym + '</button>'; };
     cal.innerHTML = '<div class="dmy-cal-h">' + nav(-12, 'Previous year', '«') + nav(-1, 'Previous month', '‹') +
         '<b>' + MONTHS[calM] + ' ' + calY + '</b>' + nav(1, 'Next month', '›') + nav(12, 'Next year', '»') + '</div>' +

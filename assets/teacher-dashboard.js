@@ -125,6 +125,7 @@
   const STATE_DOT = { blossoming: ART.blush, growing: 'var(--green-500)', tending: 'var(--lvl-1-soft)', waiting: 'var(--ink-300)' };
   const SEARCH_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   // Clock-with-arrow (change history) — the student header's small History button.
+  const COPY_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
   const HIST_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>';
 
   // One source of truth for both nav surfaces (desktop side rail + mobile
@@ -273,6 +274,27 @@
   const WIN_OF_STATE = { baseline: 'baseline', midline: 'mid', endline: 'post' };
   const PHASE_OF_WIN = { baseline: 'Baseline', mid: 'Midline', post: 'Endline' };
   function activeWindowKey() { return WIN_OF_STATE[S.windowState] || null; }
+  // A real (fresh) class: window dates and which window is open come from what the
+  // Tilli team actually deployed — not the demo's fixed Apr 2 / Jun 18 / Sep 24.
+  // Live phase → that state; only ended phases → 'between'; nothing deployed → stays.
+  // The dev Preview stage switch still overrides S.windowState afterwards.
+  function applyRealWindows() {
+    const A = window.TilliAPI, sid = schoolId();
+    if (!S.baseData.fresh || !A || !A.getDeployments || !sid) return;
+    const deps = A.getDeployments(sid).filter((x) => x.deployed !== false); if (!deps.length) return;
+    const fmt = (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
+    const byPhase = {};
+    deps.forEach((x) => {
+      const b = byPhase[x.phase] || (byPhase[x.phase] = { end: '', live: false, ended: false });
+      if (x.end && x.end > b.end) b.end = x.end;
+      if (x.status === 'Live') b.live = true; else if (x.status === 'Ended') b.ended = true;
+    });
+    S.baseData.windows = (S.baseData.windows || []).map((w) => { const b = byPhase[PHASE_OF_WIN[w.key]]; return b && b.end ? Object.assign({}, w, { date: fmt(b.end) }) : w; });
+    const STATE_OF = { Baseline: 'baseline', Midline: 'midline', Endline: 'endline' };
+    const live = Object.keys(byPhase).find((ph) => byPhase[ph].live);
+    if (live && STATE_OF[live]) S.windowState = STATE_OF[live];
+    else if (Object.keys(byPhase).some((ph) => byPhase[ph].ended)) S.windowState = 'between';
+  }
   function rebuildData() {
     const D = window.TilliDashData;
     const d = (D && S.windowState !== 'baseline') ? D.previewData(S.baseData, S.windowState) : S.baseData;
@@ -291,7 +313,32 @@
     D.finishWindow(w); D.finishLog(st);
     if (wk === 'baseline') st.assess = 'done';
   }
+  // Parent and Student lanes come from what's actually recorded (TilliAPI), with the
+  // phase's real totals: its parent questionnaires, and the child's direct assessments
+  // (at school + at home). Real class only — the preview overlay keeps its sample data.
+  // A phase with nothing deployed in a lane keeps the placeholder.
+  const REAL_LANES = { parent: 'Parent', student: 'Direct Assessment' };
+  function applyRealCompletion(d) {
+    const A = window.TilliAPI, D = window.TilliDashData, sid = schoolId();
+    if (!A || !A.chainFor || !D || !sid) return;
+    d.sections.forEach((sec) => sec.students.forEach((st) => {
+      if (!st.adm || !st.assessLog) return;
+      st.assessLog.forEach((w) => {
+        const phase = PHASE_OF_WIN[w.key]; if (!phase) return;
+        Object.keys(REAL_LANES).forEach((key) => {
+          const chain = A.chainFor(sid, phase, REAL_LANES[key], st.adm);
+          const i = w.persp.findIndex((p) => p.key === key);
+          if (!chain.length || i < 0) return;
+          const done = chain.filter((x) => x.state === 'done').length;
+          w.persp[i] = Object.assign({}, w.persp[i], { doneParts: done, totalParts: chain.length, done: done >= chain.length, started: chain.some((x) => x.startedMode) });
+        });
+        D.finishWindow(w);
+      });
+      D.finishLog(st);
+    }));
+  }
   function applyObservations(d) {
+    if (d === S.baseData) applyRealCompletion(d);
     const obs = (S.teacher && S.teacher.observations) || {};
     Object.keys(obs).forEach((wk) => d.sections.forEach((sec) => sec.students.forEach((st) => {
       if (obs[wk] && obs[wk][st.adm || st.id] && !teacherDone(st, wk)) markTeacherDone(st, wk);
@@ -370,6 +417,10 @@
       chats: [], askReturn: 'garden',
       gardener: (ctx.teacher && ctx.teacher.demo && ctx.teacher.demo.gender === 'Male') ? 'm' : 'f',
     };
+    applyRealWindows();
+    syncSavedObservations();
+    // Teachers who onboarded before names were shared: send the "About yourself" name once more.
+    try { const A = window.TilliAPI, nm = S.teacher.demo && S.teacher.demo.name; if (A && A.setDisplayName && nm && S.teacher.email) A.setDisplayName(S.teacher.email, nm); } catch (e) {}
     rebuildData();
     S.chats = loadChats() || seedChats();
     // Every change this teacher makes is logged under their name (change history).
@@ -389,6 +440,12 @@
     }
     let rt;
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { S.vw = window.innerWidth; render(); }, 120); });
+    // A parent or a student device records something in another tab → refresh the counts.
+    let st0;
+    window.addEventListener('storage', (e) => {
+      if (e.key !== 'tilliMeasures.api.v1') return;
+      clearTimeout(st0); st0 = setTimeout(() => { rebuildData(); render(); }, 150);
+    });
     bindBackButton();
     render();
   }
@@ -554,7 +611,29 @@
 
   // First-time teacher who reached the dashboard with no students yet. One calm
   // screen across every destination (except profile) with a single clear action.
+  // The teacher's own "My class isn't here" request, if any (latest, any status).
+  function myClassRequest() {
+    const A = window.TilliAPI, sid = schoolId();
+    return A && A.classRequestFor && sid && S.teacher.email ? A.classRequestFor(S.teacher.email, sid) : null;
+  }
   function emptyClassView() {
+    // No class yet because they asked for one: say what they're waiting for — they
+    // can't add students until the school admin places them (no Add button).
+    const A = window.TilliAPI, sid = schoolId(), req = myClassRequest();
+    const mine = A && A.sectionsForTeacher && sid ? A.sectionsForTeacher(S.teacher.email, sid) : [];
+    if (req && !mine.length) {
+      const cls = [req.grade, req.section].filter(Boolean).join(' · ') || 'your class';
+      const dismissed = req.status === 'dismissed';
+      return `<div class="dash-wrap" style="max-width:640px">
+      <div class="ui-empty empty-hero">
+        <div class="empty-plant">${flowerArt('waiting', 96, 0)}</div>
+        <h1 class="ui-empty-t">${dismissed ? 'Your class request was closed' : 'Waiting for your class 🌱'}</h1>
+        <p class="ui-empty-b">${dismissed
+          ? `${esc(req.doneByName || 'Your school admin')} closed your request for <b>${esc(cls)}</b>: “${esc(req.dismissReason || '')}”. Ask your school admin which class to pick.`
+          : `You asked your school admin to add <b>${esc(cls)}</b>. You’ll add your students here once they’ve placed you in it.`}</p>
+      </div>
+    </div>`;
+    }
     return `<div class="dash-wrap" style="max-width:640px">
       <div class="ui-empty empty-hero">
         <div class="empty-plant">${flowerArt('waiting', 96, 0)}</div>
@@ -629,7 +708,8 @@
       return !w || w.status !== 'done';
     });
     const resume = notDone.find((s) => draftOf(s, winKey));   // interrupted child first
-    return { done: list.length - notDone.length, total: list.length, next: resume || notDone[0] || list[0] };
+    // Everyone done → no "next" (it used to fall back to the first child and reopen them blank).
+    return { done: list.length - notDone.length, total: list.length, next: resume || notDone[0] || null };
   }
 
   // Compose the calm garden scene from the existing plant art (no new illustration).
@@ -686,8 +766,10 @@
       <h2 class="ui-title xl mg-hero-t">${esc(st.heroTitle)}</h2>
       <p class="mg-hero-b">${esc(fill(st.heroBlurb, { N, kids: nounFor(N, 'child', 'children') }))}</p>
       <div class="ui-meter mg-prog"><span style="width:${pct}%"></span></div>
-      <div class="mg-prog-row"><span><b>${pg.done}</b> of ${pg.total} ${nounFor(pg.total, 'child', 'children')} done</span><span class="mg-deadline">Window closes ${esc(st.deadline)}</span></div>
-      <button class="btn btn-primary block focus mg-hero-cta" data-continue-assess="${esc(pg.next ? pg.next.id : '')}">Continue → next: ${esc(nextName)}</button>
+      <div class="mg-prog-row"><span><b>${pg.done}</b> of ${pg.total} ${nounFor(pg.total, 'child', 'children')} done</span><span class="mg-deadline">Window closes ${esc(((S.data.windows || []).find((w) => w.key === st.winKey) || {}).date || st.deadline)}</span></div>
+      ${pg.next
+        ? `<button class="btn btn-primary block focus mg-hero-cta" data-continue-assess="${esc(pg.next.id)}">Continue → next: ${esc(nextName)}</button>`
+        : `<button class="btn btn-primary block focus mg-hero-cta" data-nav="assess" data-assesstab="completed">Every child is observed 🌸 · See who&rsquo;s complete →</button>`}
     </section>`;
   }
 
@@ -766,7 +848,13 @@
     // Slot 6 — hero: open window → its assessment CTA; no window → nothing.
     const hero = st.windowOpen ? heroWindow(st, N) : '';
 
-    return `<div class="dash-wrap mg-wrap">
+    // Has classes, but also asked for one that isn't there yet → one clear line about it.
+    const ask = myClassRequest(), A0 = window.TilliAPI, low = (v) => String(v || '').trim().toLowerCase();
+    // Already placed in the class they asked for → the request has quietly closed.
+    const placed = ask && A0 && A0.sectionsForTeacher ? A0.sectionsForTeacher(S.teacher.email, schoolId()).some((x) => low(x.grade) === low(ask.grade) && low(x.section) === low(ask.section)) : false;
+    const askLine = ask && ask.status === 'open' && !placed
+      ? `<div class="ui-note mb-3"><span aria-hidden="true">⏳</span><span><b>${esc([ask.grade, ask.section].filter(Boolean).join(' · ') || 'Your other class')}</b> — waiting for your school admin to add it.</span></div>` : '';
+    return `<div class="dash-wrap mg-wrap">${askLine}
       <div class="mg-greet">
         <div>
           <h1 class="ui-screen-title greet">${greetWord()}, ${esc(firstName())} 🌱</h1>
@@ -1222,7 +1310,7 @@
       <span class="stu-plant">${flowerArt(plantState, 76, 0)}</span>
       <div class="stu-meta">
         <h1 class="ui-title xl stu-name">${esc(stu.name)}</h1>
-        <div class="ui-meta stu-sub">${esc(stuSecLabel(stu))} · ${esc(stu.parentEmail)}</div>
+        <div class="ui-meta stu-sub">${esc(stuSecLabel(stu))} · ${esc(parentLabel(stu))}</div>
         ${uidLine(stu)}
         ${extra || ''}
       </div>
@@ -1277,13 +1365,22 @@
     // Brand-new student, no assessment recorded yet — skip the score tabs (they'd
     // all read 0%) and point the teacher at the one useful action: the baseline.
     if (stu.state === 'waiting') {
+      // Baseline already closed → nothing to start; results arrive later.
+      const A = window.TilliAPI, sid = schoolId();
+      const rd = A && A.yearReadiness && sid ? A.yearReadiness(sid) : null;
+      const baseEnded = rd && !rd.live.some((l) => l.phase === 'Baseline') ? rd.ended.find((l) => l.phase === 'Baseline') : null;
+      const endTxt = baseEnded && baseEnded.end ? new Date(baseEnded.end + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+      const empty = baseEnded
+        ? `<div class="ui-empty-t">Baseline closed${endTxt ? ' on ' + esc(endTxt) : ''}</div>
+          <p class="ui-empty-b">${esc(stu.dispFirst)}'s skills, growth and perspectives will show here once the results are ready.</p>`
+        : `<div class="ui-empty-t">No assessment data yet</div>
+          <p class="ui-empty-b">Once you complete ${esc(stu.dispFirst)}'s baseline, their skills, growth and perspectives will grow in here.</p>
+          <div class="actions"><button class="btn btn-primary md focus" data-continue-assess="${esc(stu.id)}">Start baseline for ${esc(stu.dispFirst)} →</button></div>`;
       return `<div class="dash-wrap" style="max-width:960px">
         <button class="btn-link mb-3 focus" data-back-roster>← All students</button>
         ${stuHead(stu, 'waiting', pastHeaderChips(stu, false))}
         <div class="ui-card ui-empty empty-card mt-4">
-          <div class="ui-empty-t">No assessment data yet</div>
-          <p class="ui-empty-b">Once you complete ${esc(stu.dispFirst)}'s baseline, their skills, growth and perspectives will grow in here.</p>
-          <div class="actions"><button class="btn btn-primary md focus" data-continue-assess="${esc(stu.id)}">Start baseline for ${esc(stu.dispFirst)} →</button></div>
+          ${empty}
         </div>
         ${stuChangesCard(stu)}
         ${stuPastHistory(stu, false)}
@@ -1580,7 +1677,7 @@
     if (tab === 'enter') { body = obsEnter(); subtitle = secLabel(sec) + ' · recording an observation'; }
     else if (tab === 'completed') { body = assessCompleted(); subtitle = "Who has finished each assessment window — and who's still waiting."; }
     else if (S.todoView === 'pending') { body = pendingView(); subtitle = 'Who still needs a teacher observation in this window.'; }
-    else { body = studentAssessCard() + obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
+    else { body = obsVine(); subtitle = "Your class's assessment journey grows as each window is complete. Tend the glowing window next."; }
     // Recording a child is a focused mode: no big "Assess" title or tabs — a way back,
     // then the child is the page heading (inside obsEnter).
     if (tab === 'enter') return `<div class="dash-wrap" style="max-width:1080px">
@@ -1595,77 +1692,106 @@
     </div>`;
   }
 
-  // Student direct assessments that run AT SCHOOL in the live phase. They're run
-  // from the student link (assess.html), not from here, so a child's device
-  // never opens the dashboard. With My School Check-in at school the own-class
-  // rule is on: another teacher assesses this teacher's class.
-  function studentAssessCard() {
+  // The journey (To-do) is built from what the Tilli team deployed, so a newly added
+  // teacher assessment shows up without code changes. Per phase, in this order:
+  //   pre-training survey · observations (every per-child teacher item, grouped — one
+  //   observation form records them all) · post-training survey · any other teacher
+  //   item ("Opens soon": the app has no screen for it yet) · student assessments at
+  //   school (Baseline's stay locked until the post-training survey is done).
+  // A phase nothing is deployed in yet keeps one locked "… observations" step; with
+  // no deployments at all (demo / no school) it's the fixed five-step journey.
+  function vinePlan() {
     const A = window.TilliAPI, sid = schoolId();
-    if (!A || !A.liveDirectPhase || !sid) return '';
-    const phase = A.liveDirectPhase(sid); if (!phase) return '';
-    const its = A.directAtSchool(sid, phase); if (!its.length) return '';
-    const on = A.ownClassRuleOn(sid, phase);
-    const mine = A.sectionsForTeacher(S.teacher.email, sid);
-    const mineIds = mine.map((m) => m.section_id);
-    const kids = A.studentsForSchool(sid).filter((st) => mineIds.indexOf(st.section_id) >= 0).map((st) => st.student_id);
-    const c = A.itemCompletion(sid, phase, 'Direct Assessment', kids, its.map((i) => i.id));
-    const names = mine.map((m) => m.name).join(', ') || 'your class';
-    const badge = c.expected ? `<span class="ui-badge ${c.done === c.expected ? 'done' : c.done ? 'prog' : 'pend'}" title="Steps done for the children in ${esc(names)}">${c.done} of ${c.expected} done in ${esc(names)}</span>` : '';
-    const note = on
-      ? `My School Check-in runs at school this phase, so <b>another teacher</b> runs these for ${esc(names)}. You’ll run them for a different class.`
-      : `Run them with your class — open the student link on each child’s device, or here.`;
-    return `<div class="ui-card sa-card mb-4">
-      <div class="sa-head"><div><div class="ui-title md">Student assessments · ${esc(phase)}</div>
-        <div class="sa-items">${its.map((i) => `<span class="ui-chip info">${esc(i.name)}</span>`).join('')}</div></div>${badge}</div>
-      <p class="sa-note">${note}</p>
-      <a class="btn btn-primary sm focus" href="assess.html" target="_blank" rel="noopener" title="Opens the student assessment page — it never shows your dashboard, so it’s safe on a child’s device.">${on ? 'Assess another class →' : 'Start student assessments →'}</a>
-    </div>`;
+    const deps = A && A.getDeployments && sid ? A.getDeployments(sid).filter((d) => d.deployed !== false && !d.notRun) : [];
+    if (!deps.length) return [{ kind: 'pre' }, { kind: 'obs', phase: 'Baseline' }, { kind: 'post' }, { kind: 'obs', phase: 'Midline' }, { kind: 'obs', phase: 'Endline' }];
+    const plan = [];
+    let sawPre = false, sawPost = false;
+    ['Baseline', 'Midline', 'Endline'].forEach((ph) => {
+      const t = deps.find((d) => d.phase === ph && d.audience === 'Teacher');
+      const direct = deps.find((d) => d.phase === ph && d.audience === 'Direct Assessment');
+      if (!t && !direct) { plan.push({ kind: 'obs', phase: ph, placeholder: true }); return; }
+      const items = (t && t.assessments) || [];
+      const self = items.filter((a) => a.perTeacher), perChild = items.filter((a) => !a.perTeacher);
+      const pre = self.find((a) => /pre/i.test(a.name || '')), post = self.find((a) => /post/i.test(a.name || ''));
+      if (pre && !sawPre) { plan.push({ kind: 'pre' }); sawPre = true; }
+      if (perChild.length) plan.push({ kind: 'obs', phase: ph, lane: t, chips: perChild.map((a) => a.name || a.id) });
+      if (post && !sawPost) { plan.push({ kind: 'post' }); sawPost = true; }
+      self.filter((a) => a !== pre && a !== post).forEach((a) => plan.push({ kind: 'soon', phase: ph, name: a.name || a.id }));
+      const sa = direct ? (direct.assessments || []).filter((a) => a.mode === 'school') : [];
+      if (sa.length) plan.push({ kind: 'sa', phase: ph, lane: direct, ids: sa.map((a) => a.id), chips: sa.map((a) => a.name || a.id) });
+    });
+    if (!sawPre) plan.unshift({ kind: 'pre' });   // the onboarding reflection is always step one
+    return plan;
   }
 
   function obsVine() {
     const sec = section();
     const nStu = sec.students.length;
-    // The journey follows the preview state: every step before the state's
-    // current step is complete, the current one is active, later ones locked.
-    // Observation steps (baseline / mid / end) read the class's real teacher
-    // progress for that window and show as complete once everyone is observed.
-    // Check-ins (18- / 36-week) were removed until a real check-in exists (T14).
-    // Between windows the current step is the post-training survey; once that's
-    // done nothing is active and the calm "nothing due" line shows instead.
-    const ORDER = ['pre', 'base', 'post', 'mid', 'end'];
-    const CURRENT = { baseline: 'base', between: 'post', midline: 'mid', endline: 'end' };
-    const OBS_WIN = { base: 'baseline', mid: 'mid', end: 'post' };
-    const cur = ORDER.indexOf(CURRENT[S.windowState] || 'base');
+    const A = window.TilliAPI, sid = schoolId();
+    // Observation steps follow the window state (real windows, or the dev Preview
+    // stage): earlier windows done, the current one active, later ones locked — and
+    // complete once every child is observed.
+    const WIN_OF_PHASE = { Baseline: 'baseline', Midline: 'mid', Endline: 'post' };
+    const RANK = { baseline: 0, mid: 1, post: 2 };
+    const CUR = { baseline: 0, between: 0.5, midline: 1, endline: 2 }[S.windowState];
+    const cur = CUR == null ? 0 : CUR;
     const win = (k) => (S.data.windows || []).find((w) => w.key === k) || {};
-    const DEF = {
-      pre: { title: 'Pre-training survey', done: 'Completed · Apr 2', due: 'Due Apr 2', body: 'Your baseline reflection on the class.' },
-      base: { title: 'Baseline observations', done: 'Completed · Apr 18', due: 'Due ' + (win('baseline').date || 'Apr 2') },
-      post: { title: 'Post-training survey', done: 'Completed · Apr 25', due: 'Due Apr 25', body: 'Reflect on your class after training' },
-      mid: { title: 'Midline observations', done: 'Completed · ' + (win('mid').date || 'Jun 18'), due: 'Due ' + (win('mid').date || 'Jun 18') },
-      end: { title: 'Endline observations', done: 'Completed · ' + (win('post').date || 'Sep 24'), due: 'Due ' + (win('post').date || 'Sep 24') },
-    };
+    const dayMonth = (iso) => (iso ? new Date(String(iso).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
     // Surveys follow the teacher's real reflections: the first Mirror is the
     // pre-training survey; the post-training survey is done only once they've
     // actually re-taken the reflection (it's never assumed done by the preview).
     const snaps = mirrorSnapshots();
     const postSnap = snaps.find((r) => r.kind === 'post' && !r.sample);
-    const shortDate = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); };
-    if (snaps[0] && snaps[0].at) DEF.pre.done = 'Completed · ' + shortDate(snaps[0].at);
-    if (postSnap) DEF.post.done = 'Completed · ' + shortDate(postSnap.at);
-    const journey = ORDER.map((key, i) => {
-      const d = DEF[key];
-      let st = i < cur ? 'done' : i === cur ? 'active' : 'locked';
-      if (key === 'post') st = postSnap ? 'done' : i <= cur ? 'active' : 'locked';
-      let body = d.body || '';
-      const wk = OBS_WIN[key];
-      if (wk && st !== 'locked') {
+    const shortDate = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+    const obsAll = (S.teacher && S.teacher.observations) || {};
+    // The date the last child was actually observed in a window (not a demo date).
+    const lastObs = (wk) => { const o = obsAll[wk] || {}; return Object.keys(o).map((id) => o[id] && o[id].at).filter(Boolean).sort().pop(); };
+    const plan = vinePlan(), hasPost = plan.some((p) => p.kind === 'post');
+    const kids = () => {
+      const mine = A && A.sectionsForTeacher ? A.sectionsForTeacher(S.teacher.email, sid).map((m) => m.section_id) : [];
+      return { names: (A && A.sectionsForTeacher ? A.sectionsForTeacher(S.teacher.email, sid) : []).map((m) => m.name).join(', ') || 'your class',
+        ids: A ? A.studentsForSchool(sid).filter((st) => mine.indexOf(st.section_id) >= 0).map((st) => st.student_id) : [] };
+    };
+    const journey = plan.map((p) => {
+      if (p.kind === 'pre') return { kind: 'pre', title: 'Pre-training survey', st: 'done', meta: 'Completed' + (snaps[0] && snaps[0].at ? ' · ' + shortDate(snaps[0].at) : ''), body: 'Your baseline reflection on the class.' };
+      if (p.kind === 'post') {
+        // Post-training opens any time after the pre-training survey.
+        const st = postSnap ? 'done' : snaps[0] ? 'active' : 'locked';
+        return { kind: 'post', title: 'Post-training survey', st, why: 'Opens after your pre-training survey.',
+          meta: st === 'done' ? 'Completed · ' + shortDate(postSnap.at) : st === 'active' ? 'Open now · any time after your training' : 'Locked',
+          body: st === 'done' ? 'Your Teaching Mirror now shows how you’ve changed' : st === 'active' ? 'Reflect on your class after training' : '' };
+      }
+      if (p.kind === 'soon') return { kind: 'soon', title: p.name, st: 'soon', meta: 'Opens soon — your Tilli team will share it', why: 'Your Tilli team will share this when it’s ready.' };
+      if (p.kind === 'sa') {
+        const lane = p.lane || {}, k = kids();
+        const c = A.itemCompletion(sid, p.phase, 'Direct Assessment', k.ids, p.ids);
+        const count = c.expected ? c.done + ' of ' + c.expected + ' done in ' + k.names : '';
+        const base = { kind: 'sa', phase: p.phase, title: 'Student assessments · ' + p.phase, chips: p.chips, count };
+        if (lane.status === 'Scheduled' || lane.status === 'Not deployed') return Object.assign(base, { st: 'locked', meta: 'Opens ' + dayMonth(lane.start), why: p.phase + ' opens when the Tilli team opens it for your school.' });
+        if (lane.status === 'Ended') return Object.assign(base, { st: 'done', meta: 'Closed' + (lane.end ? ' · ' + dayMonth(lane.end) : '') });
+        // Strict: Baseline's student assessments wait for the post-training survey.
+        if (p.phase === 'Baseline' && hasPost && !postSnap) return Object.assign(base, { st: 'locked', count: '', meta: 'Unlocks after your post-training survey', why: 'Finish your post-training survey to unlock this.' });
+        const on = A.ownClassRuleOn(sid, p.phase);
+        return Object.assign(base, { st: c.expected && c.done >= c.expected ? 'done' : 'active', meta: 'Open now' + (lane.end ? ' · until ' + dayMonth(lane.end) : ''), own: on,
+          body: on ? 'My School Check-in runs at school this phase, so another teacher runs these for ' + k.names + '. You’ll run them for a different class.'
+            : 'Run them with your class — open the student link on each child’s device, or here.' });
+      }
+      // Observations for one window.
+      const wk = WIN_OF_PHASE[p.phase], rank = RANK[wk];
+      let st = rank < cur ? 'done' : rank === cur ? 'active' : 'locked';
+      let body = '';
+      if (st !== 'locked') {
         const done = nStu - pendingIn(sec.students, wk);
         if (st === 'active' && nStu && done === nStu) st = 'done';
         body = st === 'done' && done === nStu ? 'All ' + countNoun(nStu, 'student', 'students') + ' observed'
           : done + ' of ' + countNoun(nStu, 'student', 'students') + ' observed';
       }
-      if (key === 'post' && st === 'done') body = 'Your Teaching Mirror now shows how you’ve changed';
-      return { key, title: d.title, meta: st === 'done' ? d.done : st === 'active' ? d.due : 'Locked', body: st === 'locked' ? '' : body, st, obs: !!wk };
+      const last = lastObs(wk), lane = p.lane;
+      const meta = st === 'done' ? 'Completed' + (last ? ' · ' + shortDate(last) : win(wk).date ? ' · ' + win(wk).date : '')
+        : st === 'active' ? 'Due ' + (win(wk).date || '')
+        : lane && lane.status === 'Scheduled' && lane.start ? 'Opens ' + dayMonth(lane.start) : 'Locked';
+      return { kind: 'obs', title: p.phase + ' observations', st, meta, body, chips: p.chips && p.chips.length > 1 ? p.chips : null,
+        why: p.phase + ' opens when the Tilli team opens it for your school.' };
     });
     const flower = (k) => { const [petal, pollen] = ART.journeyFlowers[k % ART.journeyFlowers.length]; return `<svg width="44" height="44" viewBox="0 0 44 44" fill="none"><circle cx="22" cy="12" r="6.4" fill="${petal}"/><circle cx="31.5" cy="19" r="6.4" fill="${petal}"/><circle cx="27.8" cy="30" r="6.4" fill="${petal}"/><circle cx="16.2" cy="30" r="6.4" fill="${petal}"/><circle cx="12.5" cy="19" r="6.4" fill="${petal}"/><circle cx="22" cy="22" r="6.6" fill="${pollen}"/></svg>` };
     const sprout = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 21v-8" stroke="${ART.sproutStem}" stroke-width="2" stroke-linecap="round"/><path d="M12 13C12 9 9 6 5 6c0 4 3 7 7 7Z" fill="${ART.sproutLime}"/><path d="M12 14c0-3 3-6 7-6 0 4-3 6-7 6Z" fill="${ART.green}"/></svg>`;
@@ -1678,31 +1804,59 @@
       const nextW = (S.data.windows || []).find((w) => !unlocked.has(w.key));
       calm = `<div class="ui-note mb-4"><span>🌿 Nothing to observe right now.${nextW ? ' ' + esc(nextW.label) + (nextW.date ? ' opens ' + esc(nextW.date) : ' opens next') + '.' : ' Every window this year is done.'}</span></div>`;
     }
+    const assessUrl = new URL('assess.html', location.href).href;
     const nodes = journey.map((j, ji) => {
-      const dn = j.st === 'done', active = j.st === 'active';
-      const clickable = active || dn;
-      const dataAttr = (j.key === 'post' && active) ? 'data-take-reflection="post"'
-        : (j.key === 'pre' || j.key === 'post') && dn ? 'data-nav="profile"'
-        : active && j.obs ? 'data-obs-pending="1"'   // → who's still to observe
-        : active ? 'data-obs-continue="1"' : dn ? 'data-obs-report="1"' : '';
+      const dn = j.st === 'done', active = j.st === 'active', shut = j.st === 'locked' || j.st === 'soon';
       const marker = dn ? flower(ji) : active ? `<div class="obs-marker active">${sprout}</div>` : `<div class="obs-marker lock">${lock}</div>`;
-      const badge = dn ? 'Complete' : active ? 'Active' : 'Locked';
-      const what = j.title.replace(/ (observations|report)$/, '').toLowerCase();
-      const cta = active ? (j.obs ? 'Continue ' + what + ' observations →' : 'Start survey →')
-        : (dn && j.obs) ? 'See who&rsquo;s complete →'
-        : (dn && (j.key === 'pre' || j.key === 'post')) ? 'See my Teaching Mirror →' : '';
-      return `<div class="obs-row">
-        <div class="obs-node">${marker}</div>
-        <button class="obs-card ${j.st}" ${dataAttr} ${clickable ? '' : 'disabled'}>
-          <div class="obs-card-top"><div class="ui-title md obs-card-title">${esc(j.title)}</div><span class="ui-badge ${dn ? 'done' : active ? 'prog' : 'pend'}">${badge}</span></div>
+      const badge = dn ? 'Complete' : active ? 'Active' : j.st === 'soon' ? 'Soon' : 'Locked';
+      const inner = `<div class="obs-card-top"><div class="ui-title md obs-card-title">${esc(j.title)}</div>${j.count && !shut ? `<span class="obs-count">${esc(j.count)}</span>` : ''}<span class="ui-badge ${dn ? 'done' : active ? 'prog' : 'pend'}">${badge}</span></div>
           <div class="ui-meta obs-meta">${esc(j.meta)}</div>
-          ${j.body ? `<div class="obs-body">${esc(j.body)}</div>` : ''}
+          ${j.chips ? `<div class="obs-chips">${j.chips.map((c) => `<span class="ui-chip ${shut ? 'muted' : 'info'}">${esc(c)}</span>`).join('')}</div>` : ''}
+          ${j.body ? `<div class="obs-body">${esc(j.body)}</div>` : ''}`;
+      // Student assessments open on the student link (never this dashboard), so the
+      // card holds a real link instead of being one big button.
+      if (j.kind === 'sa' && !shut) {
+        return `<div class="obs-row"><div class="obs-node">${marker}</div>
+        <div class="obs-card ${j.st} sa">${inner}
+          ${active ? `<a class="btn-soft green obs-cta active focus" href="assess.html?via=dashboard" target="_blank" rel="noopener" title="Opens the student assessment page — it never shows your dashboard, so it’s safe on a child’s device." aria-label="${j.own ? 'Assess another class' : 'Start student assessments'} (opens a new tab)">${j.own ? 'Assess another class →' : 'Start student assessments →'}</a>
+          <p class="sa-tablet">Setting up a shared school tablet? <button class="btn-link focus" data-copy="${esc(assessUrl)}" title="Copies the student-assessment link — open it on the tablet; a teacher signs in there with the school code">Copy the student link</button></p>` : ''}
+        </div></div>`;
+      }
+      const dataAttr = shut ? ''
+        : (j.kind === 'post' && active) ? 'data-take-reflection="post"'
+        : (j.kind === 'pre' || j.kind === 'post') && dn ? 'data-nav="profile"'
+        : j.kind === 'obs' ? (active ? 'data-obs-pending="1"' : 'data-obs-report="1"')   // active → who's still to observe
+        : '';
+      const what = j.title.replace(/ observations$/, '').toLowerCase();
+      const cta = active ? (j.kind === 'obs' ? 'Continue ' + what + ' observations →' : 'Start survey →')
+        : (dn && j.kind === 'obs') ? 'See who&rsquo;s complete →'
+        : (dn && (j.kind === 'pre' || j.kind === 'post')) ? 'See my Teaching Mirror →' : '';
+      // Locked steps say why on hover (the card itself is disabled, so the row carries it).
+      return `<div class="obs-row"${shut && j.why ? ` title="${esc(j.why)}"` : ''}>
+        <div class="obs-node">${marker}</div>
+        <button class="obs-card ${j.st}" ${dataAttr} ${shut ? 'disabled' : ''}>
+          ${inner}
           ${cta ? `<span class="btn-soft green obs-cta ${active ? 'active' : ''}">${cta}</span>` : ''}
         </button>
       </div>`;
     }).join('');
+    // First draw assumes even rows; fitVine() re-threads it through the markers once laid out.
     const rowYs = journey.map((_, i) => i * 152 + 30);
     return `${calm}<div class="obs-vine">${vineSVG(rowYs, 152 * journey.length)}<div class="obs-nodes">${nodes}</div></div>`;
+  }
+  // Re-thread the vine through each marker wherever the cards actually landed — a tall
+  // card (chips, the student link) pushes the steps below it down.
+  function fitVine() {
+    if (!fitVine.bound) {   // cards reflow on resize, and once the web fonts arrive
+      fitVine.bound = true;
+      let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(fitVine, 120); });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitVine);
+    }
+    const v = root.querySelector('.obs-vine'); if (!v) return;
+    const top = v.getBoundingClientRect().top;
+    const ys = Array.from(v.querySelectorAll('.obs-node > *')).map((m) => { const r = m.getBoundingClientRect(); return Math.round(r.top - top + r.height / 2); });
+    const svg = v.querySelector('.obs-vine-svg');
+    if (svg && ys.length) svg.outerHTML = vineSVG(ys, Math.round(v.getBoundingClientRect().height));
   }
   // To-do → "Continue … observations": the children still to observe in the
   // open window, as its own screen so a class of 30 doesn't stretch the journey.
@@ -1799,41 +1953,44 @@
     const ring = `<svg class="obs-ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="trk" cx="22" cy="22" r="19"/>
       <circle class="arc${answered ? '' : ' zero'}" cx="22" cy="22" r="19" pathLength="100" style="--from:${(100 - prevPct * 100).toFixed(1)};--to:${(100 - pct * 100).toFixed(1)}"/></svg>`;
     const pips = (n) => `<span class="obs-pips" aria-hidden="true">${[1, 2, 3, 4].map((j) => `<i class="${j <= n ? 'on' : ''}"></i>`).join('')}</span>`;
-    const cards = onPage.map((q, k) => {
-      // The teacher rates the behaviour only — no skill name or skill group on the card,
-      // so the rating isn't anchored to a label. (q.skill still maps the answer to its skill.)
-      const cur = e.ratings[q.id];
-      const opts = OBS_SCALE.map((o, i) => {
+    // One compact row per statement (approved redesign, 29 Oct): statement left, the four
+    // frequencies as buttons right; the Seed → Blooming pips once in the list header.
+    // "Haven't seen this yet" was taken off the page (a saved 'na' still counts as answered).
+    const cards = onPage.map((q) => {
+      const cur = e.ratings[q.id], done = isAns(cur);
+      const opts = OBS_SCALE.map((o) => {
         const picked = cur === o.v;
-        return `<button class="ui-pick obs-star${picked ? ' on' : ''}" data-star="${o.v}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}">${pips(o.v)}<div class="lb">${o.freq}</div><div class="gw">${STAR_LABELS[i]}</div></button>`;
+        return `<button class="obs-opt${picked ? ' on' : ''}" data-star="${o.v}" data-qid="${esc(q.id)}" role="radio" aria-checked="${picked}">${o.freq}</button>`;
       }).join('');
-      const na = cur === 'na';
-      return `<div class="ui-card sm obs-qcard${isAns(cur) ? ' done' : ''}" data-qcard="${esc(q.id)}">
-        <div class="obs-q">Question ${from + k + 1} of ${nQ}</div>
+      return `<div class="obs-qrow obs-qcard${done ? ' done' : ''}" data-qcard="${esc(q.id)}">
+        <span class="obs-tick" aria-hidden="true">${done ? '✓' : ''}</span>
         <p class="obs-anchor">${esc(q.text)}</p>
-        <div class="obs-stars" role="radiogroup" aria-label="Question ${from + k + 1}: ${esc(q.text)}">${opts}</div>
-        <button class="obs-na${na ? ' on' : ''}" data-star="na" data-qid="${esc(q.id)}" role="radio" aria-checked="${na}" title="Not counted in their scores">Haven&rsquo;t seen this yet</button>
+        <div class="obs-seg" role="radiogroup" aria-label="${esc(q.text)}">${opts}</div>
       </div>`;
     }).join('');
+    const scaleHead = `<div class="obs-listhead"><span>How often do you see this?</span><div class="obs-seg obs-seg-head" aria-hidden="true">${
+      OBS_SCALE.map((o, i) => `<span title="${esc(STAR_LABELS[i])}">${pips(o.v)}</span>`).join('')}</div></div>`;
+    const onPageDone = onPage.length - leftOnPage;
     const last = page >= pages - 1;
     const nextLbl = last ? (left > 1 ? 'Finish → next child' : 'Finish 🌱') : 'Next page →';
     const celebrate = e.done ? `<div class="obs-celebrate">${flowerArt('growing', 90, 0)}<div class="msg">${esc(stu.first)}'s plant just got a little taller 🌱</div></div>` : '';
     const ini = ((stu.first || '')[0] || '') + ((stu.last || '')[0] || '');
-    return `${saved}${redoNote}${resumed}<div class="obs-enter">
+    const closedNote = obsLaneStatus(wk) && obsLaneStatus(wk) !== 'Live'
+      ? `<div class="ui-note warn mb-3"><span aria-hidden="true">⚠️</span><span>${esc(winLabel)} ${obsLaneStatus(wk) === 'Ended' ? 'has closed' : 'isn’t open yet'} — what you save here is kept${obsLaneStatus(wk) === 'Ended' ? ', but won’t count for this window' : ' and counts as soon as the Tilli team opens it'}.</span></div>` : '';
+    return `${closedNote}${saved}${redoNote}${resumed}<div class="obs-enter">
       <div class="obs-enter-head"><span class="ui-avatar obs-av" aria-hidden="true">${esc(ini.toUpperCase())}</span>
-        <div><h1 class="obs-name">${esc(stu.dispFirst || stu.first)}</h1><div class="sub">${esc(secLabel(stuSec))} · ${esc(winLabel)} observation</div></div></div>
-      <div class="obs-progwrap" role="progressbar" aria-valuemin="0" aria-valuemax="${nQ}" aria-valuenow="${answered}" aria-label="${esc(stu.dispFirst || stu.first)}: ${answered} of ${nQ} answered">   <!-- sticks under the header while you scroll the questions -->
-        <div class="obs-ringbox">${ring}<span class="obs-ringnum">${answered}</span></div>
+        <div class="obs-enter-who"><h1 class="obs-name">${esc(stu.dispFirst || stu.first)}</h1><div class="sub">${esc(winLabel)} observation · page ${page + 1} of ${pages}</div></div></div>
+      <div class="obs-progwrap" role="progressbar" aria-valuemin="0" aria-valuemax="${onPage.length}" aria-valuenow="${onPageDone}" aria-label="${esc(stu.dispFirst || stu.first)}: ${onPageDone} of ${onPage.length} on this page">   <!-- sticks under the header while you scroll -->
         <div class="obs-progtxt"><div class="obs-progname">${esc(stu.dispFirst || stu.first)}</div>
-          <div class="obs-page">${answered} of ${nQ} answered · Page ${page + 1} of ${pages}${answered ? ' · <span class="obs-saved" aria-live="polite">✓ Saved</span>' : ''}</div></div>
-        <div class="obs-graded" title="Students you've finished observing for ${esc(winLabel)}, across all your classes"><span><b>${gc.done}</b> of ${gc.total} students done</span>
-          <span class="obs-graded-bar" aria-hidden="true"><i style="width:${gc.total ? Math.round(gc.done / gc.total * 100) : 0}%"></i></span></div>
+          <div class="obs-page"><b>${onPageDone} of ${onPage.length}</b> on this page${answered ? ' · <span class="obs-saved" aria-live="polite">✓ Saved</span>' : ''}</div>
+          <span class="obs-graded-bar" aria-hidden="true"><i style="width:${onPage.length ? Math.round(onPageDone / onPage.length * 100) : 0}%"></i></span></div>
+        <div class="obs-graded" title="Students you've finished observing for ${esc(winLabel)}, across all your classes"><span>Child <b>${Math.min(gc.done + 1, gc.total)}</b> of ${gc.total}</span></div>
       </div>
-      <div class="obs-qcards">${cards}</div>
+      <section class="obs-list" aria-label="Statements to rate">${scaleHead}${cards}</section>
       <div class="obs-nav">
-        ${page === 0 ? '<span></span>' : '<button class="btn-soft focus" data-enter-prev>← Back</button>'}
-        <div class="obs-nav-r"><span class="obs-need" aria-live="polite">${leftOnPage ? leftOnPage + ' left on this page' : ''}</span>
-          <button class="btn btn-primary md focus" data-enter-next>${nextLbl}</button></div>
+        ${page === 0 ? '<span></span>' : '<button class="btn-soft focus" data-enter-prev>← Previous page</button>'}
+        <div class="obs-nav-r"><span class="obs-need" aria-live="polite">${leftOnPage ? leftOnPage + ' still to rate on this page' : ''}</span>
+          <button class="btn btn-primary md focus${leftOnPage ? ' obs-next-wait' : ''}" data-enter-next title="${leftOnPage ? 'Rate every statement on this page first — tapping takes you to the next one' : ''}">${nextLbl}</button></div>
       </div>
     </div>${celebrate}`;
   }
@@ -1966,6 +2123,30 @@
       if (k < 1) requestAnimationFrame(frame); else cv.remove();
     })(t0);
   }
+  // Status of the Teacher lane for a window ('Live' | 'Scheduled' | 'Ended' | …), or
+  // null when nothing is deployed (the demo records against a default item).
+  function obsLaneStatus(wk) {
+    const A = window.TilliAPI, sid = schoolId(), phase = PHASE_OF_WIN[wk];
+    if (!A || !A.getDeployments || !sid || !phase) return null;
+    const dep = A.getDeployments(sid).find((d) => d.phase === phase && d.audience === 'Teacher' && d.deployed !== false);
+    return dep ? dep.status : null;
+  }
+  // Observations saved before the window opened were never counted. Once it's live,
+  // send them (only the ones not counted yet, so the original dates stay put).
+  function syncSavedObservations() {
+    try {
+      const A = window.TilliAPI, sid = schoolId(); if (!A || !A.markComplete || !A.isComplete || !sid) return;
+      const obs = (S.teacher && S.teacher.observations) || {};
+      Object.keys(obs).forEach((wk) => {
+        const phase = PHASE_OF_WIN[wk]; if (!phase || obsLaneStatus(wk) !== 'Live') return;
+        const dep = A.getDeployments(sid).find((d) => d.phase === phase && d.audience === 'Teacher');
+        const items = ((dep && dep.assessments) || []).filter((a) => !a.perTeacher);
+        Object.keys(obs[wk] || {}).forEach((adm) => items.forEach((a) => {
+          if (!A.isComplete(sid, phase, 'Teacher', adm, a.id)) A.markComplete(sid, phase, 'Teacher', adm, a.id, S.teacher.email);
+        }));
+      });
+    } catch (err) {}
+  }
   // Mirror the completion into the shared lifecycle store (Teacher lane) so the
   // school/platform admin dashboards count it. Best effort — no-op without a school.
   function recordTeacherCompletion(stu, wk) {
@@ -1994,8 +2175,9 @@
     const histBtn = HU ? `<button class="btn-line ui-tooltip down end hover-only focus" data-assess-hist data-tip="${esc(tip)}" aria-label="Assessment history · ${esc(tip)}">🕘 History</button>` : '';
     const one = S.trackerStu ? trackerStudentView() : '';
     if (one) return legend + one;
-    return `<div class="log-tabs-row end"><div class="log-actions">${histBtn}
-      <button class="btn-line focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div></div>${legend}${logsByClass()}`;
+    // Legend left, History / CSV right — one line (they used to sit on two).
+    return `<div class="log-tabs-row log-headrow">${legend}<div class="log-actions">${histBtn}
+      <button class="btn-line focus" data-csv title="Download the whole assessment log — one row per student, one column per assessment and window">⬇ Download CSV</button></div></div>${logsByClass()}`;
   }
 
   // ---- Tracker: pick a window (cards) → that window's Completed rate table.
@@ -2083,7 +2265,7 @@
             <button class="btn-line primary focus" data-copy="${esc(groupMsg)}" title="Copies a reminder with no children's names, ready to paste in the class group">📋 Copy reminder for the class group</button>
           </div>
           <details class="par-remind-list"><summary>Who&rsquo;s still to finish (${parentPending.length})</summary>
-            ${parentPending.map((st) => { const pe = logOf(st, wk).persp.find((x) => x.key === 'parent'); return `<div class="par-remind-row"><span class="nm">${esc(st.name)}</span><span class="pt">${pe.doneParts} of ${pe.totalParts} parts</span><button class="btn-link focus" data-copy="${esc(oneMsg(st))}" title="Copies a message for this child's parent">Copy message</button></div>`; }).join('')}
+            ${parentPending.map((st) => { const pe = logOf(st, wk).persp.find((x) => x.key === 'parent'); return `<div class="par-remind-row"><span class="nm">${esc(st.name)}</span><span class="pt">${pe.doneParts} of ${pe.totalParts} parts</span><button class="copy-ic focus" data-copy="${esc(oneMsg(st))}" data-copy-icon title="Copy a reminder for ${esc(st.dispFirst || st.first)}'s parent" aria-label="Copy a reminder for ${esc(st.dispFirst || st.first)}'s parent">${COPY_ICON}</button></div>`; }).join('')}
           </details>
         </div>`;
     // "Your classes at a glance" only helps a teacher with 2+ sections.
@@ -2176,10 +2358,10 @@
     let at = null;
     if (key === 'teacher') { const o = (((S.teacher && S.teacher.observations) || {})[wk] || {})[st.adm || st.id]; at = o && o.at; }
     const A = window.TilliAPI, sid = schoolId();
-    if (!at && A && A.completedAt && sid && st.adm) at = A.completedAt(sid, PHASE_OF_WIN[wk], key.charAt(0).toUpperCase() + key.slice(1), st.adm);
+    if (!at && A && A.completedAt && sid && st.adm) at = A.completedAt(sid, PHASE_OF_WIN[wk], REAL_LANES[key] || 'Teacher', st.adm);
     if (!at) return '';
     const t = new Date(at);
-    return isNaN(t) ? '' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return isNaN(t) ? '' : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   }
 
   // Tracker → one child (tap a row): every window with Teacher / Parent /
@@ -2731,9 +2913,19 @@
     const u = uidOf(stu);
     return u ? `<span class="ui-tag green uid-chip${small ? ' sm' : ''}" title="Student UID — this child's unique Tilli Measures code">${esc(u)}</span>` : '';
   }
+  // Admission # first (the school's own number); the UID is Tilli's permanent code, shown second.
   function uidLine(stu) {
-    const chip = uidChip(stu);
-    return chip ? `<div class="ui-meta stu-sub stu-uid">Student UID ${chip}</div>` : '';
+    const u = uidOf(stu);
+    const adm = stu.adm ? `Admission # <b>${esc(stu.adm)}</b>` : '';
+    const uid = u ? `<span class="stu-uidcode" title="Tilli's permanent code for this child. It stays the same even if the school changes admission numbers.">Tilli code ${esc(u)}</span>` : '';
+    return adm || uid ? `<div class="ui-meta stu-sub stu-uid">${[adm, uid].filter(Boolean).join(' · ')}</div>` : '';
+  }
+  // The parent(s) actually linked to this child — never a made-up address.
+  function parentLabel(stu) {
+    if (stu.parentEmail) return stu.parentEmail;
+    const A = window.TilliAPI, sid = schoolId();
+    const ps = A && A.parentsForStudent && sid && stu.adm ? A.parentsForStudent(sid, stu.adm) : [];
+    return ps.length ? ps.join(', ') : 'No parent linked yet';
   }
 
   // ================= Add student flow =================
@@ -2858,6 +3050,31 @@
     if (keep.length) S.add = Object.assign({}, a, { rows: keep, issues });
     else S.add = Object.assign({}, a, { step: 'done', rows: [addBlankRow()], issues: {} });
     render();
+    // Only over-size children left → one pop-up decides for all of them.
+    const ks = Object.keys(issues);
+    if (keep.length && ks.length === keep.length && ks.every((k) => issues[k].kind === 'over_limit')) askAddOverLimit(keep);
+  }
+  function askAddOverLimit(rows) {
+    const names = rows.map((r) => (r.first + ' ' + r.last).trim());
+    const close = () => { const o = document.getElementById('add-ovl'); if (o) o.remove(); };
+    close();
+    const ov = document.createElement('div');
+    ov.className = 'overlay'; ov.id = 'add-ovl';
+    ov.innerHTML = `<div class="ui-modal-card" role="dialog" aria-modal="true" aria-label="Over your class size">
+      <h3 class="ui-title md">Over your class size</h3>
+      <p>${names.length === 1 ? `<b>${esc(names[0])}</b> is` : `<b>${names.length} children</b> (${esc(names.join(', '))}) are`} past your class size. Send to your school admin for approval? You can still assess them meanwhile.</p>
+      <div class="row" style="gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px">
+        <button class="btn-line focus" data-ovl="cancel">Cancel</button>
+        <button class="btn-line focus" data-ovl="remove">Remove ${names.length === 1 ? esc(rows[0].first) : 'them'}</button>
+        <button class="btn btn-primary md focus" data-ovl="send">Send for approval</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => {
+      const act = e.target.dataset && e.target.dataset.ovl;
+      if (e.target === ov || act === 'cancel') { close(); return; }
+      if (act === 'send') { S.add.rows.forEach((r) => { r.request = true; }); close(); commitAddSheet(); }
+      if (act === 'remove') { close(); S.add = Object.assign({}, S.add, { step: 'done', rows: [addBlankRow()], issues: {} }); render(); }
+    });
   }
   // CSV → sheet rows for review (nothing is planted until "Plant students").
   // Columns are matched by header (first / last / admission); without a header
@@ -3470,7 +3687,7 @@
   // ---------------- Profile ----------------
   function fmtDate(iso) {
     const t = iso ? new Date(iso) : null;
-    return t && !isNaN(t) ? t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return t && !isNaN(t) ? t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   }
   // Grades · sections this teacher teaches = the sections of their class.
   function gradesTaught() { return (S.baseData.sections || []).filter((x) => x.students && x.students.length).map(secLabel); }
@@ -3639,7 +3856,8 @@
 
   // ---------------- wiring ----------------
   function wire() {
-    if (window.TilliI18n) window.TilliI18n.wire(root);   // language change → reload in the new language
+    if (window.TilliI18n) window.TilliI18n.wire(root);
+    fitVine();   // language change → reload in the new language
     // Sign out ends the saved session too, so the student-assessment link on a
     // shared device no longer opens as this teacher.
     root.querySelectorAll('[data-signout]').forEach((a) => a.addEventListener('click', () => {
@@ -3852,9 +4070,10 @@
     if (tds) tds.addEventListener('input', (e) => { S.todoSearch = e.target.value; S._refocus = 'todo-search'; render(); });
 
     root.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => {
-      const label = b.textContent;
-      copyText(b.dataset.copy).then(() => { b.textContent = 'Copied ✓'; }, () => { b.textContent = 'Couldn’t copy'; })
-        .then(() => setTimeout(() => { b.textContent = label; }, 1800));
+      // An icon button flashes a ✓; a text button says "Copied ✓".
+      const icon = b.hasAttribute('data-copy-icon'), was = b.innerHTML;
+      copyText(b.dataset.copy).then(() => { if (icon) { b.innerHTML = '✓'; b.classList.add('ok'); } else b.textContent = 'Copied ✓'; }, () => { b.textContent = icon ? '!' : 'Couldn’t copy'; })
+        .then(() => setTimeout(() => { b.innerHTML = was; b.classList.remove('ok'); }, 1800));
     }));
     const csv = root.querySelector('[data-csv]');
     if (csv) csv.addEventListener('click', downloadCSV);
@@ -4213,7 +4432,7 @@
   .pf-row .v { font-size: var(--fs-md); color: var(--ink-900); font-weight: 600; text-align: right; }
 
   /* observations */
-  .obs-vine { position: relative; max-width: 640px; }
+  .obs-vine { --obs-chip-gap: 6px; position: relative; max-width: 640px; }
   .obs-vine-svg { position: absolute; left: 0; top: 0; pointer-events: none; }
   .obs-nodes { position: relative; z-index: 1; }
   .obs-row { display: flex; gap: 16px; min-height: 152px; }
@@ -4228,6 +4447,15 @@
   .obs-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .obs-card-top .ui-badge { flex: none; }
   .obs-card.locked .obs-card-title { color: var(--text-faint); }   /* title = .ui-title.md */
+  /* "Opens soon": a deployed teacher item the app has no screen for yet — reads like locked. */
+  .obs-card.soon { background: var(--surface-100); opacity: .72; cursor: default; }
+  .obs-card.soon .obs-card-title { color: var(--text-faint); }
+  /* Student assessments on the vine: a card holding a real link (not one big button). */
+  .obs-card.sa { cursor: default; }
+  .obs-card.sa a.obs-cta { display: inline-block; text-decoration: none; }
+  .obs-count { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); white-space: nowrap; }
+  .obs-count + .ui-badge { margin-left: 0; }
+  .obs-chips { display: flex; flex-wrap: wrap; gap: var(--obs-chip-gap); margin-top: 8px; }
   .obs-meta { margin-top: 3px; }   /* .ui-meta */
   .obs-body { font-size: var(--fs-md); color: var(--text-meta); margin-top: 8px; }
   .obs-cta { margin-top: 12px; }   /* .btn-soft.green (a <span> inside the card button) */
@@ -4273,7 +4501,11 @@
   .par-remind-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line-200); }
   .par-remind-row:first-of-type { margin-top: 6px; }
   .par-remind-row .nm { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sa-tablet { margin: 10px 0 0; font-size: var(--fs-xs); font-weight: 600; color: var(--text-meta); }
   .par-remind-row .pt { color: var(--text-meta); font-weight: 600; white-space: nowrap; }
+  .copy-ic { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line-200); border-radius: var(--radius-sm); background: var(--white); color: var(--ink-450); cursor: pointer; font-weight: 700; }
+  .copy-ic:hover { border-color: var(--green-500); color: var(--green-700); }
+  .copy-ic.ok { border-color: var(--green-500); color: var(--green-700); background: var(--wash-green); }
   /* Students → parent report preview (T17) */
   .rp-card { max-width: 900px; width: calc(100vw - 32px); max-height: 92vh; }
   .rp-body { flex: 1; min-height: 0; overflow-y: auto; background: var(--surface-100); padding: 14px; }
@@ -4368,6 +4600,41 @@
     .obs-star { padding: 10px 12px; }
     .obs-qcard { padding: 14px; }
   }
+  /* Observation page — compact rows (approved redesign, 29 Oct): one row per statement,
+     four frequency buttons on the right, Seed → Blooming pips once in the list header. */
+  .obs-enter { --obs-seg-w: 480px; --obs-opt-h: 44px; --obs-line: #D5DAE1; }
+  .obs-list { background: var(--white); border: 1px solid var(--line-200); border-radius: var(--radius-lg); overflow: hidden; }
+  .obs-listhead { display: flex; align-items: center; gap: 16px; padding: 10px 20px 10px 58px; border-bottom: 1px solid var(--line-200); font-size: var(--fs-sm); font-weight: 700; color: var(--text-meta); }
+  .obs-listhead > span { flex: 1; }
+  .obs-seg-head > span { flex: 1; display: flex; justify-content: center; }
+  .obs-qrow { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-top: 1px solid var(--line-200); }
+  .obs-listhead + .obs-qrow { border-top: none; }
+  .obs-qrow.done { background: none; border-color: var(--line-200); }
+  .obs-qrow .obs-anchor { flex: 1; min-width: 0; margin: 0; font-family: var(--font-body); font-size: var(--fs-md); font-weight: 600; line-height: 1.35; color: var(--ink-900); }
+  .obs-tick { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--obs-line); display: flex; align-items: center; justify-content: center; font-size: var(--fs-xs); font-weight: 700; color: var(--white); }
+  .obs-qrow.done .obs-tick { background: var(--green-500); border-color: var(--green-500); }
+  .obs-seg { width: var(--obs-seg-w); flex: none; display: flex; gap: 6px; }
+  .obs-opt { flex: 1; min-width: 0; height: var(--obs-opt-h); border-radius: 10px; border: 1px solid var(--obs-line); background: var(--white); color: var(--ink-700); font-family: var(--font-body); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+  .obs-opt:hover { border-color: var(--green-500); }
+  .obs-opt.on { background: var(--wash-green); color: var(--green-700); border: 2px solid var(--green-500); font-weight: 700; }
+  .obs-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .obs-progtxt .obs-graded-bar { display: block; margin-top: 6px; }
+  .btn.btn-primary.obs-next-wait { background: var(--line-200); color: var(--ink-300); }   /* still clickable: jumps to the first unrated row */
+  @media (max-width: 640px) {
+    .obs-enter { --obs-opt-h: 48px; }
+    .obs-listhead { padding: 8px 12px; }
+    .obs-listhead > span:first-child { display: none; }
+    .obs-listhead .obs-seg-head { width: 100%; }
+    .obs-qrow { flex-wrap: wrap; gap: 10px; padding: 12px; }
+    .obs-qrow .obs-anchor { flex: 1 1 calc(100% - 40px); font-size: var(--fs-sm); }
+    .obs-qrow .obs-seg { width: 100%; gap: 5px; }
+    .obs-opt { font-size: var(--fs-xs); line-height: 1.15; padding: 0 2px; }
+    .obs-nav { flex-wrap: wrap; }
+    .obs-nav > * { flex: 1 1 0; }
+    .obs-nav-r { flex-wrap: wrap; }
+    .obs-nav-r .obs-need { flex: 1 1 100%; text-align: center; }
+    .obs-nav-r .btn { flex: 1 1 auto; }
+  }
   /* Milestone (1st child, then every 10th): confetti canvas + message pill */
   .ms-confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1000; }
   .ms-toast { position: fixed; left: 50%; top: 22%; transform: translate(-50%, 0); z-index: 1001; display: flex; align-items: center; gap: 10px;
@@ -4385,6 +4652,7 @@
   /* logs */
   .log-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
   .log-legend { gap: 10px 20px; margin: 0 0 18px; }
+  .log-headrow .log-legend { margin: 0; }
   .win-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
   .win-card { display: flex; align-items: center; gap: 16px; }   /* .ui-card.sm */
   .win-card .ring { flex: none; }
@@ -4585,6 +4853,7 @@
   .uid-chip { vertical-align: middle; font-family: var(--font-heading); font-size: var(--fs-sm); }   /* .ui-tag.green */
   .uid-chip.sm { font-size: var(--fs-xs); margin-left: 6px; }
   .stu-uid { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .stu-uidcode { color: var(--ink-450); cursor: help; }
   .stu-editbtn { align-self: flex-start; }
   .stu-edit-grid { display: grid; grid-template-columns: 1fr 1fr 0.9fr; gap: 10px; }
   .stu-edit-actions { display: flex; gap: 8px; margin-top: 12px; }

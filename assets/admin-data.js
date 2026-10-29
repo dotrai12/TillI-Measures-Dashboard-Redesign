@@ -270,9 +270,10 @@
   // section (not the school average), so one slow class is visible even when
   // the rest are bunched together. 'stalled' = nothing in yet while others
   // have started; 'slow' = COLLECT_GAP_PTS or more behind the leader.
+  // A section with no children can't start, so it never gets a flag.
   var COLLECT_GAP_PTS = 15;
   function collectionStatus() {
-    var rows = windowProgress().map(function (a) {
+    var rows = windowProgress().filter(function (a) { return a.completion.total > 0; }).map(function (a) {
       return Object.assign({}, a, { pct: a.completion.total ? Math.round(a.completion.done / a.completion.total * 100) : 0 });
     });
     var lead = rows.reduce(function (b, r) { return !b || r.pct > b.pct ? r : b; }, null);

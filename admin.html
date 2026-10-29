@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261028d3">
+<link rel="stylesheet" href="assets/tilli.css?v=20261029p6">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -566,6 +566,18 @@
      Look comes from .ui-devpanel (tilli.css). Docked in the sidebar on desktop;
      floats above the bottom nav when the sidebar is hidden. */
   .ad-statepanel.float { left: 8px; bottom: 74px; width: 200px; }
+  .ad-kidsub td:first-child { padding-left: 28px; }
+  .ad-kidgrp td { font-weight: 600; }
+  /* Setup checklist on an empty Overview (why it's empty + the next step). */
+  .ad-setup-list { list-style: none; padding: 0; margin: 14px 0 18px; display: grid; gap: 10px; }
+  .ad-setup-step { display: flex; gap: 10px; align-items: flex-start; color: var(--ink-450); }
+  .ad-setup-step small { display: block; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-450); }
+  .ad-setup-step b { color: var(--ink-700); }
+  .ad-setup-tick { flex: 0 0 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-200); display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-xs); font-weight: 700; }
+  .ad-setup-step.done .ad-setup-tick { background: var(--green-500); border-color: var(--green-500); color: var(--white); }
+  .ad-setup-step.done b { color: var(--ink-450); text-decoration: line-through; }
+  .ad-setup-step.next .ad-setup-tick { border-color: var(--cyan-500); }
+  .ad-setup-step.next b { color: var(--ink-900); }
 </style>
 </head>
 <body>
@@ -578,15 +590,16 @@
 <div class="ui-toast" id="ad-toast" role="status" aria-live="polite"></div>
 
 <script src="assets/school-data.js?v=20261020mx"></script>
-<script src="assets/tilli-api.js?v=20261027i6c"></script>
-<script src="assets/i18n.js?v=20261027i6c"></script>
-<script src="assets/tilli-history.js?v=20261026p5d"></script>
-<script src="assets/date-dmy.js?v=20261028d3"></script>
-<script src="assets/calendar-form.js?v=20261028d1"></script>
+<script src="assets/keep-open.js?v=20261029p10"></script>
+<script src="assets/tilli-api.js?v=20261029p9"></script>
+<script src="assets/i18n.js?v=20261029p4"></script>
+<script src="assets/tilli-history.js?v=20261029p1"></script>
+<script src="assets/date-dmy.js?v=20261029p3"></script>
+<script src="assets/calendar-form.js?v=20261029p6"></script>
 <script src="assets/created-school-bridge.js?v=20261026p5"></script>
-<script src="assets/admin-data.js?v=20261026p5c"></script>
+<script src="assets/admin-data.js?v=20261029p1"></script>
 <script src="assets/float-help.js?v=20261027i6b"></script>
-<script src="assets/admin.js?v=20261027i6a"></script>
+<script src="assets/admin.js?v=20261029p6"></script>
 <!-- Page translator: approved translations replace matching screen text; new text is listed on Tilli → Translations. -->
 <script>TilliI18n.autoTranslate({ area: 'School dashboard' });</script>
 </body>

@@ -23,14 +23,16 @@ Follow one brand-new school, **Mango Tree School**, from the day Tilli signs it 
 | Parent of Anika | `parent1@mangotree.test` | `tilli123` |
 | Parent of Kabir | `parent2@mangotree.test` | `tilli123` |
 | Parent of Meher | `parent3@mangotree.test` | `tilli123` |
+| Parent of Zoya | `parent4@mangotree.test` | `tilli123` |
 
-**The school:** India · **CBSE + IB** (two boards) · Vidya Trust group · 1 grade (Grade 1, on CBSE) · 1 section (A) · class size **3**.
+**The school:** India · **CBSE + IB** (two boards) · Vidya Trust group · 1 grade (Grade 1, on CBSE) · 1 section (A) · class size **3** to start; Ritu adds a fourth child, Zoya, in B4.2 and Asha approves her in B5.2 (class size **4**).
 
 | Child | Admission # |
 |---|---|
 | Anika Rao | `MT-001` |
 | Kabir Shah | `MT-002` |
 | Meher Iyer | `MT-003` |
+| Zoya Khan | `MT-004` (added by Ritu in B4.2) |
 
 **Why so small:** results only show once every part of Baseline (teacher, parent, student) is done or the window has ended. Three children means you can do every part yourself.
 
@@ -168,43 +170,43 @@ Follow one brand-new school, **Mango Tree School**, from the day Tilli signs it 
 ✅ "3 Students · 1 Teacher · 1 Section", **Baseline check-in: 0 of 3 children assessed**, days left, the dandelion (Assessed / In progress / Not started). Read **How completion is counted**.
 
 **B5.2 The child waiting for approval**
-- [x] **Roster** → **Students** → **Waiting for your approval**: Zoya Khan → **Turn down**. (Approve would raise the class size to 4, and you'd need a fourth parent.)
+- [x] **Roster** → **Students** → **Waiting for your approval**: Zoya Khan → **Approve**. The class size goes up to 4, and Zoya's parent joins in B8.6.
 - [x] **Roster** → **Classes**: the Teacher for Grade 1 A is **Ritu Menon**. If it still says *No teacher*, pick her.
 - [x] Optional: in Tilli, Control Room → **New students to approve** shows the same queue.
 
 **B5.3 A teacher whose class is missing (optional, 5 min)**
-- [ ] New tab → `index.html` → **School** → `teacher2@mangotree.test` → enter the **school code** (B1.4) → **Verify** → **Is this your school?** → **Yes** → `tilli123` → **Create via password**.
-- [ ] Onboarding step 3 → **My class isn't here — ask my school admin** → Grade 2 · A → **Ask my school admin** → finish → **Enter my garden →** (no class).
-- [ ] As Asha: Overview shows **Waiting for a class**; **Roster** has a count; **Your team** → the request → **Mark done**. Tilli's Control Room shows **Teachers waiting for a class**.
+- [x] New tab → `index.html` → **School** → `teacher2@mangotree.test` → enter the **school code** (B1.4) → **Verify** → **Is this your school?** → **Yes** → `tilli123` → **Create via password**.
+- [x] Onboarding step 3 → **My class isn't here — ask my school admin** → Grade 2 · A → **Ask my school admin** → finish → **Enter my garden →** (no class).
+- [x] As Asha: Overview shows **Waiting for a class**; **Roster** has a count; **Your team** → the request → **Mark done**. Tilli's Control Room shows **Teachers waiting for a class**.
 
 ---
 
 ## B6 · The teacher observes the class
 
 **B6.1 The to-do list**
-- [ ] Sign in as Ritu (`teacher@mangotree.test` / `tilli123`) → **Assess** → **To-do**.
+- [x] Sign in as Ritu (`teacher@mangotree.test` / `tilli123`) → **Assess** → **To-do**.
 
-✅ The journey: Pre-training survey **Complete**, **Baseline observations: Active** "0 of 3 students observed", the rest locked. A **Student assessments** card for IDELA (used in B7).
+✅ The journey: Pre-training survey **Complete**, **Baseline observations: Active** "0 of 4 students observed", the rest locked. A **Student assessments** card for IDELA (used in B7).
 
 **B6.2 Observe the first child**
-- [ ] **Continue baseline observations →** → **Start with Anika →**.
-- [ ] Answer page 1 (Rarely / Sometimes / Usually / Almost always, with Seed → Blooming under each; try **Haven't seen this yet** once). **Next page →**.
-- [ ] Halfway through, go back to the To-do list → Anika shows "Started · n of 21" → **Continue**.
+- [x] **Continue baseline observations →** → **Start with Anika →**.
+- [x] Answer page 1 (Rarely / Sometimes / Usually / Almost always, with Seed → Blooming under each; try **Haven't seen this yet** once). **Next page →**.
+- [x] Halfway through, go back to the To-do list → Anika shows "Started · n of 21" → **Continue**.
 
 ✅ "↺ Picked up where you left off".
-- [ ] Finish all 4 pages → **Finish → next child**.
+- [x] Finish all 4 pages → **Finish → next child**.
 
 ✅ "✓ Anika's observation is saved — next up: Kabir", plus a confetti toast for the first child.
 
 **B6.3 The rest of the class**
-- [ ] Kabir → **Finish → next child**. Meher → **Finish 🌱**.
+- [x] Kabir → **Finish → next child**. Meher → **Finish → next child**. Zoya → **Finish 🌱**.
 
-✅ "Every child is observed for Baseline 🌸" → **See who's complete →**. The Baseline step says "All 3 students observed".
+✅ "Every child is observed for Baseline 🌸" → **See who's complete →**. The Baseline step says "All 4 students observed".
 
 ⚠ K9: My Garden still shows **Continue → next: Anika**. Don't press it; it reopens her blank and overwrites the saved observation.
 
 **B6.4 Done so far**
-- [ ] **Assess** → **Done so far**: Teacher ✓ for each child. **⬇ Download CSV** and **🕘 History**.
+- [x] **Assess** → **Done so far**: Teacher ✓ for each child. **⬇ Download CSV** and **🕘 History**.
 
 ⚠ K10: the Parent and Student columns here never update.
 
@@ -213,70 +215,73 @@ Follow one brand-new school, **Mango Tree School**, from the day Tilli signs it 
 ## B7 · The children do their assessment at school
 
 **B7.1 Open the student assessment**
-- [ ] Still as Ritu: Assess → **Student assessments** card → **Start student assessments →** (opens `assess.html`, already signed in).
+> **Assumption:** here the teacher opens IDELA **from her own dashboard** (already signed in). The other route — the teacher sends the **student link** to a child's device, then signs in there with the school code + her email and picks that child — isn't covered yet. **To test later** (see Walkthrough-Feedback.md, B7.1).
+
+- [x] Still as Ritu: Assess → **Student assessments** card → **Start student assessments →** (opens `assess.html`, already signed in).
 
 ✅ **Pick a class to assess** → Grade 1 A "3 children · 0% done · Your class". A one-class school is exempt from the own-class rule.
 
 **B7.2 Each child**
-- [ ] Grade 1 A → Anika → **Start IDELA** → the placeholder screen → **Mark complete**. Do the same for Kabir and Meher.
+- [x] Grade 1 A → Anika → **Start IDELA** → the placeholder screen → **Mark complete**. Do the same for Kabir, Meher and Zoya.
 
 ✅ Each child shows ✓.
 
 ⚠ K3: there's no game yet; **Mark complete** stands in for the child playing.
-- [ ] Top bar **Finish** → "Session finished". This signs the device out, as it would on a shared school tablet.
+- [x] Top bar **Finish** → "Session finished". This signs the device out, as it would on a shared school tablet.
 
 ---
 
 ## B8 · Parents at home
 
 **B8.1 Parent 1 signs up**
-- [ ] Sign out → open the Vidya Trust parent link, `index.html?group=vidya&as=parent` (it's what Tilli's group page → **Group links** → **Open ↗** opens) → pick Mango Tree School. (Or: `index.html` → **Get started** → **Parent / Home** → type `Mango` → pick the school → **Continue →**.)
-- [ ] `parent1@mangotree.test` → **Enter →** → **Create your Tilli account** → `tilli123` → **Create via password →**.
+- [x] Sign out → `index.html` → **Get started** → **Parent / Home** → type `Mango` → pick **Mango Tree School** → **Continue →**. This is the usual way in: the same sign-in page as teachers and school admins. (Optional: a parent may instead get the group link `index.html?group=vidya&as=parent`, which Tilli's group page → **Group links** → **Open ↗** opens, and pick the school there.)
+- [x] `parent1@mangotree.test` → **Enter →** → **Create your Tilli account** → `tilli123` → **Create via password →**.
 
 **B8.2 Consent**
-- [ ] **Before you start**: **Continue** stays grey until the **Required** box is ticked. Try **I agree to all of the above** → untick one optional box → **Continue →**.
-- [ ] Try the 🌐 language picker. Most text stays English, because nothing is approved in other languages.
+- [x] **Before you start**: **Continue** stays grey until the **Required** box is ticked. Try **I agree to all of the above** → untick one optional box → **Continue →**.
+- [x] Try the 🌐 language picker. Most text stays English, because nothing is approved in other languages.
 
 **B8.3 Add the child**
-- [ ] ⚠ K1: two children you don't know (Aarav, Meera) appear. Ignore them → **+ add child**.
-- [ ] Admission number `MT-999` → "We can't find that admission number…". Then `MT-001` → **Continue →**.
+- [x] ⚠ K1: two children you don't know (Aarav, Meera) appear. Ignore them → **+ add child**.
+- [x] Admission number `MT-999` → "We can't find that admission number…". Then `MT-001` → **Continue →**.
 
 ✅ **We found your child**: Anika Rao, Grade 1, Section A → **Yes, that's my child →**.
 
 **B8.4 Anika's Baseline at home**
 
 ✅ "Watch Anika grow". Baseline shows **0 of 3 done · open until …** with Home SEL Survey, My School Check-in and Hearts & Flowers. Midline and Endline say "Not deployed yet".
-- [ ] **Mark done** on all three.
+- [x] **Mark done** on all three.
 
 ✅ **Completed**. ⚠ K3: there are no survey questions or games yet. The tap stands in for doing them.
 
 **B8.5 Profile and help**
-- [ ] Header "Anika's parent ▾" → **Profile** → **Consent & privacy** → **What you agreed to** → change an optional box → **Save**. Language picker. **Need help?** bubble (Email the Tilli team / Report a problem). → **Log out**.
+- [x] Header "Anika's parent ▾" → **Profile** → **Consent & privacy** → **What you agreed to** → change an optional box → **Save**. Language picker. **Need help?** bubble (Email the Tilli team / Report a problem). → **Log out**.
 
 **B8.6 Parents 2 and 3**
-- [ ] `parent2@mangotree.test` → Kabir (`MT-002`) → **Mark done** on all three.
-- [ ] `parent3@mangotree.test` → Meher (`MT-003`) → **Mark done** on **Home SEL Survey only**. Leave the other two, so you can see what "didn't finish" looks like.
+- [x] `parent2@mangotree.test` → Kabir (`MT-002`) → **Mark done** on all three.
+- [x] `parent3@mangotree.test` → Meher (`MT-003`) → **Mark done** on **Home SEL Survey only**. Leave the other two, so you can see what "didn't finish" looks like.
+- [x] `parent4@mangotree.test` → Zoya (`MT-004`) → **Mark done** on all three.
 
 ---
 
 ## B9 · Everyone watches progress
 
 **B9.1 School admin**
-- [ ] As Asha → **Overview**.
+- [x] As Asha → **Overview**.
 
-✅ **2 of 3 children assessed, 1 in progress**, the dandelion, and an **Almost there** point for Meher.
-- [ ] **Ask Tilli** (bubble or full screen) → "Who hasn't finished Baseline?".
-- [ ] **History** → today's changes (students added, invite, completions).
+✅ **3 of 4 children assessed, 1 in progress**, the dandelion, and an **Almost there** point for Meher.
+- [x] **Ask Tilli** (bubble or full screen) → "Who hasn't finished Baseline?".
+- [x] **History** → today's changes (students added, invite, completions).
 
 ⚠ K16: a one-class school never gets the "falling behind" warnings. Those compare classes with each other.
 
 **B9.2 Tilli**
-- [ ] As Tilli → Mango Tree School → **Overview** → Assessment progress "2 of 3 children".
-- [ ] **Assessments** → **Teacher assessment log**: Ritu, Pre-training ✓, Baseline observations 3/3 → **↓ CSV**.
-- [ ] **Students** → **Parent consent**: three parents, their choices → **Download CSV**.
-- [ ] **Ask Tilli** → `Who hasn't completed at Mango Tree School?`.
-- [ ] **Change History** → filter to Mango Tree.
-- [ ] Vidya Trust group page → **Group admin view →** → Mango Tree is in the schools table.
+- [x] As Tilli → Mango Tree School → **Overview** → Assessment progress "3 of 4 children".
+- [x] **Assessments** → **Teacher assessment log**: Ritu, Pre-training ✓, Baseline observations 3/3 → **↓ CSV**.
+- [x] **Students** → **Parent consent**: four parents, their choices → **Download CSV**.
+- [x] **Ask Tilli** → `Who hasn't completed at Mango Tree School?`.
+- [x] **Change History** → filter to Mango Tree.
+- [x] Vidya Trust group page → **Group admin view →** → Mango Tree is in the schools table.
 
 ⚠ K20, K21: the Student assessment log, Results CSV and Issues are empty for a new school. After a reload Ask Tilli's headline says 0%.
 
@@ -287,42 +292,42 @@ Follow one brand-new school, **Mango Tree School**, from the day Tilli signs it 
 In real life you'd wait for the end date. Here you end it early.
 
 **B10.1 End Baseline**
-- [ ] As Tilli → Mango Tree → **Assessments** → **Baseline** → change **End** to **yesterday**.
+- [x] As Tilli → Mango Tree → **Assessments** → **Baseline** → change **End** to **yesterday**.
 
 ✅ Toast "Baseline dates saved — ended." The tab shows **Ended**, and the planner now opens on Midline. ⚠ K12: there's no "End now" button.
 
 **B10.2 What Meher's parent sees**
-- [ ] As `parent3@mangotree.test` → Baseline "· Ended". The two rows not done say "Window ended · not completed" with **Missed**.
+- [x] As `parent3@mangotree.test` → Baseline "· Ended". The two rows not done say "Window ended · not completed" with **Missed**.
 
 ---
 
 ## B11 · Results
 
 **B11.1 School admin** (reload first; results are worked out when the page loads)
-- [ ] As Asha → **Overview**.
+- [x] As Asha → **Overview**.
 
 ✅ Up to three results points: "Baseline results: X% of skill ratings are Blooming", children Blooming, who was assessed, the strongest skill, where to help next.
-- [ ] **Outcomes** → School / All grades, Grade 1 · A, **Skill by skill**, **Where views differ**. "Small group — one child shifts this by ~33 points".
-- [ ] **Reports**:
+- [x] **Outcomes** → School / All grades, Grade 1 · A, **Skill by skill**, **Where views differ**. "Small group — one child shifts this by ~25 points".
+- [x] **Reports**:
   - **Generate leadership summary** → Print / Save as PDF.
   - **A paragraph for your newsletter** → Copy to clipboard / Regenerate.
   - Roster CSV and Aggregate outcomes CSV.
-- [ ] **Ask Tilli** → "Is the programme working?".
+- [x] **Ask Tilli** → "Is the programme working?".
 
 ⚠ K4: every score is generated by the prototype, not taken from the answers (Mayur connects the real ones). ⚠ K23: some report wording is canned ("All 1 of our sections").
 
 **B11.2 Tilli**
-- [ ] Mango Tree → **Overview** → **Outcomes** show averages (only after the school dashboard has been opened once, ⚠ K25).
+- [x] Mango Tree → **Overview** → **Outcomes** show averages (only after the school dashboard has been opened once, ⚠ K25).
 
 **B11.3 Teacher**
-- [ ] As Ritu → **Students** → Anika.
-- [ ] **Insights**.
-- [ ] **Students** → **☑ Parent reports** → **Select all** → **👁 Preview** → **⬇ Download PDFs** (needs internet).
+- [x] As Ritu → **Students** → Anika.
+- [x] **Insights**.
+- [x] **Students** → **☑ Parent reports** → **Select all** → **👁 Preview** → **⬇ Download PDFs** (needs internet).
 
 ⚠ K5: the teacher still sees "No assessment data yet" and a "Sample view" Insights. Baseline results don't reach the teacher app yet.
 
 **B11.4 Parent**
-- [ ] As `parent1@mangotree.test` → Anika's home: "3 of 3 done".
+- [x] As `parent1@mangotree.test` → Anika's home: "3 of 3 done".
 
 ⚠ K6: there's no family snapshot for a new school yet.
 
