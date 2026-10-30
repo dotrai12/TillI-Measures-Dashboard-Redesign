@@ -91,6 +91,49 @@
   function statusChip(status) { var m = ORG.status[status] || ORG.status.quiet; return '<span class="ui-chip ' + m.chip + '"><span class="dot"></span>' + m.label + '</span>'; }
   function statusPill(txt, tone) { return '<span class="ui-chip ' + (tone || '') + '">' + esc(txt) + '</span>'; }
 
+  // ---------- phone lists + list menus (F13, F14) ----------
+  // One row of a phone list: title (+ chip) and › or ⋯ on top, details underneath.
+  // o: { link: 'data-open="id"', nested: true when `end` holds its own buttons, title, chip, detail, more, end } — title / detail are already escaped.
+  function plRow(o) {
+    return '<div class="pl-row' + (o.link ? ' is-link' : '') + '"' + (o.link ? (o.nested ? '' : ' role="link" tabindex="0"') + ' ' + o.link : '') + '><span class="pl-m"><span class="pl-n">' + o.title + (o.chip || '') + '</span>' +
+      (o.detail ? '<span class="pl-d">' + o.detail + '</span>' : '') + (o.more || '') + '</span>' + (o.end || '') + (o.link ? '<span class="pl-chev" aria-hidden="true">›</span>' : '') + '</div>';
+  }
+  // ⋯ on a row: its action buttons stay in the page (hidden), wired as usual; the menu just clicks them.
+  function plMore(label, actsHtml) {
+    return '<button type="button" class="pl-more" data-plmore="' + esc(label) + '" aria-label="' + esc(label) + '">⋯</button><span class="pl-acts" hidden>' + actsHtml + '</span>';
+  }
+  function menuShell(titleHtml, innerHtml, keep) {
+    var root = document.getElementById('tl-modal-root');
+    root.innerHTML = '<div class="overlay pl-sheet-ov" id="tl-ov"' + (keep ? '' : ' data-keep="no"') + '><div class="pl-sheet" role="dialog" aria-modal="true"><div class="pl-grab" aria-hidden="true"></div>' +
+      '<button class="dialog-close" id="pl-x" type="button" aria-label="Close">×</button><div class="pl-sheet-h">' + titleHtml + '</div>' + innerHtml + '</div></div>';
+    function close() { root.innerHTML = ''; }
+    document.getElementById('pl-x').addEventListener('click', close);
+    document.getElementById('tl-ov').addEventListener('click', function (ev) { if (ev.target.id === 'tl-ov') close(); });
+    return close;
+  }
+  // items: [{ label, sub, icon, danger, id, onClick }] — a card on desktop, a bottom sheet on phones.
+  function openListMenu(title, items, keep) {
+    var close = menuShell(esc(title), items.map(function (it, i) {
+      return '<button type="button" class="pl-sheet-item' + (it.danger ? ' danger' : '') + '" data-plidx="' + i + '"' + (it.id ? ' id="' + it.id + '"' : '') + '>' + (it.icon ? '<span class="ic">' + it.icon + '</span>' : '') +
+        '<span>' + esc(it.label) + (it.sub ? '<small>' + esc(it.sub) + '</small>' : '') + '</span></button>';
+    }).join(''), keep);
+    document.querySelectorAll('[data-plidx]').forEach(function (b) { b.addEventListener('click', function () { close(); items[+b.dataset.plidx].onClick(); }); });
+  }
+  function wirePhoneLists() {
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-plmore]'); if (!b) return;
+      var scope = b.dataset.plfrom ? document.querySelector(b.dataset.plfrom) : b.parentNode;
+      openListMenu(b.dataset.plmore, Array.prototype.map.call(scope.querySelectorAll('.pl-acts button, .pl-acts a, .pl-acts-m button:not(.pl-keep), .pl-acts-m a:not(.pl-keep)'), function (x) {
+        var svg = x.querySelector('svg');
+        return { label: x.getAttribute('aria-label') || x.textContent.trim(), sub: x.dataset.plsub, icon: svg ? svg.outerHTML : x.dataset.plic, danger: x.classList.contains('danger') || x.classList.contains('btn-danger'), onClick: function () { x.click(); } };
+      }));
+    });
+    document.addEventListener('keydown', function (e) {
+      var r = e.key === 'Enter' && e.target.matches && e.target.matches('.pl-row[role="link"]') ? e.target : null;
+      if (r) r.click();
+    });
+  }
+
   // ---------- icons ----------
   var ICONS = {
     // layout toggle (Templates)
@@ -226,6 +269,8 @@
     var header = '<header class="ui-header tl-header' + (GROUP ? '' : ' tl-header-bare') + '">' +
       (GROUP ? '<div class="tl-search tl-group-title">' + esc(GROUP.name) + '</div>' : '') +
       '<div class="tl-h-actions">' +
+        // Phone: help moves to the top bar (F18); the page's own Help button steps back.
+        (GROUP ? '<button class="ui-tophelp pl-phone" type="button" data-tf-tophelp aria-label="Need help?">?</button>' : '<button class="ui-tophelp pl-phone" type="button" data-help aria-label="Help for this page">?</button>') +
         // Phone only (sidebar hidden): the avatar stands in for the sidebar profile.
         '<button class="ui-avatar tl-acct-m" id="tl-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
@@ -506,24 +551,37 @@
       { summary: true, empty: 'No changes at any school yet.' });
 
     var anyQueue = cr.cards.some(function (c) { return c.key === 'health' ? c.state !== 'healthy' : c.count > 0; });
+    // Phones show only what needs doing; the rest folds into one line (F17).
+    var nClear = cr.cards.filter(function (c) { return c.key === 'health' ? c.state === 'healthy' : c.count === 0; }).length;
+    var nOpen = cr.cards.length - nClear;
+    var statsLine = cr.stats.map(function (t) { return '<b>' + esc(t.value.toLocaleString()) + '</b> ' + esc(String(t.label).toLowerCase()); }).join(' · ');
 
     body.innerHTML =
       screenHead('Control Room', 'What needs the team\'s attention right now.',
+        '<span id="cr-new" class="pl-acts-m pl-desk" style="display:contents">' +
         '<button class="btn btn-primary btn-sm" data-qa="school">+ Add School</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="invite">+ Invite User</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="deployment">+ Deployment</button>' +
-        '<button class="btn btn-outline btn-sm" data-qa="template">+ Template</button>') +
-      '<div class="tl-findschool"><span class="ic">' + ICONS.search + '</span>' +
+        '<button class="btn btn-outline btn-sm" data-qa="template">+ Template</button></span>') +
+      '<div class="tl-findrow"><div class="tl-findschool"><span class="ic">' + ICONS.search + '</span>' +
         '<input id="cr-find" class="tl-findschool-in" placeholder="Find a school — name, code or city" autocomplete="off" aria-label="Find a school and open it" title="Type a school name, code or city, then pick it (or press Enter) to open its hub."></div>' +
+        '<button type="button" class="btn btn-primary btn-sm pl-phone" data-plmore="New" data-plfrom="#cr-new">＋ New ▾</button></div>' +
       (anyQueue ? '' : '<div class="tl-allclear">Nothing needs your attention right now. 🌱</div>') +
-      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Needs attention</h3><p class="ui-mod-note">Each card links to the pre-filtered list that produced it.</p></div></div>' +
-        '<div class="tl-queue-grid">' + cards + '</div></div>' +
-      '<div class="ui-eyebrow tl-mini-head">Platform stats</div>' +
-      '<div class="tl-kpis four">' + stats + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Needs attention</h3><p class="ui-mod-note tl-cr-note">Each card links to the pre-filtered list that produced it.</p></div>' + (nOpen ? '<span class="ui-mod-note pl-phone">' + nOpen + ' to look at</span>' : '') + '</div>' +
+        '<div class="tl-queue-grid" id="cr-queue">' + cards + '</div>' +
+        (nClear ? '<button type="button" class="tl-cr-fold pl-phone" id="cr-fold" aria-expanded="false"><span style="color:var(--green-700)">✓</span> ' + nClear + ' more all clear<span class="tl-grow"></span><span aria-hidden="true">▸</span></button>' : '') + '</div>' +
+      '<div class="ui-eyebrow tl-mini-head pl-desk">Platform stats</div>' +
+      '<div class="tl-kpis four tl-cr-kpis">' + stats + '</div>' +
+      '<div class="ui-card pl-phone tl-cr-stats"><h3 class="ui-mod-title">Platform</h3><p class="ui-mod-note" style="margin-top:4px">' + statsLine + '</p></div>' +
       '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent activity</h3><p class="ui-mod-note">The latest changes from schools — student records and assessments.</p></div>' +
         '<a class="btn-link" href="' + href('history', {}) + '">View all →</a></div><div id="cr-recent">' + recent + '</div></div>';
 
     body.querySelectorAll('[data-qa]').forEach(function (b) { b.addEventListener('click', function () { quickAction(b.dataset.qa); }); });
+    var crFold = body.querySelector('#cr-fold');
+    if (crFold) crFold.addEventListener('click', function () {
+      var open = body.querySelector('#cr-queue').classList.toggle('show-clear');
+      crFold.setAttribute('aria-expanded', String(open)); crFold.lastChild.textContent = open ? '▾' : '▸';
+    });
     var crFind = body.querySelector('#cr-find'); if (crFind) schoolTypeahead(crFind, { onPick: function (sc) { go('school', { id: sc.id }); } });
     if (HU) HU.wireSummary(body.querySelector('#cr-recent'));   // one-line rows → click to expand
   };
@@ -582,6 +640,11 @@
       '<button class="' + (!rankByGroup ? 'on' : '') + '" data-rank="" title="Rank individual schools (top 12)">Schools</button>' +
       '<button class="' + (rankByGroup ? 'on' : '') + '" data-rank="groups" title="Rank school groups by the average completion of their schools">School groups</button></div>';
 
+    // F14: the same ranking as two-line rows on phones.
+    var rankPhone = rankByGroup
+      ? gRows.map(function (x) { return plRow({ link: 'data-open-group="' + x.g.id + '"', title: esc(x.g.name), detail: (x.avg == null ? 'No results yet' : x.avg + '% average') + ' · ' + x.n + ' schools · ' + x.students.toLocaleString() + ' students' + (x.low ? ' · lowest ' + esc(x.low.name) + ' ' + x.low.completion + '%' : '') }); }).join('')
+      : ranked.map(function (s) { return plRow({ link: 'data-open="' + s.id + '"', title: esc(s.name), chip: statusChip(s.status), detail: (s.completion ? s.completion + '% complete' : 'No results yet') + (s.groupId === 'g-none' ? '' : ' · ' + esc(s.groupName)) + ' · ' + esc(s.region) }); }).join('');
+
     body.innerHTML = screenHead('Analytics', 'Rollups across the whole portfolio — outcomes, engagement and rollout.') +
       '<div class="tl-grid two">' +
         '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Outcomes by region</h3><p class="ui-mod-note">Average band across schools with results.</p></div></div>' + regionCard +
@@ -590,7 +653,8 @@
       '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Completion ranking</h3><p class="ui-mod-note">' +
         (rankByGroup ? 'School groups by the average completion of their schools with results, highest first.' : 'Assessment completion, highest first.') + '</p></div>' + rankSeg + '</div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-640 tl-rank-small"><thead>' + rankHead + '</thead><tbody>' + rankRows + '</tbody></table></div></div>';
+        '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-640 tl-rank-small"><thead>' + rankHead + '</thead><tbody>' + rankRows + '</tbody></table></div>' +
+        '<div class="pl-list pl-phone">' + rankPhone + '</div></div>';
     body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { go('school', { id: b.dataset.open }); }); });
     body.querySelectorAll('[data-open-group]').forEach(function (b) { b.addEventListener('click', function () { go('group', { id: b.dataset.openGroup }); }); });
     body.querySelectorAll('[data-rank]').forEach(function (b) { b.addEventListener('click', function () { go('analytics', b.dataset.rank ? { rank: b.dataset.rank } : {}); }); });
@@ -599,8 +663,8 @@
   // ============================================================
   //  3) ALL SCHOOLS  (spec §4.1)
   // ============================================================
-  // Phones open on cards (the list's table scrolls sideways there); the toggle still switches.
-  var schState = { tab: 'active', view: window.matchMedia && matchMedia('(max-width: 767px)').matches ? 'grid' : 'list', q: '', flag: '', country: '' };
+  // The list on every size (on phones it's two-line rows, F12); the toggle still switches to cards.
+  var schState = { tab: 'active', view: 'list', q: '', flag: '', country: '' };
   SCREEN.schools = function (params, body) {
     if (params.flag != null) { schState.flag = params.flag; schState.tab = 'active'; }
     var tabActive = schState.tab === 'active';
@@ -697,7 +761,7 @@
   // ---- shared list renderers (schools + groups) ----
   // Red "N open issues" marker — opens the school's Issues & Logs tab.
   function issueChip(id, n) {
-    return n ? '<button class="ui-chip danger tl-issue-chip" data-issues-of="' + esc(id) + '" title="' + n + ' open issue' + (n === 1 ? '' : 's') + ' reported from this school — open Issues & Logs">⚠ ' + n + ' open issue' + (n === 1 ? '' : 's') + '</button>' : '';
+    return n ? '<button class="ui-chip danger tl-issue-chip" data-issues-of="' + esc(id) + '" title="' + n + ' open issue' + (n === 1 ? '' : 's') + ' reported from this school — open Issues & Logs">' + n + ' open issue' + (n === 1 ? '' : 's') + '</button>' : '';
   }
   function wireIssueChips(root) {
     root.querySelectorAll('[data-issues-of]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); go('school', { id: b.dataset.issuesOf, tab: 'issues' }); }); });
@@ -705,13 +769,18 @@
   function schoolListHtml(rows, view) {
     if (!rows.length) return '<div class="ui-empty">No schools here yet.</div>';
     if (view === 'grid') return '<div class="tl-school-grid">' + rows.map(schoolCard).join('') + '</div>';
-    return '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Location</th><th>Grades</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
+    return '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Group</th><th>Location</th><th>Grades</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
       rows.map(function (s) {
         var nd = needsYou(s.id);
         return '<tr class="clickable" data-open="' + s.id + '"><td class="name">' + (nd.total ? needsDot('Needs you: ' + needsTitle(nd)) : '') + esc(s.name) + ' ' + issueChip(s.id, ORG.server.openIssueCount(s.id)) + '<small>' + esc(s.type) + ' · ' + esc(s.code) + '</small></td>' +
           '<td>' + esc(s.groupName) + '</td><td>' + esc([s.city, s.country].filter(Boolean).join(', ') || '—') + '</td><td class="tl-num">' + s.gradeCount + '</td><td class="tl-num">' + s.students.toLocaleString() + '</td>' +
           '<td class="tl-num">' + s.staff + '</td><td class="r text-muted">›</td></tr>';
-      }).join('') + '</tbody></table></div>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="pl-list pl-phone">' + rows.map(function (s) {
+        var nd = needsYou(s.id);
+        return plRow({ link: 'data-open="' + s.id + '"', nested: true, title: esc(s.name) + (nd.total ? ' ' + needsDot('Needs you: ' + needsTitle(nd)) : ''), chip: issueChip(s.id, ORG.server.openIssueCount(s.id)),
+          detail: esc([s.groupId === 'g-none' ? 'Independent' : s.groupName, s.city, s.students.toLocaleString() + (s.students === 1 ? ' student' : ' students')].filter(Boolean).join(' · ')) });
+      }).join('') + '</div>';
   }
 
   function groupAgg(gs) {
@@ -721,13 +790,19 @@
   }
   function groupListHtml(groups, view) {
     if (view === 'grid') return '<div class="tl-school-grid">' + groups.map(groupCard).join('') + '</div>';
-    return '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Group</th><th>Schools</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
+    return '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-640"><thead><tr><th>Group</th><th>Schools</th><th>Students</th><th>Staff</th><th></th></tr></thead><tbody>' +
       groups.map(function (x) {
         var a = groupAgg(x.schools);
         return '<tr class="clickable" data-group-open="' + x.g.id + '"><td class="name">' + esc(x.g.name) + (x.g.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '<small>School group</small></td>' +
           '<td class="tl-num">' + a.schools + '</td><td class="tl-num">' + a.students.toLocaleString() + '</td><td class="tl-num">' + a.staff + '</td>' +
           '<td class="r" style="white-space:nowrap"><span class="chip-menu" data-gmenu="' + x.g.id + '">⋮</span> <span class="text-muted">›</span></td></tr>';
-      }).join('') + '</tbody></table></div>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="pl-list pl-phone">' + groups.map(function (x) {
+        var a = groupAgg(x.schools);
+        return plRow({ link: 'data-group-open="' + x.g.id + '"', nested: true, title: esc(x.g.name), chip: x.g.archived ? ' <span class="ui-chip muted">Archived</span>' : '',
+          detail: 'Group · ' + a.schools + (a.schools === 1 ? ' school · ' : ' schools · ') + a.students.toLocaleString() + ' students · ' + a.staff + ' staff',
+          end: '<button type="button" class="pl-more" data-gmenu="' + x.g.id + '" aria-label="Menu for ' + esc(x.g.name) + '">⋮</button>' });
+      }).join('') + '</div>';
   }
   function groupCard(x) {
     var a = groupAgg(x.schools);
@@ -1002,7 +1077,7 @@
   // ---- Assessment log (school hub → Assessments → Logs) — live / created schools ----
   // One card: Phase tabs (each says its state) · Show Teachers | Children · All /
   // Still to finish · CSV, then search, Class and (multi-board schools) Board filters.
-  // Cells say only ✓ Done / In progress / Missed / Yet to complete; the date is in the
+  // Cells say only Done / In progress / Missed / Yet to start; the date is in the
   // hover / tap tip and in the CSV. Midline and Endline show only the phase just
   // before them. Search looks in every class and board, whatever is picked.
   var LOG_PHASES = ['Baseline', 'Midline', 'Endline'];
@@ -1022,18 +1097,21 @@
   function logItemLabel(name) { return /training$/i.test(name) ? name + ' survey' : name; }
   function logPhaseInfo(sid, phase) {
     var deps = window.TilliAPI.getDeployments(sid).filter(function (x) { return x.phase === phase && x.deployed !== false && !x.notRun; });
-    if (!deps.length) return { state: 'none', label: 'not yet', lead: phase + ' · not deployed yet' };
+    if (!deps.length) return { state: 'none', label: 'Not yet', lead: phase + ' · not deployed yet' };
     var latest = function (list) { return list.map(function (x) { return x.end; }).filter(Boolean).sort().pop() || ''; };
     var live = deps.filter(function (x) { return x.status === 'Live'; });
-    if (live.length) { var e = latest(live); return { state: 'live', label: '● live' + (e ? ' · closes ' + logDay(e) : ''), end: e, lead: phase + ' · live' + (e ? ', closes ' + logDay(e) : '') }; }
+    if (live.length) { var e = latest(live); return { state: 'live', label: 'Live' + (e ? ' · closes ' + logDay(e) : ''), end: e, lead: phase + ' · live' + (e ? ', closes ' + logDay(e) : '') }; }
     var sch = deps.filter(function (x) { return x.status === 'Scheduled'; });
-    if (sch.length) { var s0 = sch.map(function (x) { return x.start; }).filter(Boolean).sort()[0] || ''; return { state: 'scheduled', label: s0 ? 'opens ' + logDay(s0) : 'scheduled', start: s0, lead: phase + ' · opens ' + logDay(s0) }; }
+    if (sch.length) { var s0 = sch.map(function (x) { return x.start; }).filter(Boolean).sort()[0] || ''; return { state: 'scheduled', label: s0 ? 'Opens ' + logDay(s0) : 'Scheduled', start: s0, lead: phase + ' · opens ' + logDay(s0) }; }
     var e2 = latest(deps);
-    return { state: 'ended', label: '✓ done', end: e2, lead: phase + ' · closed' + (e2 ? ' ' + logDay(e2) : '') };
+    return { state: 'ended', label: 'Ended', end: e2, lead: phase + ' · closed' + (e2 ? ' ' + logDay(e2) : '') };
+  }
+  function logChipHtml(c) {
+    var tip = esc(c.tip || '');
+    return '<span class="tl-lg-s ' + c.tone + '" tabindex="0" data-taptip="1" title="' + tip + '" data-tip="' + tip + '">' + esc(c.word) + '</span>';
   }
   function logCellHtml(c) {
-    var tip = esc(c.tip || '');
-    return '<span class="tl-lg-s ' + c.tone + '" tabindex="0" title="' + tip + '" data-tip="' + tip + '">' + esc(c.word) + '</span>' +
+    return logChipHtml(c) +
       (c.pct != null ? '<span class="tl-lg-prog" aria-hidden="true"><i style="width:' + c.pct + '%"></i></span>' : '');
   }
   function logCsvWord(c) { return c ? String(c.word).replace(/^✓\s*/, '') : ''; }
@@ -1113,12 +1191,12 @@
       var prevEnd = prev ? info[prev].end : '', prevEnded = prev && info[prev].state === 'ended';
       function kidCell(e, it) {
         var lane = log.lanes[it.audience] || {};
-        if (e.state === 'done') { var by = whoName(e.by); return { k: 'done', word: '✓ Done', tone: 'ok', tip: 'Done on ' + logDay(e.at) + (by ? ' · ' + by : ''), at: e.at }; }
-        if (lane.status === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(lane.start) };
-        if (lane.status === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: 'Not done before ' + phase + ' closed on ' + logDay(lane.end) };
-        if (e.state === 'started') return { k: 'started', word: 'In progress', tone: 'warn', tip: 'Started on ' + logDay(e.at) + ', not finished yet', at: e.at };
-        if (e.state === 'locked') return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Opens after ' + e.after };
-        return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Not started yet' };
+        if (e.state === 'done') { var by = whoName(e.by); return { k: 'done', word: 'Done', tone: 'ok', tip: 'Done on ' + logDay(e.at) + (by ? ' · ' + by : ''), sub: logDay(e.at) + (by ? ' · ' + by : ''), at: e.at }; }
+        if (lane.status === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(lane.start), sub: 'Opens ' + logDay(lane.start) };
+        if (lane.status === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: 'Not done before ' + phase + ' closed on ' + logDay(lane.end), sub: 'Closed ' + logDay(lane.end) };
+        if (e.state === 'started') return { k: 'started', word: 'In progress', tone: 'warn', tip: 'Started on ' + logDay(e.at) + ', not finished yet', sub: 'Started ' + logDay(e.at), at: e.at };
+        if (e.state === 'locked') return { k: 'todo', word: 'Yet to start', tone: 'todo', tip: 'Opens after ' + e.after, sub: 'Opens after ' + e.after };
+        return { k: 'todo', word: 'Yet to start', tone: 'todo', tip: 'Not started yet' };
       }
       var rows = studs.map(function (stu) {
         var ent = log.students[stu.student_id] || [];
@@ -1128,7 +1206,7 @@
         var overall = nDone === cells.length ? { word: 'All done', tone: 'ok' }
           : nMiss ? { word: nMiss + (nMiss === 1 ? ' part missed' : ' parts missed'), tone: 'danger' }
           : nOf('notopen') === cells.length ? { word: 'Not open yet', tone: 'muted' }
-          : (nDone || nOf('started')) ? { word: 'In progress', tone: 'warn' } : { word: 'Yet to complete', tone: 'todo' };
+          : (nDone || nOf('started')) ? { word: 'In progress', tone: 'warn' } : { word: 'Yet to start', tone: 'todo' };
         var line = '';
         if (prevLog && prevLog.items.length) {
           var pe = prevLog.students[stu.student_id] || [], pd = pe.filter(function (e) { return e.state === 'done'; }).length, left = prevLog.items.length - pd;
@@ -1137,7 +1215,7 @@
             : prev + ': ' + left + (prevEnded ? ' missed' : ' to finish');
         } else line = linked[String(stu.student_id).toUpperCase()] ? 'Parent linked' : 'No parent linked yet';
         return { stu: stu, sec: secById[stu.section_id] || null, name: stu.name || ((stu.first || '') + ' ' + (stu.last || '')).trim(), adm: stu.student_id,
-          cells: cells, overall: overall, line: line, finished: nDone === cells.length };
+          cells: cells, overall: overall, line: line, parts: nDone + ' of ' + cells.length + ' parts', finished: nDone === cells.length };
       }).sort(function (a, b) {
         var pa = a.sec ? secPos[a.sec.section_id] : 9999, pb = b.sec ? secPos[b.sec.section_id] : 9999;
         return pa - pb || a.name.localeCompare(b.name);
@@ -1152,9 +1230,15 @@
         return '<tr><td class="who"><b>' + esc(r.name) + '</b><small>' + esc(sub) + '</small></td>' + r.cells.map(function (c) { return '<td>' + logCellHtml(c) + '</td>'; }).join('') +
           '<td><span class="tl-lg-pill ' + r.overall.tone + '">' + esc(r.overall.word) + '</span></td></tr>';
       };
-      var body = '';
+      // Phones: one row per child; tap for that child's parts (F15).
+      var phoneRow = function (r, sub) {
+        return plRow({ link: 'data-lg-child="' + esc(r.adm) + '"', title: esc(r.name), detail: esc(sub),
+          end: '<span class="pl-end"><span class="tl-lg-pill ' + r.overall.tone + '">' + esc(r.overall.word) + '</span><span class="pl-d">' + esc(r.parts) + '</span></span>' });
+      };
+      var body = '', phoneBody = '';
       if (searching) {
         body = shown.slice(0, LOG_SEARCH_CAP).map(function (r) { return rowHtml(r, (r.sec ? r.sec.label + ' · ' : '') + r.adm + ' · ' + r.line); }).join('');
+        phoneBody = '<div class="pl-list">' + shown.slice(0, LOG_SEARCH_CAP).map(function (r) { return phoneRow(r, (r.sec ? r.sec.label + ' · ' : '') + r.adm + ' · ' + r.line); }).join('') + '</div>';
       } else {
         var groups = [];
         shown.forEach(function (r) { var id = r.sec ? r.sec.section_id : '-'; var g = groups[groups.length - 1]; if (!g || g.id !== id) groups.push(g = { id: id, sec: r.sec, rows: [] }); g.rows.push(r); });
@@ -1164,22 +1248,25 @@
           var nd = cnt(function (r) { return r.finished; }), np = cnt(function (r) { return r.overall.tone === 'warn'; }), nt = cnt(function (r) { return r.overall.tone === 'todo'; }), nm = cnt(function (r) { return r.overall.tone === 'danger'; });
           var head = '<tr class="grp"><td colspan="' + nCols + '"><div class="tl-lg-stick">' + esc(g.sec ? g.sec.label : 'No class') + (multiBoard && g.sec && g.sec.board ? ' · ' + esc(g.sec.board) : '') +
             ' <span>· ' + esc(g.sec && g.sec.teacher ? g.sec.teacher : 'No teacher yet') + ' · ' + nd + ' of ' + all.length + ' done' +
-            (np ? ' · ' + np + ' in progress' : '') + (nm ? ' · ' + nm + ' missed parts' : '') + (nt ? ' · ' + nt + ' yet to complete' : '') + '</span></div></td></tr>';
+            (np ? ' · ' + np + ' in progress' : '') + (nm ? ' · ' + nm + ' missed parts' : '') + (nt ? ' · ' + nt + ' yet to start' : '') + '</span></div></td></tr>';
           var open = st.open[g.id], cut = !open && g.rows.length > LOG_ROWS;
           var list = cut ? g.rows.slice(0, LOG_ROWS) : g.rows;
           var more = g.rows.length > LOG_ROWS ? '<tr class="more"><td colspan="' + nCols + '"><div class="tl-lg-stick"><span>Showing <b>1–' + list.length + '</b> of ' + g.rows.length + ' in ' + esc(g.sec ? g.sec.label : 'this group') + '</span>' +
             '<button type="button" class="btn btn-outline btn-sm" data-lg-open="' + esc(g.id) + '">' + (cut ? 'Show all ' + g.rows.length : 'Show fewer') + '</button></div></td></tr>' : '';
+          phoneBody += '<div class="pl-grp">' + esc(g.sec ? g.sec.label : 'No class') + ' <span>· ' + esc(g.sec && g.sec.teacher ? g.sec.teacher : 'No teacher yet') + ' · ' + nd + ' of ' + all.length + ' done</span></div>' +
+            '<div class="pl-list">' + list.map(function (r) { return phoneRow(r, r.adm + ' · ' + r.line); }).join('') +
+            (g.rows.length > LOG_ROWS ? '<button type="button" class="pl-morelink" data-lg-open="' + esc(g.id) + '">' + (cut ? 'Show all ' + g.rows.length + ' in ' + esc(g.sec ? g.sec.label : 'this group') : 'Show fewer') + '</button>' : '') + '</div>';
           return head + list.map(function (r) { return rowHtml(r, r.adm + ' · ' + r.line); }).join('') + more;
         }).join('');
       }
-      var table = shown.length ? '<div class="tl-lg-wrap">' + (searching ? searchBanner(shown.length, shown.length > LOG_SEARCH_CAP) : '') +
+      var table = shown.length ? (searching ? searchBanner(shown.length, shown.length > LOG_SEARCH_CAP) : '') + '<div class="pl-phone">' + phoneBody + '</div><div class="tl-lg-wrap pl-desk">' +
         '<table class="tl-lg-t"><thead><tr class="place"><th></th>' +
           (nSchool ? '<th colspan="' + nSchool + '" class="span"><span>At school</span></th>' : '') + (nHome ? '<th colspan="' + nHome + '" class="span"><span>At home</span></th>' : '') + '<th></th></tr>' +
           '<tr><th>Child</th>' + items.map(function (it) { return '<th>' + esc(logItemLabel(it.name)) + '</th>'; }).join('') + '<th>Overall</th></tr></thead><tbody>' + body + '</tbody></table></div>'
         : (searching ? '<div class="tl-lg-wrap">' + searchBanner(0) + '</div>' : '') + '<div class="ui-empty">' + (st.only && scoped.length ? 'Everyone here has finished every part.' : searching ? 'No child matches “' + esc(st.q.trim()) + '”.' : 'No children in this class yet.') + '</div>';
       var doneN = scoped.length - unfinished;
       return {
-        total: studs.length, unfinished: unfinished, body: table,
+        total: studs.length, unfinished: unfinished, body: table, kids: shown, items: items,
         sub: pi.lead + ' · ' + (searching ? 'search results across every class.' : doneN + ' of ' + kidsWord(scoped.length) + (scopeName ? ' in ' + scopeName : '') + ' finished every part' + (pi.state === 'live' ? ' so far.' : '.')),
         csv: {
           headers: ['Class'].concat(multiBoard ? ['Board'] : []).concat(['Child', 'Admission #']).concat(prev ? [prev] : [])
@@ -1206,11 +1293,11 @@
       API.classRequests(sid).forEach(function (r) { reqs[String(r.email).toLowerCase()] = (r.grade + ' · ' + r.section).replace(/^ · | · $/g, '').trim(); });
       function selfCell(t, a) {
         var r = reps[String(t.email).toLowerCase()] || {}, post = /post/i.test(a.name), at = post ? r.post : r.pre;
-        if (at) return { k: 'done', word: '✓ Done', tone: 'ok', tip: 'Done on ' + logDay(at), at: at };
+        if (at) return { k: 'done', word: 'Done', tone: 'ok', tip: 'Done on ' + logDay(at), at: at };
         if (laneSt === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(lane.start) };
         if (laneSt === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: 'Not done before ' + phase + ' closed on ' + logDay(lane.end) };
-        if (post && !r.pre) return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Opens once the Pre-training survey is done' };
-        return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Not started yet' };
+        if (post && !r.pre) return { k: 'todo', word: 'Yet to start', tone: 'todo', tip: 'Opens once the Pre-training survey is done' };
+        return { k: 'todo', word: 'Yet to start', tone: 'todo', tip: 'Not started yet' };
       }
       function obsCell(t, lg, idx, ph) {
         var ln = lg.lanes.Teacher || {};
@@ -1226,11 +1313,11 @@
           d.forEach(function (m) { if (m.at > last) last = m.at; });
         });
         var n = kids.length, of = done + ' of ' + n + ' observed';
-        if (done === n) return { k: 'done', word: '✓ Done', tone: 'ok', tip: 'All ' + n + ' observed · finished ' + logDay(last), at: last };
+        if (done === n) return { k: 'done', word: 'Done', tone: 'ok', of: of, tip: 'All ' + n + ' observed · finished ' + logDay(last), at: last };
         if (ln.status === 'Scheduled') return { k: 'notopen', word: 'Not open yet', tone: 'muted', tip: 'Opens ' + logDay(ln.start) };
-        if (ln.status === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', tip: of + ' before ' + ph + ' closed on ' + logDay(ln.end), at: last || null };
-        if (any) return { k: 'started', word: 'In progress', tone: 'warn', tip: of + (last ? ' · last on ' + logDay(last) : ''), pct: Math.round(done * 100 / n), left: n - done, at: last || null };
-        return { k: 'todo', word: 'Yet to complete', tone: 'todo', tip: 'Not started yet', left: n };
+        if (ln.status === 'Ended') return { k: 'missed', word: 'Missed', tone: 'danger', of: of, tip: of + ' before ' + ph + ' closed on ' + logDay(ln.end), at: last || null };
+        if (any) return { k: 'started', word: 'In progress', tone: 'warn', of: of, tip: of + (last ? ' · last on ' + logDay(last) : ''), pct: Math.round(done * 100 / n), left: n - done, at: last || null };
+        return { k: 'todo', word: 'Yet to start', tone: 'todo', tip: 'Not started yet', left: n };
       }
       // Copy-a-reminder text, live phases only: "Hi Ritu, a gentle reminder: your Post-training survey is still to do for Baseline. — Tilli team"
       function remindText(name, cells) {
@@ -1281,7 +1368,16 @@
           '<span class="bar ' + t.tone + '"><i style="width:' + t.pct + '%"></i></span>' + (t.note ? '<span class="note">' + esc(t.note) + '</span>' : '') + '</div>';
       }).join('') + '</div>';
       var list = searching ? shown.slice(0, LOG_SEARCH_CAP) : shown;
-      var table = shown.length ? '<div class="tl-lg-wrap">' + (searching ? searchBanner(shown.length, shown.length > LOG_SEARCH_CAP) : '') +
+      // Phones: one row per teacher; the main status on the right, anything else underneath (F15).
+      var mainCol = cols.map(function (c) { return !!c.obs; }).indexOf(true); if (mainCol < 0) mainCol = 0;
+      var teacherPhone = '<div class="pl-list">' + list.map(function (r) {
+        var first = r.name === 'Name not given yet' ? 'this teacher' : r.name.split(' ')[0], c0 = r.cells[mainCol];
+        var extra = cols.map(function (c, i) { return i === mainCol ? '' : '<span class="pl-d" style="margin-top:4px">' + esc(c.label) + ' ' + logChipHtml(r.cells[i]) + '</span>'; }).join('') +
+          (r.prevCell ? '<span class="pl-d" style="margin-top:4px">' + esc(prev) + ' ' + logChipHtml(r.prevCell) + '</span>' : '');
+        return plRow({ title: esc(r.name), detail: esc(r.secs.length ? r.secs.map(function (x) { return x.label; }).join(', ') : c0.tip) + (c0.of ? ' · ' + esc(c0.of) : ''), more: extra,
+          end: logChipHtml(c0) + (r.remind ? '<button type="button" class="tl-lg-remind" data-lg-remind="' + esc(r.t.email) + '" aria-label="Copy a reminder for ' + esc(first) + '">' + LOG_COPY_ICON + '</button>' : '') });
+      }).join('') + '</div>';
+      var table = shown.length ? (searching ? searchBanner(shown.length, shown.length > LOG_SEARCH_CAP) : '') + '<div class="pl-phone">' + teacherPhone + '</div><div class="tl-lg-wrap pl-desk">' +
         '<table class="tl-lg-t"><thead><tr><th>Teacher</th><th>Class</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') +
           (prevIdx.length ? '<th>' + esc(prev) + '</th>' : '') + '<th><span class="sr-only">Reminder</span></th></tr></thead><tbody>' +
         list.map(function (r) {
@@ -1311,7 +1407,7 @@
     var tabs = '<div class="tl-lg-phases" role="tablist" aria-label="Phase">' + LOG_PHASES.map(function (p) {
       var x = info[p];
       return '<button type="button" role="tab" aria-selected="' + (p === phase) + '" class="' + (p === phase ? 'on' : '') + '" data-lg-phase="' + p + '">' + p +
-        ' <span class="tl-lg-ph ' + x.state + '">' + esc(x.label) + '</span></button>';
+        ' <span class="tl-lg-ph pl-desk ' + x.state + '">' + esc(x.label) + '</span><span class="pl-phone">' + (x.state === 'live' ? '● live' : x.state === 'ended' ? '✓' : '') + '</span></button>';
     }).join('') + '</div>';
     var showBtn = function (v, txt) { return '<button type="button" role="tab" aria-selected="' + (st.view === v) + '" class="' + (st.view === v ? 'on' : '') + '" data-lg-view="' + v + '">' + txt + '</button>'; };
     var bar = '<div class="tl-lg-bar"><span class="tl-lg-lbl">Show</span><div class="tl-lg-show" role="tablist" aria-label="Show">' +
@@ -1323,6 +1419,7 @@
       '<label class="q">' + (st.view === 'children' ? 'Find a child' : 'Find a teacher') + '<input type="search" class="input" data-lg-q value="' + esc(st.q) + '" placeholder="' + (st.view === 'children' ? 'Name or admission #' : 'Name or email') + '"></label>' +
       '<label' + (searching ? ' class="paused"' : '') + '>Class' + (searching ? ' (paused while searching)' : '') + '<select class="select" data-lg-cls' + (searching ? ' disabled' : '') + '>' + clsOpts + '</select></label>' +
       (multiBoard ? '<label' + (searching ? ' class="paused"' : '') + '>Board' + (searching ? ' (paused)' : '') + '<select class="select" data-lg-board' + (searching ? ' disabled' : '') + '>' + boardOpts + '</select></label>' : '') +
+      '<label class="pl-phone">Show<select class="select" data-lg-onlysel aria-label="Show"><option value="0"' + (st.only ? '' : ' selected') + '>All</option><option value="1"' + (st.only ? ' selected' : '') + '>Still to finish · ' + V.unfinished + '</option></select></label>' +
       '<span class="tl-lg-grow"></span><span class="tl-lg-hint">Hover or tap a status for its date · dates are in the CSV</span></div>';
     mount.innerHTML = '<div class="ui-card tl-lg">' + tabs + bar +
       (V.empty ? '<div class="ui-empty">' + esc(V.empty) + (pi.state === 'none' ? ' Plan it in Plan &amp; deploy.' : '') + '</div>'
@@ -1340,6 +1437,18 @@
     on('[data-lg-phase]', 'click', function (b) { st.phase = b.dataset.lgPhase; st.open = {}; again(); });
     on('[data-lg-view]', 'click', function (b) { st.view = b.dataset.lgView; again(); });
     on('[data-lg-only]', 'click', function (b) { st.only = b.dataset.lgOnly === '1'; again(); });
+    on('[data-lg-onlysel]', 'change', function (b) { st.only = b.value === '1'; again(); });
+    on('[data-lg-child]', 'click', function (b) {
+      var r = (V.kids || []).filter(function (x) { return String(x.adm) === b.dataset.lgChild; })[0]; if (!r) return;
+      var section = function (label, home) {
+        var rows = V.items.map(function (it, i) { return { it: it, c: r.cells[i] }; }).filter(function (x) { return (x.it.mode === 'home') === home; });
+        return rows.length ? '<div class="pl-sheet-sec">' + label + '</div>' + rows.map(function (x) {
+          return '<div class="pl-part">' + plRow({ title: esc(logItemLabel(x.it.name)), detail: esc(/student/i.test(x.it.audience) && home ? 'Student, with a parent' : x.it.audience),
+            end: '<span class="pl-end"><span class="tl-lg-pill ' + x.c.tone + '">' + esc(x.c.word) + '</span>' + (x.c.sub ? '<span class="pl-d">' + esc(x.c.sub) + '</span>' : '') + '</span>' }) + '</div>';
+        }).join('') : '';
+      };
+      menuShell(esc(r.name) + '<small>' + esc([r.adm, r.sec ? r.sec.label : '', phase, r.parts, r.line].filter(Boolean).join(' · ')) + '</small>', section('At school', false) + section('At home', true));
+    });
     on('[data-lg-q]', 'input', function (b) { st.q = b.value; again(true); });
     on('[data-lg-clear]', 'click', function () { st.q = ''; again(true); });
     on('[data-lg-cls]', 'change', function (b) { st.cls = b.value; st.open = {}; again(); });
@@ -1390,30 +1499,22 @@
 
   function openGroupMenu(gid) {
     var g = ORG.groupById(gid);
-    openModal('Group · ' + g.name, '<p class="tl-muted">Changes here affect every school in the group, and each one asks you to confirm.' + (g.archived ? ' <span class="ui-chip muted">Archived</span>' : '') + '</p>' +
-      '<div class="tl-stack"><button class="btn btn-outline block" id="gm-rename">Rename group</button>' +
-      '<button class="btn btn-outline block" id="gm-archive" title="' + (g.archived ? 'Restore the group and the schools that were archived with it.' : 'Archive the group and every school in it. Nothing is deleted.') + '">' + (g.archived ? 'Un-archive group' : 'Archive group') + '</button>' +
-      '<button class="btn btn-danger block" id="gm-empty">Delete / empty group</button></div>', function (close) {
-      close(); return true;
-    }, 'Done');
-    setTimeout(function () {
-      var rn = document.getElementById('gm-rename'); if (rn) rn.addEventListener('click', function () {
+    // F13: icon + one word; what each one does is said on its own confirm step.
+    openListMenu(g.name, [
+      { id: 'gm-rename', label: 'Rename', icon: ICONS.edit, onClick: function () {
         openModal('Rename group', '<label class="field">Group name<input class="input" id="gr-name" value="' + esc(g.name) + '"></label>', function (close) {
           var nm = (document.getElementById('gr-name').value || '').trim(); if (!nm) { toast('Group name is required.'); return false; }
           ORG.server.renameGroup(g.id, nm); ORG.server.logAudit(me.name, 'group.rename', nm, 'group');
           close(); toast('Group renamed.'); go('schools', {});
         }, 'Save');
-      });
-      var ga = document.getElementById('gm-archive'); if (ga) ga.addEventListener('click', function () {
-        document.getElementById('tl-modal-root').innerHTML = '';
-        archiveGroupFlow(g);
-      });
-      var em = document.getElementById('gm-empty'); if (em) em.addEventListener('click', function () {
-        document.getElementById('tl-modal-root').innerHTML = '';
+      } },
+      { id: 'gm-archive', label: g.archived ? 'Un-archive' : 'Archive', icon: MENU_ARCHIVE_ICON, onClick: function () { archiveGroupFlow(g); } },
+      { id: 'gm-empty', label: 'Delete', icon: ICONS.trash, danger: true, onClick: function () {
         gated({ title: 'Delete group', danger: true, typed: 'DELETE', body: '<p>Delete <b>' + esc(g.name) + '</b>? Its schools move to <b>No group</b> — no school or student data is deleted.</p>', confirmLabel: 'Delete group', audit: { action: 'group.delete', entity: g.name, entityType: 'group' }, onConfirm: function () { ORG.server.deleteGroup(g.id); toast('Group deleted.'); go('schools', {}); } });
-      });
-    }, 0);
+      } },
+    ], true);
   }
+  var MENU_ARCHIVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"></rect><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"></path><path d="M10 13h4"></path></svg>';
 
   // ---------- Add-School wizard (spec §4.1: name, type, group, initial
   //            grades/sections → land on the new hub). Multi-step so a
@@ -1553,6 +1654,15 @@
   function wizDraft() { try { return JSON.parse(localStorage.getItem(wizDraftKey()) || 'null'); } catch (e) { return null; } }
   function saveWizDraft(v) { try { if (v) localStorage.setItem(wizDraftKey(), JSON.stringify(v)); else localStorage.removeItem(wizDraftKey()); } catch (e) { /* private mode — the draft won't survive a reload */ } }
 
+  // F7: the custom row reads as one sentence — "Add [Grade 1 ▾] called [Sunflowers] → Add".
+  function customGradeRow(pfx, freeBases, addLabel) {
+    if (!freeBases.length) return '';
+    return '<div class="ws-newgrade-row">Add <label class="select-wrap"><select class="select" id="' + pfx + '-newbase" aria-label="Base grade" title="The fixed grade this maps to. Tilli and Ask Tilli use it even if the school renames the grade.">' +
+        freeBases.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('') + '</select></label> called ' +
+        '<input class="input" id="' + pfx + '-newgrade" placeholder="e.g. Sunflowers" aria-label="School’s name for this grade (optional)">' +
+        '<button class="btn btn-outline btn-sm" id="' + pfx + '-addgrade" type="button">' + addLabel + '</button></div>' +
+      '<div class="ws-newgrade-hint">Only if the school uses its own name for a grade.</div>';
+  }
   function openAddSchool() {
     function freshDraft() {
       var f = {
@@ -1570,6 +1680,7 @@
 
     function persist(open) { saveWizDraft({ d: d, step: step, open: open !== false }); }
     function hasInput() { return !!(d.name || d.boards.length || d.city || d.grades.length || d.admin.name || d.admin.email || d.calFileName); }
+    var resumed = !!(saved && saved.d) && hasInput();   // reopened on a saved draft: say so once, with a way out
     function close() { persist(false); root.innerHTML = ''; }
 
     // Pull the current step's inputs into the draft before we move/re-render.
@@ -1665,49 +1776,56 @@
         body + '</div>';
     }
 
+    function wsTotals() {
+      var ng = d.grades.length, ns = draftSectionTotal(d), nk = draftStudentTotal(d);
+      return ng + (ng === 1 ? ' grade · ' : ' grades · ') + ns + (ns === 1 ? ' section · ' : ' sections · ') + '<b>' + nk + '</b>' + (nk === 1 ? ' student' : ' students');
+    }
     function bodyStructure() {
       var freeBases = BASE_GRADES.filter(function (b) { return !d.grades.some(function (g) { return g.base === b; }); });
-      var presetBtns = freeBases.map(function (p) { return '<button class="ui-filterchip" type="button" data-preset="' + esc(p) + '">＋ ' + esc(p) + '</button>'; }).join('');
-      var baseOpts = '<option value="">Base grade…</option>' + freeBases.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('');
-      var list = d.grades.length ? d.grades.map(function (g, gi) {
+      // Quick add keeps every grade in place: added ones just grey out, so nothing jumps.
+      var presetBtns = BASE_GRADES.map(function (p) {
+        var hi = /^Grade (6|7|8|9|1\d)$/.test(p) ? ' ws-preset-hi' : '';
+        return freeBases.indexOf(p) >= 0 ? '<button class="ui-filterchip' + hi + '" type="button" data-preset="' + esc(p) + '">＋ ' + esc(p) + '</button>'
+          : '<span class="ui-filterchip ws-added' + hi + '">✓ ' + esc(p) + '</span>';
+      }).join('') + '<button class="ui-filterchip ws-preset-more" type="button" data-presetmore>＋ 6–12 ▾</button>';
+      var multi = d.boards.length > 1;
+      var list = d.grades.map(function (g, gi) {
+        // Multi-board school: each grade runs one board (its sections inherit it).
+        // Default = the first board in the picker's own order (CBSE before IB), not the first one ticked.
+        if (multi && d.boards.indexOf(g.board) < 0) g.board = d.boards.slice().sort(function (a, b) { return ADD_BOARDS.indexOf(a) - ADD_BOARDS.indexOf(b); })[0];
+        var perClass = g.sections.length ? (parseInt(g.sections[0].students, 10) || 0) : (parseInt(g.students, 10) || 0);
         var secs = g.sections.length ? g.sections.map(function (sec, si) {
           return '<span class="ws-sec"><input class="ws-secname" data-gi="' + gi + '" data-si="' + si + '" value="' + esc(sec.name) + '" size="' + Math.max(1, sec.name.length) + '" aria-label="Section name — click to rename" title="Click to rename. Base stays ' + esc(baseCode(g.base, sec.base)) + '.">' +
             baseTag(sec.name, sec.base, 'sec') +
-            '<input class="ws-secnum" type="number" min="0" data-gi="' + gi + '" data-si="' + si + '" value="' + (parseInt(sec.students, 10) || 0) + '" aria-label="Expected students in ' + esc(g.grade + ' ' + sec.name) + '" title="Expected students in ' + esc(g.grade + ' ' + sec.name) + '. Teachers can add up to this many; more needs an admin’s approval. Leave at 0 and teachers can’t add anyone without approval.">' +
             '<button class="ws-secx" type="button" data-gi="' + gi + '" data-si="' + si + '" title="Remove section" aria-label="Remove section">×</button></span>';
-        }).join('') : '<span class="ws-nosec">No sections</span>' +
-          '<label class="ws-gradenum-wrap">Students' +
-            '<input class="ws-gradenum" type="number" min="0" data-gi="' + gi + '" value="' + (parseInt(g.students, 10) || 0) + '" aria-label="Students in ' + esc(g.grade) + '"></label>';
-        // Multi-board school: each grade runs one board (its sections inherit it).
-        // Default = the first board in the picker's own order (CBSE before IB), not the first one ticked.
-        if (d.boards.length > 1 && d.boards.indexOf(g.board) < 0) g.board = d.boards.slice().sort(function (a, b) { return ADD_BOARDS.indexOf(a) - ADD_BOARDS.indexOf(b); })[0];
+        }).join('') + '<button class="ui-filterchip ws-add-sec" type="button" data-addsec="' + gi + '" aria-label="Add a section to ' + esc(g.grade) + '">＋</button>'
+          : '<span class="ws-g-one">One class</span><button class="btn btn-outline btn-sm ws-add-sec" type="button" data-addsec="' + gi + '">＋ Add sections</button>';
         // Wrapped in .select-wrap so it shows a chevron — on its own it read as a text box.
-        var boardSel = d.boards.length > 1 ? '<label class="select-wrap ws-gradeboard-wrap" title="Which board this grade follows. A school admin limited to one board only sees that board’s grades."><select class="select sm ws-gradeboard" data-gboard="' + gi + '" aria-label="Board for ' + esc(g.grade) + '">' +
-          d.boards.map(function (b) { return '<option' + (b === g.board ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></label>' : '';
-        return '<div class="ws-grade-card">' +
-          '<div class="ws-gradeid"><input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. Base stays ' + esc(g.base) + '.">' + baseTag(g.grade, g.base) + boardSel + '</div>' +
-          '<div class="ws-secs">' + secs + '</div>' +
-          '<div class="ws-grade-actions">' +
-            '<button class="btn-link ws-add-sec" type="button" data-addsec="' + gi + '">＋ Section</button>' +
-            '<button class="tl-rowact danger" type="button" data-delgrade="' + gi + '" title="Remove grade" aria-label="Remove ' + esc(g.grade) + '">' + ICONS.trash + '</button>' +
-          '</div></div>';
-      }).join('') : '';
-      return '<p class="tl-muted">Add the grades this school teaches.</p>' +
-        '<div class="ws-grades">' + list + '</div>' +
+        var boardSel = multi ? '<div class="ws-g-board"><span class="ws-g-lbl">Board</span><label class="select-wrap" title="Which board this grade follows. A school admin limited to one board only sees that board’s grades."><select class="select ws-gradeboard" data-gboard="' + gi + '" aria-label="Board for ' + esc(g.grade) + '">' +
+          d.boards.map(function (b) { return '<option' + (b === g.board ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></label></div>' : '';
+        return '<div class="ws-g-row">' +
+          '<div class="ws-g-name-c"><span class="ws-g-name"><input class="ws-gradename" data-gi="' + gi + '" value="' + esc(g.grade) + '" aria-label="Grade name — click to rename" title="Click to rename. Base stays ' + esc(g.base) + '."></span>' +
+            (sameName(g.grade, g.base) ? '' : '<span class="ws-base">Base: ' + esc(g.base) + '</span>') + '</div>' +
+          boardSel +
+          '<div class="ws-g-secs-c"><span class="ws-g-lbl">Sections</span><div class="ws-g-secs">' + secs + '</div></div>' +
+          '<div class="ws-g-num"><span class="ws-g-lbl">Students per class</span><input class="ws-gradenum" type="number" min="0" data-gi="' + gi + '" value="' + perClass + '" aria-label="Students per class in ' + esc(g.grade) + '" title="Expected students in each class of ' + esc(g.grade) + '. Teachers can add up to this many; more needs an admin’s approval."></div>' +
+          '<div class="ws-g-del"><button class="tl-rowact danger" type="button" data-delgrade="' + gi + '" title="Remove grade" aria-label="Remove ' + esc(g.grade) + '">' + ICONS.trash + '</button></div>' +
+        '</div>';
+      }).join('');
+      var head = d.grades.length ? '<div class="ws-g-head"><span>Grade</span>' + (multi ? '<span>Board <span class="tl-tip" tabindex="0" role="button" aria-label="About boards" data-tip="Which board this grade follows. A school admin limited to one board only sees that board’s grades.">i</span></span>' : '') + '<span>Sections</span><span>Students per class</span><span></span></div>' : '';
+      return '<p class="tl-muted">Add the grades this school teaches. Rename a grade if the school calls it something else — Tilli still treats it as the grade underneath.</p>' +
+        '<div class="ws-table' + (multi ? ' multi' : '') + '">' + head + list + '</div>' +
         '<div class="ws-addbar">' +
-          (presetBtns ? '<div class="ws-addbar-lbl">Quick add</div><div class="ws-presets">' + presetBtns + '</div>' : '') +
-          (freeBases.length ? '<div class="ws-newgrade-row"><select class="select" id="ws-newbase" aria-label="Base grade" title="The fixed grade this maps to. Tilli and Ask Tilli use it even if the school renames the grade.">' + baseOpts + '</select>' +
-            '<input class="input grow" id="ws-newgrade" placeholder="School’s name for it (optional)" aria-label="School’s name for this grade">' +
-            '<button class="btn btn-outline btn-sm" id="ws-addgrade" type="button">Add</button></div>' : '') +
+          '<div class="ws-addbar-lbl">Quick add</div><div class="ws-presets" id="ws-presets">' + presetBtns + '</div>' +
+          customGradeRow('ws', freeBases, 'Add') +
         '</div>' +
-        (d.grades.length ? '<div class="ws-total">' + d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students' +
+        (d.grades.length ? '<div class="ws-total">' + wsTotals() +
           ' <span class="tl-tip" tabindex="0" role="button" aria-label="About empty grades and sections" data-tip="Any grade or section still without students ' + ORG.emptyStructureTtlDays + ' days after it’s added is removed automatically. It can be added back.">i</span></div>' : '');
     }
 
     function bodyAdmin() {
-      return '<p class="tl-muted">If you invite them, they\'ll get an activation email and can add teachers and students themselves. Teachers can also self-join later with the school code from the Staff tab.</p>' +
-        '<div class="tl-stack">' +
-          '<label class="field">Admin name<input class="input" id="ws-admin-name" placeholder="e.g. Meera Krishnan" value="' + esc(d.admin.name) + '"></label>' +
+      return '<div class="tl-stack">' +
+          '<label class="field"><span>Admin name <span class="tl-tip" tabindex="0" role="button" aria-label="What happens when you invite them" data-tip="If you invite them, they’ll get an activation email and can add teachers and students themselves. Teachers can also self-join later with the school code from the Staff tab.">i</span></span><input class="input" id="ws-admin-name" placeholder="e.g. Meera Krishnan" value="' + esc(d.admin.name) + '"></label>' +
           '<label class="field">Admin email<input class="input" id="ws-admin-email" type="email" placeholder="name@school.edu" value="' + esc(d.admin.email) + '"></label>' +
           // Multi-board school: the first admin can be limited to some boards.
           (d.boards.length > 1 ? '<div class="field"><span>Board access</span>' +
@@ -1731,7 +1849,7 @@
           row('Academic year', fmtJoined(d.yearStart) + ' → ' + fmtJoined(d.yearEnd)) +
           (d.calFileName ? row('School calendar', d.calFileName + ' (read after create — check it)') : '') +
           (d.admin.email && d.boards.length > 1 ? row('Admin board access', d.admin.boards ? d.admin.boards.join(' + ') + ' only' : 'All boards') : '') +
-          row('Structure', d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · ' + draftStudentTotal(d) + ' students') +
+          row('Structure', wsTotals().replace(/<\/?b>/g, '')) +
           row('Grades', d.grades.map(function (g) { return gradeLbl(g.grade, g.base) + (d.boards.length > 1 ? ' · ' + (g.board || d.boards[0]) : '') + (!g.sections.length && !(parseInt(g.students, 10) || 0) ? ' (no sections yet)' : ''); }).join(', ')) +
           row('First admin', admin) +
         '</div>';
@@ -1761,15 +1879,14 @@
 
     function render() {
       var last = step === WIZ_STEPS.length - 1;
-      root.innerHTML = '<div class="overlay" id="tl-ov" data-keep="own"><div class="ui-modal-card">' +
-        '<div class="ui-modal-h"><h3>Add a partner school</h3><button class="dialog-close" id="tl-mx" aria-label="Close">×</button></div>' +
-        stepper() +
+      root.innerHTML = '<div class="overlay" id="tl-ov" data-keep="own"><div class="ui-modal-card' + (step === 1 ? ' xwide' : '') + '">' +
+        '<div class="ui-modal-h"><h3>Add a partner school</h3><button class="dialog-close" id="tl-mx" aria-label="Close — your draft is kept">×</button></div>' +
+        '<div class="pl-desk">' + stepper() + '</div>' +
+        '<div class="ws-phonesteps pl-phone">Step ' + (step + 1) + ' of ' + WIZ_STEPS.length + ' · ' + esc(WIZ_STEPS[step].label) + '<div>' + WIZ_STEPS.map(function (x, i) { return '<i class="' + (i <= step ? 'on' : '') + '"></i>'; }).join('') + '</div></div>' +
+        (resumed ? '<div class="ws-resume">Picking up where you left off — <button class="btn-link" id="ws-fresh" type="button">Start fresh</button></div>' : '') +
         '<div id="ws-body">' + BODIES[step]() + '</div>' +
         '<div class="ui-modal-foot" style="justify-content:space-between">' +
-          '<div class="tl-inline-actions">' +
-            '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
-            (hasInput() ? '<button class="btn-link" id="ws-reset" type="button" title="Clear everything typed in this form and start again">Start over</button>' : '') +
-          '</div>' +
+          '<button class="btn btn-outline btn-sm" id="ws-back"' + (step === 0 ? ' style="visibility:hidden"' : '') + ' type="button">Back</button>' +
           '<button class="btn btn-primary btn-sm" id="ws-next" type="button"' + (stepBlocked() ? ' disabled title="' + esc(blockReason()) + '"' : '') + '>' + (last ? 'Create school' : 'Next') + '</button>' +
         '</div></div></div>';
 
@@ -1778,10 +1895,10 @@
       document.getElementById('tl-mx').addEventListener('click', close);
       document.getElementById('ws-back').addEventListener('click', function () { commit(); step = Math.max(0, step - 1); render(); });
       document.getElementById('ws-next').addEventListener('click', onNext);
-      var rs = document.getElementById('ws-reset');
-      if (rs) rs.addEventListener('click', function () {
-        if (!window.confirm('Clear everything typed in this form?')) return;
-        d = freshDraft(); step = 0; render(); toast('Form cleared.');
+      var fr = document.getElementById('ws-fresh');
+      if (fr) fr.addEventListener('click', function () {
+        if (!window.confirm('Discard this draft?')) return;
+        d = freshDraft(); step = 0; resumed = false; render(); toast('Draft discarded.');
       });
       // Save the draft on every keystroke / pick, after the field's own handler ran.
       ov.addEventListener('input', function () { commit(); persist(); });
@@ -1855,6 +1972,7 @@
       } else if (step === 1) {
         var body = document.getElementById('ws-body');
         body.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { addGrade(b.dataset.preset); }); });
+        var pm = body.querySelector('[data-presetmore]'); if (pm) pm.addEventListener('click', function () { document.getElementById('ws-presets').classList.add('open'); pm.remove(); });
         body.querySelectorAll('[data-gboard]').forEach(function (sel) { sel.addEventListener('change', function () { d.grades[+sel.dataset.gboard].board = sel.value; }); });
         var ag = document.getElementById('ws-addgrade');
         if (ag) {
@@ -1867,34 +1985,27 @@
         }
         body.querySelectorAll('[data-addsec]').forEach(function (b) { b.addEventListener('click', function () {
           var g = d.grades[+b.dataset.addsec];
-          // First section inherits any grade-level count, so the cohort you already
-          // typed becomes Section A rather than being silently dropped.
-          if (!g.sections.length && (parseInt(g.students, 10) || 0) > 0) {
-            g.sections.push({ name: secLetter(0), base: secLetter(0), students: parseInt(g.students, 10) || 0 }); g.students = 0;
-          } else {
-            // A new section starts at a typical class size (editable) — 0 would mean "no size",
-            // and then every child a teacher adds would need an admin's approval.
-            g.sections.push({ name: secLetter(g.sections.length), base: secLetter(g.sections.length), students: WIZ_SECTION_SIZE });
-          }
+          // First section inherits the grade-level count, so the size you already typed
+          // carries over; later ones copy it — one "Students per class" per grade.
+          var perClass = g.sections.length ? (parseInt(g.sections[0].students, 10) || 0) : (parseInt(g.students, 10) || 0);
+          g.sections.push({ name: secLetter(g.sections.length), base: secLetter(g.sections.length), students: perClass });
+          g.students = 0;
           rerenderStructure();
         }); });
         body.querySelectorAll('[data-delgrade]').forEach(function (b) { b.addEventListener('click', function () { d.grades.splice(+b.dataset.delgrade, 1); rerenderStructure(); }); });
         body.querySelectorAll('.ws-secx').forEach(function (b) { b.addEventListener('click', function () {
-          var g = d.grades[+b.dataset.gi]; g.sections.splice(+b.dataset.si, 1);
+          var g = d.grades[+b.dataset.gi], gone = g.sections.splice(+b.dataset.si, 1)[0];
+          if (!g.sections.length) g.students = parseInt(gone.students, 10) || 0;   // back to one class of the same size
           // Keep base letters A,B,C… contiguous (nothing exists yet); renamed sections keep their name.
           g.sections.forEach(function (sec, i) { if (sameName(sec.name, sec.base)) sec.name = secLetter(i); sec.base = secLetter(i); });
           rerenderStructure();
         }); });
-        body.querySelectorAll('.ws-secnum').forEach(function (inp) { inp.addEventListener('input', function () {
-          d.grades[+inp.dataset.gi].sections[+inp.dataset.si].students = Math.max(0, parseInt(inp.value, 10) || 0);
-          var tot = document.querySelector('#ws-body .ws-total');
-          if (tot) tot.innerHTML = d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students';
-        }); });
-        // Grade-level student count, shown only when the grade has no sections.
+        // Students per class: the grade itself when it's one class, every section otherwise.
         body.querySelectorAll('.ws-gradenum').forEach(function (inp) { inp.addEventListener('input', function () {
-          d.grades[+inp.dataset.gi].students = Math.max(0, parseInt(inp.value, 10) || 0);
+          var g = d.grades[+inp.dataset.gi], n = Math.max(0, parseInt(inp.value, 10) || 0);
+          if (g.sections.length) g.sections.forEach(function (sec) { sec.students = n; }); else g.students = n;
           var tot = document.querySelector('#ws-body .ws-total');
-          if (tot) tot.innerHTML = d.grades.length + ' grades · ' + draftSectionTotal(d) + ' sections · <b>' + draftStudentTotal(d) + '</b> students';
+          if (tot && tot.firstChild) { var tip = tot.querySelector('.tl-tip'); tot.innerHTML = wsTotals() + ' '; if (tip) tot.appendChild(tip); }
         }); });
         // Inline rename — commit on blur/Enter, then re-sort so it lands in the right place.
         body.querySelectorAll('.ws-gradename').forEach(function (inp) {
@@ -1996,14 +2107,18 @@
     var header = crumbs(crumbParts) +
       '<div class="tl-hub-head">' +
         '<div><h1 class="ui-screen-title" style="margin-bottom:4px">' + esc(s.name) + (s.archived ? ' <span class="ui-chip">Archived</span>' : '') + '</h1>' +
-        '<p class="ui-screen-sub m-0">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + ' · ' + esc(s.city + ', ' + s.country) + '</p>' +
-        '<button class="tl-hub-last" data-hubtab="history" title="Open this school\'s change history">' + lastLine(s.id) + '</button></div>' +
-        '<div class="tl-hub-actions">' + helpBtnHtml() + '<button class="btn btn-outline btn-sm" data-hub-edit>Edit</button>' +
-          '<button class="btn btn-outline btn-sm" data-hub-archive>' + (s.archived ? 'Un-archive' : 'Archive') + '</button>' +
+        '<p class="ui-screen-sub m-0 pl-desk">' + esc(s.type) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.groupName) + ' · ' + esc(s.city + ', ' + s.country) + '</p>' +
+        '<p class="ui-screen-sub m-0 pl-phone">' + esc(schoolBoardList(s).join(' + ')) + ' · <span class="mono">' + esc(s.code) + '</span> · ' + esc(s.city) + '</p>' +
+        '<button class="tl-hub-last" data-hubtab="history" title="Open this school\'s change history">' + lastLine(s.id) + '</button>' +
+        '<p class="tl-hub-stats pl-phone m-0"><b>' + s.gradeCount + '</b> grades · <b>' + s.sectionCount + '</b> sections · <b>' + s.students.toLocaleString() + '</b> students · <b>' + s.staff + '</b> staff · <b>' + sum0.counts.openIssues + '</b> issues</p></div>' +
+        // Phones: the same buttons, behind ⋯ (F16).
+        '<div class="tl-hub-actions pl-acts-m">' + helpBtnHtml() + '<button class="btn btn-outline btn-sm" data-hub-edit data-plic="✎" data-plsub="Name, boards, city, group">Edit</button>' +
+          '<button class="btn btn-outline btn-sm" data-hub-archive data-plic="▤" data-plsub="' + (s.archived ? 'Restores it' : 'Hides it — nothing is deleted') + '">' + (s.archived ? 'Un-archive' : 'Archive') + '</button>' +
           (s.archived ? '<button class="btn btn-danger btn-sm" data-hub-delete>Delete</button>' : '') +
-          (s.live ? '<a class="btn btn-primary btn-sm" href="admin.html?school=' + encodeURIComponent(s.created ? s.id : s.name) + '&email=' + encodeURIComponent(s.created && s.coordinator ? s.coordinator.email : me.email) + '&from=tilli" style="text-decoration:none">Leadership dashboard →</a>' : '') + '</div>' +
+          (s.live ? '<a class="btn btn-primary btn-sm" data-plic="↗" data-plsub="Open the school admin’s view" href="admin.html?school=' + encodeURIComponent(s.created ? s.id : s.name) + '&email=' + encodeURIComponent(s.created && s.coordinator ? s.coordinator.email : me.email) + '&from=tilli" style="text-decoration:none">Leadership dashboard →</a>' : '') + '</div>' +
+        '<button type="button" class="pl-more pl-phone" data-plmore="' + esc(s.name) + '" aria-label="School actions">⋯</button>' +
       '</div>' +
-      '<div class="tl-kpis five mt-3">' +
+      '<div class="tl-kpis five mt-3 pl-desk">' +
         kpi(s.gradeCount, 'Grades') + kpi(s.sectionCount, 'Sections') + kpi(s.students.toLocaleString(), 'Students') +
         kpi(s.staff, 'Staff') + kpi(sum0.counts.openIssues, 'Open issues') + '</div>' +
       '<div class="ui-tabs hub">' + HUB_TABS.map(function (t) {
@@ -2069,7 +2184,7 @@
     return '<div class="tl-phases">' + d.assessment_progress.map(function (p) {
       var tone = !p.deployed ? 'muted' : (p.status === 'Live' ? 'live' : (p.status === 'Ended' ? 'done' : 'sched'));
       return '<div class="tl-phase ' + tone + '"><div class="tp-name">' + esc(p.phase) + '</div>' +
-        '<div class="tp-state">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</div>' +
+        '<div class="tp-state"><span class="ui-chip ' + (!p.deployed ? 'muted' : p.status === 'Live' ? 'ok' : p.status === 'Ended' ? 'muted' : 'warn') + '">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</span></div>' +
         (p.deployed ? '<div class="tp-win">' + esc(p.window || '') + '</div><div class="tp-comp" title="Children who have finished every assessment deployed to this school for this phase">' +
           (p.completion != null ? pct(p.completion) + '% complete' + (p.kidsTotal ? ' · ' + p.kidsDone + ' of ' + p.kidsTotal + ' children' : '') : '') + '</div>' : '') + '</div>';
     }).join('') + '</div>';
@@ -2090,7 +2205,6 @@
     var full = room.expected != null && room.added >= room.expected;
     var html = ' <i class="' + (full ? 'full' : 'short') + '">' + room.added + (room.expected != null ? '/' + room.expected : '') + (full ? ' ✓' : '') + '</i>';
     if (room.expected == null) html += '<em class="tl-room-tag warn" title="No expected class size set — teachers can’t add students here without an admin’s approval.">no size set</em>';
-    else if (!room.confirmed) html += '<em class="tl-room-tag warn" title="Set automatically from the headcount — confirm it in Settings → Grades & sections.">not confirmed</em>';
     if (room.pending) html += '<em class="tl-room-tag pend" title="New students a teacher added past the expected size — waiting for approval.">+' + room.pending + ' pending</em>';
     return html;
   }
@@ -2190,8 +2304,12 @@
       : '<div class="ui-empty">No grades/sections yet.</div>';
 
     var progress = phaseProgressHtml(d);
+    // F19: one line for the whole card instead of a tag on every class.
+    var unsure = [];
+    d.structure.grades.forEach(function (g) { g.sections.forEach(function (sec) { var rm = roomFor(s.id, g.grade, sec.name); if (rm && rm.expected != null && !rm.confirmed) unsure.push(rm); }); });
+    var confirmLine = unsure.length ? '<div class="tl-filterbanner mt-3">' + unsure.length + (unsure.length === 1 ? ' class needs its size confirmed' : ' classes need their size confirmed') + (GROUP ? '' : ' — <button class="btn-link" data-confirmall>Confirm all</button>') + '</div>' : '';
 
-    var flags = d.flags.length ? '<div class="tl-flagrow">' + d.flags.map(function (f) { return '<span class="ui-chip warn lg">⚠ ' + esc(f.label) + '</span>'; }).join('') + '</div>' : '<div class="tl-ok">On track — no onboarding flags. 🌱</div>';
+    var flags = d.flags.length ? '<div class="tl-flagrow">' + d.flags.map(function (f) { return '<span class="ui-chip warn lg">' + esc(f.label) + '</span>'; }).join('') + '</div>' : '<div class="tl-ok">On track — no onboarding flags. 🌱</div>';
 
     var issues = d.issues.filter(function (i) { return i.status === 'open'; }).slice(0, 4);
     var issuesHtml = issues.length ? issues.map(function (i) { return '<div class="tl-feed-row"><span class="tl-feed-when">' + esc(i.date) + '</span><span class="tl-feed-body">' + esc(i.page) + ' · <i>' + esc(i.reporter) + '</i></span></div>'; }).join('') : '<div class="ui-empty">No open issues.</div>';
@@ -2205,7 +2323,7 @@
     var yoy = yrs && yrs.length > 1 ? yearOverYearHtml(s, yrs).replace('<div class="ui-card mt-gap">', '<div class="ui-card span2">')
       .replace('<h3 class="ui-mod-title">Year over year</h3>', '<h3 class="ui-mod-title">Year ' + yrs.length + ' with Tilli</h3>') : '';
     el.innerHTML = '<div class="tl-grid two">' +
-      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title" title="Each section shows children added / expected class size, e.g. B 0/2. Grey until the class is full, ✓ once every child is on the roster.">Structure</h3></div>' + structure + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title" title="Each section shows children added / expected class size, e.g. B 0/2. Grey until the class is full, ✓ once every child is on the roster.">Structure</h3></div>' + structure + confirmLine + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Onboarding</h3></div>' + flags + '</div>' +
       '<div class="ui-card span2"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + progress + '</div>' +
       yoy + outcomes +
@@ -2213,6 +2331,13 @@
     '</div>';
     // [data-hubtab] triggers are wired by SCREEN.school's wireHubtabTriggers()
     // so they swap the section in place instead of re-rendering the screen.
+    var ca = el.querySelector('[data-confirmall]');
+    if (ca) ca.addEventListener('click', function () {
+      unsure.forEach(function (rm) { window.TilliAPI.setSectionExpected(s.id, rm.section_id, rm.expected, me.email); });
+      ORG.server.logAudit(me.name, 'school.size', unsure.length + ' class sizes confirmed', 'school', s.id);
+      toast(unsure.length + (unsure.length === 1 ? ' class size' : ' class sizes') + ' confirmed.');
+      render();
+    });
   };
 
   HUB.students = function (d, el) {
@@ -2234,13 +2359,19 @@
       var st = r && r.current ? statusPill('Given', 'ok') : c ? statusPill(c.version !== cCfg.version ? 'Old version' : 'Withdrawn', 'warn') : statusPill('Not yet', 'warn');
       return '<td>' + st + '</td>' + cOpt.map(function (it) { return '<td>' + (c ? (c.items[it.id] ? 'Yes' : 'No') : '—') + '</td>'; }).join('');
     }
+    function consentChip(adm) {
+      var emails = window.TilliAPI.parentsForStudent ? window.TilliAPI.parentsForStudent(s.id, adm) : [];
+      if (!emails.length) return ' <span class="ui-chip muted">No parent yet</span>';
+      var r = emails.map(function (e) { return cByEmail[e]; }).filter(Boolean).sort(function (a, b) { return (b.current ? 1 : 0) - (a.current ? 1 : 0); })[0];
+      return r && r.current ? ' <span class="ui-chip ok">Consent</span>' : r && r.consent ? ' <span class="ui-chip warn">' + (r.consent.version !== cCfg.version ? 'Old consent' : 'Consent withdrawn') + '</span>' : ' <span class="ui-chip warn">Consent missing</span>';
+    }
     var waiting = window.TilliAPI && window.TilliAPI.pendingStudents ? window.TilliAPI.pendingStudents(s.id) : [];
     el.innerHTML = (waiting.length ? '<div class="ui-card tl-pendcard"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for approval</h3>' +
         '<p class="ui-mod-note">' + waiting.length + ' new student' + (waiting.length === 1 ? '' : 's') + ' added past the class size. They can already be assessed.</p></div></div>' +
         '<div id="stu-pending">' + pendingTableHtml(waiting, false) + '</div></div>' : '') +
       '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
-        '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" data-add-st>+ Add Students</button>' + (hasConsent ? '<button class="btn btn-outline btn-sm" data-consent-open title="Who agreed to the parent consent, when, and to which wording — Tilli team only">Parent consent</button>' : '') + '<button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
-          '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div></div>' +
+        '<div class="tl-student-actions"><div class="tl-inline-actions pl-acts-m"><button class="btn btn-outline btn-sm pl-keep" data-add-st>+ Add Students</button>' + (hasConsent ? '<button class="btn btn-outline btn-sm" data-consent-open title="Who agreed to the parent consent, when, and to which wording — Tilli team only">Parent consent</button>' : '') + '<button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
+          '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div><button type="button" class="pl-more pl-phone" data-plmore="Students" data-plfrom=".tl-student-actions" aria-label="More student actions">⋯</button></div></div>' +
       (roster.length ? '<div class="tl-filters"><input class="input grow tl-filter-q" id="stu-q" type="search" placeholder="Search by name, admission # or grade/section…" aria-label="Search students" value="' + esc(stuPager.schoolId === s.id ? stuPager.q : '') + '"></div><div id="stu-page"></div>'
         : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
     if (waiting.length) wirePendingTable(el.querySelector('#stu-pending'), waiting, function () { go('school', { id: s.id, tab: 'students' }); });
@@ -2265,7 +2396,13 @@
           '<button class="tl-rowact danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '" title="Delete ' + esc(r.name) + '" aria-label="Delete ' + esc(r.name) + '">' + ICONS.trash + '</button></div></td></tr>';
       }).join('');
       if (!list.length) { mount.innerHTML = '<div class="ui-empty">No students match “' + esc(stuPager.q.trim()) + '”.</div>'; return; }
-      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th>' + (hasConsent ? '<th>Parent consent</th>' + cOpt.map(function (it) { return '<th>' + esc(it.id.charAt(0).toUpperCase() + it.id.slice(1)) + '</th>'; }).join('') : '') + '<th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      var phoneRows = list.slice(start, start + stuPager.size).map(function (r) {
+        return plRow({ title: '<button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button>',
+          chip: r.status === 'Pending' ? ' <span class="ui-chip warn">Waiting for approval</span>' : hasConsent ? consentChip(r.admission) : '',
+          detail: esc(r.admission) + ' · ' + esc(r.gradeSection),
+          end: plMore('Actions for ' + r.name, '<button data-edit-st="' + esc(r.admission) + '" aria-label="Edit">' + ICONS.edit + '</button><button class="danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '" aria-label="Delete">' + ICONS.trash + '</button>') });
+      }).join('');
+      mount.innerHTML = '<div class="pl-list pl-phone">' + phoneRows + '</div><div class="ui-tablewrap pl-desk"><table class="ui-table mw-640"><thead><tr><th>Name</th><th>Admission #</th><th>Grade/Section</th>' + (hasConsent ? '<th>Parent consent</th>' + cOpt.map(function (it) { return '<th>' + esc(it.id.charAt(0).toUpperCase() + it.id.slice(1)) + '</th>'; }).join('') : '') + '<th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
         pagerHtml(list.length, stuPager.page, stuPager.size, words.length ? 'matching students' : 'students');
       wirePager(mount, function (page, size) {
         if (size !== stuPager.size) { stuPager.size = size; stuPager.page = 1; try { localStorage.setItem(STU_PAGE_KEY, String(size)); } catch (e) { /* per-viewer convenience only */ } }
@@ -2404,12 +2541,13 @@
         : (multiBoard && t ? t.section_ids.map(function (id) { return API.boardOfSection(s.id, id); }).filter(function (b, i, a) { return b && a.indexOf(b) === i; }).join(' + ') : '');
       var invCls = inv ? [inv.grade, inv.section].filter(Boolean).join(' · ') : '';
       var cls = isAdmin ? (boards ? boards.join(' + ') + ' classes' : 'Every class') : secs.length ? secs.join(', ') : (state === 'invited' || state === 'expired') && invCls ? invCls : 'No class yet';
-      var st = state === 'expired' ? { txt: 'Invite expired', tone: 'danger', sub: 'Expired ' + fmtJoined(inv.expires) + ' · never signed in' }
-        : state === 'invited' ? { txt: 'Invited — not joined yet', tone: 'info', sub: inv ? 'Sent ' + fmtJoined(inv.created) + ' · expires ' + fmtJoined(inv.expires) : '' }
-        : state === 'waiting' ? { txt: 'Waiting for a class', tone: 'warn', sub: 'Asked for ' + ((ask.grade + ' · ' + ask.section).replace(/^ · | · $/g, '').trim() || 'a class') }
-        : { txt: '● Active', tone: 'ok', sub: t && t.via === 'code' ? 'Joined with the school code' + (t.joinedAt ? ' · ' + fmtMs(t.joinedAt) : '') : inv ? 'Joined from an invite' : '' };
+      var st = state === 'expired' ? { txt: 'Invite expired', short: 'Invite expired', tone: 'danger', sub: 'Expired ' + fmtJoined(inv.expires) + ' · never signed in' }
+        : state === 'invited' ? { txt: 'Invited — not joined yet', short: 'Invited', tone: 'info', sub: inv ? 'Sent ' + fmtJoined(inv.created) + ' · expires ' + fmtJoined(inv.expires) : '' }
+        : state === 'waiting' ? { txt: 'Waiting for a class', short: 'Waiting for a class', tone: 'warn', sub: 'Asked for ' + ((ask.grade + ' · ' + ask.section).replace(/^ · | · $/g, '').trim() || 'a class') }
+        : { txt: 'Active', short: 'Active', tone: 'ok', sub: t && t.via === 'code' ? 'Joined with the school code' + (t.joinedAt ? ' · ' + fmtMs(t.joinedAt) : '') : inv ? 'Joined from an invite' : '' };
       people.push({ name: u.name && String(u.name).indexOf('@') < 0 ? u.name : 'Name not given yet', email: u.email, role: isAdmin ? 'School admin' : (u.role || 'Teacher'), isAdmin: isAdmin,
-        roleSub: roleSub, cls: cls, clsMuted: isAdmin || !secs.length, state: state, st: st, raw: u });
+        roleSub: roleSub, cls: cls, clsMuted: isAdmin || !secs.length, state: state, st: st, raw: u,
+        phoneSub: state === 'waiting' ? st.sub.replace(/^Asked/, 'asked') : state === 'invited' && inv ? cls + ' · expires ' + fmtJoined(inv.expires) : cls });
     }
     (d.staff_users || []).forEach(addPerson);
     d.invitations.forEach(function (i) { addPerson({ name: i.name, email: i.email, role: i.role, sections: [], invited: i.status !== 'Activated' }); });
@@ -2423,15 +2561,15 @@
     var countLine = [people.length + (people.length === 1 ? ' person' : ' people'), nOf('active') ? nOf('active') + ' active' : '', nOf('invited') ? nOf('invited') + ' invited' : '',
       nOf('expired') ? nOf('expired') + ' invite' + (nOf('expired') === 1 ? '' : 's') + ' expired' : '', nOf('waiting') ? nOf('waiting') + ' waiting for a class' : ''].filter(Boolean).join(' · ');
 
-    var codeStrip = '<div class="tl-codestrip"><span>Teachers can also join on their own with the school code</span><b class="mono" title="It’s also inside the teacher and student-assessment links, so keep those within the school. The parents’ link doesn’t contain it.">' + esc(s.code) + '</b>' +
+    var codeStrip = '<div class="tl-codestrip"><span>Teachers can <span class="pl-desk">also </span>join <span class="pl-desk">on their own </span>with the <span class="pl-desk">school </span>code</span><b class="mono" title="It’s also inside the teacher and student-assessment links, so keep those within the school. The parents’ link doesn’t contain it.">' + esc(s.code) + '</b>' +
       '<button class="btn btn-outline btn-sm" data-copy="' + esc(s.code) + '">Copy</button><span class="tl-grow"></span>' +
-      (tlUsesApi(s) && !GROUP ? '<button class="btn-link danger" data-regen-code title="Use this if the code was shared outside the school.">Regenerate</button>' : '') + '</div>';
+      (tlUsesApi(s) && !GROUP ? '<span class="pl-acts-m" style="display:contents"><button class="btn-link danger" data-regen-code title="Use this if the code was shared outside the school.">Regenerate</button></span><button type="button" class="pl-more pl-phone" data-plmore="School code" aria-label="Code options">⋯</button>' : '') + '</div>';
     var filterBar = '<div class="tl-people-bar"><div class="tl-lg-show" role="tablist" aria-label="Show">' + FILTERS.map(function (x) {
-        return '<button type="button" role="tab" aria-selected="' + (view.f === x[0]) + '" class="' + (view.f === x[0] ? 'on' : '') + '" data-pf="' + x[0] + '">' + x[1] + ' · ' + people.filter(x[2]).length + '</button>';
+        return '<button type="button" role="tab" aria-selected="' + (view.f === x[0]) + '" class="' + (view.f === x[0] ? 'on' : '') + '" data-pf="' + x[0] + '">' + (x[0] === 'admin' ? '<span class="pl-desk">School admins</span><span class="pl-phone">Admins</span>' : x[1]) + ' · ' + people.filter(x[2]).length + '</button>';
       }).join('') + '</div><span class="tl-grow"></span>' +
       (people.length > STAFF_SEARCH_AT ? '<label class="tl-people-q">Find a person<input type="search" class="input" data-pq value="' + esc(view.q) + '" placeholder="Name or email"></label>' : '') + '</div>';
     var peopleCard = '<div class="ui-card mt-gap tl-people"><div class="ui-mod-h"><div><h3 class="ui-mod-title">People at ' + esc(s.name) + '</h3><p class="ui-mod-note">' + esc(countLine || 'No one yet') + '</p></div>' +
-        '<button class="btn btn-primary btn-sm" data-invite>＋ Invite someone</button></div>' + codeStrip + filterBar + '<div id="staff-page"></div></div>';
+        '<button class="btn btn-primary btn-sm" data-invite>＋ Invite<span class="pl-desk"> someone</span></button></div>' + codeStrip + filterBar + '<div id="staff-page"></div></div>';
 
     // Demo access panel — the exact logins needed to click through the whole flow
     // (coordinator → teacher → parent) for a created school. Prototype only.
@@ -2495,19 +2633,26 @@
     var act = function (attr, p, label, icon, extra) {
       return '<button type="button" class="tl-pact' + (extra || '') + '" ' + attr + '="' + esc(p.email) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '">' + icon + '</button>';
     };
-    function rowHtml(p) {
+    function rowActs(p) {
       var first = p.name === 'Name not given yet' ? p.email : p.name.split(' ')[0];
-      var acts = isInv(p)
+      return isInv(p)
         ? act('data-resend', p, p.state === 'expired' ? 'Send ' + first + ' a new invitation' : 'Resend the invitation to ' + first, ICONS.resend, p.state === 'expired' ? ' go' : '') +
           act('data-revoke', p, 'Revoke ' + first + '’s invitation', ICONS.revoke, ' danger')
         : (p.isAdmin && multiBoard ? act('data-boards', p, 'Board access for ' + first, ICONS.layers) : '') +
           act('data-role', p, 'Change ' + first + '’s role', ICONS.role) +
           act('data-remove', p, 'Remove ' + first + ' from ' + s.name, ICONS.trash, ' danger');
+    }
+    function rowHtml(p) {
+      var acts = rowActs(p);
       return '<tr><td class="name">' + esc(p.name) + '<small>' + esc(p.email) + '</small></td>' +
         '<td>' + esc(p.role) + (p.roleSub ? '<small>' + esc(p.roleSub) + '</small>' : '') + '</td>' +
         '<td class="' + (p.clsMuted ? 'tl-muted' : '') + '">' + esc(p.cls) + '</td>' +
-        '<td><span class="tl-pst ' + p.st.tone + '">' + esc(p.st.txt) + '</span>' + (p.st.sub ? '<small>' + esc(p.st.sub) + '</small>' : '') + '</td>' +
+        '<td><span class="ui-chip ' + p.st.tone + '">' + esc(p.st.txt) + '</span>' + (p.st.sub ? '<small>' + esc(p.st.sub) + '</small>' : '') + '</td>' +
         '<td class="r"><div class="tl-pacts">' + acts + '</div></td></tr>';
+    }
+    function phoneRowHtml(p) {
+      var acts = rowActs(p);
+      return plRow({ title: esc(p.name), chip: ' <span class="ui-chip ' + p.st.tone + '">' + esc(p.st.short) + '</span>', detail: esc(p.role) + ' · ' + esc(p.phoneSub), end: plMore('Actions for ' + p.name, acts) });
     }
     function drawStaff() {
       var q = low(view.q).trim();
@@ -2516,7 +2661,7 @@
       var pages = Math.max(1, Math.ceil(list.length / staffPager.size));
       staffPager.page = Math.min(Math.max(1, staffPager.page), pages);
       var start = (staffPager.page - 1) * staffPager.size;
-      mount.innerHTML = '<div class="ui-tablewrap"><table class="ui-table mw-640 tl-people-t"><thead><tr><th>Person</th><th>Role</th><th>Classes</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
+      mount.innerHTML = '<div class="pl-list pl-phone">' + list.slice(start, start + staffPager.size).map(phoneRowHtml).join('') + '</div><div class="ui-tablewrap pl-desk"><table class="ui-table mw-640 tl-people-t"><thead><tr><th>Person</th><th>Role</th><th>Classes</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
         list.slice(start, start + staffPager.size).map(rowHtml).join('') + '</tbody></table></div>' +
         pagerHtml(list.length, staffPager.page, staffPager.size, 'staff');
       wirePager(mount, function (page, size) {
@@ -2995,37 +3140,59 @@
     return out;
   }
 
-  function planPhaseBody(s, phase) {
+  // Anything done or started in this phase? Then undeploying would wipe real work.
+  function tlHasRecords(s, phase) {
+    if (!tlUsesApi(s)) return TL_AUD.some(function (a) { var c = tlAudCompletion(s, phase, a.key); return c && c.done > 0; });
+    var st = window.TilliAPI.phaseLog(s.id, phase).students || {};
+    return Object.keys(st).some(function (id) { return st[id].some(function (e) { return e.state === 'done' || e.state === 'started'; }); });
+  }
+  function planPhaseBody(s, phase, parentsHtml) {
     var p = tlPlan(s, phase), ps = tlPhaseStatus(s, phase), running = tlRunningCount(p);
     var missing = [];
     if (!p.start) missing.push('a start date'); if (!p.end) missing.push('an end date'); if (!running) missing.push('at least one assessment');
     // End before start is shown as an error and blocks Deploy — never "fixed" for you.
     var badDates = !!(p.start && p.end && p.end < p.start);
     var ready = !missing.length && !badDates && !p.deployed;
-    var deployBtn = p.deployed
-      ? (tlWindowStatus(s, p) === 'live' ? '<button class="btn btn-outline btn-sm" data-endnow="' + esc(phase) + '" title="Close this window today — nothing more can be completed, and results are worked out">End now</button> ' : '') +
-        '<button class="btn btn-outline btn-sm" data-undeploy="' + esc(phase) + '" title="Take this phase back to draft — teachers and parents lose access">Undeploy</button>'
-      : '<button class="btn btn-primary btn-sm" data-deploy="' + esc(phase) + '"' + (ready ? '' : ' disabled') + '>Deploy phase</button>';
-    var statusPill = '<span class="ui-chip ' + TL_ST_CHIP[ps.st] + '">' + (ps.st === 'live' ? '● ' : ps.st === 'completed' ? '✓ ' : '') + TL_ST_LABEL[ps.st] + '</span>';
-    var head = '<div class="dep-phase-head">' +
-      '<span class="dep-phase-name">' + esc(phase) + '</span>' + statusPill +
-      '<span class="dep-phase-sum">' + running + ' in use · ' + p.off.length + ' not used</span>' +
-      '<span class="dep-dates" title="The phase goes live on the start date and closes after the end date. You can change both at any time.">' +
-        '<label>Start <input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '"' + (p.end ? ' max="' + esc(p.end) + '"' : '') + ' aria-label="' + esc(phase) + ' start date"></label>' +
-        '<span class="dep-date-sep">→</span>' +
-        '<label>End <input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '"' + (p.start ? ' min="' + esc(p.start) + '"' : '') + ' aria-label="' + esc(phase) + ' end date"></label>' +
-      '</span>' + deployBtn + '</div>' +
-      (badDates ? '<div class="dep-phase-when dep-date-err" role="alert">The end date (' + esc(fmtJoined(p.end)) + ') is before the start date (' + esc(fmtJoined(p.start)) + '). Fix one of them' + (p.deployed ? ' — until then the saved dates stay as they were.' : ' to deploy.') + '</div>'
-        : ps.st !== 'none' ? '<div class="dep-phase-when st-' + ps.st + '">' + esc(tlDateLine(ps)) + '</div>'
-        : p.fromCalendar && ready ? '<div class="dep-phase-when">Dates from the school calendar — ready to deploy; it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'
-        : (!ready ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>' : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'));
+    var win = tlWindowStatus(s, p), f = function (v) { return v ? fmtJoined(v) : '—'; };
+    // Reading order (F26): one status box says what's happening, or asks for dates + Deploy.
+    var HERO_TITLE = { none: 'isn’t deployed', scheduled: 'is scheduled', live: 'is live', ended: 'has ended', completed: 'is complete' };
+    var menu = '';
+    if (p.deployed) {
+      // Undeploy erases the phase as if it never ran, so it's only offered while nothing
+      // has been recorded (F6). End now keeps everything.
+      var canUndeploy = win === 'scheduled' || !tlHasRecords(s, phase);
+      var dlBtn = '<button type="button" data-changedates="' + esc(phase) + '">Change dates</button>' +
+        (win === 'live' ? '<button type="button" data-endnow="' + esc(phase) + '" data-plsub="Closes it today and keeps everything recorded">End now</button>' : '') +
+        (canUndeploy ? '<button type="button" class="danger" data-undeploy="' + esc(phase) + '" data-plsub="Takes it back to draft">Undeploy</button>' : '');
+      menu = plMore(phase + ' options', dlBtn);
+    }
+    var head = '<div class="dep-hero st-' + ps.st + '"><div class="dep-hero-h"><span class="tl-grow">' + esc(phase) + ' ' + HERO_TITLE[ps.st] + '</span>' + menu + '</div>';
+    if (!p.deployed) {
+      head += '<div class="dep-hero-dates">' +
+          '<label>Start<input type="date" class="dep-date" data-date="' + esc(phase) + '|start" value="' + esc(p.start) + '"' + (p.end ? ' max="' + esc(p.end) + '"' : '') + ' aria-label="' + esc(phase) + ' start date"></label>' +
+          '<label>End<input type="date" class="dep-date" data-date="' + esc(phase) + '|end" value="' + esc(p.end) + '"' + (p.start ? ' min="' + esc(p.start) + '"' : '') + ' aria-label="' + esc(phase) + ' end date"></label></div>' +
+        (badDates ? '<div class="dep-phase-when dep-date-err" role="alert">The end date (' + esc(fmtJoined(p.end)) + ') is before the start date (' + esc(fmtJoined(p.start)) + '). Fix one of them to deploy.</div>'
+          : p.fromCalendar && ready ? '<div class="dep-phase-when">Dates from the school calendar — ready to deploy; it goes live on ' + esc(fmtJoined(p.start)) + '.</div>'
+          : !ready ? '<div class="dep-phase-when">To deploy, add ' + esc(missing.join(', ').replace(/, ([^,]*)$/, ' and $1')) + '.</div>'
+          : '<div class="dep-phase-when">Ready to deploy — it goes live on ' + esc(fmtJoined(p.start)) + '.</div>') +
+        '<button class="btn btn-primary block" data-deploy="' + esc(phase) + '"' + (ready ? '' : ' disabled') + '>Deploy ' + esc(phase) + '</button>';
+    } else if (win === 'scheduled') {
+      head += '<div class="dep-hero-when">' + esc(tlDateLine(ps)) + '</div>';
+    } else {
+      var big = ps.kids ? ps.kids.done + ' of ' + ps.kids.total + ' children done' : ps.pct != null ? ps.pct + '% complete' : '';
+      var left = win === 'live' && p.end ? Math.max(0, Math.round((new Date(p.end + 'T00:00:00') - new Date(ps.today + 'T00:00:00')) / 86400000)) : null;
+      head += (big ? '<div class="dep-hero-big">' + esc(big) + '</div>' : '') +
+        (ps.pct != null ? '<div class="dep-hero-bar" role="img" aria-label="' + ps.pct + ' percent done"><i style="width:' + ps.pct + '%"></i></div>' : '') +
+        '<div class="dep-hero-when">' + esc(f(p.start)) + ' → ' + esc(f(p.end)) + (left != null ? ' · ' + left + (left === 1 ? ' day left' : ' days left') : '') + '</div>';
+    }
+    head += '</div>';
 
     var chip = function (id, n, prev) {
       var it = p.byId[id];
       var tip = (n ? '#' + n + (prev ? ' — opens once “' + prev + '” is done' : ' — opens first') : 'Any time — open as soon as the phase is live') + (tlIsCheckin(it) ? '. ' + tlCheckinNote(s) : '');
-      return '<div class="dep-node md-' + it.mode + (tlIsCheckin(it) ? ' is-checkin' : '') + '" draggable="true" data-item="' + esc(id) + '" title="' + esc(tip) + '">' +
-        (n ? '<span class="dep-ord">' + n + '</span>' : '') +
-        '<span class="dep-node-name">' + esc(it.name) + '</span>' +
+      return '<div class="dep-node md-' + it.mode + (tlIsCheckin(it) ? ' is-checkin' : '') + '" draggable="true" data-item="' + esc(id) + '" data-taptip="1" title="' + esc(tip) + '">' +
+        (n ? '<span class="dep-ord">' + n + '</span>' : '<span class="dep-ord free" aria-hidden="true"></span>') +
+        '<span class="dep-node-name">' + esc(it.name) + '<small class="dep-node-who">' + esc(TL_AUD_SHORT[it.aud]) + (n ? '' : ' · any time') + '</small></span>' +
         (it.version ? '<span class="dep-ver" title="Deployed with v' + it.version + ' of this template — this window keeps it even if a newer version is published">v' + it.version + '</span>' : '') +
         '<span class="ui-tag ' + TL_AUD_TAG[it.aud] + '">' + esc(TL_AUD_CHIP[it.aud]) + '</span>' +
         '<button class="dep-item-menu" data-menu="' + esc(id) + '" aria-label="Options for ' + esc(it.name) + '">⋯</button></div>';
@@ -3039,11 +3206,10 @@
     };
     var rows = TL_PLACES.map(function (pl) {
       var m = pl.mode, ord = p.ord[m], any = p.any[m], has = ord.length || any.length;
-      var c = tlPlaceCompletion(s, phase, p, m), win = tlWindowStatus(s, p), pct = c ? Math.round(c.done * 100 / c.expected) : null;
-      var st = win === 'none' || !has ? '' : '<span class="dep-aud-st st-' + (pct === 100 ? 'completed' : win) + '">' + (pct === 100 ? 'Completed' : TL_ST_LABEL[win]) + (pct != null ? ' · ' + pct + '%' : '') + '</span>';
-      var auds = pl.auds.map(function (ak) { return TL_AUD_CHIP[ak]; }).join(' and ');
+      var c = tlPlaceCompletion(s, phase, p, m), pct = c ? Math.round(c.done * 100 / c.expected) : null;
+      var icon = m === 'school' ? '<path d="M3 21h18"></path><path d="M5 21V10l7-5 7 5v11"></path><path d="M10 21v-5h4v5"></path>' : '<path d="M3 11l9-7 9 7"></path><path d="M6 9.5V20h12V9.5"></path>';
       return '<div class="dep-aud dep-place" data-place="' + m + '">' +
-        '<div class="dep-aud-h"><span class="dep-place-tag md-' + m + '">' + esc(pl.label) + '</span>' + st + '<span class="dep-aud-rule">' + esc(pl.who) + ' · ' + esc(auds) + ' assessments</span></div>' +
+        '<div class="dep-band md-' + m + '" title="' + esc(pl.who) + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + icon + '</svg><span class="tl-grow">' + esc(pl.label) + '</span><span>' + (pct != null ? pct + '%' : ord.length + any.length) + '</span></div>' +
         (has ? group(pl.auds.join(','), m, 'order', ord) + group(pl.auds.join(','), m, 'any', any)
           : '<span class="dep-lane-empty">Nothing runs ' + esc(pl.label.toLowerCase()) + ' in ' + esc(phase) + ' — turn one on below or use + Add assessment.</span>') + '</div>';
     }).join('');
@@ -3061,7 +3227,8 @@
     var rule = ruleOn ? '<div class="tl-filterbanner dep-rule"><b>Own-class rule is on for ' + esc(phase) + '.</b> ' + TL_CHECKIN + ' runs at school, so no teacher runs student assessments for their own class — another teacher does, using the student direct-assessment link.' +
         (flagged ? ' <b>' + flagged + '</b> earlier result' + (flagged === 1 ? ' was' : 's were') + ' recorded by the child’s own teacher — kept and flagged.' : '') + '</div>'
       : ckSchool ? '<div class="tl-filterbanner dep-rule">' + TL_CHECKIN + ' runs at school, but this school has only one class, so the own-class rule doesn’t apply — its teacher runs everything.</div>' : '';
-    return '<div class="dep-phase" data-phase="' + esc(phase) + '">' + head + rule + rows + offBox + '</div>';
+    return '<div class="dep-phase" data-phase="' + esc(phase) + '">' + head + (parentsHtml || '') + rule + rows +
+      '<button type="button" class="dep-add" data-addassess title="Add an assessment from Templates to one phase of this school">＋ Add assessment</button>' + offBox + '</div>';
   }
 
   function renderPlanner(d, mount) {
@@ -3071,20 +3238,22 @@
     var cur = TL_TAB[s.id];
     var tabs = TL_PHASES.map(function (ph) {
       var x = tlPhaseStatus(s, ph);
-      return '<button class="dep-tab' + (ph === cur ? ' on' : '') + '" role="tab" aria-selected="' + (ph === cur) + '" data-tab="' + ph + '">' + esc(ph) +
-        '<span class="dep-tab-st st-' + x.st + '">' + TL_ST_LABEL[x.st] + (x.pct != null && x.st !== 'scheduled' ? ' · ' + x.pct + '%' : '') + '</span></button>';
+      return '<button class="dep-tab st-' + x.st + (ph === cur ? ' on' : '') + '" role="tab" aria-selected="' + (ph === cur) + '" data-tab="' + ph + '">' + esc(ph) +
+        '<span class="dep-tab-st">' + (x.st === 'live' ? '● ' : x.st === 'ended' || x.st === 'completed' ? '✓ ' : '') + TL_ST_LABEL[x.st] + (x.pct != null && x.st !== 'scheduled' && x.st !== 'live' ? ' · ' + x.pct + '%' : '') + '</span></button>';
     }).join('');
     var on = tlParentsOn(s), live = tlLiveCheckinPhases(s);
     // Phases still running the check-in in the old place (changed "from the next phase").
     var lag = TL_PHASES.filter(function (ph) { var p = tlPlan(s, ph); return tlWindowStatus(s, p) !== 'ended' && tlCheckinIds(p).some(function (id) { return tlGroupOf(p, id) && p.byId[id].mode !== tlCheckinMode(s); }); });
-    var parents = '<div class="dep-parents"><div class="dep-parents-txt"><b>Parents take part in Tilli Measures</b>' +
-      '<span>' + (on ? TL_CHECKIN + ' runs at home — the parent asks their child the questions.'
-        : TL_CHECKIN + ' runs at school' + (tlRuleApplies(s) ? ' — so no teacher runs student assessments for their own class.' : '.')) + '</span>' +
-      (lag.length ? '<span>' + esc(lag.join(', ')) + ' keeps it ' + (on ? 'at school' : 'at home') + ' until it ends.</span>' : '') +
-      (live.length ? '<span class="dep-parents-lock">Locked while ' + esc(live.join(', ')) + ' is live — changing it asks whether to apply it now or from the next phase.</span>' : '') + '</div>' +
-      '<span title="On: parents take part, so ' + TL_CHECKIN + ' goes home. Off: it runs at school and the own-class rule applies. Ended phases keep where it ran.">' +
-        switchHtml(on, ' data-parents-on aria-label="Parents take part in Tilli Measures"') + '</span></div>';
-    mount.innerHTML = parents + '<div class="dep-tabs" role="tablist" aria-label="Phases">' + tabs + '</div>' + planPhaseBody(s, cur);
+    // One setting for the whole school, read after the status box. Locked while a phase runs
+    // the check-in; the reason shows on hover or tap (F4, F5).
+    var what = on ? TL_CHECKIN + ' runs at home — the parent asks their child the questions.'
+      : TL_CHECKIN + ' runs at school' + (tlRuleApplies(s) ? ' — so no teacher runs student assessments for their own class.' : '.');
+    var lockTip = 'Locked while ' + live.join(', ') + ' is live. It can change once ' + (live.length > 1 ? 'they end.' : 'it ends.');
+    var parents = '<div class="dep-set"><span>Parents take part</span><span class="tl-tip" tabindex="0" role="button" aria-label="About parents taking part" data-tip="' + esc(what) + '">i</span><span class="tl-grow"></span>' +
+      (live.length ? '<button type="button" class="dep-set-lock" style="border:none;background:none;padding:0" data-locktip data-tip="' + esc(lockTip) + '" aria-label="' + esc(lockTip) + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.4" fill="#9AA3AF"></rect><path d="M8 10.5V8a4 4 0 018 0v2.5" stroke="#9AA3AF" stroke-width="2"></path></svg></button>' : '') +
+      '<span' + (live.length ? ' data-locktip data-tip="' + esc(lockTip) + '"' : '') + '>' + switchHtml(on, ' data-parents-on aria-label="Parents take part in Tilli Measures"' + (live.length ? ' disabled' : '')) + '</span></div>' +
+      (lag.length ? '<div class="dep-set-note">' + esc(lag.join(', ')) + ' keeps it ' + (on ? 'at school' : 'at home') + ' until it ends.</div>' : '');
+    mount.innerHTML = '<div class="dep-tabs" role="tablist" aria-label="Phases">' + tabs + '</div>' + planPhaseBody(s, cur, parents);
     wirePlanner(d, mount);
   }
 
@@ -3146,19 +3315,22 @@
           refreshPlanner(d);
         });
       }
-      var live = tlLiveCheckinPhases(s);
-      if (!live.length) { apply(false); return; }
-      // A phase is live: default to the next phase, allow changing it now.
-      var to = on ? 'at home' : 'at school';
-      openModal('Change while ' + live.join(', ') + ' is live?', '<p class="tl-muted">' + TL_CHECKIN + ' is in use in ' + esc(live.join(', ')) + ', which is live now.</p>' +
-        '<div class="dep-where-pick">' +
-          '<button type="button" class="dep-where-opt on" data-when="next"><b>From the next phase</b><span>' + esc(live.join(', ')) + ' keeps it where it is until it ends. Later phases run it ' + to + '.</span></button>' +
-          '<button type="button" class="dep-where-opt" data-when="now"><b>Change it now</b><span>It moves ' + to + ' straight away. A child who has already started it finishes it where they started, and their completion counts as normal.</span></button>' +
-        '</div>', function (close) { close(); return true; }, 'Cancel');
-      setTimeout(function () {
-        document.querySelectorAll('[data-when]').forEach(function (b) { b.addEventListener('click', function () { document.getElementById('tl-modal-root').innerHTML = ''; apply(b.dataset.when === 'next'); }); });
-      }, 0);
+      apply(false);   // never reached while a phase is live: the switch is locked then
     });
+    mount.querySelectorAll('[data-addassess]').forEach(function (b) { b.addEventListener('click', function () { openAddAssessment(d); }); });
+    // Once deployed, dates live in the phase's ⋯ (F26).
+    mount.querySelectorAll('[data-changedates]').forEach(function (b) { b.addEventListener('click', function () {
+      var phase = b.dataset.changedates, p = tlPlan(s, phase);
+      openModal('Change ' + phase + ' dates', '<div class="dep-hero-dates"><label>Start<input type="date" class="input" id="cd-start" value="' + esc(p.start) + '"></label><label>End<input type="date" class="input" id="cd-end" value="' + esc(p.end) + '"></label></div>', function (close) {
+        var a = document.getElementById('cd-start').value, z = document.getElementById('cd-end').value;
+        if (!a || !z) { toast('Add both dates.'); return false; }
+        if (z < a) { toast('The end date is before the start date.'); return false; }
+        p.start = a; p.end = z; p.endedEarly = false; p.held = false;
+        tlPersistDeploy(s, phase);
+        ORG.server.logAudit(me.name, 'phase.dates', phase + ': ' + p.start + ' → ' + p.end, 'phase', s.id);
+        close(); toast(phase + ' dates saved — ' + TL_ST_LABEL[tlPhaseStatus(s, phase).st].toLowerCase() + '.'); refreshPlanner(d);
+      }, 'Save');
+    }); });
 
     // Dates are the schedule — editable before and after deploying.
     mount.querySelectorAll('.dep-date').forEach(function (inp) {
@@ -3359,12 +3531,14 @@
     var ask = rd && window.TilliAPI.yearRequest(s.id), askNote = ask && ask.status === 'open'
       ? '<div class="ui-note warn mt-2"><span aria-hidden="true">↻</span><span><b>' + esc(ask.byName || ask.by) + '</b> asked on ' + esc(fmtJoined(localISO(new Date(ask.at)))) + ' to start the next academic year.</span></div>' : '';
     return '<div class="ui-card mb-gap tl-yearbar"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Academic year</h3>' +
-        '<p class="ui-mod-note">' + (cur ? esc(yearRange(cur)) + ' · year ' + n + ' with Tilli' : '') + '</p>' + askNote + calNote + '</div>' +
-        '<div class="tl-inline-actions">' +
+        '<p class="ui-mod-note">' + (cur ? '<span class="pl-phone">Academic year ' + esc(cur.label) + ' · </span>' + esc(yearRange(cur)) + '<span class="pl-desk"> · year ' + n + ' with Tilli</span>' : '') + '</p>' + askNote + calNote + '</div>' +
+        '<div class="tl-inline-actions pl-acts-m">' +
           calBtn +
           (viewingCur ? '<button class="btn btn-outline btn-sm" data-yearedit title="Change this year’s name or dates. Dates are set per school.">Edit dates</button>' : '') +
           newYearBtn +
-        '</div></div>' + seg + '</div>';
+        '</div><button type="button" class="pl-more pl-phone tl-yearbar-more" data-plmore="Academic year" aria-label="Year options">⋯</button></div>' +
+        // Only a school with more than one year on record has anything to switch between (F3).
+        (yrs.length > 1 ? seg : '') + '</div>';
   }
   function laneChip(st) { return '<span class="ui-chip ' + (st === 'Ended' ? 'ok' : st === 'Live' ? 'active' : 'muted') + '">' + esc(st) + '</span>'; }
   // Read-only view of a closed year: what ran, how complete, results, classes.
@@ -3688,9 +3862,7 @@
           '<button class="btn btn-outline btn-sm" data-dlcsv title="Download this school’s assessment results as a CSV">Results CSV</button></div></div>' +
         '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>'
       : sub === 'sessions' ? sessionsCardHtml(s)
-      : '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Deployments</h3></div>' +
-          '<div class="tl-inline-actions"><button class="btn btn-primary btn-sm" data-addassess title="Add an assessment from Templates to one phase of this school">+ Add assessment</button></div></div>' +
-          '<div class="dep-chains" id="dep-planner"></div></div>' +
+      : '<div class="ui-card tl-planner-card"><div class="dep-chains" id="dep-planner"></div></div>' +
         '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Link to share</h3><p class="ui-mod-note">Send this to ' + esc(s.name) + '’s parents. Staff join with the school code or their invite; the student-assessment link is on each teacher’s dashboard.</p></div></div>' + links + grpNote + '</div>' +
         (yrs ? yearOverYearHtml(s, yrs) : '');
     el.innerHTML = subBar + bodyHtml;
@@ -3700,7 +3872,6 @@
       history.replaceState(null, '', buildHash('school', { id: s.id, tab: 'assessments', sub: b.dataset.asub }));
       HUB.assessments(d, el);
     }); });
-    var aa = el.querySelector('[data-addassess]'); if (aa) aa.addEventListener('click', function () { openAddAssessment(d); });
     var ns = el.querySelector('[data-newsession]'); if (ns) ns.addEventListener('click', function () { openNewSession(s); });
     el.querySelectorAll('[data-session]').forEach(function (b) {
       b.addEventListener('click', function () { go('session', { id: b.dataset.session }); });
@@ -4364,7 +4535,12 @@
     }).join('') || '<tr><td colspan="4"><div class="ui-empty">No users match.</div></td></tr>';
     body.innerHTML = peopleHead('users', list.length + ' users' + (filtered ? ' (filtered)' : '') + '.') + banner +
       '<div class="ui-card">' + peopleFiltersHtml('users', f) +
-        '<div id="u-page"><div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>School</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<div id="u-page"><div class="ui-tablewrap pl-desk"><table class="ui-table mw-640"><thead><tr><th>User</th><th>Role</th><th>School</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<div class="pl-list pl-phone">' + (list.slice(start, start + usersPager.size).map(function (u) {
+          var sc = u.schoolId ? ORG.byId(u.schoolId) : null;
+          return plRow({ title: esc(u.name), chip: u.role === 'none' ? ' <span class="ui-chip warn">No role</span>' : '', detail: [u.role === 'none' ? '' : esc(u.role), sc ? esc(sc.name) : (u.role === 'Super Admin' ? 'Tilli Team' : '')].filter(Boolean).join(' · ') || esc(u.email),
+            end: plMore('Actions for ' + u.name, '<button data-role="' + esc(u.email) + '" aria-label="Change role">' + ICONS.role + '</button><button class="danger" data-del="' + esc(u.name) + '" aria-label="Delete user">' + ICONS.trash + '</button>') });
+        }).join('') || '<div class="ui-empty">No users match.</div>') + '</div>' +
         (list.length ? pagerHtml(list.length, usersPager.page, usersPager.size, filtered ? 'matching users' : 'users') : '') + '</div></div>';
     wirePeopleTabs(body);
     var um = body.querySelector('#u-page');
@@ -4864,7 +5040,9 @@
     }
     var empty = '<div class="ui-empty">' + (arch ? 'No archived templates.' : 'No templates.') + '</div>';
     var tplView = !items.length ? empty : asList
-      ? '<div class="ui-tablewrap"><table class="ui-table mw-820 tl-tpl-table"><thead><tr>' +
+      ? '<div class="pl-list pl-phone">' + sortTplItems(items, tplSort.tpl).map(function (it) {
+          return plRow({ title: tplName(it), chip: it.badges ? ' ' + it.badges : '', detail: esc(it.aud) + (it.meta ? ' · ' + it.meta : ''), end: it.action });
+        }).join('') + '</div><div class="ui-tablewrap pl-desk"><table class="ui-table mw-820 tl-tpl-table"><thead><tr>' +
           sortTh('tpl', 'title', 'Template', 'Sort by template name') + sortTh('tpl', 'aud', 'Audience', 'Sort by audience') +
           '<th title="Each phase: v = the live version, ✎ = a draft in progress, plain = not set up">Phases</th>' +
           sortTh('tpl', 'history', 'History', 'Sort by last edited (newest first on the first click)') + '<th></th></tr></thead><tbody>' +
@@ -6287,7 +6465,7 @@
   var TAP_TIP_SKIP = { BUTTON: 1, A: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1, OPTION: 1, svg: 1, SVG: 1 };
   function tapTips(root) {
     root.querySelectorAll('[title]').forEach(function (el) {
-      if (el.dataset.taptip) return;
+      if (el.dataset.taptip || el.classList.contains('tl-needs-dot')) return;   // an ⓘ inside the 8px dot sat on top of the school's name (F1)
       var t = (el.getAttribute('title') || '').trim();
       if (t.length < TAP_TIP_MIN || t === (el.textContent || '').trim()) return;
       var next = el.hasAttribute('data-tipnext');
@@ -6316,7 +6494,7 @@
     document.addEventListener('focusout', hideTip);
     document.addEventListener('pointerdown', function (e) { if (tipFor && !(e.target.closest && e.target.closest('[data-tip]'))) hideTip(); });
     document.addEventListener('click', function (e) {
-      var t = e.target.closest && e.target.closest('.tl-tip');
+      var t = e.target.closest && e.target.closest('.tl-tip, [data-locktip]');
       if (!t) return;
       e.preventDefault(); e.stopPropagation();   // an ⓘ inside a link / clickable row shouldn't navigate
       showTip(t);   // tap shows it; tapping anywhere else hides it
@@ -7085,10 +7263,7 @@
       (function () {
         var used = s.structure.grades.map(function (g) { return g.base || inferBase(g.grade); });
         var free = BASE_GRADES.filter(function (b) { return used.indexOf(b) < 0; });
-        return free.length ? '<div class="ws-newgrade-row"><select class="select" id="sg-newbase" aria-label="Base grade" title="The fixed grade this maps to. Tilli and Ask Tilli use it even if the school renames the grade.">' +
-            '<option value="">Base grade…</option>' + free.map(function (b) { return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('') + '</select>' +
-          '<input class="input grow" id="sg-newgrade" placeholder="School’s name for it (optional)" aria-label="School’s name for this grade">' +
-          '<button class="btn btn-outline btn-sm" id="sg-addgrade">Add grade</button></div>' : '';
+        return customGradeRow('sg', free, 'Add grade');
       })() +
       removedHtml,
       function (close) { close(); return true; }, 'Done');
@@ -7288,6 +7463,7 @@
   if (window.TilliFloat) TilliFloat.mount(GROUP ? { role: 'School group admin' } : { role: 'Platform admin', askSub: 'Completion, follow-ups and how-tos', ask: function () { go('ask-tilli', {}); } });
   window.addEventListener('hashchange', function () { closeHelp(); hideTip(); render(); });
   if (!GROUP) { wireTips(); wireHelp(); }
+  wirePhoneLists();
   if (!location.hash) location.replace('#/' + HOME);
   render();
   // The Add School wizard was open before the reload → bring it back where it was.

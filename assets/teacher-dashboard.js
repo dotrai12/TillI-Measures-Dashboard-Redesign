@@ -403,7 +403,7 @@
       perspChartOpen: false,   // Child → Perspectives: "See it as a chart" fold
       insightsView: 'myclass', skillGroup: 'sel', compareGrade: null,
       ovBand: null, ovSkill: null,
-      growthFilter: 'overview', growthTable: false,   // Insights → Growth over time line chart   // Insights → Class Skill Overview: box filter + expanded skill
+      growthFilter: 'overview', growthTable: window.innerWidth < 768,   // Insights → Growth over time line chart   // Insights → Class Skill Overview: box filter + expanded skill
       add: { active: false, step: 'method', sectionId: null, full: false, rows: [], issues: {}, csvMsg: '', csvErr: '', picMsg: '', results: [] },
       histOpen: false, histKind: '',   // Students → class change-history modal + its kind filter
       vw: window.innerWidth,
@@ -578,7 +578,7 @@
       <div class="dash">
         ${sidebar}
         <div class="dash-col${S.nav === 'ask' ? ' ask-mode' : ''}">
-          ${S.nav === 'ask' ? '' : `<header class="ui-header dash-header">${headerId}${chips}</header>`}
+          ${S.nav === 'ask' ? '' : `<header class="ui-header dash-header">${headerId}${chips}${S.vw < 768 ? '<button class="ui-tophelp focus" type="button" data-tf-tophelp aria-label="Need help?">?</button>' : ''}</header>`}
           <main class="dash-main${S.nav === 'ask' ? ' ask-mode' : ''}">${mainView()}</main>
         </div>
         ${bottomNav}
@@ -587,7 +587,7 @@
         ${reportPreviewView()}
         ${redoModalView()}
         ${addModal()}
-        ${sideWide ? '' : stateSwitcherGUI(true)}
+        ${sideWide || isPhone ? '' : stateSwitcherGUI(true)}
       </div>`;
     // Phone: the bottom nav's raised centre button already is Ask Tilli.
     if (window.TilliFloat) {
@@ -1488,7 +1488,7 @@
       { title: 'Midline', meta: 'Teacher · Parent report · complete', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
       { title: 'Baseline', meta: 'Teacher · Parent · Student-direct', status: 'Done', dot: ST.done.dot, color: ST.done.fg },
       { title: 'Enrolled', meta: 'Added to ' + stuSecLabel(stu), status: '—', dot: STATE_DOT.waiting, color: 'var(--ink-300)' },
-    ].map((h) => `<div class="hist-row"><span class="dot" style="background:${h.dot}"></span><div class="hm"><div class="nm">${esc(h.title)}</div><div class="sub">${esc(h.meta)}</div></div><div class="st" style="color:${h.color}">${esc(h.status)}</div></div>`).join('');
+    ].map((h) => `<div class="hist-row"><span class="dot" style="background:${h.dot}"></span><div class="hm"><div class="nm">${esc(h.title)}</div><div class="sub">${esc(h.meta)}</div></div><div class="st">${h.status === '—' ? '—' : `<span class="ui-chip ${h.status === 'Done' ? 'ok' : 'warn'}">${esc(h.status)}</span>`}</div></div>`).join('');
     const past = stuPastHistory(stu, true);
     return past + (past ? `<h3 class="ui-title hist-sec-h">This year · ${esc(stuSecLabel(stu))}</h3>` : '') + `<div class="ui-card td-rows">${rows}</div>` + stuChangesCard(stu);
   }
@@ -1891,7 +1891,7 @@
         <div class="todo-list todo-done-list">${shownDone.map((st, i) => { const dt = doneDate(st, wk, 'teacher'); return `<div class="todo-row">
           <span class="todo-pl">${flowerArt(st.state, 24, i)}</span>
           <span class="todo-nm">${esc(st.name)}</span>
-          <span class="todo-st done">✓ Done${dt ? ' · ' + esc(dt) : ''}</span>
+          <span class="todo-st done">Done${dt ? ' · ' + esc(dt) : ''}</span>
           <button class="todo-redo focus" data-redo-obs="${esc(st.id)}" aria-label="Redo ${esc(st.name)}'s observation">↻ Redo</button>
         </div>`; }).join('')}</div></details>` : '';
     const list = !ordered.length ? `<div class="todo-h">Everyone is observed for ${esc(winLabel)} 🌸</div>`
@@ -2168,7 +2168,7 @@
       <span><i class="round" style="background:${STATUS_META.done.dot}"></i>Complete</span>
       <span><i class="round" style="background:${STATUS_META.in_progress.dot}"></i>In progress</span>
       <span><i class="round" style="background:${STATUS_META.pending.dot}"></i>Not started</span>
-      <span style="color:var(--ink-300)">· 👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
+      <span style="color:var(--ink-450)">👩‍🏫 Teacher &nbsp; 🏠 Parent &nbsp; 🧒 Student</span></div>`;
     // History opens the class change-history modal pre-filtered to assessments;
     // hover shows when this class's assessment activity last changed.
     const HU = window.TilliHistory;
@@ -2381,7 +2381,7 @@
       const persp = w.persp.map((p) => {
         const dt = p.done ? doneDate(st, w.key, p.key) : '';
         const txt = locked ? 'Not open yet' : p.done ? 'Done' + (dt ? ' · ' + dt : '') : (p.started || p.doneParts) ? 'In progress' : 'Waiting';
-        return `<div class="tl-persp${p.done ? ' done' : ''}"><span class="ic">${p.icon}</span><div><div class="nm">${esc(p.label)}</div><div class="st">${esc(txt)}</div></div></div>`;
+        return `<div class="tl-persp${p.done ? ' done' : ''}"><span class="ic">${p.icon}</span><div><div class="nm">${esc(p.label)}</div><div class="st${p.done ? ' done' : (!locked && (p.started || p.doneParts)) ? ' prog' : ''}">${esc(txt)}</div></div></div>`;
       }).join('');
       // Only the open window offers the teacher's own observation.
       const canGo = !locked && w.key === openWk && !teacherDone(st, w.key);
@@ -2682,7 +2682,7 @@
       <div class="ui-meta ins-sub">Class average per skill at Baseline → Midline → Endline. Filter to compare groups or follow one skill.</div>
       <div class="gr-filters">
         ${pill('overview', 'Overview')}${pill('sel', 'Social-Emotional')}${pill('cog', 'Cognitive')}${skillSel}
-        <button class="gr-view focus" data-growth-table title="Switch between the chart and a table of the same numbers">${S.growthTable ? '📈 Chart view' : '▦ Table view'}</button>
+        <button class="gr-view focus" data-growth-table title="Switch between the chart and a table of the same numbers">${S.growthTable ? 'See chart' : 'See table'}</button>
       </div>
       ${S.growthTable ? table : `${legend}<div class="gr-wrap" tabindex="0" aria-label="Growth chart — use left and right arrows to read each window">${growthSVG(series, phases, meas, partial)}<div class="ui-tip gr-tip" hidden></div></div>
         <div class="gr-taps">${phases.map((p, i) => `<button type="button" class="ui-filterchip tip-chip focus" data-gr-i="${i}" aria-pressed="false">ⓘ ${esc(p.meta.label)}</button>`).join('')}</div>`}
@@ -3848,6 +3848,7 @@
       <div class="ui-card td-rows mt-4">${rows}</div>
       ${mirrorCard()}
       ${window.TilliI18n ? `<div class="td-langrow"><span>${esc(window.TilliI18n.t('lang.label'))}</span>${window.TilliI18n.switcherHTML()}</div>` : ''}
+      ${bp().isPhone && !S.baseData.fresh ? `<div class="mt-4">${stateSwitcherGUI(false)}</div>` : ''}
       <div class="td-btnrow">
         <button class="btn btn-ghost md focus" data-redo>Redo reflection</button>
         <a class="btn btn-danger-outline td-btn-md focus" href="index.html" data-signout>↩ Sign out</a>
@@ -4377,6 +4378,14 @@
   .stu-chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .stu-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 18px; scrollbar-width: none; }
   .stu-tabs::-webkit-scrollbar { display: none; }
+  /* F21: a child's four tabs as a 2×2 grid on phones, not a sideways strip. */
+  @media (max-width: 767px) {
+    .stu-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+    .stu-tabs .stab { width: 100%; min-height: 44px; justify-content: center; }
+    .dash-header .dash-chips { margin-left: 0; flex: 1; }
+    .dash-header .ui-tophelp { margin-left: auto; }
+    .log-legend { flex-wrap: wrap; font-size: 12px; }
+  }
   .sg-title { margin: 0 0 12px; }   /* .ui-title.md */
   .skill-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 12px; }
   .sc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
@@ -4486,8 +4495,9 @@
   .todo-row:first-child { border-top: none; }
   .todo-pl { flex: none; width: 28px; display: flex; justify-content: center; }
   .todo-nm { flex: 1; min-width: 0; font-weight: 700; font-size: var(--fs-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .todo-st { font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); white-space: nowrap; }
-  .todo-st.started { color: var(--lvl-2-ink); }
+  /* F27: the same filled status chip as everywhere else. */
+  .todo-st { padding: 4px 11px; border-radius: var(--radius-pill); background: var(--surface-100); font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); white-space: nowrap; }
+  .todo-st.started { background: var(--warn-wash); color: var(--warn-700); }
   .todo-row .btn { flex: none; }
   .todo-done { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-200); font-size: var(--fs-sm); color: var(--text-meta); }
   .todo-done summary { cursor: pointer; font-weight: 700; }
@@ -4495,7 +4505,7 @@
   .todo-done-list { margin-top: 6px; }
   .todo-done-list .todo-row:hover { background: var(--surface-100); }
   .todo-done-list .todo-row { padding-left: 4px; padding-right: 4px; border-radius: var(--radius-xs); }
-  .todo-st.done { color: var(--green-700); }
+  .todo-st.done { background: var(--status-done-bg); color: var(--status-done-fg); }
   .todo-done-list .todo-nm { color: var(--ink-900); }   /* .todo-done greys its text; the names stay readable */
   .todo-redo { flex: none; padding: 3px 10px; border: 1.5px solid var(--green-500); border-radius: 999px; background: var(--white); cursor: pointer;
     font: 700 var(--fs-xs) var(--font-body); color: var(--green-700); }
@@ -4544,7 +4554,9 @@
   .tl-persp { display: flex; align-items: center; gap: 9px; background: var(--surface-100); border: 1px solid var(--line-200); border-radius: var(--radius-md); padding: 9px 11px; }
   .tl-persp.done { background: var(--wash-green); border-color: var(--lvl-3-wash); }
   .tl-persp .ic { font-size: var(--fs-md); }
-  .tl-persp .nm { font-weight: 700; font-size: var(--fs-sm); } .tl-persp .st { font-size: var(--fs-xs); font-weight: 700; color: var(--text-meta); }
+  .tl-persp .nm { font-weight: 700; font-size: var(--fs-sm); } .tl-persp .st { display: inline-block; margin-top: 2px; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--surface-100); font-size: var(--fs-xs); font-weight: 700; color: var(--ink-450); }
+  .tl-persp .st.done { background: var(--white); color: var(--status-done-fg); }
+  .tl-persp .st.prog { background: var(--warn-wash); color: var(--warn-700); }
   .tl-persp.done .st { color: var(--green-700); }
   .tl-card.locked { background: var(--surface-100); }
   .tl-card.locked .tl-persp { opacity: .6; }

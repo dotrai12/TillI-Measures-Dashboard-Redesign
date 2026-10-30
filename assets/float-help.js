@@ -166,7 +166,12 @@
       el.id = 'tf-stack';
       document.body.appendChild(el);
       // Outside click / Esc closes the help card.
-      document.addEventListener('click', function (ev) { if (el && !el.contains(ev.target)) setPop(false); });
+      document.addEventListener('click', function (ev) {
+        // Phones: the ? in the page's top bar opens the same help card (F18).
+        var top = ev.target.closest && ev.target.closest('[data-tf-tophelp]');
+        if (top) { setPop(document.getElementById('tf-pop').hidden); return; }
+        if (el && !el.contains(ev.target)) setPop(false);
+      });
       document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') setPop(false); });
       bindDrag();
     }

@@ -565,6 +565,8 @@
     var header = '<header class="ui-header dash-header">' +
       '<div><div class="ui-h-title">' + esc(AD.school.name) + '</div><div class="ui-h-sub desk-only">' + esc(AD.school.city + ', ' + AD.school.country) + '</div></div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">' + lastChip + yearCtrl +
+      // Phone: help moves from the floating bubbles to the top bar (F18).
+      '<button class="ui-tophelp pl-phone" type="button" data-tf-tophelp aria-label="Need help?">?</button>' +
       // Phone only (sidebar hidden): the avatar stands in for the sidebar profile.
       '<button class="ui-avatar ad-acct-m" id="ad-acct-btn-m" aria-label="Account menu">' + esc(initials(me.name).toUpperCase()) + '</button></div></header>';
 
@@ -619,6 +621,10 @@
       (fromTilli ? '<button class="ui-menu-item" data-am="tilli">← Tilli platform</button>' : '') +
       (fromGroup ? '<button class="ui-menu-item" data-am="group">← Group view</button>' : '') +
       yearItems +
+      // Preview stage on phones: in here rather than over the content; demo schools only (F18).
+      (!window.TILLI_CREATED && AD.lifecycleStates ? '<div class="pl-phone"><div class="ad-acct-sec">Preview stage</div>' + AD.lifecycleStates.map(function (x) {
+        return '<button class="ui-menu-item' + (x.key === AD.lifecycleState ? ' on' : '') + '" data-amstage="' + esc(x.key) + '">' + (x.key === AD.lifecycleState ? '✓ ' : '') + esc(x.label) + '</button>';
+      }).join('') + '</div>' : '') +
       (window.TilliI18n ? '<div class="ad-acct-sec">' + esc(window.TilliI18n.t('lang.label')) + '</div><div class="ad-acct-lang">' + window.TilliI18n.switcherHTML() + '</div>' : '') +
       '<button class="ui-menu-item" data-am="signout">Sign out</button>';
     document.body.appendChild(m);
@@ -629,6 +635,10 @@
     if (fromTilli) m.querySelector('[data-am="tilli"]').addEventListener('click', function () { location.href = 'tilli.html?email=' + encodeURIComponent(me.email); });
     if (fromGroup) m.querySelector('[data-am="group"]').addEventListener('click', function () { location.href = 'tilli.html?group=' + encodeURIComponent(qp.get('group')); });
     m.querySelector('[data-am="signout"]').addEventListener('click', function () { try { localStorage.removeItem('tilliMeasures.session'); localStorage.removeItem('tilliMeasures.assessSession'); } catch (e) {} location.href = 'index.html'; });
+    m.querySelectorAll('[data-amstage]').forEach(function (b) { b.addEventListener('click', function () {
+      AD.setLifecycleState(b.dataset.amstage); render(); renderStatePanel();
+      var st = AD.lifecycleStates.find(function (x) { return x.key === AD.lifecycleState; }); toast('Preview: ' + (st ? st.label : '') + ' stage.');
+    }); });
     m.querySelectorAll('[data-amyear]').forEach(function (b) { b.addEventListener('click', function () { closeAcctMenu(); if (!(vy && vy.id === b.dataset.amyear)) switchYear(b.dataset.amyear); }); });
     setTimeout(function () { document.addEventListener('click', closeAcctMenu, { once: true }); }, 0);
   }
@@ -2275,7 +2285,10 @@
           teacherLine + '</button>';
       }).join('') + '</div>';
     // Add students from the Students tab too (it used to be only on Classes).
-    var listBody = (canManageClasses() ? '<div class="row mb-3" style="justify-content:flex-end"><button class="btn btn-cyan btn-sm" data-stuadd>+ Add students</button></div>' : '') + gradeCards;
+    // F19: one line for the whole list instead of a tag on every class.
+    var unsure = canManageClasses() ? AD.sections.map(apiRoom).filter(function (rm) { return rm && rm.expected != null && !rm.confirmed; }) : [];
+    var confirmLine = unsure.length ? '<div class="ad-confirmline"><span>' + unsure.length + (unsure.length === 1 ? ' class size isn’t confirmed yet' : ' class sizes aren’t confirmed yet') + '</span><button class="btn btn-outline btn-sm" data-sizesok>Confirm all</button></div>' : '';
+    var listBody = confirmLine + (canManageClasses() ? '<div class="row mb-3" style="justify-content:flex-end"><button class="btn btn-cyan btn-sm" data-stuadd>+ Add students</button></div>' : '') + gradeCards;
 
     // user management
     var users = seedUsers();
@@ -2411,6 +2424,11 @@
       });
     }); });
     var sa = body.querySelector('[data-stuadd]'); if (sa) sa.addEventListener('click', function () { openAddStudents(); });
+    var szo = body.querySelector('[data-sizesok]');
+    if (szo) szo.addEventListener('click', function () {
+      unsure.forEach(function (rm) { TilliAPI.setSectionExpected(currentSchoolId(), rm.section_id, rm.expected, email); });
+      toast(unsure.length + (unsure.length === 1 ? ' class size' : ' class sizes') + ' confirmed.'); render();
+    });
     var askOf = function (id) { return asks.filter(function (x) { return x.id === id; })[0]; };
     body.querySelectorAll('[data-askadd]').forEach(function (b) { b.addEventListener('click', function () { openAddClassFor(askOf(b.dataset.askadd)); }); });
     body.querySelectorAll('[data-askdismiss]').forEach(function (b) { b.addEventListener('click', function () { openDismissAsk(askOf(b.dataset.askdismiss)); }); });
@@ -2874,8 +2892,8 @@
 
   // Teachers who signed up but couldn't find their class ("My class isn't here").
   function waitingTeachers() { return !AD.pastYear && window.TilliAPI && TilliAPI.classRequests && currentSchoolId() ? TilliAPI.classRequests(currentSchoolId()) : []; }
-  function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.confirmed ? '' : ' · not confirmed') + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
-  function roomTone(rm) { return rm.expected == null || !rm.confirmed ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
+  function roomText(rm) { return rm.expected == null ? rm.added + ' · no size set' : rm.added + ' of ' + rm.expected + (rm.pending ? ' +' + rm.pending + ' waiting' : ''); }
+  function roomTone(rm) { return rm.expected == null ? ' warn' : rm.added < rm.expected ? ' short' : ''; }
   // "Zoya Khan was already approved by the Tilli team · 29 Oct, 10:42" — a stale page
   // learns who decided (from either dashboard) instead of a vague "already handled".
   function handledMsg(nm, dec) {

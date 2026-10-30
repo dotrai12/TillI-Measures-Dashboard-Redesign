@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261029p11">
+<link rel="stylesheet" href="assets/tilli.css?v=20261030b1">
 <style>
   /* ============================================================
      Tilli Measures — School Admin (leadership) dashboard chrome.
@@ -587,6 +587,25 @@
   .ad-setup-step.done b { color: var(--ink-450); text-decoration: line-through; }
   .ad-setup-step.next .ad-setup-tick { border-color: var(--cyan-500); }
   .ad-setup-step.next b { color: var(--ink-900); }
+  /* ---- Phone clean-up (30 Oct): status chip, confirm line, roster list, Preview stage ---- */
+  .ad-stage-s { display: inline-block; padding: 4px 11px; border-radius: var(--radius-pill); background: var(--surface-100); color: var(--ink-450); font-size: var(--fs-xs); font-weight: 700; }
+  .ad-stage.done .ad-stage-s { background: var(--status-done-bg); color: var(--status-done-fg); }
+  .ad-stage.prog .ad-stage-s { background: var(--warn-wash); color: var(--warn-700); }
+  .ad-confirmline { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px 10px 16px; border: 1px solid #F2D9A8; border-radius: 16px; background: var(--warn-wash); color: var(--warn-700); font-size: var(--fs-sm); font-weight: 600; }
+  .ad-confirmline span { flex: 1; min-width: 0; }
+  .ad-confirmline .btn { flex: none; border-color: #E0C08A; color: var(--warn-700); }
+  @media (max-width: 767px) {
+    .ad-statepanel.float { display: none !important; }
+    /* F14: grades as one two-line list, each row keeping its grade's stripe. */
+    .ad-navcards:has(.ad-gradecard) { display: block; border: 1px solid var(--line-200); border-radius: 16px; overflow: hidden; background: var(--white); }
+    .ui-card.tight.ad-gradecard { width: 100%; padding: 10px 12px 10px 20px; border: none; border-top: 1px solid var(--line-200); border-radius: 0; background: var(--white); box-shadow: none; }
+    .ad-gradecard:first-child { border-top: none !important; }
+    .ad-gradecard .nc-top .ui-title { font-size: 14px; }
+    .ad-gradecard .nc-meta { display: inline; font-size: 12px; font-weight: 500; }
+    .ad-gradecard .nc-pcts { display: block; margin-top: 2px; font-size: 12px; font-weight: 500 !important; line-height: 1.4; }
+    .ad-gradecard .nc-pcts span { font-weight: 500 !important; }
+    .ad-gradecard .nc-pcts > span { display: block; }
+  }
 </style>
 </head>
 <body>
@@ -607,8 +626,8 @@
 <script src="assets/calendar-form.js?v=20261029p6"></script>
 <script src="assets/created-school-bridge.js?v=20261026p5"></script>
 <script src="assets/admin-data.js?v=20261029p11"></script>
-<script src="assets/float-help.js?v=20261027i6b"></script>
-<script src="assets/admin.js?v=20261029p11"></script>
+<script src="assets/float-help.js?v=20261030b1"></script>
+<script src="assets/admin.js?v=20261030b1"></script>
 <!-- Page translator: approved translations replace matching screen text; new text is listed on Tilli → Translations. -->
 <script>TilliI18n.autoTranslate({ area: 'School dashboard' });</script>
 </body>
