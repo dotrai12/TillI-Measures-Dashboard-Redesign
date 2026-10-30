@@ -46,9 +46,72 @@ Mango Tree only lives in your browser, so these ran on Banyan Tree (Endline live
 **Still for you (visual, or needs Mango Tree's data / a fresh sign-up):** T1.1, T1.2, T1.5, T2.1, T2.5, T2.7, T2.8, T3.2, T3.10, T4.2, T4.3, T4.5–T4.8, T5 (all), T6.2–T6.5, T6.7, T6.9, T6.10, T7 (all), T8.1, T8.2, T9.2–T9.5, T9.7, T10.1, T10.3–T10.5 (T10.5 is superseded by F12), T10.7, T10.8.
 - **F23 — Phone type weights** (30 Oct, your call on the mockups). No extra-bold look on phones: **600 everywhere**, the page title **700**, detail lines **500**. Also stops `<b>` inside 600-weight text computing to "bolder" (900). ✅
 - **F24 — Words touching** (30 Oct, everywhere). No space between neighbouring text, e.g. "**Outcomes**Scores appear…", "**Open issues**None". Prototype boards fixed. Live site: 34 screens at 375 and 1280 px show none, so the fault was in the prototypes. Pop-ups outside those screens were checked in the code only. ✅
-- **F25 — Redundant text** (30 Oct, Tilli internal dashboard, plus the group admin view that shares its code). "Remove from Banyan Tree School — They lose access at once" states the obvious; only say what would surprise someone. Plan first, build after approval. 💬
+- **F25 — Redundant text** (30 Oct, Tilli internal dashboard, plus the group admin view that shares its code). "Remove from Banyan Tree School — They lose access at once" states the obvious; only say what would surprise someone. Built from the approved plan below. ✅
 - **F26 — Plan & deploy reading order** (30 Oct, all sizes). Too much at the same weight. Order: phase tiles coloured by status → one status box (what is happening, or dates + Deploy) → Parents take part → At school (cyan) and At home (pink) boxes → quiet Add assessment. Dates and End now move into the phase ⋯ once live. Colour means one thing each. Mockup first. ✅
 - **F27 — One status chip everywhere** (30 Oct, all sizes). Statuses showed two ways: a filled chip ("In progress", "All done") and plain coloured text ("✓ Done"). Keep only the **filled chip** with no ✓ or ● inside it. Green = done, active or live · amber = in progress or waiting · red = missed or a problem · grey = yet to start or ended · cyan = invited. Prototype boards fixed; apply to the live site in the batch build. ✅
 
 ### Batch build (30 Oct)
-F1–F23, F26 and F27 are built from the approved mockups, not committed yet and not yet tested in a browser. F25 is still waiting for its plan to be approved. Not built from the mockups: the Students filter chips (All · Grade 1 · Consent missing), which are a new feature no F-item asked for.
+F1–F23, F26 and F27 are built from the approved mockups and committed (`e665a98`), not yet tested in a browser.
+
+### Follow-ups (30 Oct)
+Built after the batch, not committed yet and not yet tested in a browser:
+- **All Schools header on phones:** Active / Archived, ＋ Add and ⋯ on one line. ✅
+- **School Overview on phones:** classes with their teachers, progress as a list with bars, short rows for empty Outcomes and Open issues. The Onboarding card only shows when it has a warning. ✅
+- **Consent missing chip** on Students, all sizes. It counts children with no parent linked too. The grade chips on the mockup weren't built. ✅
+- **Issues and Invitations on phones:** two-line lists on the Issues screen, the school's Issues & Logs tab and Invitations. Deployments and History still scroll sideways. ✅
+- **`parent.html`:** nothing to change. It has no weights above 700, and neither its Google Fonts link nor the font files go past 700. It doesn't use Poppins either. ✅
+
+### F25 plan — approved and built (30 Oct, not committed yet, not yet tested in a browser)
+The rule: keep what would surprise someone or can't be undone; cut what the title or button already says.
+
+**Remove**
+
+| Screen | Text |
+|---|---|
+| Control Room | "What needs the team's attention right now." |
+| Control Room → Needs attention | "Each card links to the pre-filtered list that produced it." |
+| Control Room → Recent activity | "The latest changes from schools — student records and assessments." |
+| Analytics | "Rollups across the whole portfolio — outcomes, engagement and rollout." |
+| Analytics → Board mix | "Partner schools by curriculum board." |
+| A school → History | "Student records and assessments at this school — who changed what, and when." |
+| School history (group view) | "Who changed what at this school, newest first." |
+| Group history | "Latest student-record and assessment changes across the group." |
+| Group overview | "Open a school to see its assessment progress and change history." |
+| A school → Assessments → Logs | "Who has completed what, and when — teachers first, then each child." |
+| Deployments | "Deploy assessments to schools and read their responses." |
+| New deployment | "Deploy an assessment to a sample school. Status is derived from the window + publish state." |
+| New invitation | "Send an onboarding invite." |
+| New template | "Create an assessment template." |
+| New group | "Groups let you manage related schools together." |
+| Add School → Review | "Check the details, then create. You'll land on the new school's page." |
+| Knowledge base | "Manuals and FAQs for the Tilli team — how to do the common jobs in this dashboard." |
+| A child → Gap Analysis | "Discrepancies between perspectives — large gaps may indicate areas needing attention." |
+| Search | "Type a query in the top bar." The top bar has no search any more, so this is also wrong. |
+
+**Shorten**
+
+| Screen | Now | Becomes |
+|---|---|---|
+| Remove from school (3 pop-ups) | "Remove Ritu from Mango Tree School? They lose access to the school's classes and children at once." | "Remove Ritu from Mango Tree School?" |
+| Students | "56 students · this school's roster." | "56 students" |
+| Add School → Basics | "The basics. Name, board, country and city are required — everything can change later." | "Everything can change later." |
+| Add School → Year | "Add it one way — you can change the dates later." | "You can change the dates later." |
+| A school → Link to share | "Send this to Mango Tree's parents. Staff join with the school code or their invite; the student-assessment link is on each teacher's dashboard." | "Send this to parents. Staff join with the school code or an invite." |
+| Merge students | "Deduplicate profiles. Suggestions never auto-merge — always confirm." | "Suggestions never merge on their own." |
+| Student lookup | "Global, cross-school lookup. Read-only — student writes happen in the school context." | "Read-only. Edit a student from their school." |
+| A school → Settings | "As Super Admin you have full access — every action here runs and is written to the audit trail. A role layer can restrict these later." | "Every action here is written to the audit trail." |
+| Template | "An assessment template — shared question bank, published per phase. Deploy it from Deployments; read responses in Deployments → Results." | "Deploy it from Deployments; read responses in Deployments → Results." |
+| Template → Translate | "Translate this template's text. Options, scores and settings stay shared." | "Options, scores and settings stay shared." |
+| Grades & sections | Two paragraphs on renaming, auto-removal and class sizes | "Empty grades and sections are removed after 60 days; add them back below. Past a class's size, a new child needs an admin's approval." |
+| New user's password | "Share these one-time credentials with …. They'll sign in and set their own password." | "Share these one-time credentials with …." The next line already covers the rest. |
+
+**Keep (each one would surprise someone)**
+- Regenerate code: which links stop working.
+- Archive school or group: deployments and links are suspended.
+- Close the year: "This can't be undone."
+- Delete group: "Its schools move to No group."
+- Undeploy and End now: what happens to access and records.
+- Publishing: running windows keep the version they started with.
+- Own-class rule, and "They can already be assessed" on children past the class size.
+- Merge: which child is kept and which is deleted.
+- Parent consent: "Only the Tilli team sees this."

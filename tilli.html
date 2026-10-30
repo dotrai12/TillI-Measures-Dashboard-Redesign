@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/tilli.css?v=20261030b1">
+<link rel="stylesheet" href="assets/tilli.css?v=20261030b2">
 <style>
   /* ============================================================
      Tilli Measures — INTERNAL managing platform chrome.
@@ -1137,6 +1137,24 @@
     .tl-hub-last { margin-top: 2px; }
 
     .tl-screen-actions .tl-help-btn { display: none; }   /* F18: the ? in the top bar opens it */
+    /* All Schools: one line for Active / Archived, Add and ⋯. */
+    .tl-sch-page .ui-screen-sub { display: none; }
+    .tl-sch-page .tl-screen-head { margin-bottom: 10px; }
+    .tl-sch-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .tl-sch-bar .ui-seg { flex: 1; min-width: 0; width: auto; }
+    .tl-sch-bar .ui-seg button { flex: 1; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+    .tl-sch-bar .btn { flex: none; }
+    /* Overview: compact rows; progress as a list with bars. */
+    .tl-phrow { padding: 10px 0; border-top: 1px solid var(--line-200); }
+    .tl-phrow:first-child { border-top: none; padding-top: 0; }
+    .tl-phrow-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .tl-phrow-h .pl-d { flex: none; margin-top: 0; }
+    .tl-phrow-bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--line-200); overflow: hidden; }
+    .tl-phrow-bar i { display: block; height: 100%; border-radius: 3px; background: var(--green-500); }
+    .tl-main .ui-card.tl-emptyrows { padding: 0 8px 0 2px; overflow: hidden; }
+    /* Issues: four tabs fit without sideways scroll. */
+    .tl-issue-tabs { gap: 0; overflow-x: auto; scrollbar-width: none; }
+    .tl-issue-tabs .ui-tab { flex: 1; padding-left: 4px; padding-right: 4px; font-size: 13px; white-space: nowrap; }
     /* F11 — search gets its own full-width line. */
     .tl-filters .ui-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
     .tl-filters .tl-filter-q { flex: 1 1 100%; max-width: none; }
@@ -1151,7 +1169,6 @@
     .tl-cr-fold .tl-grow { flex: 1; }
     .tl-findrow { display: flex; align-items: stretch; gap: 8px; }
     .tl-findrow .tl-findschool { flex: 1; min-width: 0; margin: 0; }
-    .tl-cr-note { display: none; }
     .tl-cr-stats { margin-bottom: var(--page-gap); }
     .tl-cr-stats b { font-size: 15px; }
     .tl-cr-kpis { display: none; }
@@ -1178,6 +1195,9 @@
 
     /* F14 — people strip + filters without sideways scroll. */
     .tl-people.ui-card { padding: 0 !important; border: none; background: none; box-shadow: none; }
+    /* These two cards lost their outer box, so their lists keep their own. */
+    .tl-people .pl-list, .tl-lg .pl-list { border: 1px solid var(--line-200); border-radius: 16px; margin-bottom: 12px; }
+    .tl-people .pl-list .pl-row, .tl-lg .pl-list .pl-row { padding-left: 16px; }
     .tl-codestrip { flex-wrap: nowrap; padding: 10px 8px 10px 14px; }
     .tl-codestrip > span:first-child { flex: 1; min-width: 0; font-weight: 500; }
     .tl-codestrip .tl-grow, .tl-codestrip .pl-acts-m { display: none; }
@@ -1207,6 +1227,6 @@
 <script src="assets/calendar-form.js?v=20261029p6"></script>
 <script src="assets/tilli-org-data.js?v=20261029p2"></script>
 <script src="assets/float-help.js?v=20261030b1"></script>
-<script src="assets/tilli-admin.js?v=20261030b1"></script>
+<script src="assets/tilli-admin.js?v=20261030b3"></script>
 </body>
 </html>

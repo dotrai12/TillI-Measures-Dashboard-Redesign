@@ -557,7 +557,7 @@
     var statsLine = cr.stats.map(function (t) { return '<b>' + esc(t.value.toLocaleString()) + '</b> ' + esc(String(t.label).toLowerCase()); }).join(' · ');
 
     body.innerHTML =
-      screenHead('Control Room', 'What needs the team\'s attention right now.',
+      screenHead('Control Room', '',
         '<span id="cr-new" class="pl-acts-m pl-desk" style="display:contents">' +
         '<button class="btn btn-primary btn-sm" data-qa="school">+ Add School</button>' +
         '<button class="btn btn-outline btn-sm" data-qa="invite">+ Invite User</button>' +
@@ -567,13 +567,13 @@
         '<input id="cr-find" class="tl-findschool-in" placeholder="Find a school — name, code or city" autocomplete="off" aria-label="Find a school and open it" title="Type a school name, code or city, then pick it (or press Enter) to open its hub."></div>' +
         '<button type="button" class="btn btn-primary btn-sm pl-phone" data-plmore="New" data-plfrom="#cr-new">＋ New ▾</button></div>' +
       (anyQueue ? '' : '<div class="tl-allclear">Nothing needs your attention right now. 🌱</div>') +
-      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Needs attention</h3><p class="ui-mod-note tl-cr-note">Each card links to the pre-filtered list that produced it.</p></div>' + (nOpen ? '<span class="ui-mod-note pl-phone">' + nOpen + ' to look at</span>' : '') + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Needs attention</h3></div>' + (nOpen ? '<span class="ui-mod-note pl-phone">' + nOpen + ' to look at</span>' : '') + '</div>' +
         '<div class="tl-queue-grid" id="cr-queue">' + cards + '</div>' +
         (nClear ? '<button type="button" class="tl-cr-fold pl-phone" id="cr-fold" aria-expanded="false"><span style="color:var(--green-700)">✓</span> ' + nClear + ' more all clear<span class="tl-grow"></span><span aria-hidden="true">▸</span></button>' : '') + '</div>' +
       '<div class="ui-eyebrow tl-mini-head pl-desk">Platform stats</div>' +
       '<div class="tl-kpis four tl-cr-kpis">' + stats + '</div>' +
       '<div class="ui-card pl-phone tl-cr-stats"><h3 class="ui-mod-title">Platform</h3><p class="ui-mod-note" style="margin-top:4px">' + statsLine + '</p></div>' +
-      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent activity</h3><p class="ui-mod-note">The latest changes from schools — student records and assessments.</p></div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent activity</h3></div>' +
         '<a class="btn-link" href="' + href('history', {}) + '">View all →</a></div><div id="cr-recent">' + recent + '</div></div>';
 
     body.querySelectorAll('[data-qa]').forEach(function (b) { b.addEventListener('click', function () { quickAction(b.dataset.qa); }); });
@@ -645,11 +645,11 @@
       ? gRows.map(function (x) { return plRow({ link: 'data-open-group="' + x.g.id + '"', title: esc(x.g.name), detail: (x.avg == null ? 'No results yet' : x.avg + '% average') + ' · ' + x.n + ' schools · ' + x.students.toLocaleString() + ' students' + (x.low ? ' · lowest ' + esc(x.low.name) + ' ' + x.low.completion + '%' : '') }); }).join('')
       : ranked.map(function (s) { return plRow({ link: 'data-open="' + s.id + '"', title: esc(s.name), chip: statusChip(s.status), detail: (s.completion ? s.completion + '% complete' : 'No results yet') + (s.groupId === 'g-none' ? '' : ' · ' + esc(s.groupName)) + ' · ' + esc(s.region) }); }).join('');
 
-    body.innerHTML = screenHead('Analytics', 'Rollups across the whole portfolio — outcomes, engagement and rollout.') +
+    body.innerHTML = screenHead('Analytics') +
       '<div class="tl-grid two">' +
         '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Outcomes by region</h3><p class="ui-mod-note">Average band across schools with results.</p></div></div>' + regionCard +
           '<div class="ui-legend"><span><i style="background:var(--green-500)"></i>Social-Emotional</span><span><i style="background:var(--cyan-500)"></i>Cognitive</span></div></div>' +
-        '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Board mix</h3><p class="ui-mod-note">Partner schools by curriculum board.</p></div></div>' + boardRows + '</div>' +
+        '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Board mix</h3></div></div>' + boardRows + '</div>' +
       '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Completion ranking</h3><p class="ui-mod-note">' +
         (rankByGroup ? 'School groups by the average completion of their schools with results, highest first.' : 'Assessment completion, highest first.') + '</p></div>' + rankSeg + '</div>' +
@@ -730,16 +730,22 @@
       '<button class="' + (!schState.country ? 'on' : '') + '" data-country="" title="Schools in every country">All countries <b>' + inTab.length + '</b></button>' +
       countries.map(function (c) { return '<button class="' + (schState.country === c ? 'on' : '') + '" data-country="' + esc(c) + '" title="Only schools in ' + esc(c) + '">' + esc(c) + ' <b>' + countryCounts[c] + '</b></button>'; }).join('') +
       '</div>' : '';
-    body.innerHTML = screenHead('All Schools', ORG.activeSchools().filter(inCountry).length + ' active partner schools ' + (schState.country ? 'in ' + esc(schState.country) + '.' : 'across the portfolio.'),
-      '<button class="btn btn-outline btn-sm" id="sch-csv" title="Download every school in this view (tab, country and search apply) as a CSV.">↓ Schools CSV</button>' +
-      '<button class="btn btn-outline btn-sm" id="sch-newgroup">New Group</button><button class="btn btn-primary btn-sm" id="sch-add">+ Add School</button>') +
-      '<div class="ui-tabs">' +
+    body.innerHTML = '<div class="tl-sch-page">' + screenHead('All Schools', ORG.activeSchools().filter(inCountry).length + ' active partner schools ' + (schState.country ? 'in ' + esc(schState.country) + '.' : 'across the portfolio.'),
+      '<span id="sch-acts" class="pl-acts-m pl-desk" style="display:contents"><button class="btn btn-outline btn-sm" id="sch-csv" title="Download every school in this view (tab, country and search apply) as a CSV." aria-label="Schools CSV">↓ Schools CSV</button>' +
+      '<button class="btn btn-outline btn-sm" id="sch-newgroup">New Group</button><button class="btn btn-primary btn-sm pl-keep" id="sch-add">+ Add School</button>' +
+      '<span class="pl-acts" hidden><button data-view="' + (schState.view === 'grid' ? 'list' : 'grid') + '">' + (schState.view === 'grid' ? 'Show as a list' : 'Show as cards') + '</button></span></span>') +
+      // Phones: Active / Archived, Add and everything else on one line (the rest sits behind ⋯).
+      '<div class="tl-sch-bar pl-phone"><div class="ui-seg" role="group" aria-label="Show">' +
+        '<button class="' + (tabActive ? 'on' : '') + '" data-tab="active">Active · ' + counts.active + '</button><button class="' + (!tabActive ? 'on' : '') + '" data-tab="archived">Archived · ' + counts.archived + '</button></div>' +
+        '<button type="button" class="btn btn-primary btn-sm" data-sch-addm>＋ Add</button>' +
+        '<button type="button" class="pl-more" data-plmore="All Schools" data-plfrom="#sch-acts" aria-label="More: New group, Schools CSV">⋯</button></div>' +
+      '<div class="ui-tabs pl-desk">' +
         '<button class="ui-tab' + (tabActive ? ' on' : '') + '" data-tab="active">Active <b>' + counts.active + '</b></button>' +
         '<button class="ui-tab' + (!tabActive ? ' on' : '') + '" data-tab="archived">Archived <b>' + counts.archived + '</b></button>' +
         '<div class="tl-viewtoggle"><button class="' + (schState.view === 'grid' ? 'on' : '') + '" data-view="grid" title="Grid">▦</button><button class="' + (schState.view === 'list' ? 'on' : '') + '" data-view="list" title="List">☰</button></div>' +
       '</div>' + flagBanner +
       '<div class="tl-filters">' + countrySeg + '<input class="input grow tl-filter-q" id="sch-q" placeholder="Search by school name or code…" value="' + esc(schState.q) + '"></div>' +
-      content;
+      content + '</div>';
 
     body.querySelectorAll('[data-group-open]').forEach(function (b) { b.addEventListener('click', function (ev) { if (ev.target.dataset.gmenu) return; go('group', { id: b.dataset.groupOpen }); }); });
     body.querySelectorAll('[data-gmenu]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); openGroupMenu(b.dataset.gmenu); }); });
@@ -750,6 +756,7 @@
     wireIssueChips(body);
     var cf = body.querySelector('#sch-clearflag'); if (cf) cf.addEventListener('click', function () { schState.flag = ''; go('schools', {}); SCREEN.schools({}, body); });
     var addb = body.querySelector('#sch-add'); if (addb) addb.addEventListener('click', openAddSchool);
+    var addm = body.querySelector('[data-sch-addm]'); if (addm) addm.addEventListener('click', openAddSchool);
     var ng = body.querySelector('#sch-newgroup'); if (ng) ng.addEventListener('click', openNewGroup);
     var csvb = body.querySelector('#sch-csv'); if (csvb) csvb.addEventListener('click', function () {
       var name = 'schools-' + (tabActive ? 'active' : 'archived') + (schState.country ? '-' + schState.country.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '') + '.csv';
@@ -1729,7 +1736,7 @@
       var countryOpts = ADD_COUNTRIES.map(function (c) { return '<option value="' + esc(c) + '"' + (c === d.country ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
       var groupOpts = ORG.activeGroups().map(function (g) { return '<option value="' + g.id + '"' + (g.id === d.groupId ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') +
         '<option value="__new">＋ New group…</option>';
-      return '<p class="tl-muted">The basics. Name, board, country and city are required — everything can change later.</p>' +
+      return '<p class="tl-muted">Everything can change later.</p>' +
         '<div class="tl-stack">' +
           '<label class="field">School name *<input class="input" id="ws-name" placeholder="e.g. Harmony High" value="' + esc(d.name) + '"></label>' +
           boardPickerHtml('ws', d.boardPick) +
@@ -1771,7 +1778,7 @@
           (r ? '<div class="ui-note info mt-2"><span aria-hidden="true">🔍</span><span>We read these dates from the file — check them against the real calendar. You can change any of them later.</span></div>' +
             yearFields + '<div class="ws-calread">' + list('Terms', r.terms) + list('Exams', r.exams) + list('Holidays', r.holidays) + '</div>' : '');
       }
-      return '<div class="field"><span>Academic year &amp; school calendar *</span><span class="tl-muted" style="font-weight:400">Add it one way — you can change the dates later.</span>' +
+      return '<div class="field"><span>Academic year &amp; school calendar *</span><span class="tl-muted" style="font-weight:400">You can change the dates later.</span>' +
         '<div class="ws-calopts">' + opt('manual', 'Enter dates manually', 'Type the year’s start and end') + opt('pdf', 'Upload a PDF', 'We read the dates for you to check') + opt('photo', 'Upload a photo', 'A clear photo of the calendar') + '</div>' +
         body + '</div>';
     }
@@ -1841,8 +1848,7 @@
       var grp = (ORG.groups.find(function (g) { return g.id === d.groupId; }) || ORG.groups[0]).name;
       function row(k, v) { return '<div class="ws-rev-row"><span>' + esc(k) + '</span><b>' + esc(v || '—') + '</b></div>'; }
       var admin = d.admin.email ? (d.admin.name || d.admin.email) + ' · ' + d.admin.email : 'None — add later';
-      return '<p class="tl-muted">Check the details, then create. You\'ll land on the new school\'s page.</p>' +
-        '<div class="ws-review">' +
+      return '<div class="ws-review">' +
           row('Name', d.name) + row('Board', d.boards.join(', ')) +
           row('Location', [d.city, d.country].filter(Boolean).join(', ')) +
           row('Group', grp) + row('Joined', fmtJoined(d.joined)) +
@@ -2181,7 +2187,12 @@
 
   // Baseline / Midline / Endline cards from a school summary (hub + group drill-in).
   function phaseProgressHtml(d) {
-    return '<div class="tl-phases">' + d.assessment_progress.map(function (p) {
+    return '<div class="pl-phone tl-phrows">' + d.assessment_progress.map(function (p) {
+      var pc = p.completion != null ? pct(p.completion) : null;
+      return '<div class="tl-phrow"><div class="tl-phrow-h"><span class="pl-n">' + esc(p.phase) + '<span class="ui-chip ' + (!p.deployed ? 'muted' : p.status === 'Live' ? 'ok' : p.status === 'Ended' ? 'muted' : 'warn') + '">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</span></span>' +
+        (pc != null ? '<span class="pl-d">' + pc + '%' + (p.kidsTotal ? ' · ' + p.kidsDone + ' of ' + p.kidsTotal : '') + '</span>' : '') + '</div>' +
+        (pc != null ? '<div class="tl-phrow-bar"><i style="width:' + pc + '%"></i></div>' : '') + '</div>';
+    }).join('') + '</div><div class="tl-phases pl-desk">' + d.assessment_progress.map(function (p) {
       var tone = !p.deployed ? 'muted' : (p.status === 'Live' ? 'live' : (p.status === 'Ended' ? 'done' : 'sched'));
       return '<div class="tl-phase ' + tone + '"><div class="tp-name">' + esc(p.phase) + '</div>' +
         '<div class="tp-state"><span class="ui-chip ' + (!p.deployed ? 'muted' : p.status === 'Live' ? 'ok' : p.status === 'Ended' ? 'muted' : 'warn') + '">' + (p.deployed ? esc(p.status) : 'Not deployed') + '</span></div>' +
@@ -2287,8 +2298,7 @@
   var HUB = {};
   HUB.history = function (d, el) {
     var s = d.school;
-    el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3>' +
-        '<p class="ui-mod-note">Student records and assessments at this school — who changed what, and when.</p></div>' +
+    el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3></div>' +
         '<a class="btn-link" href="' + href('history', { school: s.id }) + '">Filter &amp; search →</a></div>' +
       histList(ORG.server.history([s.id], { limit: 40 }), { showSchool: false, empty: 'No changes recorded for this school yet.' }) + '</div>';
   };
@@ -2302,6 +2312,21 @@
           return '<div class="tl-tree-grade"><b>' + esc(g.grade) + '</b>' + baseTag(g.grade, g.base || inferBase(g.grade)) + body + '</div>';
         }).join('') + '</div>'
       : '<div class="ui-empty">No grades/sections yet.</div>';
+
+    // Phones: one two-line row per grade, each class with its teacher.
+    var A = tlUsesApi(s) ? window.TilliAPI : null, teacherOf = {};
+    if (A) A.teachersFor(s.id).forEach(function (t) { t.section_ids.forEach(function (id) { (teacherOf[id] = teacherOf[id] || []).push(t.name && t.name.indexOf('@') < 0 ? t.name : 'Name not given yet'); }); });
+    var structurePhone = d.structure.grades.length ? '<div class="pl-list pl-phone">' + d.structure.grades.map(function (g) {
+      var lines = g.sections.map(function (sec) {
+        var rm = roomFor(s.id, g.grade, sec.name);
+        var bits = [sec.name, rm ? rm.added + (rm.expected != null ? '/' + rm.expected : '') : sec.students];
+        if (rm && teacherOf[rm.section_id]) bits.push(teacherOf[rm.section_id].join(', '));
+        if (rm && rm.expected == null) bits.push('no size set');
+        if (rm && rm.pending) bits.push('+' + rm.pending + ' pending');
+        return '<span class="pl-d">' + esc(bits.join(' · ')) + '</span>';
+      }).join('') || '<span class="pl-d">No sections yet' + ((parseInt(g.students, 10) || 0) ? ' · ' + parseInt(g.students, 10) : '') + '</span>';
+      return plRow({ title: esc(g.grade), more: lines });
+    }).join('') + '</div>' : '';
 
     var progress = phaseProgressHtml(d);
     // F19: one line for the whole card instead of a tag on every class.
@@ -2317,17 +2342,23 @@
     // Live schools: outcomes come from the latest finished phase (any year), labelled
     // with that year + phase; the Year over year card follows from year 2.
     var yrs = schoolYears(s), latest = yrs ? latestOutcomes(s, yrs) : null;
+    // Nothing to show yet: on phones these become one short row each, not a whole card.
+    var noOutcomes = latest ? latest.sel == null && latest.cog == null : yrs ? true : s.sel == null && s.cog == null;
     var outcomes = GROUP ? '' : latest
-      ? outcomesCardHtml(latest.sel, latest.cog, 'Average skill score (0–100) · ' + latest.label + '.', 'span2')
-      : outcomesCardHtml(yrs ? null : s.sel, yrs ? null : s.cog, 'Average skill score (0–100) from this school’s latest results.', 'span2');
+      ? outcomesCardHtml(latest.sel, latest.cog, 'Average skill score (0–100) · ' + latest.label + '.', 'span2' + (noOutcomes ? ' pl-desk' : ''))
+      : outcomesCardHtml(yrs ? null : s.sel, yrs ? null : s.cog, 'Average skill score (0–100) from this school’s latest results.', 'span2' + (noOutcomes ? ' pl-desk' : ''));
+    var emptyRows = ((noOutcomes && !GROUP) ? plRow({ title: 'Outcomes', detail: 'Scores appear once Midline or Endline is complete' }) : '') +
+      (issues.length ? '' : plRow({ link: 'data-hubtab="issues"', title: 'Open issues', detail: 'None' }));
     var yoy = yrs && yrs.length > 1 ? yearOverYearHtml(s, yrs).replace('<div class="ui-card mt-gap">', '<div class="ui-card span2">')
       .replace('<h3 class="ui-mod-title">Year over year</h3>', '<h3 class="ui-mod-title">Year ' + yrs.length + ' with Tilli</h3>') : '';
     el.innerHTML = '<div class="tl-grid two">' +
-      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title" title="Each section shows children added / expected class size, e.g. B 0/2. Grey until the class is full, ✓ once every child is on the roster.">Structure</h3></div>' + structure + confirmLine + '</div>' +
-      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Onboarding</h3></div>' + flags + '</div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title" title="Each section shows children added / expected class size, e.g. B 0/2. Grey until the class is full, ✓ once every child is on the roster.">Structure</h3></div><div class="pl-desk">' + structure + '</div>' + structurePhone + (d.structure.grades.length ? '' : '<div class="pl-phone">' + structure + '</div>') + confirmLine + '</div>' +
+      // "On track" with nothing to act on only adds length on a phone.
+      '<div class="ui-card' + (d.flags.length ? '' : ' pl-desk') + '"><div class="ui-mod-h"><h3 class="ui-mod-title">Onboarding</h3></div>' + flags + '</div>' +
       '<div class="ui-card span2"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + progress + '</div>' +
       yoy + outcomes +
-      '<div class="ui-card span2"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Open issues</h3></div><button class="btn-link" data-hubtab="issues">View all →</button></div>' + issuesHtml + '</div>' +
+      '<div class="ui-card span2' + (issues.length ? '' : ' pl-desk') + '"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Open issues</h3></div><button class="btn-link" data-hubtab="issues">View all →</button></div>' + issuesHtml + '</div>' +
+      (emptyRows ? '<div class="ui-card span2 pl-phone tl-emptyrows">' + emptyRows + '</div>' : '') +
     '</div>';
     // [data-hubtab] triggers are wired by SCREEN.school's wireHubtabTriggers()
     // so they swap the section in place instead of re-rendering the screen.
@@ -2359,6 +2390,10 @@
       var st = r && r.current ? statusPill('Given', 'ok') : c ? statusPill(c.version !== cCfg.version ? 'Old version' : 'Withdrawn', 'warn') : statusPill('Not yet', 'warn');
       return '<td>' + st + '</td>' + cOpt.map(function (it) { return '<td>' + (c ? (c.items[it.id] ? 'Yes' : 'No') : '—') + '</td>'; }).join('');
     }
+    function consentOutstanding(adm) {
+      var emails = window.TilliAPI.parentsForStudent ? window.TilliAPI.parentsForStudent(s.id, adm) : [];
+      return !emails.some(function (e) { return cByEmail[e] && cByEmail[e].current; });
+    }
     function consentChip(adm) {
       var emails = window.TilliAPI.parentsForStudent ? window.TilliAPI.parentsForStudent(s.id, adm) : [];
       if (!emails.length) return ' <span class="ui-chip muted">No parent yet</span>';
@@ -2369,22 +2404,24 @@
     el.innerHTML = (waiting.length ? '<div class="ui-card tl-pendcard"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Waiting for approval</h3>' +
         '<p class="ui-mod-note">' + waiting.length + ' new student' + (waiting.length === 1 ? '' : 's') + ' added past the class size. They can already be assessed.</p></div></div>' +
         '<div id="stu-pending">' + pendingTableHtml(waiting, false) + '</div></div>' : '') +
-      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3><p class="ui-mod-note">' + (roster.length ? roster.length + ' students · ' : '') + 'this school\'s roster.</p></div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Student Directory</h3>' + (roster.length ? '<p class="ui-mod-note">' + roster.length + (roster.length === 1 ? ' student' : ' students') + '</p>' : '') + '</div>' +
         '<div class="tl-student-actions"><div class="tl-inline-actions pl-acts-m"><button class="btn btn-outline btn-sm pl-keep" data-add-st>+ Add Students</button>' + (hasConsent ? '<button class="btn btn-outline btn-sm" data-consent-open title="Who agreed to the parent consent, when, and to which wording — Tilli team only">Parent consent</button>' : '') + '<button class="btn btn-outline btn-sm" data-merge-here>Merge Students</button>' +
           '<button class="btn btn-outline btn-sm" data-hubtab="issues" title="Students deleted at this school, who deleted them and when (Issues & Logs tab).">Deletion logs</button></div><button type="button" class="pl-more pl-phone" data-plmore="Students" data-plfrom=".tl-student-actions" aria-label="More student actions">⋯</button></div></div>' +
-      (roster.length ? '<div class="tl-filters"><input class="input grow tl-filter-q" id="stu-q" type="search" placeholder="Search by name, admission # or grade/section…" aria-label="Search students" value="' + esc(stuPager.schoolId === s.id ? stuPager.q : '') + '"></div><div id="stu-page"></div>'
+      (roster.length ? '<div class="tl-filters"><input class="input grow tl-filter-q" id="stu-q" type="search" placeholder="Search by name, admission # or grade/section…" aria-label="Search students" value="' + esc(stuPager.schoolId === s.id ? stuPager.q : '') + '">' +
+          (hasConsent ? '<button type="button" class="ui-filterchip' + (stuPager.schoolId === s.id && stuPager.consent ? ' on' : '') + '" data-stu-consent aria-pressed="' + !!(stuPager.schoolId === s.id && stuPager.consent) + '" title="Children whose parent hasn’t agreed yet, including children with no parent linked">Consent missing <b>' + roster.filter(function (r) { return consentOutstanding(r.admission); }).length + '</b></button>' : '') + '</div><div id="stu-page"></div>'
         : '<div class="ui-empty">No students yet — add students or import a CSV.</div>') + '</div>';
     if (waiting.length) wirePendingTable(el.querySelector('#stu-pending'), waiting, function () { go('school', { id: s.id, tab: 'students' }); });
     el.querySelector('[data-add-st]').addEventListener('click', function () { go('add-students', { school: s.id }); });
     el.querySelector('[data-merge-here]').addEventListener('click', function () { go('merge', { school: s.id }); });
     // [data-hubtab] Deletion logs button is wired in place by SCREEN.school.
     // Only the table + pager re-render when paging, so that button stays wired.
-    if (stuPager.schoolId !== s.id) { stuPager.schoolId = s.id; stuPager.page = 1; stuPager.q = ''; }
+    if (stuPager.schoolId !== s.id) { stuPager.schoolId = s.id; stuPager.page = 1; stuPager.q = ''; stuPager.consent = false; }
     var mount = el.querySelector('#stu-page');
     function drawPage() {
       // Search matches any word of the query against name, admission # and grade/section.
       var words = stuPager.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
       var list = words.length ? roster.filter(function (r) { var hay = (r.name + ' ' + r.admission + ' ' + r.gradeSection).toLowerCase(); return words.every(function (w) { return hay.indexOf(w) >= 0; }); }) : roster;
+      if (hasConsent && stuPager.consent) list = list.filter(function (r) { return consentOutstanding(r.admission); });
       var pages = Math.max(1, Math.ceil(list.length / stuPager.size));
       stuPager.page = Math.min(Math.max(1, stuPager.page), pages);
       var start = (stuPager.page - 1) * stuPager.size;
@@ -2395,7 +2432,7 @@
           '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-edit-st="' + esc(r.admission) + '" title="Edit ' + esc(r.name) + '" aria-label="Edit ' + esc(r.name) + '">' + ICONS.edit + '</button>' +
           '<button class="tl-rowact danger" data-del-st="' + esc(r.admission) + '" data-nm="' + esc(r.name) + '" title="Delete ' + esc(r.name) + '" aria-label="Delete ' + esc(r.name) + '">' + ICONS.trash + '</button></div></td></tr>';
       }).join('');
-      if (!list.length) { mount.innerHTML = '<div class="ui-empty">No students match “' + esc(stuPager.q.trim()) + '”.</div>'; return; }
+      if (!list.length) { mount.innerHTML = '<div class="ui-empty">' + (words.length ? 'No students match “' + esc(stuPager.q.trim()) + '”.' : 'Every child here has consent.') + '</div>'; return; }
       var phoneRows = list.slice(start, start + stuPager.size).map(function (r) {
         return plRow({ title: '<button class="btn-link" data-open-student="' + esc(r.admission) + '">' + esc(r.name) + '</button>',
           chip: r.status === 'Pending' ? ' <span class="ui-chip warn">Waiting for approval</span>' : hasConsent ? consentChip(r.admission) : '',
@@ -2418,6 +2455,12 @@
     }
     var sq = el.querySelector('#stu-q');
     if (sq) sq.addEventListener('input', function () { stuPager.q = sq.value; stuPager.page = 1; drawPage(); });
+    var sc = el.querySelector('[data-stu-consent]');
+    if (sc) sc.addEventListener('click', function () {
+      stuPager.consent = !stuPager.consent; stuPager.page = 1;
+      sc.classList.toggle('on', stuPager.consent); sc.setAttribute('aria-pressed', String(stuPager.consent));
+      drawPage();
+    });
     if (mount) drawPage();
     // Parent consent detail (parent email, wording version, date, CSV) — Tilli team only,
     // in a pop-up from the directory header instead of a second card on the page.
@@ -2603,7 +2646,7 @@
     }); });
     el.querySelectorAll('[data-unjoin]').forEach(function (b) { b.addEventListener('click', function () {
       gated({ title: 'Remove teacher', danger: true, confirmLabel: 'Remove',
-        body: '<p>Remove <b>' + esc(b.dataset.unjoinName) + '</b> from ' + esc(s.name) + '? They lose access to the school’s classes and children at once.</p>',
+        body: '<p>Remove <b>' + esc(b.dataset.unjoinName) + '</b> from ' + esc(s.name) + '?</p>',
         audit: { action: 'user.remove', entity: b.dataset.unjoin, entityType: 'user', schoolId: s.id },
         onConfirm: function () {
           var r = API.removeTeacherAccess(s.id, b.dataset.unjoin, me.email);
@@ -2680,7 +2723,7 @@
       mount.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () {
         var p = byEmail(b.dataset.remove);
         gated({ title: 'Remove from school', danger: true, confirmLabel: 'Remove',
-          body: '<p>Remove <b>' + esc(p.name) + '</b> from ' + esc(s.name) + '? ' + (p.isAdmin ? 'They lose access to the school dashboard at once.' : 'They lose access to the school’s classes and children at once.') + '</p>',
+          body: '<p>Remove <b>' + esc(p.name) + '</b> from ' + esc(s.name) + '?</p>',
           audit: { action: 'user.remove', entity: p.email, entityType: 'user', schoolId: s.id },
           onConfirm: function () {
             if (!apiS) { toast('Removed from school.'); return; }
@@ -3858,12 +3901,12 @@
 
     var bodyHtml = sub === 'logs' && tlUsesApi(s) ? '<div id="hub-log"></div>'
       : sub === 'logs'
-      ? '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Assessment logs</h3><p class="ui-mod-note">Who has completed what, and when — teachers first, then each child.</p></div>' +
+      ? '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Assessment logs</h3></div>' +
           '<button class="btn btn-outline btn-sm" data-dlcsv title="Download this school’s assessment results as a CSV">Results CSV</button></div></div>' +
         '<div id="hub-teacherlog"></div><div id="hub-studentlog"></div>'
       : sub === 'sessions' ? sessionsCardHtml(s)
       : '<div class="ui-card tl-planner-card"><div class="dep-chains" id="dep-planner"></div></div>' +
-        '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Link to share</h3><p class="ui-mod-note">Send this to ' + esc(s.name) + '’s parents. Staff join with the school code or their invite; the student-assessment link is on each teacher’s dashboard.</p></div></div>' + links + grpNote + '</div>' +
+        '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Link to share</h3><p class="ui-mod-note">Send this to parents. Staff join with the school code or an invite.</p></div></div>' + links + grpNote + '</div>' +
         (yrs ? yearOverYearHtml(s, yrs) : '');
     el.innerHTML = subBar + bodyHtml;
     if (yearBar && sub === 'plan') { el.querySelector('.tl-subtabs').insertAdjacentHTML('afterend', calendarClashHtml(s) ); el.querySelector('.tl-subtabs').insertAdjacentHTML('afterend', yearBar); wireYearBar(s, d, el); }
@@ -3905,9 +3948,11 @@
       return '<tr><td>' + esc(x.deletedAt) + '</td><td class="name">' + esc(x.studentName) + '<small class="mono">' + esc(x.code) + '</small></td><td>' + esc(x.gradeSection) + '</td><td>' + esc(x.deletedBy) + '</td></tr>';
     }).join('') : '<tr><td colspan="4"><div class="ui-empty">No deletions for this school.</div></td></tr>';
     el.innerHTML = '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Issue reports</h3></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Reporter</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th></tr></thead><tbody>' + iRows + '</tbody></table></div></div>' +
+        '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-640"><thead><tr><th>Reporter</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th></tr></thead><tbody>' + iRows + '</tbody></table></div>' +
+        '<div class="pl-phone">' + (d.issues.length ? '<div class="pl-list">' + d.issues.map(function (i) { return plRow({ title: esc(i.reporter), chip: issueStatusPill(i.status), detail: esc([i.role, i.page, i.device, i.date].filter(Boolean).join(' · ')) }); }).join('') + '</div>' : '<div class="ui-empty">No issues for this school.</div>') + '</div></div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><h3 class="ui-mod-title">Deletion logs</h3></div>' +
-        '<div class="ui-tablewrap"><table class="ui-table mw-560"><thead><tr><th>Deleted at</th><th>Student</th><th>Grade/Section</th><th>Deleted by</th></tr></thead><tbody>' + dRows + '</tbody></table></div></div>';
+        '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-560"><thead><tr><th>Deleted at</th><th>Student</th><th>Grade/Section</th><th>Deleted by</th></tr></thead><tbody>' + dRows + '</tbody></table></div>' +
+        '<div class="pl-phone">' + (d.deletions.length ? '<div class="pl-list">' + d.deletions.map(function (x) { return plRow({ title: esc(x.studentName), detail: esc([x.code, x.gradeSection, x.deletedAt, 'by ' + x.deletedBy].join(' · ')) }); }).join('') + '</div>' : '<div class="ui-empty">No deletions for this school.</div>') + '</div></div>';
   };
 
   HUB.settings = function (d, el) {
@@ -3918,7 +3963,7 @@
       '<button class="btn btn-outline block" data-set="group">Group assignment</button>' +
       '<button class="btn btn-danger block" data-set="archive">' + (s.archived ? 'Un-archive school' : 'Archive school') + '</button>' +
       (s.archived ? '<button class="btn btn-danger block" data-set="delete">Delete school</button>' : '') + '</div>' +
-      '<p class="tl-muted mt-3">As Super Admin you have full access — every action here runs and is written to the audit trail. A role layer can restrict these later.</p></div>';
+      '<p class="tl-muted mt-3">Every action here is written to the audit trail.</p></div>';
     el.querySelectorAll('[data-set]').forEach(function (b) { b.addEventListener('click', function () {
       var k = b.dataset.set;
       if (k === 'archive') archiveSchool(s);
@@ -4227,8 +4272,7 @@
     return '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Multi-perspective view</h3>' +
         '<p class="ui-mod-note">The same skills rated by teacher, parent and the child directly — the gaps between them are often the most useful part.</p></div></div>' +
         '<div class="sr-radar-wrap">' + srRadar(axes, series) + legend + '</div></div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Gap Analysis</h3>' +
-        '<p class="ui-mod-note">Discrepancies between perspectives — large gaps may indicate areas needing attention.</p></div></div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Gap Analysis</h3></div></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Skill</th><th>Teacher</th><th>Parent</th><th>Student Direct</th><th>Gap</th><th>Status</th></tr></thead><tbody>' + gapRows + '</tbody></table></div></div>';
   }
 
@@ -4370,7 +4414,7 @@
 
     var sc = scopeId ? ORG.byId(scopeId) : null;
     body.innerHTML = (sc ? crumbs([{ label: 'All Schools', screen: 'schools' }, { label: sc.name, screen: 'school', params: { id: sc.id, tab: 'students' } }, { label: 'Merge Students' }]) : '') +
-      screenHead('Merge Students', 'Deduplicate profiles. Suggestions never auto-merge — always confirm.' + (sc ? ' Scoped to ' + sc.name + '.' : '')) +
+      screenHead('Merge Students', 'Suggestions never merge on their own.' + (sc ? ' Scoped to ' + sc.name + '.' : '')) +
       '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Suggested duplicates</h3><p class="ui-mod-note">Same admission # or same normalised name within a school.</p></div></div>' + suggHtml + '</div>' +
       '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Merge history</h3><p class="ui-mod-note">Rows marked <span class="ui-tag plain danger tl-smell">0 re-linked</span> moved no assessment data.</p></div></div>' +
         '<div class="ui-tablewrap"><table class="ui-table mw-640"><thead><tr><th>Date</th><th>School</th><th>Master (kept)</th><th>Duplicate (deleted)</th><th>Re-linked</th><th>Skipped</th></tr></thead><tbody>' + history + '</tbody></table></div></div>';
@@ -4416,7 +4460,7 @@
     var rows = ORG.server.studentDirectory();
     var q = (params.q || '').toLowerCase();
     var filtered = rows.filter(function (r) { return !q || (r.name + ' ' + r.admission).toLowerCase().indexOf(q) >= 0; });
-    body.innerHTML = screenHead('Student Directory', 'Global, cross-school lookup. Read-only — student writes happen in the school context.') +
+    body.innerHTML = screenHead('Student Directory', 'Read-only. Edit a student from their school.') +
       '<div class="ui-card"><div class="tl-filters"><input class="input grow tl-filter-q" id="dir-q" placeholder="Search by name or admission #…" value="' + esc(params.q || '') + '"></div>' +
       (filtered.length ? '<div class="ui-tablewrap"><table class="ui-table mw-560"><thead><tr><th>Name</th><th>Admission #</th><th>School</th><th>Grade/Section</th></tr></thead><tbody>' +
         filtered.map(function (r) { var s = ORG.byId(r.schoolId); return '<tr class="clickable" data-open="' + r.schoolId + '"><td class="name">' + esc(r.name) + '</td><td class="mono">' + esc(r.admission) + '</td><td>' + (s ? esc(s.name) : '—') + '</td><td>' + esc(r.gradeSection) + '</td></tr>'; }).join('') +
@@ -4581,8 +4625,14 @@
         '<td class="r"><div class="tl-rowacts"><button class="tl-rowact" data-resend="' + esc(i.email) + '" title="Resend invitation" aria-label="Resend invitation to ' + esc(i.email) + '">' + ICONS.resend + '</button>' +
           '<button class="tl-rowact danger" data-revoke="' + esc(i.email) + '" title="Revoke invitation" aria-label="Revoke invitation to ' + esc(i.email) + '">' + ICONS.revoke + '</button></div></td></tr>';
     }).join('') || '<tr><td colspan="8"><div class="ui-empty">No invitations.</div></td></tr>';
+    var invPhone = '<div class="pl-phone">' + (list.length ? '<div class="pl-list">' + list.map(function (i) {
+      var sc = i.schoolId ? ORG.byId(i.schoolId) : null, m = { 'Activated': 'ok', 'Account Created': 'sched', 'Expired': 'danger' };
+      return plRow({ title: '<button class="btn-link" data-inv-detail="' + esc(i.email) + '">' + esc(i.name) + '</button>', chip: statusPill(i.status === 'Account Created' ? 'Invited' : (INV_LABEL[i.status] || i.status), m[i.status] || ''),
+        detail: esc([i.role, sc ? sc.name : '', i.status === 'Activated' ? '' : 'expires ' + fmtJoined(i.expires)].filter(Boolean).join(' · ')),
+        end: plMore('Actions for ' + i.name, '<button data-resend="' + esc(i.email) + '" aria-label="Resend invitation">' + ICONS.resend + '</button><button class="danger" data-revoke="' + esc(i.email) + '" aria-label="Revoke invitation">' + ICONS.revoke + '</button>') });
+    }).join('') + '</div>' : '<div class="ui-empty">No invitations.</div>') + '</div>';
     body.innerHTML = peopleHead('invitations', list.length + ' invitations' + (attn ? ' needing attention' : '') + (filtered ? ' (filtered)' : '') + '.') + banner +
-      '<div class="ui-card">' + peopleFiltersHtml('invitations', f) + '<div class="ui-tablewrap"><table class="ui-table mw-820"><thead><tr><th>Recipient</th><th>Role</th><th>School</th><th>Status</th><th>Delivery</th><th>Created</th><th>Expires</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+      '<div class="ui-card">' + peopleFiltersHtml('invitations', f) + invPhone + '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-820"><thead><tr><th>Recipient</th><th>Role</th><th>School</th><th>Status</th><th>Delivery</th><th>Created</th><th>Expires</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     wirePeopleTabs(body);
     wirePeopleFilters(body, 'invitations', attn ? { filter: 'attention' } : {}, function (np) { SCREEN.invitations(np, body); });
     var c = body.querySelector('#inv-clear'); if (c) c.addEventListener('click', function () { go('invitations', readPeopleFilters(body)); });
@@ -4601,7 +4651,7 @@
     var roleOpts = invRoles.map(function (r) { return '<option value="' + r + '"' + (r === defRole ? ' selected' : '') + '>' + esc(r) + '</option>'; }).join('');
     var groupOpts = '<option value="">— Select group —</option>' + ORG.activeGroups().filter(function (g) { return g.id !== 'g-none'; })
       .map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('');
-    openModal('New invitation', '<p class="tl-muted">Send an onboarding invite. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
+    openModal('New invitation', '<p class="tl-muted"><small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
       '<label class="field">Recipient email<input class="input" id="iv-email" type="email" placeholder="name@school.edu"></label>' +
       '<label class="field">Role<select class="select" id="iv-role">' + roleOpts + '</select>' +
         '<span class="tl-rolecap" id="iv-rolecap">' + esc(roleCap(defRole)) + '</span></label>' +
@@ -4708,7 +4758,7 @@
   // Super Admin can pass it to the recipient. The recipient signs in with this
   // + their email, then is forced to set their own password on first login.
   function showInviteCredentials(res) {
-    openModal('Invitation created', '<p class="tl-muted">Share these one-time credentials with <b>' + esc(res.email) + '</b>. They\'ll sign in and set their own password.</p>' +
+    openModal('Invitation created', '<p class="tl-muted">Share these one-time credentials with <b>' + esc(res.email) + '</b>.</p>' +
       '<div class="tl-stack mt-3">' +
         '<div class="ws-rev-row"><span>Email</span><b class="mono">' + esc(res.email) + '</b></div>' +
         '<div class="ws-rev-row"><span>Temporary password</span><b class="mono" id="iv-temp">' + esc(res.tempPassword) + '</b></div>' +
@@ -4762,16 +4812,21 @@
     }).join('') || '<tr><td colspan="7"><div class="ui-empty">No issues in this view.</div></td></tr>';
 
     var crashGroup = crashes.length ? '<div class="ui-card mt-gap"><details class="tl-crashes"><summary><b>' + crashes.length + '</b> auto-crash reports · grouped (' + esc(crashes[0].crashSig) + ')</summary>' +
-      '<div class="ui-tablewrap"><table class="ui-table mw-560"><thead><tr><th>Device</th><th>Page</th><th>Date</th><th>School</th></tr></thead><tbody>' +
+      '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-560"><thead><tr><th>Device</th><th>Page</th><th>Date</th><th>School</th></tr></thead><tbody>' +
         crashes.map(function (c) { var s = ORG.byId(c.schoolId); return '<tr><td>' + esc(c.device) + '</td><td>' + esc(c.page) + '</td><td>' + esc(c.date) + '</td><td>' + (s ? esc(s.name) : '—') + '</td></tr>'; }).join('') +
-      '</tbody></table></div></details></div>' : '';
+      '</tbody></table></div><div class="pl-list pl-phone">' + crashes.map(function (c) { var s = ORG.byId(c.schoolId); return plRow({ title: esc(c.device), detail: esc([c.page, c.date, s ? s.name : ''].filter(Boolean).join(' · ')) }); }).join('') + '</div></details></div>' : '';
+    var issuesPhone = '<div class="pl-phone">' + (list.length ? '<div class="pl-list">' + list.slice(start, start + issuesPager.size).map(function (i) {
+      var sc = ORG.byId(i.schoolId);
+      return plRow({ title: esc(i.reporter), chip: issueStatusPill(i.status), detail: esc([sc ? sc.name : '', i.page, i.date].filter(Boolean).join(' · ')),
+        end: plMore('Actions for ' + i.reporter, '<button data-status="' + i.id + '">Change status</button>') });
+    }).join('') + '</div>' : '<div class="ui-empty">No issues in this view.</div>') + '</div>';
 
     var schName = schF && ORG.byId(schF) ? ORG.byId(schF).name : '';
     body.innerHTML = screenHead('Issue Reports', counts.open + ' open · ' + crashes.length + ' auto-crash grouped' + (schName ? ' · ' + esc(schName) : '') + '.') +
       strip +
-      '<div class="ui-card"><div class="tl-filters">' + schoolSel + (schF ? '<button class="btn-link" id="is-clear">Clear school filter</button>' : '') + '</div><div class="ui-tabs">' +
+      '<div class="ui-card"><div class="tl-filters">' + schoolSel + (schF ? '<button class="btn-link" id="is-clear">Clear school filter</button>' : '') + '</div><div class="ui-tabs tl-issue-tabs">' +
         ['all', 'open', 'investigating', 'resolved'].map(function (k) { return '<button class="ui-tab' + (st === k ? ' on' : '') + '" data-istab="' + k + '">' + k.charAt(0).toUpperCase() + k.slice(1) + ' <b>' + (k === 'all' ? counts.all : counts[k]) + '</b></button>'; }).join('') + '</div>' +
-        '<div id="is-page"><div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>Reporter</th><th>School</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<div id="is-page">' + issuesPhone + '<div class="ui-tablewrap pl-desk"><table class="ui-table mw-760"><thead><tr><th>Reporter</th><th>School</th><th>Page</th><th>Device</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
         (list.length ? pagerHtml(list.length, issuesPager.page, issuesPager.size, st === 'all' ? 'issues' : st + ' issues') : '') + '</div></div>' +
       crashGroup;
     var im = body.querySelector('#is-page');
@@ -4800,7 +4855,7 @@
   SCREEN.deployments = function (params, body) {
     var tab = params.tab === 'results' ? 'results' : 'list';
     var panels = { list: depList, results: depResults };
-    body.innerHTML = screenHead('Deployments', 'Deploy assessments to schools and read their responses.') +
+    body.innerHTML = screenHead('Deployments') +
       '<div class="ui-tabs">' +
         '<button class="ui-tab' + (tab === 'list' ? ' on' : '') + '" data-deptab="list">Deployments <b>' + ORG.deployments.length + '</b></button>' +
         '<button class="ui-tab' + (tab === 'results' ? ' on' : '') + '" data-deptab="results">Results <b>' + ORG.results.length + '</b></button>' +
@@ -5441,7 +5496,7 @@
     var al = body.querySelector('[data-addlang]'); if (al) al.addEventListener('click', function () {
       var left = TB_LANGS.filter(function (l) { return t.langs.indexOf(l) < 0; });
       if (!left.length) { toast('Every language is already added.'); return; }
-      openModal('Add a language', '<p class="tl-muted">Translate this template’s text. Options, scores and settings stay shared.</p><label class="field">Language<select class="select" id="tb-newlang">' +
+      openModal('Add a language', '<p class="tl-muted">Options, scores and settings stay shared.</p><label class="field">Language<select class="select" id="tb-newlang">' +
         left.map(function (l) { return '<option>' + esc(l) + '</option>'; }).join('') + '</select></label>', function (close) {
           var l = document.getElementById('tb-newlang').value; t.langs.push(l); tbState.lang = l; saved(); close(); redraw();
         }, 'Add language');
@@ -5718,10 +5773,10 @@
     body.innerHTML = screenHead(GROUP.name, schools.length + ' school' + (schools.length === 1 ? '' : 's') + ' in your group — what\'s happening, and what changed.') +
       '<div class="tl-kpis four">' + kpi(schools.length, 'Schools') + kpi(sum(schools, function (s) { return s.students; }).toLocaleString(), 'Students') +
         kpi(sum(schools, function (s) { return s.staff; }).toLocaleString(), 'Staff') + kpi(avg + '%', 'Avg. completion') + '</div>' +
-      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Schools</h3><p class="ui-mod-note">Open a school to see its assessment progress and change history.</p></div></div>' +
+      '<div class="ui-card"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Schools</h3></div></div>' +
         (rows ? '<div class="ui-tablewrap"><table class="ui-table mw-760"><thead><tr><th>School</th><th>Status</th><th>Students</th><th>Completion</th><th>Last updated</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
               : '<div class="ui-empty">No schools in this group yet.</div>') + '</div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent changes</h3><p class="ui-mod-note">Latest student-record and assessment changes across the group.</p></div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Recent changes</h3></div>' +
         '<a class="btn-link" href="' + href('history', {}) + '">View all →</a></div>' +
         histList(ORG.server.history(scopeSchoolIds(), { limit: 8 }), { empty: 'No changes recorded in this group yet.' }) + '</div>';
     body.querySelectorAll('[data-gopen]').forEach(function (tr) { tr.addEventListener('click', function () { go('gschool', { id: tr.dataset.gopen }); }); });
@@ -5743,7 +5798,7 @@
         (dash ? '<div class="tl-hub-actions">' + dash + '</div>' : '') + '</div>' +
       '<div class="tl-kpis four mt-3">' + kpi(s.gradeCount, 'Grades') + kpi(s.sectionCount, 'Sections') + kpi(s.students.toLocaleString(), 'Students') + kpi(s.staff, 'Staff') + '</div>' +
       '<div class="ui-card"><div class="ui-mod-h"><h3 class="ui-mod-title">Assessment progress</h3></div>' + phaseProgressHtml(d) + '</div>' +
-      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3><p class="ui-mod-note">Who changed what at this school, newest first.</p></div>' +
+      '<div class="ui-card mt-gap"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Change history</h3></div>' +
         '<a class="btn-link" href="' + href('history', { school: s.id }) + '">Filter &amp; search →</a></div>' +
         // The latest 10 (30 ran ~4,700px tall on a tablet); the full list is one tap away.
         histList(ORG.server.history([s.id], { limit: 10 }), { showSchool: false, empty: 'No changes recorded for this school yet.' }) +
@@ -5777,7 +5832,7 @@
   // Global search (spec: schools · students · users · invitations · deployments)
   SCREEN.search = function (params, body) {
     var q = (params.q || '').trim().toLowerCase();
-    if (!q) { body.innerHTML = screenHead('Search', 'Type a query in the top bar.') + '<div class="ui-card"><div class="ui-empty">Search schools, students, users, invitations and deployments.</div></div>'; return; }
+    if (!q) { body.innerHTML = screenHead('Search') + '<div class="ui-card"><div class="ui-empty">Search schools, students, users, invitations and deployments.</div></div>'; return; }
     var groups = [
       { title: 'Schools', rows: ORG.schools.filter(function (s) { return (s.name + ' ' + s.code).toLowerCase().indexOf(q) >= 0; }).slice(0, 8).map(function (s) { return { label: s.name, sub: s.code + ' · ' + s.groupName, go: ['school', { id: s.id }] }; }) },
       { title: 'Students', rows: ORG.server.studentDirectory().filter(function (r) { return (r.name + ' ' + r.admission).toLowerCase().indexOf(q) >= 0; }).slice(0, 8).map(function (r) { return { label: r.name, sub: r.admission, go: ['school', { id: r.schoolId, tab: 'students' }] }; }) },
@@ -6041,7 +6096,7 @@
     }).join('');
 
     b.innerHTML = crumbs([{ label: 'Templates', screen: 'templates' }, { label: 'Teacher Observation Form' }]) +
-      screenHead('Teacher Observation Form', 'An assessment template — shared question bank, published per phase. Deploy it from Deployments; read responses in Deployments → Results.') +
+      screenHead('Teacher Observation Form', 'Deploy it from Deployments; read responses in Deployments → Results.') +
       '<div class="tl-grid two">' +
         '<div class="ui-card span2"><div class="ui-mod-h"><div><h3 class="ui-mod-title">Question bank</h3><p class="ui-mod-note">' + obs.questions.length + ' active questions, shared across all phases.</p></div>' +
           '<div class="tl-inline-actions"><button class="btn btn-outline btn-sm" id="ob-preview">Preview</button><button class="btn btn-outline btn-sm" id="ob-dlq">Download CSV</button></div></div>' +
@@ -6342,7 +6397,7 @@
       '<ol class="tl-kb-steps">' + cur.steps.map(function (st) {
         return '<li>' + esc(st.text) + (st.link ? ' <a class="btn-link" href="' + href(st.link[0], st.link[1]) + '">Open ' + esc(st.link[2]) + ' →</a>' : '') + '</li>';
       }).join('') + '</ol></article>';
-    body.innerHTML = screenHead('Knowledge Base', 'Manuals and FAQs for the Tilli team — how to do the common jobs in this dashboard.') + kbTabs +
+    body.innerHTML = screenHead('Knowledge Base') + kbTabs +
       '<div class="tl-kb"><aside class="ui-card tl-kb-side"><input class="input tl-kb-q" id="kb-q" placeholder="Search manuals…" value="' + esc(q) + '" aria-label="Search manuals">' +
         '<nav class="tl-kb-list">' + (list.length ? list.map(function (m) {
           return '<a class="tl-kb-item' + (m.id === cur.id ? ' on' : '') + '" href="' + href('knowledge', { a: m.id, q: q }) + '"><b>' + esc(m.title) + '</b><span>' + esc(m.summary) + '</span></a>';
@@ -6361,7 +6416,7 @@
           var fs = list.filter(function (f) { return f.topic === t; }); if (!fs.length) return '';
           return '<div class="ui-card mb-gap"><h3 class="ui-mod-title tl-faq-topic">' + esc(t) + '</h3>' + fs.map(function (f) { return faqItemHtml(f, f.id === params.f); }).join('') + '</div>';
         }).join('');
-    body.innerHTML = screenHead('Knowledge Base', 'Manuals and FAQs for the Tilli team — how to do the common jobs in this dashboard.') + kbTabs +
+    body.innerHTML = screenHead('Knowledge Base') + kbTabs +
       '<div class="tl-filters"><input class="input grow tl-filter-q" id="faq-q" placeholder="Search the FAQ…" value="' + esc(q) + '" aria-label="Search the FAQ">' +
         '<a class="btn btn-outline btn-sm" href="' + href('ask-tilli', {}) + '" style="text-decoration:none">Can’t find it? Ask Tilli →</a></div>' + groups;
     var qi = body.querySelector('#faq-q');
@@ -7063,7 +7118,7 @@
   // ============================================================
   function openNewTemplate() {
     var audOpts = ['Teacher', 'Parent', 'Direct Assessment'].map(function (a) { return '<option>' + a + '</option>'; }).join('');
-    openModal('New template', '<p class="tl-muted">Create an assessment template. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
+    openModal('New template', '<p class="tl-muted"><small class="tl-auditnote">Recorded in the Audit Trail.</small></p><div class="tl-stack">' +
       '<label class="field">Title<input class="input" id="nt-title" placeholder="e.g. Endline · Parent Report"></label>' +
       '<label class="field">Audience<select class="select" id="nt-aud">' + audOpts + '</select></label>' +
 
@@ -7257,8 +7312,7 @@
           '<button class="btn-link" data-restore="' + i + '" title="Add this back for the school. It gets a fresh ' + ttl + ' days to receive students.">Add back</button></div>';
       }).join('') + '</div>' : '';
     openModal('Grades & sections · ' + s.name,
-      '<p class="tl-muted">Click a grade or section name to rename it — its base (in brackets) never changes. Empty grades and sections are removed automatically ' + ttl + ' days after they’re added; add them back below if needed.</p>' +
-      '<p class="tl-muted">Each section shows students added <b>of</b> the expected size. Teachers can add up to that size; past it — or with no size set — a new child needs an admin’s approval.</p>' +
+      '<p class="tl-muted">Empty grades and sections are removed after ' + ttl + ' days; add them back below. Past a class’s size, a new child needs an admin’s approval.</p>' +
       '<div class="tl-tree mb-4">' + tree + '</div>' +
       (function () {
         var used = s.structure.grades.map(function (g) { return g.base || inferBase(g.grade); });
@@ -7373,7 +7427,7 @@
         return '<option value="' + esc(t.title) + '" data-aud="' + esc(t.audience) + '" data-phase="' + esc(ph) + '">' + esc(t.title) + ' — v' + tplLive(t, ph).v + '</option>';
       }).join('') + '</optgroup>';
     }).join('');
-    openModal('New deployment', '<p class="tl-muted">Deploy an assessment to a sample school. Status is derived from the window + publish state. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
+    openModal('New deployment', '<p class="tl-muted"><small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
       (liveN ? '<p class="tl-muted"><b>Live schools aren’t listed</b> (' + liveN + ') — open the school → Assessments to plan and deploy its phases.</p>' : '') + '<div class="tl-stack">' +
       '<label class="field">School<select class="select" id="nd-school">' + schoolOpts + '</select></label>' +
       '<label class="field">Assessment<select class="select" id="nd-assess">' + tplOpts + '</select></label>' +
@@ -7418,7 +7472,7 @@
   }
 
   function openNewGroup() {
-    openModal('New school group', '<p class="tl-muted">Groups let you manage related schools together. <small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
+    openModal('New school group', '<p class="tl-muted"><small class="tl-auditnote">Recorded in the Audit Trail.</small></p>' +
       '<label class="field">Group name<input class="input" id="ng-name" placeholder="e.g. Coastal Schools Trust"></label>', function (close) {
         var nm = (document.getElementById('ng-name').value || '').trim();
         if (!nm) { toast('Group name is required.'); return false; }

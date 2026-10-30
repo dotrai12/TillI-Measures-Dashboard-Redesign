@@ -1555,6 +1555,10 @@ body:has(.overlay) .ui-devpanel, body:has(.ui-scrim) .ui-devpanel { display: non
 .pl-grp { margin: 16px 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-900); }
 .pl-grp span { font-weight: 500; font-size: 12px; color: var(--text-meta); }
 
+/* Already inside a card: no second box (F20). */
+.ui-card .pl-list { border: none; border-radius: 0; margin-bottom: 0; }
+.ui-card .pl-list .pl-row { padding-left: 0; }
+
 /* One list menu: a small card on desktop, a bottom sheet on phones (F13, row ⋯, school ⋯). */
 .pl-sheet { position: relative; width: 100%; max-width: 420px; max-height: 88vh; overflow-y: auto; background: var(--white); border-radius: 20px; padding: 14px 0 12px; box-shadow: var(--shadow-modal); }
 .pl-grab { display: none; width: 40px; height: 4px; border-radius: 2px; background: var(--line-200); margin: 0 auto 10px; }
